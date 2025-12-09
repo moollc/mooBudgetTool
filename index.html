@@ -464,7 +464,7 @@
             // FIX: Removed draggable="true" from TR. Added drag-handle cell.
             return `<tr class="draggable-row border-b hover:bg-gray-100 group" data-item-id="${item.id}" data-section="${sectionName}">
                 <td class="p-2 text-center text-gray-400 cursor-grab active:cursor-grabbing drag-handle touch-none select-none hover:text-blue-500" title="Drag to reorder">⠿</td>
-                <td class="p-1 w-16"><input type="number" step="0.1" aria-label="Crewtiplier" data-field="multiplier" data-id="${item.id}" data-section="${sectionName}" value="${multiplierValue}" class="w-full bg-transparent p-0.5 rounded text-center" placeholder="1" /></td>
+                <td class="p-1 w-16"><input type="number" step="0.1" aria-label="Multiplier" data-field="multiplier" data-id="${item.id}" data-section="${sectionName}" value="${multiplierValue}" class="w-full bg-transparent p-0.5 rounded text-center" placeholder="1" /></td>
                 <td class="p-2"><input type="text" aria-label="Description" data-field="description" data-id="${item.id}" data-section="${sectionName}" value="${item.description}" class="w-full bg-transparent p-1 rounded-md" /></td>
                 <td class="p-2 text-center"><input type="number" aria-label="Quantity" data-field="quantity" data-id="${item.id}" data-section="${sectionName}" value="${item.quantity}" class="w-20 bg-transparent p-1 rounded-md text-center" /></td>
                 <td class="p-2"><select aria-label="Unit" data-field="unit" data-id="${item.id}" data-section="${sectionName}" class="w-full bg-transparent p-1 rounded-md"><option ${item.unit === 'Day' ? 'selected' : ''}>Day</option><option ${item.unit === 'Week' ? 'selected' : ''}>Week</option><option ${item.unit === 'Flat' ? 'selected' : ''}>Flat</option><option ${item.unit === 'Policy' ? 'selected' : ''}>Policy</option><option ${item.unit === 'Hour' ? 'selected' : ''}>Hour</option></select></td>
@@ -963,15 +963,15 @@
                     handle.addEventListener('mouseup', endDrag);
                     handle.addEventListener('mouseleave', endDrag);
                     
-                   // Touch events – THIS IS THE FIXED VERSION
-				    handle.addEventListener('touchstart', (e) => {
-			        	startDrag();
-        				row.draggable = true;
-        				row.classList.add('dragging');
-					}, {passive: true});
+                    // Touch events – FIXED for mobile dragging
+                    handle.addEventListener('touchstart', (e) => {
+                        startDrag();
+                        row.draggable = true;
+                        row.classList.add('dragging');
+                    }, { passive: true);
 
-				    handle.addEventListener('touchend', endDrag);
-				    handle.addEventListener('touchcancel', endDrag);
+                    handle.addEventListener('touchend', endDrag);
+                    handle.addEventListener('touchcancel', endDrag);
 		 }
 
                 row.addEventListener('dragstart', (e) => { 
