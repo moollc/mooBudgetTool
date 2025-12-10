@@ -78,6 +78,59 @@
             th:nth-child(9), td:nth-child(9) { width: 40px; } /* Actions */
         }
 
+	/* [NOTE: New Styles for Crew Avatar and Contact Popups] */
+.crew-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s;
+}
+.crew-avatar:hover { transform: scale(1.1); }
+.crew-avatar.unassigned { background-color: #e5e7eb; color: #9ca3af; border: 1px dashed #d1d5db; }
+.crew-avatar.assigned { background-color: #3b82f6; border: 2px solid #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+/* Contact Popup Tooltip */
+.contact-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    z-index: 50;
+    margin-bottom: 8px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+/* Show popup on hover for desktop, or via JS toggle for mobile */
+.group:hover .contact-popup { opacity: 1; visibility: visible; }
+
+.contact-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: opacity 0.2s;
+}
+.contact-btn:hover { opacity: 0.8; }
         /* --- Status Bar Scrolling --- */
         .scrolling-text-wrapper {
             flex: 1; 
@@ -130,9 +183,146 @@
                 display: none !important;
             }
         }
+
+/* [NOTE: 19.50 Updated Crew Styles - Strict Isolation] */
+        .crew-wrapper {
+            position: relative;
+            display: inline-flex; /* Shrinks to fit content exactly */
+            width: 28px;          /* Hard limit to avatar width */
+            height: 28px;         /* Hard limit to avatar height */
+            align-items: center;
+            justify-content: center;
+            vertical-align: middle;
+            z-index: 20;
+        }
+
+        .crew-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .crew-avatar:hover { transform: scale(1.15); }
+        .crew-avatar.unassigned { background-color: #f3f4f6; color: #9ca3af; border: 1px dashed #d1d5db; }
+        .crew-avatar.assigned { background-color: #3b82f6; border: 2px solid #ffffff; }
+        
+        /* Floating Popup */
+        .contact-popup {
+            position: absolute;
+            left: 10px; /* Start hidden behind avatar */
+            top: 50%;
+            transform: translateY(-50%) scale(0.8);
+            background: white;
+            border: 1px solid #f3f4f6;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 9999px;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: -1; 
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+
+        /* SAFETY RESET: Force hide on general row hover to prevent "Flying out" bug */
+        .group:hover .contact-popup {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* TRIGGER: Only show when hovering the specific wrapper or tapped on mobile */
+        .crew-wrapper:hover .contact-popup,
+        .crew-wrapper.mobile-active .contact-popup { 
+            opacity: 1 !important; 
+            visibility: visible !important; 
+            pointer-events: auto !important;
+            left: 34px; /* Move out to the right */
+            transform: translateY(-50%) scale(1);
+            z-index: 50;
+        }
+
+        /* Invisible Bridge - Kept tight to prevent accidental closure, but not wide enough to catch neighbor hovers */
+        .contact-popup::before {
+            content: '';
+            position: absolute;
+            left: -14px; 
+            top: 0;
+            bottom: 0;
+            width: 14px;
+            background: transparent;
+        }
+        
+        .contact-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: transform 0.2s ease, filter 0.2s;
+            text-decoration: none;
+            flex-shrink: 0;
+        }
+        .contact-btn:hover { transform: scale(1.15); filter: brightness(1.1); }
+        .contact-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        
+        /* Specific Colors */
+        .btn-wa-call { background-color: #25D366; }
+        .btn-wa-msg { background-color: #128C7E; }
+        .btn-email { background-color: #3b82f6; }
+
     </style>
 </head>
 <body class="bg-gray-100">
+
+<!-- 19.50 Spash Screen -->
+	<div id="splash" class="fixed inset-0 bg-white z-50 flex items-center justify-center flex-col gap-6">
+    <img src="https://raw.githubusercontent.com/moollc/mooBudgetTool/main/assets/cow-192.png" alt="Moo" class="w-32 h-32 animate-pulse">
+    <div class="text-3xl font-bold text-gray-800">Moo Budget Tool</div>
+    <div class="text-sm text-gray-500">Loading production magic…</div>
+</div>
+
+<style>
+    #splash { transition: opacity 0.6s ease-out; }
+    #splash.fade-out { opacity: 0; }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const splash = document.getElementById('splash');
+        if (!splash) return;
+
+        // Set minimum visible time in milliseconds
+        const minTime = 1200; 
+        const start = performance.now();
+
+        const tryRemove = () => {
+            if (performance.now() - start >= minTime) {
+                splash.classList.add('fade-out');
+                // Remove from DOM after fade transition (600ms matches CSS)
+                setTimeout(() => splash.remove(), 600);
+            } else {
+                requestAnimationFrame(tryRemove);
+            }
+        };
+        requestAnimationFrame(tryRemove);
+    });
+</script>
 
     <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"></div>
     
@@ -171,14 +361,13 @@
 	
     <script>
         // --- CONSTANTS ---
-        const APP_VERSION = "19.49";
-        
-        const ROADMAP_LOG = [
-            "v19.49: Offline/PWA fixes, 'Get Offline Tool' added, version sync.",
-            "Templates: Added Production Days calculator (v19.44)",
-            "PWA: Accessibility fixes for buttons & labels (v19.42)",
-            "Recovery: Added Bulk Restore & Delete All options (v19.41)"
-        ];
+    const APP_VERSION = "19.50";
+    
+    const ROADMAP_LOG = [
+        "v19.50: Crew Profiles, Device Contact Import, Pro Exports, WhatsApp Integration.",
+        "v19.49: Offline/PWA fixes, 'Get Offline Tool' added.",
+        "v19.44: Production Days calculator."
+    ];
 
         const UPDATE_SOURCE_URL = 'https://gist.githubusercontent.com/moollc/b31c0e4d1fb8b3f6de11beffb4b353a9/raw/gistfile1.txt';
         const storageKeyPrefix = 'prodBudget_v5_';
@@ -419,7 +608,7 @@
             return template;
         };
 
-        // ---------------------------------------------------------
+       // ---------------------------------------------------------
         // UI Rendering
         // ---------------------------------------------------------
         
@@ -456,14 +645,72 @@
             container.innerHTML = `<div id="statusMsgWrapper" class="scrolling-text-wrapper"><span id="statusBarMessage" class="font-medium px-1">${message}</span></div><div class="flex items-center flex-shrink-0 pl-2 border-l border-blue-200 ml-2"><button id="undoBtn" class="px-2 py-1 rounded-md text-sm font-semibold ${canUndo ? 'bg-blue-200 hover:bg-blue-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}" ${!canUndo ? 'disabled' : ''}>Undo</button><button id="redoBtn" class="ml-2 px-2 py-1 rounded-md text-sm font-semibold ${canRedo ? 'bg-blue-200 hover:bg-blue-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}" ${!canRedo ? 'disabled' : ''}>Redo</button></div>`;
         }
 
-        function renderLineItem(item, sectionName) {
+   function renderLineItem(item, sectionName) {
             const rateDisp = toDisp(item.rate);
             const actualDisp = toDisp(item.actual);
-            const multiplierValue = item.multiplier !== 1 ? item.multiplier : '';
             
+            /* [NOTE: 19.50 Update: Crew Column Logic] */
+            const multiplierValue = item.multiplier !== 1 ? item.multiplier : 1;
+            
+            // 1. Check for manually assigned crew data
+            const crew = item.crew || {};
+            const hasAssignedCrew = !!crew.name;
+            
+            // 2. Fallback to Role-based mock logic if no specific person assigned
+            const isRoleMatch = ['director', 'dp', 'producer', 'manager', 'sound'].some(role => item.description.toLowerCase().includes(role));
+            
+            // 3. Determine Display Data
+            let initials = '?';
+            let avatarClass = 'unassigned';
+            let titleText = 'Unassigned (Double click to add)';
+
+            if (hasAssignedCrew) {
+                // User manually entered a person
+                initials = crew.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                avatarClass = 'assigned'; 
+                titleText = `${crew.name} (Double click to edit)`;
+            } else if (isRoleMatch) {
+                // System recognized role
+                initials = item.description.substring(0, 2).toUpperCase();
+                avatarClass = 'assigned opacity-75'; // Slightly lighter to indicate "role filled but no person"
+                titleText = 'Role Detected (Double click to assign person)';
+            }
+
+            // 4. Contact Links (Dynamic)
+            const phoneLink = crew.phone ? `https://wa.me/${crew.phone.replace(/[^0-9]/g, '')}` : '#';
+            const emailLink = crew.email ? `mailto:${crew.email}` : '#';
+            const btnClass = hasAssignedCrew ? '' : 'opacity-50 cursor-not-allowed'; // Dim buttons if no data
+
             return `<tr class="draggable-row border-b hover:bg-gray-100 group" data-item-id="${item.id}" data-section="${sectionName}">
-                <td class="p-2 text-center text-gray-400 cursor-grab active:cursor-grabbing drag-handle touch-none select-none hover:text-blue-500" title="Drag to reorder">⠿</td>
-                <td class="p-1 w-16"><input type="number" step="0.1" aria-label="Multiplier" data-field="multiplier" data-id="${item.id}" data-section="${sectionName}" value="${multiplierValue}" class="w-full bg-transparent p-0.5 rounded text-center" placeholder="1" /></td>
+                
+                <td class="p-1 w-12 text-center relative">
+                    <div class="crew-wrapper">
+                        <div class="crew-avatar ${avatarClass}" 
+                             onclick="toggleCrewPopup(this, event)" 
+                             ondblclick="openCrewProfile(this, event, '${item.id}', '${sectionName}')"
+                             title="${titleText}">
+                            ${initials}
+                        </div>
+                        <div class="contact-popup">
+                            <a href="${phoneLink}" target="_blank" class="contact-btn btn-wa-call ${btnClass}" title="WhatsApp Call">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                            </a>
+                            <a href="${phoneLink}" target="_blank" class="contact-btn btn-wa-msg ${btnClass}" title="WhatsApp Message">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            </a>
+                            <a href="${emailLink}" class="contact-btn btn-email ${btnClass}" title="Email">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            </a>
+                            <button onclick="openCrewProfile(this, event, '${item.id}', '${sectionName}')" class="contact-btn bg-gray-400" title="Edit Profile">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <input type="hidden" data-field="multiplier" data-id="${item.id}" data-section="${sectionName}" value="${multiplierValue}" />
+                </td>
+
+                <td class="p-2 text-center text-gray-400 cursor-grab active:cursor-grabbing drag-handle touch-none select-none hover:text-blue-500 w-8" title="Drag to reorder">⠿</td>
+
                 <td class="p-2"><input type="text" aria-label="Description" data-field="description" data-id="${item.id}" data-section="${sectionName}" value="${item.description}" class="w-full bg-transparent p-1 rounded-md" /></td>
                 <td class="p-2 text-center"><input type="number" aria-label="Quantity" data-field="quantity" data-id="${item.id}" data-section="${sectionName}" value="${item.quantity}" class="w-20 bg-transparent p-1 rounded-md text-center" /></td>
                 <td class="p-2"><select aria-label="Unit" data-field="unit" data-id="${item.id}" data-section="${sectionName}" class="w-full bg-transparent p-1 rounded-md"><option ${item.unit === 'Day' ? 'selected' : ''}>Day</option><option ${item.unit === 'Week' ? 'selected' : ''}>Week</option><option ${item.unit === 'Flat' ? 'selected' : ''}>Flat</option><option ${item.unit === 'Policy' ? 'selected' : ''}>Policy</option><option ${item.unit === 'Hour' ? 'selected' : ''}>Hour</option></select></td>
@@ -471,14 +718,27 @@
                 <td data-estimated-id="${item.id}" class="p-2 text-right font-medium"></td>
                 <td class="p-2 text-right"><input type="number" step="0.01" aria-label="Actual Cost" data-field="actual" data-id="${item.id}" data-section="${sectionName}" value="${actualDisp.toFixed(2)}" class="w-28 bg-blue-50 p-1 rounded-md text-right" /></td>
                 <td data-variance-id="${item.id}" class="p-2 text-right font-medium"></td>
-                <td class="p-2 text-center"><button aria-label="Remove Item" data-remove-item="${item.id}" data-section="${sectionName}" class="text-gray-400 hover:text-red-500"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="pointer-events-none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
+                <td class="p-2 text-center"><button aria-label="Remove Item" data-remove-item="${item.id}" data-section="${sectionName}" class="text-gray-400 hover:text-red-500"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="pointer-events-none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
             </tr>`;
         }
-        
+
         function renderBudgetSections() {
-            return Object.entries(budget.sections).map(([sectionName, section]) => `<div class="mb-6 bg-white rounded-lg shadow-md overflow-hidden"><div class="bg-gray-50 p-3 flex justify-between items-center cursor-pointer border-b" data-section-toggle="${sectionName}"><div class="flex items-center pointer-events-none"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2 section-arrow">${section.isOpen ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="9 18 15 12 9 6"></polyline>'}</svg><h2 class="text-xl font-semibold">${sectionName}</h2></div><span data-section-total="${sectionName}" class="text-lg font-bold pointer-events-none"></span></div><div class="section-content ${section.isOpen ? '' : 'hidden'}"><div class="p-2 table-container"><table class="w-full text-sm"><thead><tr>
-                <th class="p-1 w-8"></th> 
-                <th class="p-1 text-center w-16">Crew</th><th class="p-2 text-left min-w-[250px]">Description</th><th class="p-2 text-center">Qty</th><th class="p-2 text-left">Unit</th><th class="p-2 text-right">Rate</th><th class="p-2 text-right">Estimated</th><th class="p-2 text-right">Actual</th><th class="p-2 text-right">Variance</th><th class="p-2"></th></tr></thead><tbody data-section-body="${sectionName}">${section.items.map(item => renderLineItem(item, sectionName)).join('')}</tbody></table></div><div class="mt-2 p-2"><button data-add-item="${sectionName}" class="flex items-center text-blue-600 font-medium"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-1"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>Add Line Item</button></div></div></div>`).join('');
+            return Object.entries(budget.sections).map(([sectionName, section]) => `<div class="mb-6 bg-white rounded-lg shadow-md overflow-hidden"><div class="bg-gray-50 p-3 flex justify-between items-center cursor-pointer border-b" data-section-toggle="${sectionName}"><div class="flex items-center pointer-events-none"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2 section-arrow">${section.isOpen ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="9 18 15 12 9 6"></polyline>'}</svg><h2 class="text-xl font-semibold">${sectionName}</h2></div><span data-section-total="${sectionName}" class="text-lg font-bold pointer-events-none"></span></div><div class="section-content ${section.isOpen ? '' : 'hidden'}"><div class="p-2 table-container"><table class="w-full text-sm">
+            <thead>
+                <tr>
+                    <th class="p-1 text-center w-12">Crew</th>
+                    <th class="p-1 w-8"></th> 
+                    <th class="p-2 text-left min-w-[250px]">Description</th>
+                    <th class="p-2 text-center">Qty</th>
+                    <th class="p-2 text-left">Unit</th>
+                    <th class="p-2 text-right">Rate</th>
+                    <th class="p-2 text-right">Estimated</th>
+                    <th class="p-2 text-right">Actual</th>
+                    <th class="p-2 text-right">Variance</th>
+                    <th class="p-2"></th>
+                </tr>
+            </thead>
+            <tbody data-section-body="${sectionName}">${section.items.map(item => renderLineItem(item, sectionName)).join('')}</tbody></table></div><div class="mt-2 p-2"><button data-add-item="${sectionName}" class="flex items-center text-blue-600 font-medium"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-1"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>Add Line Item</button></div></div></div>`).join('');
         }
 
         function render() {
@@ -1534,27 +1794,22 @@
           } else if (tabName === 'roadmap') {
                  // 1. Data Definition
                  const futureItems = [
-                    "Full Firebase integration for real-time cloud syncing.",
-                    "Enhance PDF export (include full breakdown table).",
-                    "Verify icon scaling on iPad.",
-                    "Add 'Dark Mode' toggle.",
-                    "Refactor monolithic HTML into modular JS files.",
-                    "Enhance AI with specific role-based agents."
+                    "<b>Open Gate Database:</b> Anonymous rate/cost sharing & 'Open Gate' publishing.",
+                    "<b>Cloud & Funding:</b> Google/Dropbox integration; 1-Click 'Seek Funding' pitch generator.",
+                    "<b>AI 2.0:</b> Attach files (scripts/treatments), save chat history, analysis tools.",
+                    "<b>Smart Templates:</b> Stage-specific crew checklists (Pre/Shoot/Wrap) & logic for equipment days.",
+                    "<b>Offline UI:</b> Further hardening of visual alignment when network is lost."
                  ];
 
                  const recentItems = [
-                    { v: "v19.49", t: "Current", d: "Offline/PWA fixes, 'Get Offline Tool' added, version sync." },
-                    { v: "v19.48", t: "Dec 9", d: "Reorganized UI for consistency." },
-                    { v: "v19.44", t: "Dec 8", d: "Fixed Offline 'Page Not Found'; Implemented Self-Contained Service Worker." }
+                    { v: "v19.50", t: "Production Workflow", d: "<b>Crew:</b> Visual Avatars, Native Contact Import, Profile Editor.<br><b>Actions:</b> WhatsApp Call/Msg & Email integration.<br><b>Exports:</b> Professional PDF/Excel with Budget Summaries.<br><b>UX:</b> Branded Splash Screen, Footer Location (🇯🇲), Table Restructure." },
+                    { v: "v19.49", t: "PWA Core", d: "Offline fixes, 'Get Offline Tool' download, Bulk Restore." },
+                    { v: "v19.44", t: "Logic", d: "Production Days calculator; Template 'Type' & 'Cap' fields." }
                  ];
 
                  const archiveItems = [
-                    { v: "v19.44", t: "Baseline", d: "Added 'Production Days' calculator; Bulk Restore; PWA Accessibility fixes." },
-                    { v: "v19.40", t: "Stable PWA", d: "Restored missing logic (handleNewProject); Verified Netlify/GH Pages setup." },
-                    { v: "v19.39", t: "Alpha", d: "Initial PWA Conversion (manifest.json, sw.js); Rewrite update logic." },
-                    { v: "v19.38", t: "Templates", d: "Restored detailed default templates (Read-Only); Renamed to 'Clone / New'." },
-                    { v: "v19.36", t: "Feature", d: "Template Manager (Create/Import/Export); LocalStorage templates." },
-                    { v: "v19.32-35", t: "UI Polish", d: "Status bar scrolling; API Key layout fix; Mobile UI tweaks." }
+                    { v: "v19.40", t: "Stable", d: "Verified Netlify/GH Pages setup." },
+                    { v: "v19.36", t: "Feature", d: "Template Manager (Create/Import/Export)." }
                  ];
 
                  // 2. Helper function
@@ -1579,7 +1834,7 @@
                             
                             <div class="relative">
                                 <div class="absolute -left-[31px] bg-white border-2 border-dashed border-purple-400 rounded-full w-4 h-4 mt-1.5 shadow-sm"></div>
-                                <h4 class="text-md font-bold text-purple-800 mb-2">Upcoming Features</h4>
+                                <h4 class="text-md font-bold text-purple-800 mb-2">Up Next (Google Sheet Integration)</h4>
                                 <ul class="space-y-2">
                                     ${futureItems.map(f => `<li class="flex items-start gap-2 text-sm text-gray-600"><span class="text-purple-400 mt-0.5">•</span> ${f}</li>`).join('')}
                                 </ul>
@@ -1587,7 +1842,7 @@
 
                             <div class="relative">
                                 <div class="absolute -left-[33px] bg-blue-600 border-4 border-white shadow-md rounded-full w-6 h-6 mt-0"></div>
-                                <h4 class="text-md font-bold text-blue-800 mb-2">Recent Updates (v19.49+)</h4>
+                                <h4 class="text-md font-bold text-blue-800 mb-2">Current Release (v19.50)</h4>
                                 <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
                                     <ul class="space-y-1">
                                         ${renderList(recentItems)}
@@ -1597,7 +1852,7 @@
 
                             <div class="relative roadmap-detail hidden transition-all duration-300">
                                 <div class="absolute -left-[31px] bg-gray-400 border-2 border-white rounded-full w-4 h-4 mt-1.5"></div>
-                                <h4 class="text-md font-bold text-gray-500 mb-2">Archive (v19.32 - v19.48)</h4>
+                                <h4 class="text-md font-bold text-gray-500 mb-2">Archive</h4>
                                 <ul class="space-y-1 pl-1 opacity-75 border-t pt-2 mt-2">
                                     ${renderList(archiveItems)}
                                 </ul>
@@ -1609,15 +1864,141 @@
             }
         }
 
+      // ---------------------------------------------------------
         // --- Utils & Init ---
+        // ---------------------------------------------------------
+        
+        /* [NOTE: 19.50 Mobile Crew Toggle Helper] */
+        window.toggleCrewPopup = function(el, event) {
+            if(event) event.stopPropagation(); // Prevent drag start
+            const wrapper = el.parentElement;
+            
+            // Close others
+            document.querySelectorAll('.crew-wrapper').forEach(div => {
+                if (div !== wrapper) div.classList.remove('mobile-active');
+            });
+            
+            // Toggle current
+            wrapper.classList.toggle('mobile-active');
+        };
+
+        /* [NOTE: 19.50 Crew Profile Manager & Save Logic] */
+        window.openCrewProfile = function(el, event, itemId, sectionName) {
+            if(event) event.stopPropagation();
+            
+            // 1. Find the item in the data model
+            const section = budget.sections[sectionName];
+            const item = section.items.find(i => i.id === itemId);
+            if(!item) return;
+
+            // 2. Get existing data or defaults
+            const crew = item.crew || { name: '', phone: '', email: '' };
+
+            // 3. Build the Modal Content (Resized for better fit)
+            const content = `
+                <form id="crewProfileForm" class="space-y-6 p-1">
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-4">
+                        <div class="w-14 h-14 flex-shrink-0 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-2xl shadow-sm">
+                            ${crew.name ? crew.name.substring(0,1).toUpperCase() : '?'}
+                        </div>
+                        <div class="min-w-0 flex-grow">
+                            <p class="text-xs text-blue-600 font-bold uppercase tracking-wider mb-0.5">Assigning Role</p>
+                            <p class="font-bold text-gray-900 text-lg leading-tight truncate">${item.description}</p>
+                        </div>
+                        
+                        <button type="button" id="importContactBtn" class="flex-shrink-0 p-2 bg-white text-blue-600 rounded-full border border-blue-200 shadow-sm hover:bg-blue-50 transition-colors" title="Import from Device Contacts">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        </button>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
+                            <input type="text" id="crewName" value="${crew.name || ''}" placeholder="e.g. Jane Doe" class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm">
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Phone / WhatsApp</label>
+                                <input type="tel" id="crewPhone" value="${crew.phone || ''}" placeholder="+1 876..." class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all shadow-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email Address</label>
+                                <input type="email" id="crewEmail" value="${crew.email || ''}" placeholder="jane@set.com" class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-6 flex flex-col-reverse sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-100 mt-2">
+                        <button type="button" class="w-full sm:w-auto text-red-500 text-sm hover:text-red-700 font-medium py-2 transition-colors" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Clear Assignment</button>
+                        <button type="submit" class="w-full sm:w-auto bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold shadow hover:bg-blue-700 active:transform active:scale-95 transition-all">Save Profile</button>
+                    </div>
+                </form>
+            `;
+
+            // 4. Open Modal (Using 'max-w-lg' for wider layout to prevent cropping)
+            createModal('crewProfile', 'Manage Crew Contact', content, 'max-w-lg');
+
+            // 5. Setup Contact Import Logic (Prepped for Contact Picker API)
+            /* [NOTE: 19.50 Future Feature: Device Contact Import Logic] */
+            document.getElementById('importContactBtn').addEventListener('click', async () => {
+                const supported = ('contacts' in navigator && 'ContactsManager' in window);
+                
+                if (supported) {
+                    try {
+                        const props = ['name', 'tel', 'email'];
+                        const opts = { multiple: false };
+                        const contacts = await navigator.contacts.select(props, opts);
+                        
+                        if (contacts.length) {
+                            const contact = contacts[0];
+                            // Auto-fill form fields
+                            if(contact.name && contact.name[0]) document.getElementById('crewName').value = contact.name[0];
+                            if(contact.tel && contact.tel[0]) document.getElementById('crewPhone').value = contact.tel[0];
+                            if(contact.email && contact.email[0]) document.getElementById('crewEmail').value = contact.email[0];
+                        }
+                    } catch (ex) {
+                        // Handle user cancellation silently
+                        console.log("Contact import cancelled", ex);
+                    }
+                } else {
+                    // Fallback / Alert for now
+                    alert("Device Contact Import:\n\nThis feature requires a supported mobile device (Android/iOS) and HTTPS context. In the future, this will open your native contact picker.");
+                }
+            });
+
+            // 6. Handle Save (Persists to LocalStorage via pushToHistory)
+            document.getElementById('crewProfileForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                item.crew = {
+                    name: document.getElementById('crewName').value.trim(),
+                    phone: document.getElementById('crewPhone').value.trim(),
+                    email: document.getElementById('crewEmail').value.trim()
+                };
+                pushToHistory(`Assigned ${item.crew.name || 'Crew'} to ${item.description}`);
+                closeModal('crewProfileModal');
+                render(); // Re-render to show new avatar/initials
+            });
+        };
+
+        window.clearCrewAssignment = function(itemId, sectionName) {
+            if(confirm('Remove this person from the role?')) {
+                const item = budget.sections[sectionName].items.find(i => i.id === itemId);
+                if(item) {
+                    delete item.crew;
+                    pushToHistory(`Cleared crew from ${item.description}`);
+                    closeModal('crewProfileModal');
+                    render();
+                }
+            }
+        };
+
         function renderProjectManagement() {
             const container = document.getElementById('project-management-container');
             if(container) {
-                // v19.36: Dynamic Template List in Dropdown
                 const templates = getAllTemplates();
                 const templateOptions = Object.keys(templates).map(k => `<option value="${k}">New ${k}</option>`).join('');
                 
-                // FIX: "File" button now uses 'appearance-none' to hide arrow and looks like a button
                 container.innerHTML = `<div id="project-management" class="flex flex-wrap items-center justify-start gap-x-3 gap-y-2">
                 <select id="projectLoader" aria-label="Load Project" class="bg-white border border-gray-300 text-sm rounded-lg p-2.5">${getProjectList().map(p => `<option value="${p}" ${p === currentProjectName ? 'selected' : ''}>${p}</option>`).join('')}</select>
                 <div class="relative">
@@ -1629,6 +2010,11 @@
                         <option value="Recover">Recover Deleted...</option>
                     </select>
                 </div>
+
+                <button id="autoAssignBtn" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 border border-indigo-200 transition-colors" title="Auto Assign Roles">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </button>
+
                 <button id="deleteProjectBtn" class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">Delete</button>
                 <button id="currencyToggleBtn" class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">To ${displayCurrency === 'JMD' ? 'USD' : 'JMD'}</button>
                 
@@ -1639,10 +2025,13 @@
                     <div class="flex items-center"><input type="checkbox" id="hideZeroQty" class="h-4 w-4 rounded"><label for="hideZeroQty" class="ml-2 text-sm text-gray-600">Hide Zero Qty</label></div>
                 </div>
             </div>`;
+            
+                document.getElementById('autoAssignBtn')?.addEventListener('click', () => {
+                     alert("Auto Assign Feature:\n\nThis will eventually allow you to auto-fill crew spots from the 'Art of Documentary' database or your uploaded contacts based on tagged skillsets.");
+                });
             }
         }
 
-        // --- Helper Functions (RESTORED) ---
         function makeInputDraggable(input) {
             if (!input || input.dataset.draggable === 'true') return;
             input.dataset.draggable = 'true';
@@ -1677,13 +2066,11 @@
         
         function updateOnlineStatus() { 
             const isOnline = navigator.onLine;
-            // Login Btn
             const btn = document.getElementById('loginBtn'); 
             if(btn) { 
                 btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isOnline ? 'status-online' : 'status-offline'}`; 
                 btn.title = isOnline ? "Online" : "Offline"; 
             }
-            // AI Btn
             const aiBtn = document.getElementById('openAiToolsBtn');
             if(aiBtn) {
                 aiBtn.className = `p-2 border rounded-lg text-sm transition-colors flex items-center justify-center flex-shrink-0 ${isOnline ? 'bg-green-100 border-green-200 text-green-800 hover:bg-green-200' : 'bg-red-100 border-red-200 text-red-800 cursor-not-allowed opacity-75'}`;
@@ -1696,38 +2083,202 @@
         function exportToPdf() { 
             const { jsPDF } = window.jspdf; 
             const doc = new jsPDF(); 
-            doc.text(budget.projectName, 14, 22);
-            doc.setFontSize(10);
             
-            // Simple PDF Export
-            let y = 30;
-            Object.entries(budget.sections).forEach(([name, section]) => {
-                if(y > 270) { doc.addPage(); y = 20; }
-                doc.setFont(undefined, 'bold');
-                doc.text(name, 14, y);
-                y += 6;
-                doc.setFont(undefined, 'normal');
-                section.items.forEach(item => {
-                    if(document.getElementById('hideZeroQty').checked && (!item.quantity || item.quantity == 0)) return;
-                    
-                    const line = `${item.quantity} ${item.unit} - ${item.description}: $${item.rate}`;
-                    doc.text(line, 14, y);
-                    y += 5;
-                    if(y > 280) { doc.addPage(); y = 20; }
-                });
-                y += 5;
+            // --- 1. Header & Title ---
+            doc.setFontSize(18);
+            doc.text(budget.projectName || "Untitled Project", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            const dateStr = new Date().toLocaleDateString();
+            doc.text(`Generated: ${dateStr}`, 14, 26);
+            
+            // --- 2. Budget Summary Table ---
+            // Calculate totals freshly to ensure accuracy
+            const { subtotal } = calculateTotals(budget.sections);
+            const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
+            const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
+            const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
+            const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
+            const grandTotal = totalBeforeDiscount - discountAmount;
+            
+            const summaryData = [
+                ['Subtotal', formatCurrency(toDisp(subtotal))],
+                [`Contingency (${budget.contingencyPercentage}%)`, formatCurrency(toDisp(contingencyAmount))],
+                [`Sales Tax (${budget.salesTaxPercentage}%)`, formatCurrency(toDisp(taxAmount))],
+                [`Discount (${budget.discountPercentage}%)`, `-${formatCurrency(toDisp(discountAmount))}`],
+                ['GRAND TOTAL', formatCurrency(toDisp(grandTotal))]
+            ];
+
+            doc.autoTable({
+                startY: 32,
+                head: [['Category', 'Amount']],
+                body: summaryData,
+                theme: 'striped',
+                headStyles: { fillColor: [66, 66, 66] },
+                columnStyles: { 
+                    0: { fontStyle: 'bold' },
+                    1: { halign: 'right' } 
+                },
+                margin: { left: 14, right: 100 } // Keep summary compact on the left
             });
-            doc.save(`${budget.projectName}.pdf`); 
+
+            // --- 3. Detailed Line Items ---
+            let finalY = doc.lastAutoTable.finalY + 10;
+            
+            // Flatten data for the main table
+            const tableRows = [];
+            
+            Object.entries(budget.sections).forEach(([sectionName, section]) => {
+                // Section Header Row (styled differently)
+                let sectionTotal = 0;
+                section.items.forEach(i => sectionTotal += calculateItem(i).estimated);
+                
+                // Add Section Title Row
+                tableRows.push([{ 
+                    content: sectionName.toUpperCase(), 
+                    colSpan: 5, 
+                    styles: { fillColor: [220, 220, 220], fontStyle: 'bold', textColor: [0, 0, 0] } 
+                }]);
+
+                // Add Items
+                section.items.forEach(item => {
+                    // Filter zero qty if checkbox is checked
+                    if(document.getElementById('hideZeroQty')?.checked && (!item.quantity || item.quantity == 0)) return;
+
+                    const { estimated } = calculateItem(item);
+                    
+                    // Format: Description | Qty | Unit | Rate | Total
+                    tableRows.push([
+                        item.description,
+                        item.quantity,
+                        item.unit,
+                        formatCurrency(toDisp(item.rate)),
+                        formatCurrency(toDisp(estimated))
+                    ]);
+                });
+
+                // Section Subtotal Row
+                tableRows.push([{ 
+                    content: `Total ${sectionName}: ${formatCurrency(toDisp(sectionTotal))}`, 
+                    colSpan: 5, 
+                    styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } 
+                }]);
+            });
+
+            doc.autoTable({
+                startY: finalY,
+                head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
+                body: tableRows,
+                theme: 'grid',
+                headStyles: { fillColor: [41, 128, 185] }, // Blue header
+                columnStyles: {
+                    0: { cellWidth: 'auto' }, // Description gets remaining space
+                    1: { cellWidth: 20, halign: 'center' },
+                    2: { cellWidth: 20, halign: 'center' },
+                    3: { cellWidth: 30, halign: 'right' },
+                    4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+                },
+                styles: { fontSize: 9, cellPadding: 3 },
+                // Handle page breaks nicely
+                pageBreak: 'auto',
+            });
+
+            // Save
+            doc.save(`${budget.projectName || 'Budget'}.pdf`); 
         }
         
-        function exportToXlsx() { 
-            const wb = XLSX.utils.book_new(); 
-            const ws = XLSX.utils.aoa_to_sheet([[budget.projectName]]); 
-            XLSX.utils.book_append_sheet(wb, ws, "Budget"); 
-            XLSX.writeFile(wb, `${budget.projectName}.xlsx`); 
+       function exportToXlsx() { 
+            const wb = XLSX.utils.book_new();
+            
+            // --- 1. Calculate Summary Totals ---
+            const { subtotal } = calculateTotals(budget.sections);
+            const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
+            const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
+            const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
+            const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
+            const grandTotal = totalBeforeDiscount - discountAmount;
+            const totalActual = calculateActuals(budget.sections);
+
+            // --- 2. Build Data Array (Rows) ---
+            const data = [];
+            
+            // Title & Metadata
+            data.push([budget.projectName || "Untitled Project"]);
+            data.push([`Generated: ${new Date().toLocaleDateString()}`]);
+            data.push([]); // Spacer
+
+            // Summary Section
+            data.push(["BUDGET SUMMARY", ""]);
+            data.push(["Subtotal", toDisp(subtotal)]);
+            data.push([`Contingency (${budget.contingencyPercentage}%)`, toDisp(contingencyAmount)]);
+            data.push([`Sales Tax (${budget.salesTaxPercentage}%)`, toDisp(taxAmount)]);
+            data.push([`Discount (${budget.discountPercentage}%)`, -toDisp(discountAmount)]); 
+            data.push(["GRAND TOTAL", toDisp(grandTotal)]);
+            data.push(["TOTAL ACTUAL SPEND", toDisp(totalActual)]);
+            data.push([]); // Spacer
+
+            // Main Headers
+            data.push(["Description", "Qty", "Unit", "Rate", "Estimated", "Actual", "Variance"]);
+
+            // Detailed Line Items
+            Object.entries(budget.sections).forEach(([sectionName, section]) => {
+                // Section Header
+                data.push([sectionName.toUpperCase(), "", "", "", "", "", ""]);
+                
+                let sectionEst = 0;
+                let sectionAct = 0;
+
+                section.items.forEach(item => {
+                    // Filter zero qty if checkbox is checked
+                    if(document.getElementById('hideZeroQty')?.checked && (!item.quantity || item.quantity == 0)) return;
+
+                    const { estimated, variance } = calculateItem(item);
+                    sectionEst += estimated;
+                    sectionAct += (parseFloat(item.actual) || 0);
+
+                    data.push([
+                        item.description,
+                        item.quantity,
+                        item.unit,
+                        toDisp(item.rate),
+                        toDisp(estimated),
+                        toDisp(item.actual),
+                        toDisp(variance)
+                    ]);
+                });
+
+                // Section Footer (Subtotals)
+                data.push([
+                    `Total ${sectionName}`, 
+                    "", 
+                    "", 
+                    "", 
+                    toDisp(sectionEst), 
+                    toDisp(sectionAct), 
+                    toDisp(sectionAct - sectionEst)
+                ]);
+                data.push([]); // Spacer between sections
+            });
+
+            // --- 3. Create Sheet & Set Column Widths ---
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // Set column widths for better readability
+            ws['!cols'] = [
+                { wch: 40 }, // Description (wide)
+                { wch: 8 },  // Qty
+                { wch: 10 }, // Unit
+                { wch: 15 }, // Rate
+                { wch: 15 }, // Estimated
+                { wch: 15 }, // Actual
+                { wch: 15 }  // Variance
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "Budget Detail");
+            XLSX.writeFile(wb, `${budget.projectName || 'Budget'}.xlsx`); 
         }
 
-        // NEW: Download current tool state for offline use
         function downloadOfflineHTML() {
             const htmlContent = document.documentElement.outerHTML;
             const blob = new Blob([htmlContent], {type: 'text/html'});
@@ -1744,6 +2295,13 @@
             projectToLoad ? loadBudget(projectToLoad) : handleNewProject(false);
             render();
             bindAppEventListeners();
+            
+            // Global click listener to close popups when clicking outside
+            document.addEventListener('click', (e) => {
+                if(!e.target.closest('.crew-wrapper')) {
+                    document.querySelectorAll('.crew-wrapper').forEach(div => div.classList.remove('mobile-active'));
+                }
+            });
         }
     
         document.addEventListener('DOMContentLoaded', init);
