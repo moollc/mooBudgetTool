@@ -72,35 +72,61 @@
         #settingsModalContent, #aiToolsModalContent { transition: all 0.3s ease-in-out; }
 
         /* --- Tables --- */
-      @media (max-width: 768px) {
+/* --- Mobile Table Optimized (v19.52) --- */
+        @media (max-width: 768px) {
             .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            table { min-width: 600px; }
-            th, td { white-space: nowrap; padding: 0.5rem 0.25rem; font-size: 0.75rem; }
+            /* Allow table to find its natural width based on min-widths below */
+            table { min-width: 600px; width: auto; } 
+            
+            /* Reduce padding everywhere to close gaps */
+            th, td { white-space: nowrap; padding: 0.5rem 0.1rem; font-size: 0.75rem; }
             
             /* Col 1: Crew Avatar */
-            th:nth-child(1), td:nth-child(1) { width: 45px; text-align: center; } 
+            th:nth-child(1), td:nth-child(1) { width: 40px; text-align: center; } 
             
             /* Col 2: Drag Handle */
-            th:nth-child(2), td:nth-child(2) { width: 35px; min-width: 35px; } 
+            th:nth-child(2), td:nth-child(2) { width: 30px; min-width: 30px; } 
             
             /* Col 3: Description */
-            th:nth-child(3), td:nth-child(3) { min-width: 160px; max-width: 200px; white-space: normal; } 
+            th:nth-child(3), td:nth-child(3) { min-width: 140px; max-width: 180px; white-space: normal; } 
             
-            /* Remaining Columns */
-            th:nth-child(4), td:nth-child(4) { width: 45px; } /* Qty */
-            th:nth-child(5), td:nth-child(5) { width: 60px; } /* Unit */
-            th:nth-child(6), td:nth-child(6) { width: 70px; } /* Rate */
-            th:nth-child(7), td:nth-child(7) { width: 70px; } /* Est */
-            th:nth-child(8), td:nth-child(8) { width: 70px; } /* Act */
-            th:nth-child(9), td:nth-child(9) { width: 70px; } /* Var */
-            th:nth-child(10), td:nth-child(10) { width: 30px; } /* Actions */
+            /* Col 4: Qty (Tightened) */
+            th:nth-child(4), td:nth-child(4) { width: 32px; padding: 0; } 
+            td:nth-child(4) input { text-align: center; padding: 0; }
+
+            /* Col 5: Unit (Fixed Visibility & Spacing) */
+            th:nth-child(5), td:nth-child(5) { width: 42px; padding: 0; } 
+            /* Remove native arrow so text fits; Blue text indicates it is clickable */
+            td:nth-child(5) select { 
+                appearance: none; 
+                -webkit-appearance: none; 
+                padding: 0 !important; 
+                text-align: center; 
+                background-image: none !important;
+                font-weight: 600;
+                color: #2563eb; 
+                width: 100%;
+            }
+
+            /* Col 6: Rate (Dynamic-ish) */
+            /* Using min-width allows it to grow if numbers are huge, but stay compact otherwise */
+            th:nth-child(6), td:nth-child(6) { min-width: 65px; width: auto; } 
+            td:nth-child(6) input { text-align: right; padding-right: 2px; }
+
+            /* Remaining Financial Columns */
+            th:nth-child(7), td:nth-child(7) { min-width: 65px; width: auto; } /* Estimated */
+            th:nth-child(8), td:nth-child(8) { min-width: 65px; width: auto; } /* Actual */
+            th:nth-child(9), td:nth-child(9) { min-width: 65px; width: auto; } /* Variance */
+            
+            /* Actions */
+            th:nth-child(10), td:nth-child(10) { width: 25px; } 
         }
 
-        /* Drag Unlocking */
+        /* Fix Drag Locking */
         .drag-handle {
-            touch-action: none; /* Prevents scroll interference */
+            touch-action: none; 
             cursor: grab;
-            padding: 10px !important; /* Larger touch target for mobile */
+            padding: 10px !important;
         }
         .drag-handle:active { cursor: grabbing; }
 
