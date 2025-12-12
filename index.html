@@ -7,7 +7,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v19.49</title>
+    <title>mooBudgetTool v19.52</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/assets/cow-512.png">
@@ -18,6 +18,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263/lucide.min.js">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script>
+        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -35,7 +42,6 @@
         
         body { font-family: 'Inter', sans-serif; }
 
-        /* FIX: Add text-size-adjust compatibility */
         html {
             -webkit-text-size-adjust: 100%;
             text-size-adjust: 100%;
@@ -78,59 +84,118 @@
             th:nth-child(9), td:nth-child(9) { width: 40px; } /* Actions */
         }
 
-	/* [NOTE: New Styles for Crew Avatar and Contact Popups] */
-.crew-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: bold;
-    color: white;
-    cursor: pointer;
-    position: relative;
-    transition: transform 0.2s;
-}
-.crew-avatar:hover { transform: scale(1.1); }
-.crew-avatar.unassigned { background-color: #e5e7eb; color: #9ca3af; border: 1px dashed #d1d5db; }
-.crew-avatar.assigned { background-color: #3b82f6; border: 2px solid #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        /* --- v19.50 Crew Styles v19.52 --- */
+        .crew-wrapper {
+            position: relative;
+            display: inline-flex; 
+            width: 28px;          
+            height: 28px;         
+            align-items: center;
+            justify-content: center;
+            vertical-align: middle;
+            z-index: 20;
+        }
 
-/* Contact Popup Tooltip */
-.contact-popup {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: white;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
-    padding: 8px;
-    display: flex;
-    gap: 8px;
-    z-index: 50;
-    margin-bottom: 8px;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-/* Show popup on hover for desktop, or via JS toggle for mobile */
-.group:hover .contact-popup { opacity: 1; visibility: visible; }
+        .crew-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .crew-avatar:hover { transform: scale(1.15); }
+        .crew-avatar.unassigned { background-color: #f3f4f6; color: #9ca3af; border: 1px dashed #d1d5db; }
+        .crew-avatar.assigned { background-color: #3b82f6; border: 2px solid #ffffff; }
+        
+       /* --- v19.50 Floating Popup v19.52 --- */
+        .contact-popup {
+            position: absolute;
+            left: 10px; 
+            top: 50%;
+            transform: translateY(-50%) scale(0.8);
+            background: white;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 9999px;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: -1; 
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
 
-.contact-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    transition: opacity 0.2s;
-}
-.contact-btn:hover { opacity: 0.8; }
+        .group:hover .contact-popup {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        @media (hover: hover) {
+            .crew-wrapper:hover .contact-popup {
+                opacity: 1 !important; 
+                visibility: visible !important; 
+                pointer-events: auto !important;
+                left: 34px; 
+                transform: translateY(-50%) scale(1);
+                z-index: 50;
+            }
+        }
+
+        .crew-wrapper.mobile-active .contact-popup { 
+            opacity: 1 !important; 
+            visibility: visible !important; 
+            pointer-events: auto !important;
+            left: 34px; 
+            transform: translateY(-50%) scale(1);
+            z-index: 50;
+        }
+
+        .contact-popup::before {
+            content: '';
+            position: absolute;
+            left: -14px; 
+            top: 0;
+            bottom: 0;
+            width: 14px;
+            background: transparent;
+            z-index: 0;
+        }
+        
+        .contact-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: transform 0.2s ease, filter 0.2s;
+            text-decoration: none !important;
+            border-bottom: none !important;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 10;
+        }
+        .contact-btn:hover { transform: scale(1.15); filter: brightness(1.1); }
+        .contact-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        
+        .btn-wa-call { background-color: #25D366; }
+        .btn-wa-msg { background-color: #128C7E; }
+        .btn-email { background-color: #3b82f6; }
+
         /* --- Status Bar Scrolling --- */
         .scrolling-text-wrapper {
             flex: 1; 
@@ -177,121 +242,16 @@
         /* Print Hiding */
         @media print { #footnote, #loginBtn, footer, #settingsBtn, #openAiToolsBtn { display: none !important; } }
         
-        /* v19.32: Hide Floating BMC Widget on Mobile */
         @media (max-width: 640px) {
             #bmac-btn-container, #bmc-wbtn {
                 display: none !important;
             }
         }
-
-/* [NOTE: 19.50 Updated Crew Styles - Strict Isolation] */
-        .crew-wrapper {
-            position: relative;
-            display: inline-flex; /* Shrinks to fit content exactly */
-            width: 28px;          /* Hard limit to avatar width */
-            height: 28px;         /* Hard limit to avatar height */
-            align-items: center;
-            justify-content: center;
-            vertical-align: middle;
-            z-index: 20;
-        }
-
-        .crew-avatar {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: 700;
-            color: white;
-            cursor: pointer;
-            position: relative;
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-            user-select: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .crew-avatar:hover { transform: scale(1.15); }
-        .crew-avatar.unassigned { background-color: #f3f4f6; color: #9ca3af; border: 1px dashed #d1d5db; }
-        .crew-avatar.assigned { background-color: #3b82f6; border: 2px solid #ffffff; }
-        
-        /* Floating Popup */
-        .contact-popup {
-            position: absolute;
-            left: 10px; /* Start hidden behind avatar */
-            top: 50%;
-            transform: translateY(-50%) scale(0.8);
-            background: white;
-            border: 1px solid #f3f4f6;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            border-radius: 9999px;
-            padding: 4px 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            z-index: -1; 
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            pointer-events: none;
-        }
-
-        /* SAFETY RESET: Force hide on general row hover to prevent "Flying out" bug */
-        .group:hover .contact-popup {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-
-        /* TRIGGER: Only show when hovering the specific wrapper or tapped on mobile */
-        .crew-wrapper:hover .contact-popup,
-        .crew-wrapper.mobile-active .contact-popup { 
-            opacity: 1 !important; 
-            visibility: visible !important; 
-            pointer-events: auto !important;
-            left: 34px; /* Move out to the right */
-            transform: translateY(-50%) scale(1);
-            z-index: 50;
-        }
-
-        /* Invisible Bridge - Kept tight to prevent accidental closure, but not wide enough to catch neighbor hovers */
-        .contact-popup::before {
-            content: '';
-            position: absolute;
-            left: -14px; 
-            top: 0;
-            bottom: 0;
-            width: 14px;
-            background: transparent;
-        }
-        
-        .contact-btn {
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            transition: transform 0.2s ease, filter 0.2s;
-            text-decoration: none;
-            flex-shrink: 0;
-        }
-        .contact-btn:hover { transform: scale(1.15); filter: brightness(1.1); }
-        .contact-btn svg { width: 14px; height: 14px; fill: currentColor; }
-        
-        /* Specific Colors */
-        .btn-wa-call { background-color: #25D366; }
-        .btn-wa-msg { background-color: #128C7E; }
-        .btn-email { background-color: #3b82f6; }
-
     </style>
 </head>
 <body class="bg-gray-100">
 
-<!-- 19.50 Spash Screen -->
-	<div id="splash" class="fixed inset-0 bg-white z-50 flex items-center justify-center flex-col gap-6">
+<div id="splash" class="fixed inset-0 bg-white z-50 flex items-center justify-center flex-col gap-6">
     <img src="https://raw.githubusercontent.com/moollc/mooBudgetTool/main/assets/cow-192.png" alt="Moo" class="w-32 h-32 animate-pulse">
     <div class="text-3xl font-bold text-gray-800">Moo Budget Tool</div>
     <div class="text-sm text-gray-500">Loading production magic…</div>
@@ -307,14 +267,12 @@
         const splash = document.getElementById('splash');
         if (!splash) return;
 
-        // Set minimum visible time in milliseconds
         const minTime = 1200; 
         const start = performance.now();
 
         const tryRemove = () => {
             if (performance.now() - start >= minTime) {
                 splash.classList.add('fade-out');
-                // Remove from DOM after fade transition (600ms matches CSS)
                 setTimeout(() => splash.remove(), 600);
             } else {
                 requestAnimationFrame(tryRemove);
@@ -325,12 +283,10 @@
 </script>
 
     <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"></div>
-    
     <div id="global-modal-container"></div>
-
-    <footer class="relative max-w-7xl mx-auto p-4 mt-8 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+<footer class="relative max-w-7xl mx-auto p-4 mt-8 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
         <div class="flex items-center gap-4 z-10 w-full sm:w-auto justify-center sm:justify-start">
-            <p>Budget Tool by moo v19.49</p>
+            <p>Budget Tool by moo v19.52</p>
             <a href="mailto:moo@moo.llc" class="text-blue-600 hover:underline">moo@moo.llc</a>
         </div>
         
@@ -346,28 +302,18 @@
         <div class="hidden sm:block w-10"></div>
     </footer>
 
-    <script 
-        data-name="BMC-Widget" 
-        data-cfasync="false" 
-        src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" 
-        data-id="jaysonmy" 
-        data-description="Support me on Buy me a coffee!" 
-        data-message="Thanks for the coffee!" 
-        data-color="#5F7FFF" 
-        data-position="Right" 
-        data-x_margin="18" 
-        data-y_margin="18">
+    <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="jaysonmy" data-description="Support me on Buy me a coffee!" data-message="Thanks for the coffee!" data-color="#5F7FFF" data-position="Right" data-x_margin="18" data-y_margin="18">
     </script>
 	
     <script>
-        // --- CONSTANTS ---
-    const APP_VERSION = "19.50";
-    
-    const ROADMAP_LOG = [
-        "v19.50: Crew Profiles, Device Contact Import, Pro Exports, WhatsApp Integration.",
-        "v19.49: Offline/PWA fixes, 'Get Offline Tool' added.",
-        "v19.44: Production Days calculator."
-    ];
+        /* --- v19.51 App Version v19.52 --- */
+        const APP_VERSION = "19.52";
+        
+        const ROADMAP_LOG = [
+            "v19.52: UI Polish (Buttons fixed), Publish Placeholder, Manifest 'moo' update.",
+            "v19.50: Crew Profiles, Device Contact Import, Pro Exports, WhatsApp Integration.",
+            "v19.49: Offline/PWA fixes, 'Get Offline Tool' added."
+        ];
 
         const UPDATE_SOURCE_URL = 'https://gist.githubusercontent.com/moollc/b31c0e4d1fb8b3f6de11beffb4b353a9/raw/gistfile1.txt';
         const storageKeyPrefix = 'prodBudget_v5_';
@@ -388,6 +334,21 @@
         let tempTemplateData = null;
 
         const initialLineItem = { description: 'New Item', quantity: 1, unit: 'Day', multiplier: 1, rate: 0, actual: 0 };
+
+        /* --- v19.51 Helper Functions v19.52 --- */
+        // Generate collision-resistant IDs for attachments
+        function generateSafeId() {
+            return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        // Abbreviate long filenames for UI display
+        function getAbbreviatedName(name, maxLen = 25) {
+            if (name.length <= maxLen) return name;
+            const ext = name.split('.').pop();
+            const base = name.substring(0, name.lastIndexOf('.'));
+            const keep = maxLen - ext.length - 4; // "..." + ext
+            return base.substring(0, keep) + '...' + ext;
+        }
 
         // ---------------------------------------------------------
         // State & Persistence
@@ -497,8 +458,7 @@
 
         const getSelectedProvider = () => localStorage.getItem(aiProviderStorage) || 'gemini';
         const setSelectedProvider = (provider) => localStorage.setItem(aiProviderStorage, provider);
-
-        async function callUnifiedAI(provider, apiKey, prompt) {
+async function callUnifiedAI(provider, apiKey, prompt) {
             if (provider === 'gemini') {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
                 const response = await fetch(url, {
@@ -645,41 +605,49 @@
             container.innerHTML = `<div id="statusMsgWrapper" class="scrolling-text-wrapper"><span id="statusBarMessage" class="font-medium px-1">${message}</span></div><div class="flex items-center flex-shrink-0 pl-2 border-l border-blue-200 ml-2"><button id="undoBtn" class="px-2 py-1 rounded-md text-sm font-semibold ${canUndo ? 'bg-blue-200 hover:bg-blue-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}" ${!canUndo ? 'disabled' : ''}>Undo</button><button id="redoBtn" class="ml-2 px-2 py-1 rounded-md text-sm font-semibold ${canRedo ? 'bg-blue-200 hover:bg-blue-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}" ${!canRedo ? 'disabled' : ''}>Redo</button></div>`;
         }
 
+ /* --- v19.50 Render Line Item (Smart Buttons) v19.52 --- */
    function renderLineItem(item, sectionName) {
             const rateDisp = toDisp(item.rate);
             const actualDisp = toDisp(item.actual);
             
-            /* [NOTE: 19.50 Update: Crew Column Logic] */
             const multiplierValue = item.multiplier !== 1 ? item.multiplier : 1;
             
-            // 1. Check for manually assigned crew data
             const crew = item.crew || {};
             const hasAssignedCrew = !!crew.name;
             
-            // 2. Fallback to Role-based mock logic if no specific person assigned
             const isRoleMatch = ['director', 'dp', 'producer', 'manager', 'sound'].some(role => item.description.toLowerCase().includes(role));
             
-            // 3. Determine Display Data
             let initials = '?';
             let avatarClass = 'unassigned';
             let titleText = 'Unassigned (Double click to add)';
 
             if (hasAssignedCrew) {
-                // User manually entered a person
                 initials = crew.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                 avatarClass = 'assigned'; 
                 titleText = `${crew.name} (Double click to edit)`;
             } else if (isRoleMatch) {
-                // System recognized role
                 initials = item.description.substring(0, 2).toUpperCase();
-                avatarClass = 'assigned opacity-75'; // Slightly lighter to indicate "role filled but no person"
+                avatarClass = 'assigned opacity-75'; 
                 titleText = 'Role Detected (Double click to assign person)';
             }
 
-            // 4. Contact Links (Dynamic)
-            const phoneLink = crew.phone ? `https://wa.me/${crew.phone.replace(/[^0-9]/g, '')}` : '#';
-            const emailLink = crew.email ? `mailto:${crew.email}` : '#';
-            const btnClass = hasAssignedCrew ? '' : 'opacity-50 cursor-not-allowed'; // Dim buttons if no data
+            // Conditional Button Generation
+            const cleanPhone = crew.phone ? crew.phone.replace(/[^0-9]/g, '') : '';
+            
+            const waCallBtn = cleanPhone ? 
+                `<a href="https://wa.me/${cleanPhone}" target="_blank" class="contact-btn btn-wa-call" title="WhatsApp Call">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                </a>` : '';
+
+            const waMsgBtn = cleanPhone ? 
+                `<a href="https://wa.me/${cleanPhone}" target="_blank" class="contact-btn btn-wa-msg" title="WhatsApp Message">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                </a>` : '';
+
+            const emailBtn = crew.email ? 
+                `<a href="mailto:${crew.email}" class="contact-btn btn-email" title="Email">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                </a>` : '';
 
             return `<tr class="draggable-row border-b hover:bg-gray-100 group" data-item-id="${item.id}" data-section="${sectionName}">
                 
@@ -692,15 +660,9 @@
                             ${initials}
                         </div>
                         <div class="contact-popup">
-                            <a href="${phoneLink}" target="_blank" class="contact-btn btn-wa-call ${btnClass}" title="WhatsApp Call">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                            </a>
-                            <a href="${phoneLink}" target="_blank" class="contact-btn btn-wa-msg ${btnClass}" title="WhatsApp Message">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                            </a>
-                            <a href="${emailLink}" class="contact-btn btn-email ${btnClass}" title="Email">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                            </a>
+                            ${waCallBtn}
+                            ${waMsgBtn}
+                            ${emailBtn}
                             <button onclick="openCrewProfile(this, event, '${item.id}', '${sectionName}')" class="contact-btn bg-gray-400" title="Edit Profile">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                             </button>
@@ -764,8 +726,7 @@
                 if (toFocus) toFocus.focus();
             }
         }
-
-        // ---------------------------------------------------------
+// ---------------------------------------------------------
         // Modal Logic
         // ---------------------------------------------------------
 
@@ -789,10 +750,37 @@
             createModal('rateComparison', 'Rate Comparisons (2025 Averages)', content, 'max-w-4xl');
         }
 
+        /* --- v19.51 AI Modal with File Tray v19.52 --- */
         function showAIToolsModal() {
             const provider = getSelectedProvider();
             const key = getStoredApiKey(provider);
+            const attachments = budget.attachments || [];
             
+            // Render Attachment Tray HTML
+            const trayHTML = attachments.length > 0 ? 
+                `<div class="mb-3 p-2 bg-gray-100 rounded-lg border border-gray-200">
+                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">Attached Context</div>
+                    <div class="flex flex-col gap-1 max-h-32 overflow-y-auto">
+                        ${attachments.map(file => `
+                            <div class="flex items-center justify-between bg-white p-1.5 rounded border border-gray-200 shadow-sm group">
+                                <div class="flex items-center gap-2 overflow-hidden">
+                                    <div class="w-6 h-6 flex-shrink-0 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-[9px] font-bold border border-blue-200">
+                                        ${file.name.split('.').pop().toUpperCase().substring(0,3)}
+                                    </div>
+                                    <span class="text-xs text-gray-700 truncate font-medium" title="${file.name}">${getAbbreviatedName(file.name)}</span>
+                                </div>
+                                <button onclick="removeAttachment('${file.id}')" class="text-gray-400 hover:text-red-500 p-1 opacity-60 group-hover:opacity-100 transition-opacity" title="Remove File">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>` 
+                : 
+                `<div class="mb-3 p-3 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400 text-xs">
+                    No files attached. <button onclick="handleUniversalImport()" class="text-blue-500 hover:underline">Import Context</button>
+                 </div>`;
+
             const content = !key ? 
                 `<div class="text-center py-10">
                     <div class="text-4xl mb-4">🔑</div>
@@ -802,25 +790,34 @@
                 </div>` 
                 : 
                 `<div class="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-                    <div class="border rounded-xl p-5 bg-white shadow-sm flex flex-col">
+                    <div class="border rounded-xl p-5 bg-white shadow-sm flex flex-col h-[500px] md:h-auto">
                         <h4 class="font-bold text-gray-800 mb-2 flex items-center gap-2 text-lg"><span class="text-2xl">🩺</span> Budget Doctor</h4>
                         <p class="text-sm text-gray-500 mb-4">Analyze your current budget for gaps, risks, and rate anomalies using ${provider}.</p>
                         <button id="analyzeBudgetBtn" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 flex justify-center items-center gap-2 font-medium transition-colors">Analyze Current Budget</button>
                         <div id="aiAnalysisOutput" class="mt-4 text-sm text-gray-700 flex-grow overflow-y-auto border-t pt-4 min-h-[200px]"></div>
                     </div>
+                    
                     <div class="border rounded-xl p-5 bg-white shadow-sm flex flex-col h-[500px] md:h-auto">
-                        <h4 class="font-bold text-gray-800 mb-2 flex items-center gap-2 text-lg"><span class="text-2xl">💬</span> Production Consultant</h4>
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-gray-800 flex items-center gap-2 text-lg"><span class="text-2xl">💬</span> Production Consultant</h4>
+                        </div>
+                        
+                        ${trayHTML}
+
                         <div id="aiChatHistory" class="flex-grow overflow-y-auto bg-gray-50 rounded-lg p-3 mb-3 border border-gray-200"><div class="text-sm text-gray-400 text-center mt-10">Ask about union rules, equipment packages, or local rates...</div></div>
-                        <form id="aiChatForm" class="flex gap-2">
+                        
+                        <form id="aiChatForm" class="flex gap-2 items-center">
+                            <button type="button" onclick="handleUniversalImport()" class="p-3 text-gray-500 hover:bg-gray-100 rounded-lg border border-transparent hover:border-gray-300 transition-colors" title="Attach File (PDF, Doc, Sheets)">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            </button>
                             <input type="text" id="aiChatInput" placeholder="Ask a question..." aria-label="Ask AI" class="flex-grow text-sm p-3 border rounded-lg focus:outline-none focus:border-blue-500">
-                            <button type="submit" class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
                         </form>
                     </div>
                 </div>`;
 
             createModal('aiTools', '✨ AI Assistant', content, 'max-w-4xl');
             
-            // Re-bind listeners if key exists
             if (key) {
                 document.getElementById('analyzeBudgetBtn')?.addEventListener('click', handleAnalyzeBudget);
                 document.getElementById('aiChatForm')?.addEventListener('submit', (e) => { e.preventDefault(); handleConsultantChat(); });
@@ -838,11 +835,10 @@
                 </div>
                 <div class="p-6" id="settingsContent">${renderSettingsContent(defaultTab)}</div>
             `;
-            createModal('settings', 'Settings & Tools', content, 'max-w-4xl'); // Expanded width for templates
+            createModal('settings', 'Settings & Tools', content, 'max-w-4xl');
             bindSettingsEvents(defaultTab);
         }
 
-        // v19.36: Updated showItemSelector to use centralized logic
         function showItemSelectorModal(sectionName) {
             const allItems = getAllItems();
             const uniqueMap = {};
@@ -1170,12 +1166,29 @@
             return datePart;
         }
 
+        /* --- v19.51 File Menu Handler v19.52 --- */
         function handleNewProjectSelection(e) {
             const type = e.target.value;
-            e.target.value = ""; 
-            if (type === 'Duplicate') handleDuplicateProject();
-            else if (type === 'Recover') showRecoveryModal();
-            else if (type) handleNewProject(true, type); 
+            
+            if (type === 'Duplicate') {
+                handleDuplicateProject();
+                e.target.value = ""; 
+            }
+            else if (type === 'Recover') {
+                showRecoveryModal();
+                e.target.value = "";
+            }
+            else if (type === 'ImportFile' || type === 'ImportMoo') {
+                handleUniversalImport(); 
+                
+                setTimeout(() => { 
+                    const el = document.getElementById('newProjectSelector');
+                    if(el) el.value = ""; 
+                }, 500);
+            }
+            else if (type) {
+                handleNewProject(true, type); 
+            } 
         }
         
         function handleDuplicateProject() {
@@ -1207,21 +1220,17 @@
         let draggedItem = null;
         function initializeDragAndDrop() {
             document.querySelectorAll('.draggable-row').forEach(row => {
-                // 1. Disable dragging by default so inputs are editable
                 row.draggable = false;
 
-                // 2. Only enable drag if the user touches the "drag-handle"
                 const handle = row.querySelector('.drag-handle');
                 if(handle) {
                     const startDrag = () => { row.draggable = true; };
                     const endDrag = () => { row.draggable = false; };
                     
-                    // Mouse events
                     handle.addEventListener('mousedown', startDrag);
                     handle.addEventListener('mouseup', endDrag);
                     handle.addEventListener('mouseleave', endDrag);
                     
-                    // Touch events – FIXED for mobile dragging
                     handle.addEventListener('touchstart', (e) => {
                         startDrag();
                         row.draggable = true;
@@ -1238,7 +1247,6 @@
                         e.target.classList.add('dragging'); 
                         e.dataTransfer.effectAllowed = 'move'; 
                     } else {
-                        // If draggable is false (clicked input), stop the drag immediately
                         e.preventDefault(); 
                     }
                 });
@@ -1248,7 +1256,6 @@
                     e.dataTransfer.dropEffect = 'move'; 
                     e.currentTarget.classList.add('drag-over');
                     const rect = e.currentTarget.getBoundingClientRect();
-                    // Visual guide for where item will drop
                     if (e.clientY < rect.top + rect.height / 2) { 
                         e.currentTarget.style.borderTop = '3px solid #3b82f6'; 
                         e.currentTarget.style.borderBottom = 'none'; 
@@ -1272,7 +1279,6 @@
                 });
             });
 
-           // Allow dropping into empty sections
             document.querySelectorAll('[data-section-body]').forEach(section => {
                 section.addEventListener('dragover', (e) => { e.preventDefault(); });
                 section.addEventListener('drop', (e) => { 
@@ -1296,8 +1302,7 @@
             pushToHistory(`Reordered item '${item.description}' from ${fromSection} to ${toSection}`);
             render();
         }
-
-        // --- Settings & AI Handlers (Refactored) ---
+// --- Settings & AI Handlers ---
         window.switchSettingsTab = function(tabName, btn) {
             editingGlobalItemIndex = -1;
             const buttons = btn.parentElement.children;
@@ -1309,7 +1314,7 @@
 
         function bindSettingsEvents(tabName) {
             if(tabName === 'general') { 
-                // CHANGED: Now calls downloadOfflineHTML instead of handleAppUpdate
+                /* --- v19.50 Offline Download v19.52 --- */
                 document.getElementById('updateBtn')?.addEventListener('click', downloadOfflineHTML); 
                 document.getElementById('dateFormatSelect')?.addEventListener('change', (e) => { setProjectDateFormat(e.target.value); });
                 document.getElementById('separatorInput')?.addEventListener('input', (e) => { setProjectNameSeparator(e.target.value); });
@@ -1345,345 +1350,6 @@
             });
         }
         
-        // v19.36: Template Logic
-        function bindTemplateEvents() {
-            // Dropdown selection
-            document.getElementById('templateSelector')?.addEventListener('change', (e) => {
-                editingTemplateId = e.target.value;
-                tempTemplateData = null; // Clear unsaved changes
-                window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
-            });
-
-            // Action Buttons
-            document.getElementById('createTemplateBtn')?.addEventListener('click', () => {
-                const isDefault = ['Commercial', 'Documentary', 'LiveStream'].includes(editingTemplateId);
-                const suggestedName = isDefault ? `New ${editingTemplateId}` : '';
-                const name = prompt("Enter new template name (e.g., 'Music Video'):", suggestedName);
-                if (name) {
-                    const allTemplates = getAllTemplates();
-                    if(allTemplates[name]) return alert("Template name already exists.");
-                    // Clone currently selected or default
-                    const base = editingTemplateId ? allTemplates[editingTemplateId] : DEFAULT_TEMPLATES['Commercial'];
-                    allTemplates[name] = JSON.parse(JSON.stringify(base));
-                    allTemplates[name].projectName = `Untitled ${name} Project`;
-                    saveAllTemplates(allTemplates);
-                    editingTemplateId = name;
-                    window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
-                }
-            });
-
-            document.getElementById('importTemplateBtn')?.addEventListener('click', () => {
-                const jsonStr = prompt("Paste template JSON string here:");
-                if(jsonStr) {
-                    try {
-                        const parsed = JSON.parse(jsonStr);
-                        if(!parsed.sections) throw new Error("Invalid template format.");
-                        const name = prompt("Name for this imported template:", "Imported Template");
-                        if(name) {
-                            const allTemplates = getAllTemplates();
-                            allTemplates[name] = parsed;
-                            saveAllTemplates(allTemplates);
-                            editingTemplateId = name;
-                            window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
-                        }
-                    } catch(e) { alert("Import Failed: " + e.message); }
-                }
-            });
-
-            document.getElementById('exportTemplateBtn')?.addEventListener('click', () => {
-                if(!editingTemplateId) return;
-                const allTemplates = getAllTemplates();
-                const data = JSON.stringify(allTemplates[editingTemplateId]);
-                navigator.clipboard.writeText(data).then(() => alert("Template JSON copied to clipboard!")).catch(() => prompt("Copy this:", data));
-            });
-
-            document.getElementById('deleteTemplateBtn')?.addEventListener('click', () => {
-                if(!editingTemplateId || ['Commercial', 'Documentary', 'LiveStream'].includes(editingTemplateId)) {
-                    return alert("Cannot delete default templates.");
-                }
-                if(confirm(`Delete template "${editingTemplateId}"?`)) {
-                    const allTemplates = getAllTemplates();
-                    delete allTemplates[editingTemplateId];
-                    saveAllTemplates(allTemplates);
-                    editingTemplateId = 'Commercial';
-                    window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
-                }
-            });
-
-            document.getElementById('saveTemplateChangesBtn')?.addEventListener('click', () => {
-                if(isDefaultTemplate(editingTemplateId)) {
-                    return alert("Cannot edit default templates directly. Please create a copy.");
-                }
-                if (tempTemplateData && editingTemplateId) {
-                    const allTemplates = getAllTemplates();
-                    allTemplates[editingTemplateId] = tempTemplateData;
-                    saveAllTemplates(allTemplates);
-                    alert("Template Saved!");
-                    tempTemplateData = null;
-                }
-            });
-
-            // Delegate events for the editor table
-            const editorContainer = document.getElementById('templateEditorContainer');
-            if(editorContainer) {
-                // Initial render call v19.37 fix
-                renderTemplateEditor(editorContainer);
-
-                // Only allow edits if not default
-                if(isDefaultTemplate(editingTemplateId)) return; 
-
-                editorContainer.addEventListener('change', (e) => {
-                    const target = e.target;
-                    
-                    // v19.44: Production Days Inputs
-                    if (target.dataset.daysField) {
-                         if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
-                         if(!tempTemplateData.days) tempTemplateData.days = { principal: 10, scouting: 5, preprod: 15 };
-                         
-                         const field = target.dataset.daysField;
-                         tempTemplateData.days[field] = parseFloat(target.value) || 0;
-                         
-                         // Auto Calculate Quantities
-                         recalculateTemplateQuantities(tempTemplateData);
-                         
-                         // Re-render to show updated quantities
-                         renderTemplateEditor(editorContainer);
-                         return;
-                    }
-
-                    if (target.dataset.templateField) {
-                        if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
-                        
-                        const field = target.dataset.templateField;
-                        const val = target.value;
-                        
-                        if(target.dataset.templateId) { // Line Item
-                            const section = tempTemplateData.sections[target.dataset.templateSection];
-                            const item = section.items.find(i => i.id === target.dataset.templateId);
-                            if(item) {
-                                if(['quantity', 'rate', 'multiplier'].includes(field)) item[field] = parseFloat(val);
-                                else item[field] = val;
-                            }
-                        } else { // Top Level
-                            if(['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(field)) tempTemplateData[field] = parseFloat(val);
-                        }
-                    }
-                });
-
-                editorContainer.addEventListener('click', (e) => {
-                    const btn = e.target.closest('button');
-                    if(!btn) return;
-                    if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
-
-                    if(btn.dataset.templateAddItem) {
-                        const sectionName = btn.dataset.templateAddItem;
-                        tempTemplateData.sections[sectionName].items.push({ id: crypto.randomUUID(), ...initialLineItem });
-                        renderTemplateEditor(editorContainer);
-                    } else if (btn.dataset.templateRemoveItem) {
-                        const sectionName = btn.dataset.templateSection;
-                        const itemId = btn.dataset.templateRemoveItem;
-                        const idx = tempTemplateData.sections[sectionName].items.findIndex(i => i.id === itemId);
-                        if(idx > -1) {
-                            tempTemplateData.sections[sectionName].items.splice(idx, 1);
-                            renderTemplateEditor(editorContainer);
-                        }
-                    } else if (btn.dataset.templateRemoveSection) {
-                        const sectionName = btn.dataset.templateRemoveSection;
-                        if(confirm("Delete section?")) {
-                            delete tempTemplateData.sections[sectionName];
-                            renderTemplateEditor(editorContainer);
-                        }
-                    } else if (btn.id === 'addTemplateSectionBtn') {
-                        const name = prompt("New Section Name:");
-                        if(name && !tempTemplateData.sections[name]) {
-                            tempTemplateData.sections[name] = { isOpen: true, items: [] };
-                            renderTemplateEditor(editorContainer);
-                        }
-                    }
-                });
-            }
-        }
-        
-        // v19.44: Production Days Logic
-        function recalculateTemplateQuantities(data) {
-            if(!data.days) return;
-            const { principal, scouting, preprod } = data.days;
-            const totalRun = principal + scouting + preprod;
-            const prepScout = scouting + preprod;
-            
-            // Regex for Full Run (Principal + Scout + Prep)
-            const fullRunRegex = /(director|producer|camera|dp|operator|ac|gaffer|grip|mixer|sound|supervisor|manager|coordinator|pa|assistant)/i;
-            // Regex for Prep + Scout
-            const prepRegex = /(researcher|location|casting)/i;
-
-            Object.values(data.sections).forEach(section => {
-                section.items.forEach(item => {
-                    // Only update if unit is 'Day'
-                    if(item.unit !== 'Day') return;
-                    
-                    const desc = item.description.toLowerCase();
-                    
-                    if (fullRunRegex.test(desc)) {
-                        item.quantity = totalRun;
-                    } else if (prepRegex.test(desc)) {
-                        item.quantity = prepScout;
-                    }
-                });
-            });
-        }
-
-        function isDefaultTemplate(id) {
-            return ['Commercial', 'Documentary', 'LiveStream'].includes(id);
-        }
-
-        // v19.36: Visual Template Editor Renderer
-        function renderTemplateEditor(container) {
-            if (!container) return; // v19.37 fix: Safety check
-            const data = tempTemplateData || getAllTemplates()[editingTemplateId];
-            if(!data) return;
-            
-            // v19.44: Init days if missing
-            if (!data.days) data.days = { principal: 10, scouting: 5, preprod: 15 };
-
-            const isReadOnly = isDefaultTemplate(editingTemplateId);
-            const disabledAttr = isReadOnly ? 'disabled' : '';
-            const readOnlyBanner = isReadOnly ? `<div class="mb-4 p-2 bg-yellow-50 text-yellow-800 text-xs border border-yellow-200 rounded flex items-center gap-2"><span class="font-bold">⚠ Default Template:</span> Read-only mode. Click "Clone / New" to create an editable copy.</div>` : '';
-
-            let html = `
-                ${readOnlyBanner}
-                
-                <div class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
-                    <h3 class="text-xs font-bold text-indigo-800 mb-2 uppercase tracking-wide">Production Days Inputs</h3>
-                    <div class="grid grid-cols-3 gap-3">
-                        <div>
-                            <label class="block text-xs text-indigo-700 mb-1">Principal</label>
-                            <input type="number" data-days-field="principal" value="${data.days.principal}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-indigo-700 mb-1">Scouting</label>
-                            <input type="number" data-days-field="scouting" value="${data.days.scouting}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-indigo-700 mb-1">Pre-Prod</label>
-                            <input type="number" data-days-field="preprod" value="${data.days.preprod}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}">
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-indigo-400 mt-2 italic">Updating these automatically adjusts quantities for standard roles (Director, Camera, etc).</p>
-                </div>
-
-                <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded grid grid-cols-3 gap-4">
-                    <div><label class="block text-xs font-bold text-gray-700">Contingency %</label><input type="number" aria-label="Template Contingency" step="0.1" value="${data.contingencyPercentage}" ${disabledAttr} data-template-field="contingencyPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}"></div>
-                    <div><label class="block text-xs font-bold text-gray-700">Sales Tax %</label><input type="number" aria-label="Template Tax" step="0.1" value="${data.salesTaxPercentage}" ${disabledAttr} data-template-field="salesTaxPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}"></div>
-                    <div><label class="block text-xs font-bold text-gray-700">Discount %</label><input type="number" aria-label="Template Discount" step="0.1" value="${data.discountPercentage}" ${disabledAttr} data-template-field="discountPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}"></div>
-                </div>
-            `;
-
-            Object.entries(data.sections).forEach(([sectionName, section]) => {
-                html += `
-                <div class="mb-4 border rounded-lg overflow-hidden">
-                    <div class="bg-gray-100 p-2 flex justify-between items-center">
-                        <h3 class="font-bold text-sm text-gray-700">${sectionName}</h3>
-                        ${!isReadOnly ? `<button data-template-remove-section="${sectionName}" aria-label="Remove Section" class="text-red-400 hover:text-red-600"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="pointer-events-none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>` : ''}
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs">
-                            <thead class="bg-gray-50 text-gray-500"><tr><th class="p-2 text-left">Description</th><th class="p-2 text-center w-12">Qty</th><th class="p-2 text-left w-20">Unit</th><th class="p-2 text-right w-24">Rate</th><th class="w-8"></th></tr></thead>
-                            <tbody>
-                                ${section.items.map(item => `
-                                <tr class="border-t hover:bg-gray-50">
-                                    <td class="p-1"><input class="w-full bg-transparent ${isReadOnly ? 'text-gray-500' : ''}" value="${item.description}" ${disabledAttr} aria-label="Template Description" data-template-field="description" data-template-id="${item.id}" data-template-section="${sectionName}"></td>
-                                    <td class="p-1"><input type="number" class="w-full bg-transparent text-center ${isReadOnly ? 'text-gray-500' : 'font-bold text-blue-600'}" value="${item.quantity}" ${disabledAttr} aria-label="Template Quantity" data-template-field="quantity" data-template-id="${item.id}" data-template-section="${sectionName}"></td>
-                                    <td class="p-1">
-                                        <select class="w-full bg-transparent ${isReadOnly ? 'text-gray-500' : ''}" ${disabledAttr} aria-label="Template Unit" data-template-field="unit" data-template-id="${item.id}" data-template-section="${sectionName}">
-                                            <option ${item.unit === 'Day' ? 'selected' : ''}>Day</option><option ${item.unit === 'Week' ? 'selected' : ''}>Week</option><option ${item.unit === 'Flat' ? 'selected' : ''}>Flat</option><option ${item.unit === 'Policy' ? 'selected' : ''}>Policy</option><option ${item.unit === 'Hour' ? 'selected' : ''}>Hour</option>
-                                        </select>
-                                    </td>
-                                    <td class="p-1"><input type="number" class="w-full bg-transparent text-right ${isReadOnly ? 'text-gray-500' : ''}" value="${item.rate}" ${disabledAttr} aria-label="Template Rate" data-template-field="rate" data-template-id="${item.id}" data-template-section="${sectionName}"></td>
-                                    <td class="p-1 text-center">${!isReadOnly ? `<button data-template-remove-item="${item.id}" data-template-section="${sectionName}" aria-label="Remove Template Item" class="text-gray-400 hover:text-red-500">×</button>` : ''}</td>
-                                </tr>`).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    ${!isReadOnly ? `<button data-template-add-item="${sectionName}" class="w-full p-2 text-center text-xs text-blue-500 hover:bg-blue-50">+ Add Line Item</button>` : ''}
-                </div>`;
-            });
-
-            if (!isReadOnly) {
-                html += `<button id="addTemplateSectionBtn" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-500 font-medium text-sm">Add New Section</button>`;
-            }
-            
-            container.innerHTML = html;
-        }
-        
-        window.editGlobalItem = function(index) { editingGlobalItemIndex = index; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
-        window.cancelEditGlobalItem = function() { editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
-        window.deleteGlobalItem = function(idx) { if (confirm("Remove item?")) { const items = getGlobalItems(); items.splice(idx, 1); saveGlobalItems(items); if(editingGlobalItemIndex === idx) editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); } };
-        window.handleRestore = function(index) {
-            const trash = JSON.parse(localStorage.getItem(trashKey) || '[]');
-            const projectToRestore = trash.splice(index, 1)[0];
-            if (projectToRestore) {
-                delete projectToRestore.deletedTimestamp;
-                localStorage.setItem(storageKeyPrefix + projectToRestore.projectName, JSON.stringify(projectToRestore));
-                localStorage.setItem(trashKey, JSON.stringify(trash));
-                loadBudget(projectToRestore.projectName);
-                render();
-            }
-            closeModal('recoveryModal');
-        };
-        window.handlePermanentDelete = function(index) {
-            if (confirm("Delete forever?")) { const trash = JSON.parse(localStorage.getItem(trashKey) || '[]'); trash.splice(index, 1); localStorage.setItem(trashKey, JSON.stringify(trash)); showRecoveryModal(); }
-        }
-
-        window.handleRestoreAll = function() {
-            const trash = JSON.parse(localStorage.getItem(trashKey) || '[]');
-            if (trash.length === 0) return;
-            
-            if (confirm(`Are you sure you want to restore all ${trash.length} projects?`)) {
-                trash.forEach(project => {
-                    delete project.deletedTimestamp;
-                    localStorage.setItem(storageKeyPrefix + project.projectName, JSON.stringify(project));
-                });
-                localStorage.removeItem(trashKey);
-                showRecoveryModal();
-                render(); 
-            }
-        };
-
-        window.handleDeleteAllTrash = function() {
-            if (confirm("WARNING: This will permanently delete ALL projects in the trash.\n\nThis action cannot be undone. Are you sure?")) {
-                localStorage.removeItem(trashKey);
-                showRecoveryModal();
-            }
-        };
-
-        async function handleAnalyzeBudget() {
-            const provider = getSelectedProvider();
-            const key = getStoredApiKey(provider);
-            const outputDiv = document.getElementById('aiAnalysisOutput');
-            outputDiv.innerHTML = '<div class="text-blue-600 animate-pulse">Analyzing...</div>';
-            const simplifiedBudget = { project: budget.projectName, totals: calculateTotals(budget.sections), sections: {} };
-            for (const [name, sec] of Object.entries(budget.sections)) simplifiedBudget.sections[name] = sec.items.map(i => `${i.quantity} ${i.unit} ${i.description} @ ${i.rate}`).join(', ');
-            const prompt = `You are a line producer. Analyze this budget JSON for a Jamaica/Intl project. 1. Missing roles/equip? 2. Rate anomalies (JMD)? 3. Risks? Budget Data: ${JSON.stringify(simplifiedBudget)}`;
-            try { const response = await callUnifiedAI(provider, key, prompt); outputDiv.innerHTML = marked.parse(response); } catch (error) { outputDiv.innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`; }
-        }
-
-        async function handleConsultantChat() {
-            const provider = getSelectedProvider();
-            const key = getStoredApiKey(provider);
-            const input = document.getElementById('aiChatInput');
-            const message = input.value.trim();
-            if (!message) return;
-            const chatHistory = document.getElementById('aiChatHistory');
-            chatHistory.innerHTML += `<div class="ai-message user">${message}</div>`;
-            input.value = '';
-            chatHistory.scrollTop = chatHistory.scrollHeight;
-            const loadingMsg = document.createElement('div'); loadingMsg.className = 'ai-message assistant text-gray-400 italic'; loadingMsg.textContent = `Thinking (${provider})...`; chatHistory.appendChild(loadingMsg);
-            try {
-                const response = await callUnifiedAI(provider, key, `You are a film production consultant. Answer concisely: ${message}`);
-                loadingMsg.innerHTML = marked.parse(response); loadingMsg.className = 'ai-message assistant';
-            } catch (error) { loadingMsg.textContent = `Error: ${error.message}`; loadingMsg.classList.add('text-red-500'); }
-        }
-
         function renderSettingsContent(tabName) {
             const currentDateFormat = getProjectDateFormat();
             const currentSeparator = getProjectNameSeparator();
@@ -1864,37 +1530,28 @@
             }
         }
 
-      // ---------------------------------------------------------
-        // --- Utils & Init ---
-        // ---------------------------------------------------------
-        
-        /* [NOTE: 19.50 Mobile Crew Toggle Helper] */
+        /* --- v19.50 Mobile Crew Toggle Helper v19.52 --- */
         window.toggleCrewPopup = function(el, event) {
-            if(event) event.stopPropagation(); // Prevent drag start
+            if(event) event.stopPropagation(); 
             const wrapper = el.parentElement;
             
-            // Close others
             document.querySelectorAll('.crew-wrapper').forEach(div => {
                 if (div !== wrapper) div.classList.remove('mobile-active');
             });
             
-            // Toggle current
             wrapper.classList.toggle('mobile-active');
         };
 
-        /* [NOTE: 19.50 Crew Profile Manager & Save Logic] */
+        /* --- v19.50 Crew Profile Manager v19.52 --- */
         window.openCrewProfile = function(el, event, itemId, sectionName) {
             if(event) event.stopPropagation();
             
-            // 1. Find the item in the data model
             const section = budget.sections[sectionName];
             const item = section.items.find(i => i.id === itemId);
             if(!item) return;
 
-            // 2. Get existing data or defaults
             const crew = item.crew || { name: '', phone: '', email: '' };
 
-            // 3. Build the Modal Content (Resized for better fit)
             const content = `
                 <form id="crewProfileForm" class="space-y-6 p-1">
                     <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-4">
@@ -1936,11 +1593,9 @@
                 </form>
             `;
 
-            // 4. Open Modal (Using 'max-w-lg' for wider layout to prevent cropping)
-            createModal('crewProfile', 'Manage Crew Contact', content, 'max-w-lg');
+            createModal('crewProfile', '', content, 'max-w-lg');
 
-            // 5. Setup Contact Import Logic (Prepped for Contact Picker API)
-            /* [NOTE: 19.50 Future Feature: Device Contact Import Logic] */
+            /* --- v19.50 Device Contact Import Logic v19.52 --- */
             document.getElementById('importContactBtn').addEventListener('click', async () => {
                 const supported = ('contacts' in navigator && 'ContactsManager' in window);
                 
@@ -1952,22 +1607,24 @@
                         
                         if (contacts.length) {
                             const contact = contacts[0];
-                            // Auto-fill form fields
                             if(contact.name && contact.name[0]) document.getElementById('crewName').value = contact.name[0];
                             if(contact.tel && contact.tel[0]) document.getElementById('crewPhone').value = contact.tel[0];
                             if(contact.email && contact.email[0]) document.getElementById('crewEmail').value = contact.email[0];
                         }
                     } catch (ex) {
-                        // Handle user cancellation silently
                         console.log("Contact import cancelled", ex);
                     }
                 } else {
-                    // Fallback / Alert for now
-                    alert("Device Contact Import:\n\nThis feature requires a supported mobile device (Android/iOS) and HTTPS context. In the future, this will open your native contact picker.");
+                    const nameInput = document.getElementById('crewName');
+                    nameInput.focus();
+                    
+                    const btn = document.getElementById('importContactBtn');
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<span class="text-xs text-red-500 font-bold">N/A</span>';
+                    setTimeout(() => btn.innerHTML = originalHTML, 2000);
                 }
             });
 
-            // 6. Handle Save (Persists to LocalStorage via pushToHistory)
             document.getElementById('crewProfileForm').addEventListener('submit', (e) => {
                 e.preventDefault();
                 item.crew = {
@@ -1977,7 +1634,7 @@
                 };
                 pushToHistory(`Assigned ${item.crew.name || 'Crew'} to ${item.description}`);
                 closeModal('crewProfileModal');
-                render(); // Re-render to show new avatar/initials
+                render(); 
             });
         };
 
@@ -1993,6 +1650,427 @@
             }
         };
 
+/* --- v19.51 Export PDF with Options v19.52 --- */
+function exportToPdf() {
+    const content = `
+        <div class="space-y-4 p-4">
+            <h3 class="font-bold text-lg text-gray-800 mb-4">PDF Export Options</h3>
+            <div class="space-y-3">
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="pdfFitToPageModal" class="w-4 h-4 rounded" checked>
+                    <span class="text-sm font-medium text-gray-700">Fit to Page (Auto-scale)</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="pdfHideZeroQtyModal" class="w-4 h-4 rounded">
+                    <span class="text-sm font-medium text-gray-700">Hide Zero Quantity Items</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="pdfLandscapeModal" class="w-4 h-4 rounded">
+                    <span class="text-sm font-medium text-gray-700">Landscape Orientation</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="pdfStagesModal" class="w-4 h-4 rounded">
+                    <span class="text-sm font-medium text-gray-700">Include Stages Breakdown</span>
+                </label>
+            </div>
+            <div class="mt-6 flex gap-3 justify-end border-t pt-4">
+                <button onclick="closeModal('pdfExportModal')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+                <button id="confirmPdfExport" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold">Export PDF</button>
+            </div>
+        </div>
+    `;
+    
+    createModal('pdfExport', 'Export Budget to PDF', content, 'max-w-md');
+    
+    document.getElementById('confirmPdfExport').addEventListener('click', () => {
+        const fitToPage = document.getElementById('pdfFitToPageModal').checked;
+        const hideZeroQty = document.getElementById('pdfHideZeroQtyModal').checked;
+        const landscape = document.getElementById('pdfLandscapeModal').checked;
+        const includeStages = document.getElementById('pdfStagesModal').checked;
+        
+        closeModal('pdfExportModal');
+        generatePdfWithOptions(fitToPage, hideZeroQty, landscape, includeStages);
+    });
+}
+
+function generatePdfWithOptions(fitToPage, hideZeroQty, landscape, includeStages) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait' });
+    
+    doc.setFontSize(18);
+    doc.text(budget.projectName || "Untitled Project", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const dateStr = new Date().toLocaleDateString();
+    doc.text(`Generated: ${dateStr}`, 14, 26);
+    
+    const { subtotal } = calculateTotals(budget.sections);
+    const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
+    const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
+    const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
+    const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
+    const grandTotal = totalBeforeDiscount - discountAmount;
+    
+    const summaryData = [
+        ['Subtotal', formatCurrency(toDisp(subtotal))],
+        [`Contingency (${budget.contingencyPercentage}%)`, formatCurrency(toDisp(contingencyAmount))],
+        [`Sales Tax (${budget.salesTaxPercentage}%)`, formatCurrency(toDisp(taxAmount))],
+        [`Discount (${budget.discountPercentage}%)`, `-${formatCurrency(toDisp(discountAmount))}`],
+        ['GRAND TOTAL', formatCurrency(toDisp(grandTotal))]
+    ];
+
+    doc.autoTable({
+        startY: 32,
+        head: [['Category', 'Amount']],
+        body: summaryData,
+        theme: 'striped',
+        headStyles: { fillColor: [66, 66, 66] },
+        columnStyles: { 
+            0: { fontStyle: 'bold' },
+            1: { halign: 'right' } 
+        },
+        margin: { left: 14, right: landscape ? 150 : 100 }
+    });
+
+    let finalY = doc.lastAutoTable.finalY + 10;
+    const tableRows = [];
+    
+    Object.entries(budget.sections).forEach(([sectionName, section]) => {
+        let sectionTotal = 0;
+        const sectionItems = [];
+        
+        section.items.forEach(item => {
+            if (hideZeroQty && (!item.quantity || item.quantity == 0)) return;
+            const { estimated } = calculateItem(item);
+            sectionTotal += estimated;
+            sectionItems.push([
+                item.description,
+                item.quantity,
+                item.unit,
+                formatCurrency(toDisp(item.rate)),
+                formatCurrency(toDisp(estimated))
+            ]);
+        });
+        
+        if (sectionItems.length === 0) return;
+        
+        tableRows.push([{ 
+            content: sectionName.toUpperCase(), 
+            colSpan: 5, 
+            styles: { fillColor: [220, 220, 220], fontStyle: 'bold', textColor: [0, 0, 0] } 
+        }]);
+        
+        tableRows.push(...sectionItems);
+        
+        tableRows.push([{ 
+            content: `Total ${sectionName}: ${formatCurrency(toDisp(sectionTotal))}`, 
+            colSpan: 5, 
+            styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } 
+        }]);
+    });
+
+    const tableConfig = {
+        startY: finalY,
+        head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
+        body: tableRows,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: fitToPage ? 8 : 9, cellPadding: fitToPage ? 2 : 3 },
+        pageBreak: 'auto',
+    };
+    
+    if (fitToPage) {
+        tableConfig.tableWidth = 'auto';
+        tableConfig.columnStyles = {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 15, halign: 'center' },
+            2: { cellWidth: 15, halign: 'center' },
+            3: { cellWidth: 25, halign: 'right' },
+            4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+        };
+    } else {
+        tableConfig.columnStyles = {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 20, halign: 'center' },
+            2: { cellWidth: 20, halign: 'center' },
+            3: { cellWidth: 30, halign: 'right' },
+            4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+        };
+    }
+
+    doc.autoTable(tableConfig);
+    
+    if (includeStages) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Production Stages Breakdown', 14, 20);
+        doc.setFontSize(10);
+        doc.text('(Feature coming in v19.52)', 14, 28);
+    }
+
+    doc.save(`${budget.projectName || 'Budget'}.pdf`);
+}
+        
+ /* --- v19.51 Export Excel with Options v19.52 --- */
+function exportToXlsx() {
+    const content = `
+        <div class="space-y-4 p-4">
+            <h3 class="font-bold text-lg text-gray-800 mb-4">Excel Export Options</h3>
+            <div class="space-y-3">
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="xlsxHideZeroQtyModal" class="w-4 h-4 rounded">
+                    <span class="text-sm font-medium text-gray-700">Hide Zero Quantity Items</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                    <input type="checkbox" id="xlsxStagesModal" class="w-4 h-4 rounded">
+                    <span class="text-sm font-medium text-gray-700">Include Stages Breakdown</span>
+                </label>
+            </div>
+            <div class="mt-6 flex gap-3 justify-end border-t pt-4">
+                <button onclick="closeModal('xlsxExportModal')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+                <button id="confirmXlsxExport" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold">Export Excel</button>
+            </div>
+        </div>
+    `;
+    
+    createModal('xlsxExport', 'Export Budget to Excel', content, 'max-w-md');
+    
+    document.getElementById('confirmXlsxExport').addEventListener('click', () => {
+        const hideZeroQty = document.getElementById('xlsxHideZeroQtyModal').checked;
+        const includeStages = document.getElementById('xlsxStagesModal').checked;
+        
+        closeModal('xlsxExportModal');
+        generateXlsxWithOptions(hideZeroQty, includeStages);
+    });
+}
+
+function generateXlsxWithOptions(hideZeroQty, includeStages) {
+    const wb = XLSX.utils.book_new();
+    const { subtotal } = calculateTotals(budget.sections);
+    const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
+    const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
+    const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
+    const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
+    const grandTotal = totalBeforeDiscount - discountAmount;
+    const totalActual = calculateActuals(budget.sections);
+
+    const data = [];
+    
+    data.push([budget.projectName || "Untitled Project"]);
+    data.push([`Generated: ${new Date().toLocaleDateString()}`]);
+    data.push([]);
+
+    data.push(["BUDGET SUMMARY", ""]);
+    data.push(["Subtotal", toDisp(subtotal)]);
+    data.push([`Contingency (${budget.contingencyPercentage}%)`, toDisp(contingencyAmount)]);
+    data.push([`Sales Tax (${budget.salesTaxPercentage}%)`, toDisp(taxAmount)]);
+    data.push([`Discount (${budget.discountPercentage}%)`, -toDisp(discountAmount)]); 
+    data.push(["GRAND TOTAL", toDisp(grandTotal)]);
+    data.push(["TOTAL ACTUAL SPEND", toDisp(totalActual)]);
+    data.push([]);
+
+    data.push(["Description", "Qty", "Unit", "Rate", "Estimated", "Actual", "Variance"]);
+
+    Object.entries(budget.sections).forEach(([sectionName, section]) => {
+        data.push([sectionName.toUpperCase(), "", "", "", "", "", ""]);
+        let sectionEst = 0;
+        let sectionAct = 0;
+
+        section.items.forEach(item => {
+            if (hideZeroQty && (!item.quantity || item.quantity == 0)) return;
+
+            const { estimated, variance } = calculateItem(item);
+            sectionEst += estimated;
+            sectionAct += (parseFloat(item.actual) || 0);
+
+            data.push([
+                item.description,
+                item.quantity,
+                item.unit,
+                toDisp(item.rate),
+                toDisp(estimated),
+                toDisp(item.actual),
+                toDisp(variance)
+            ]);
+        });
+
+        data.push([
+            `Total ${sectionName}`, 
+            "", "", "", 
+            toDisp(sectionEst), 
+            toDisp(sectionAct), 
+            toDisp(sectionAct - sectionEst)
+        ]);
+        data.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [
+        { wch: 40 }, { wch: 8 }, { wch: 10 }, { wch: 15 },
+        { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Budget Detail");
+    
+    if (includeStages) {
+        const stagesData = [["Stages Breakdown"], ["Feature coming in v19.52"]];
+        const stagesWs = XLSX.utils.aoa_to_sheet(stagesData);
+        XLSX.utils.book_append_sheet(wb, stagesWs, "Stages");
+    }
+    
+    XLSX.writeFile(wb, `${budget.projectName || 'Budget'}.xlsx`);
+}
+
+/* --- v19.51 .moo File Export/Import Logic v19.52 --- */
+        function exportToMoo() {
+    if (!budget) {
+        alert("No active budget to export.");
+        return;
+    }
+    const dataStr = JSON.stringify(budget, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (budget.projectName || "untitled").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    a.href = url;
+    a.download = `${safeName}.moo`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.createObjectURL(url);
+}
+
+function handleUniversalImport() {
+    if (budget && budget.projectName) saveBudget();
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.moo,.json,.pdf,.doc,.docx,.txt,.rtf,.md,.csv,.xls,.xlsx,image/*';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        let budgetImported = false;
+        let attachedCount = 0;
+
+        try {
+            for (const file of files) {
+                const ext = file.name.split('.').pop().toLowerCase();
+
+                if (ext === 'moo' || (ext === 'json' && file.name.includes('Budget'))) {
+                    if (budgetImported) {
+                        alert("Notice: Skipped extra budget file. Please import one project at a time.");
+                        continue;
+                    }
+
+                    const textContent = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(reader.error);
+                        reader.readAsText(file);
+                    });
+
+                    try {
+                        const importedBudget = JSON.parse(textContent);
+                        if (!importedBudget.sections || !importedBudget.projectName) throw new Error("Missing required budget data");
+
+                        const existingProjects = getProjectList();
+                        let newName = importedBudget.projectName;
+
+                        while (existingProjects.includes(newName)) {
+                            const userResponse = prompt(
+                                `Project "${newName}" already exists.\n\nEnter a new name to open it as a separate project:`, 
+                                `${newName} (Imported)`
+                            );
+                            if (userResponse === null) throw new Error("Import cancelled by user.");
+                            newName = userResponse.trim();
+                            if (!newName) throw new Error("Name cannot be empty.");
+                        }
+
+                        importedBudget.projectName = newName;
+                        if (!importedBudget.attachments) importedBudget.attachments = []; 
+                        
+                        localStorage.setItem(storageKeyPrefix + newName, JSON.stringify(importedBudget));
+                        loadBudget(newName); 
+                        budgetImported = true;
+
+                    } catch (parseErr) {
+                        alert(`Failed to load project "${file.name}": ${parseErr.message}`);
+                    }
+                } 
+                else {
+                    if (!budget) { 
+                        alert("Please open a project before attaching files."); 
+                        continue; 
+                    }
+                    if (!budget.attachments) budget.attachments = [];
+
+                    const attachment = {
+                        id: generateSafeId(),
+                        name: file.name,
+                        type: file.type || 'application/octet-stream',
+                        size: file.size,
+                        dateAdded: new Date().toISOString(),
+                        content: null
+                    };
+
+                    try {
+                        if (['txt','csv','rtf','md'].includes(ext)) {
+                             const text = await file.text();
+                             attachment.content = text.substring(0, 25000); 
+                        }
+                    } catch (err) { console.warn("Text extraction failed", err); }
+
+                    budget.attachments.push(attachment);
+                    attachedCount++;
+                }
+            }
+
+            if (attachedCount > 0) saveBudget();
+
+            render(); 
+
+            let msg = "";
+            if (budgetImported) msg += `✅ Loaded Project: "${budget.projectName}"\n`;
+            if (attachedCount > 0) msg += `📎 ${attachedCount} file(s) added to Production Consultant tray.`;
+            
+            if(msg) alert(msg.trim());
+
+            if (document.getElementById('aiToolsModal') && !document.getElementById('aiToolsModal').classList.contains('hidden')) {
+                showAIToolsModal();
+            }
+
+        } catch (globalErr) {
+            console.error("Import Error:", globalErr);
+        } finally {
+            document.body.removeChild(input);
+        }
+    };
+
+    input.click();
+}
+
+function removeAttachment(id) {
+    if(!budget || !budget.attachments) return;
+    budget.attachments = budget.attachments.filter(a => a.id !== id);
+    saveBudget();
+    showAIToolsModal();
+}
+
+        function downloadOfflineHTML() {
+            const htmlContent = document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], {type: 'text/html'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `mooBudgetTool_v${APP_VERSION}.html`;
+            a.click();
+        }
+/* --- v19.51 Project Management UI (Icon-only Export) v19.52 --- */
         function renderProjectManagement() {
             const container = document.getElementById('project-management-container');
             if(container) {
@@ -2001,15 +2079,25 @@
                 
                 container.innerHTML = `<div id="project-management" class="flex flex-wrap items-center justify-start gap-x-3 gap-y-2">
                 <select id="projectLoader" aria-label="Load Project" class="bg-white border border-gray-300 text-sm rounded-lg p-2.5">${getProjectList().map(p => `<option value="${p}" ${p === currentProjectName ? 'selected' : ''}>${p}</option>`).join('')}</select>
+                
                 <div class="relative">
-                    <select id="newProjectSelector" aria-label="File Menu" class="appearance-none px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold cursor-pointer text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <select id="newProjectSelector" aria-label="File Menu" class="appearance-none px-2 py-2 w-[4.5rem] bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold cursor-pointer text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
                         <option value="" disabled selected>File</option>
                         ${templateOptions}
                         <option value="" disabled>---</option>
                         <option value="Duplicate">Duplicate Current</option>
+                        <option value="ImportFile">Import File...</option>
                         <option value="Recover">Recover Deleted...</option>
                     </select>
                 </div>
+
+                <button id="exportMooBtn" class="p-2 bg-yellow-400 text-yellow-900 rounded-lg hover:bg-yellow-300 border border-yellow-500 shadow-sm transition-colors flex items-center justify-center" title="Export Project (.moo)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+                
+                <button id="publishBtn" class="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 shadow-sm text-sm font-semibold flex items-center gap-1">
+                    <span>Publish</span>
+                </button>
 
                 <button id="autoAssignBtn" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 border border-indigo-200 transition-colors" title="Auto Assign Roles">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -2019,15 +2107,49 @@
                 <button id="currencyToggleBtn" class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">To ${displayCurrency === 'JMD' ? 'USD' : 'JMD'}</button>
                 
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:border-l sm:border-gray-300 sm:pl-3">
-                    <button id="exportXlsxBtn" class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Excel</button>
-                    <button id="exportPdfBtn" class="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">PDF</button>
-                    <div class="flex items-center"><input type="checkbox" id="pdfFitToPage" class="h-4 w-4 rounded"><label for="pdfFitToPage" class="ml-2 text-sm text-gray-600">Fit to Page</label></div>
-                    <div class="flex items-center"><input type="checkbox" id="hideZeroQty" class="h-4 w-4 rounded"><label for="hideZeroQty" class="ml-2 text-sm text-gray-600">Hide Zero Qty</label></div>
-                </div>
-            </div>`;
+            <button id="exportXlsxBtn" class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Excel</button>
+            <button id="exportPdfBtn" class="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">PDF</button>
+        </div>
+                </div>`;
             
                 document.getElementById('autoAssignBtn')?.addEventListener('click', () => {
                      alert("Auto Assign Feature:\n\nThis will eventually allow you to auto-fill crew spots from the 'Art of Documentary' database or your uploaded contacts based on tagged skillsets.");
+                });
+                document.getElementById('exportMooBtn')?.addEventListener('click', exportToMoo);
+                
+                // v19.52 Publish Placeholder Logic
+                document.getElementById('publishBtn')?.addEventListener('click', () => {
+                    const content = `
+                        <div class="text-center p-6 space-y-4">
+                            <div class="inline-block p-4 bg-blue-50 text-blue-600 rounded-full text-4xl mb-2">☁️</div>
+                            <h3 class="text-xl font-bold text-gray-800">Cloud Integration Coming Soon</h3>
+                            <p class="text-gray-600">We are building direct integration to save your budgets to:</p>
+                            
+                            <div class="flex justify-center gap-6 py-4">
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Google Drive">
+                                    <svg class="w-10 h-10" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ff3333"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#00ac47"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ea4335"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">Drive</span>
+                                </div>
+
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Dropbox">
+                                    <svg class="w-10 h-10" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.8 20L32 32L51.2 20L32 8L12.8 20Z" fill="#0061FF"/><path d="M12.8 44L32 56L51.2 44L32 32L12.8 44Z" fill="#0061FF"/><path d="M12.8 44L32 56V32L12.8 20V44Z" fill="#0061FF"/><path d="M51.2 44L32 56V32L51.2 20V44Z" fill="#0061FF"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">Dropbox</span>
+                                </div>
+
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="OneDrive">
+                                    <svg class="w-10 h-10" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M42.3 11C35.8 11 30.1 14.8 27.5 20.3 26.5 20 25.4 19.8 24.3 19.8 17.5 19.8 12 25.3 12 32c0 1.2.2 2.3.5 3.4C10.5 36.8 9.3 38.3 9.3 40c0 3.3 2.7 6 6 6h32.1c8.1 0 14.6-6.6 14.6-14.7 0-7.8-6.1-14.2-13.8-14.6C47.3 14.5 45 11 42.3 11z" fill="#0078D4"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">OneDrive</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-yellow-50 border border-yellow-100 p-4 rounded-lg text-left text-sm text-yellow-800 mt-4">
+                                <strong>Need storage?</strong><br>
+                                When this feature launches, users who need to create new cloud accounts will get exclusive discounts on storage plans via our partners.
+                            </div>
+                            <button onclick="closeModal('publishPlaceholderModal')" class="mt-4 px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">Got it</button>
+                        </div>
+                    `;
+                    createModal('publishPlaceholder', 'Publish to Cloud', content, 'max-w-sm');
                 });
             }
         }
@@ -2079,234 +2201,433 @@
         }
         
         function handleLogin() { if (navigator.onLine && confirm("Simulate Login?")) alert("Logged in!"); }
-        
-        function exportToPdf() { 
-            const { jsPDF } = window.jspdf; 
-            const doc = new jsPDF(); 
-            
-            // --- 1. Header & Title ---
-            doc.setFontSize(18);
-            doc.text(budget.projectName || "Untitled Project", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            const dateStr = new Date().toLocaleDateString();
-            doc.text(`Generated: ${dateStr}`, 14, 26);
-            
-            // --- 2. Budget Summary Table ---
-            // Calculate totals freshly to ensure accuracy
-            const { subtotal } = calculateTotals(budget.sections);
-            const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
-            const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
-            const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
-            const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
-            const grandTotal = totalBeforeDiscount - discountAmount;
-            
-            const summaryData = [
-                ['Subtotal', formatCurrency(toDisp(subtotal))],
-                [`Contingency (${budget.contingencyPercentage}%)`, formatCurrency(toDisp(contingencyAmount))],
-                [`Sales Tax (${budget.salesTaxPercentage}%)`, formatCurrency(toDisp(taxAmount))],
-                [`Discount (${budget.discountPercentage}%)`, `-${formatCurrency(toDisp(discountAmount))}`],
-                ['GRAND TOTAL', formatCurrency(toDisp(grandTotal))]
-            ];
 
-            doc.autoTable({
-                startY: 32,
-                head: [['Category', 'Amount']],
-                body: summaryData,
-                theme: 'striped',
-                headStyles: { fillColor: [66, 66, 66] },
-                columnStyles: { 
-                    0: { fontStyle: 'bold' },
-                    1: { halign: 'right' } 
-                },
-                margin: { left: 14, right: 100 } // Keep summary compact on the left
+// --- v19.36 Template Events & Logic v19.52 ---
+        function bindTemplateEvents() {
+            document.getElementById('templateSelector')?.addEventListener('change', (e) => {
+                editingTemplateId = e.target.value;
+                tempTemplateData = null; 
+                window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
             });
 
-            // --- 3. Detailed Line Items ---
-            let finalY = doc.lastAutoTable.finalY + 10;
-            
-            // Flatten data for the main table
-            const tableRows = [];
-            
-            Object.entries(budget.sections).forEach(([sectionName, section]) => {
-                // Section Header Row (styled differently)
-                let sectionTotal = 0;
-                section.items.forEach(i => sectionTotal += calculateItem(i).estimated);
-                
-                // Add Section Title Row
-                tableRows.push([{ 
-                    content: sectionName.toUpperCase(), 
-                    colSpan: 5, 
-                    styles: { fillColor: [220, 220, 220], fontStyle: 'bold', textColor: [0, 0, 0] } 
-                }]);
+            document.getElementById('createTemplateBtn')?.addEventListener('click', () => {
+                const isDefault = ['Commercial', 'Documentary', 'LiveStream'].includes(editingTemplateId);
+                const suggestedName = isDefault ? `New ${editingTemplateId}` : '';
+                const name = prompt("Enter new template name (e.g., 'Music Video'):", suggestedName);
+                if (name) {
+                    const allTemplates = getAllTemplates();
+                    if(allTemplates[name]) return alert("Template name already exists.");
+                    const base = editingTemplateId ? allTemplates[editingTemplateId] : DEFAULT_TEMPLATES['Commercial'];
+                    allTemplates[name] = JSON.parse(JSON.stringify(base));
+                    allTemplates[name].projectName = `Untitled ${name} Project`;
+                    saveAllTemplates(allTemplates);
+                    editingTemplateId = name;
+                    window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
+                }
+            });
 
-                // Add Items
-                section.items.forEach(item => {
-                    // Filter zero qty if checkbox is checked
-                    if(document.getElementById('hideZeroQty')?.checked && (!item.quantity || item.quantity == 0)) return;
+            document.getElementById('importTemplateBtn')?.addEventListener('click', () => {
+                const jsonStr = prompt("Paste template JSON string here:");
+                if(jsonStr) {
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        if(!parsed.sections) throw new Error("Invalid template format.");
+                        const name = prompt("Name for this imported template:", "Imported Template");
+                        if(name) {
+                            const allTemplates = getAllTemplates();
+                            allTemplates[name] = parsed;
+                            saveAllTemplates(allTemplates);
+                            editingTemplateId = name;
+                            window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
+                        }
+                    } catch(e) { alert("Import Failed: " + e.message); }
+                }
+            });
 
-                    const { estimated } = calculateItem(item);
+            document.getElementById('exportTemplateBtn')?.addEventListener('click', () => {
+                if(!editingTemplateId) return;
+                const allTemplates = getAllTemplates();
+                const data = JSON.stringify(allTemplates[editingTemplateId]);
+                navigator.clipboard.writeText(data).then(() => alert("Template JSON copied to clipboard!")).catch(() => prompt("Copy this:", data));
+            });
+
+            document.getElementById('deleteTemplateBtn')?.addEventListener('click', () => {
+                if(!editingTemplateId || ['Commercial', 'Documentary', 'LiveStream'].includes(editingTemplateId)) {
+                    return alert("Cannot delete default templates.");
+                }
+                if(confirm(`Delete template "${editingTemplateId}"?`)) {
+                    const allTemplates = getAllTemplates();
+                    delete allTemplates[editingTemplateId];
+                    saveAllTemplates(allTemplates);
+                    editingTemplateId = 'Commercial';
+                    window.switchSettingsTab('templates', document.querySelector('button[onclick*="templates"]'));
+                }
+            });
+
+            document.getElementById('saveTemplateChangesBtn')?.addEventListener('click', () => {
+                if(isDefaultTemplate(editingTemplateId)) {
+                    return alert("Cannot edit default templates directly. Please create a copy.");
+                }
+                if (tempTemplateData && editingTemplateId) {
+                    const allTemplates = getAllTemplates();
+                    allTemplates[editingTemplateId] = tempTemplateData;
+                    saveAllTemplates(allTemplates);
+                    alert("Template Saved!");
+                    tempTemplateData = null;
+                }
+            });
+
+            const editorContainer = document.getElementById('templateEditorContainer');
+            if(editorContainer) {
+                renderTemplateEditor(editorContainer);
+
+                if(isDefaultTemplate(editingTemplateId)) return; 
+
+                editorContainer.addEventListener('change', (e) => {
+                    const target = e.target;
                     
-                    // Format: Description | Qty | Unit | Rate | Total
-                    tableRows.push([
-                        item.description,
-                        item.quantity,
-                        item.unit,
-                        formatCurrency(toDisp(item.rate)),
-                        formatCurrency(toDisp(estimated))
-                    ]);
+                    if (target.dataset.daysField) {
+                         if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
+                         if(!tempTemplateData.days) tempTemplateData.days = { principal: 10, scouting: 5, preprod: 15 };
+                         
+                         const field = target.dataset.daysField;
+                         tempTemplateData.days[field] = parseFloat(target.value) || 0;
+                         recalculateTemplateQuantities(tempTemplateData);
+                         renderTemplateEditor(editorContainer);
+                         return;
+                    }
+
+                    if (target.dataset.templateField) {
+                        if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
+                        
+                        const field = target.dataset.templateField;
+                        const val = target.value;
+                        
+                        if(target.dataset.templateId) { 
+                            const section = tempTemplateData.sections[target.dataset.templateSection];
+                            const item = section.items.find(i => i.id === target.dataset.templateId);
+                            if(item) {
+                                if(['quantity', 'rate', 'multiplier'].includes(field)) item[field] = parseFloat(val);
+                                else item[field] = val;
+                            }
+                        } else { 
+                            if(['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(field)) tempTemplateData[field] = parseFloat(val);
+                        }
+                    }
                 });
 
-                // Section Subtotal Row
-                tableRows.push([{ 
-                    content: `Total ${sectionName}: ${formatCurrency(toDisp(sectionTotal))}`, 
-                    colSpan: 5, 
-                    styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } 
-                }]);
-            });
+                editorContainer.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button');
+                    if(!btn) return;
+                    if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
 
-            doc.autoTable({
-                startY: finalY,
-                head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
-                body: tableRows,
-                theme: 'grid',
-                headStyles: { fillColor: [41, 128, 185] }, // Blue header
-                columnStyles: {
-                    0: { cellWidth: 'auto' }, // Description gets remaining space
-                    1: { cellWidth: 20, halign: 'center' },
-                    2: { cellWidth: 20, halign: 'center' },
-                    3: { cellWidth: 30, halign: 'right' },
-                    4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
-                },
-                styles: { fontSize: 9, cellPadding: 3 },
-                // Handle page breaks nicely
-                pageBreak: 'auto',
-            });
-
-            // Save
-            doc.save(`${budget.projectName || 'Budget'}.pdf`); 
+                    if(btn.dataset.templateAddItem) {
+                        const sectionName = btn.dataset.templateAddItem;
+                        tempTemplateData.sections[sectionName].items.push({ id: crypto.randomUUID(), ...initialLineItem });
+                        renderTemplateEditor(editorContainer);
+                    } else if (btn.dataset.templateRemoveItem) {
+                        const sectionName = btn.dataset.templateSection;
+                        const itemId = btn.dataset.templateRemoveItem;
+                        const idx = tempTemplateData.sections[sectionName].items.findIndex(i => i.id === itemId);
+                        if(idx > -1) {
+                            tempTemplateData.sections[sectionName].items.splice(idx, 1);
+                            renderTemplateEditor(editorContainer);
+                        }
+                    } else if (btn.dataset.templateRemoveSection) {
+                        const sectionName = btn.dataset.templateRemoveSection;
+                        if(confirm("Delete section?")) {
+                            delete tempTemplateData.sections[sectionName];
+                            renderTemplateEditor(editorContainer);
+                        }
+                    } else if (btn.id === 'addTemplateSectionBtn') {
+                        const name = prompt("New Section Name:");
+                        if(name && !tempTemplateData.sections[name]) {
+                            tempTemplateData.sections[name] = { isOpen: true, items: [] };
+                            renderTemplateEditor(editorContainer);
+                        }
+                    }
+                });
+            }
         }
         
-       function exportToXlsx() { 
-            const wb = XLSX.utils.book_new();
+        function recalculateTemplateQuantities(data) {
+            if(!data.days) return;
+            const { principal, scouting, preprod } = data.days;
+            const totalRun = principal + scouting + preprod;
+            const prepScout = scouting + preprod;
             
-            // --- 1. Calculate Summary Totals ---
-            const { subtotal } = calculateTotals(budget.sections);
-            const contingencyAmount = subtotal * (budget.contingencyPercentage / 100);
-            const taxAmount = subtotal * (budget.salesTaxPercentage / 100);
-            const totalBeforeDiscount = subtotal + contingencyAmount + taxAmount;
-            const discountAmount = totalBeforeDiscount * ((budget.discountPercentage || 0) / 100);
-            const grandTotal = totalBeforeDiscount - discountAmount;
-            const totalActual = calculateActuals(budget.sections);
+            const fullRunRegex = /(director|producer|camera|dp|operator|ac|gaffer|grip|mixer|sound|supervisor|manager|coordinator|pa|assistant)/i;
+            const prepRegex = /(researcher|location|casting)/i;
 
-            // --- 2. Build Data Array (Rows) ---
-            const data = [];
-            
-            // Title & Metadata
-            data.push([budget.projectName || "Untitled Project"]);
-            data.push([`Generated: ${new Date().toLocaleDateString()}`]);
-            data.push([]); // Spacer
-
-            // Summary Section
-            data.push(["BUDGET SUMMARY", ""]);
-            data.push(["Subtotal", toDisp(subtotal)]);
-            data.push([`Contingency (${budget.contingencyPercentage}%)`, toDisp(contingencyAmount)]);
-            data.push([`Sales Tax (${budget.salesTaxPercentage}%)`, toDisp(taxAmount)]);
-            data.push([`Discount (${budget.discountPercentage}%)`, -toDisp(discountAmount)]); 
-            data.push(["GRAND TOTAL", toDisp(grandTotal)]);
-            data.push(["TOTAL ACTUAL SPEND", toDisp(totalActual)]);
-            data.push([]); // Spacer
-
-            // Main Headers
-            data.push(["Description", "Qty", "Unit", "Rate", "Estimated", "Actual", "Variance"]);
-
-            // Detailed Line Items
-            Object.entries(budget.sections).forEach(([sectionName, section]) => {
-                // Section Header
-                data.push([sectionName.toUpperCase(), "", "", "", "", "", ""]);
-                
-                let sectionEst = 0;
-                let sectionAct = 0;
-
+            Object.values(data.sections).forEach(section => {
                 section.items.forEach(item => {
-                    // Filter zero qty if checkbox is checked
-                    if(document.getElementById('hideZeroQty')?.checked && (!item.quantity || item.quantity == 0)) return;
-
-                    const { estimated, variance } = calculateItem(item);
-                    sectionEst += estimated;
-                    sectionAct += (parseFloat(item.actual) || 0);
-
-                    data.push([
-                        item.description,
-                        item.quantity,
-                        item.unit,
-                        toDisp(item.rate),
-                        toDisp(estimated),
-                        toDisp(item.actual),
-                        toDisp(variance)
-                    ]);
+                    if(item.unit !== 'Day') return;
+                    const desc = item.description.toLowerCase();
+                    if (fullRunRegex.test(desc)) item.quantity = totalRun;
+                    else if (prepRegex.test(desc)) item.quantity = prepScout;
                 });
+            });
+        }
 
-                // Section Footer (Subtotals)
-                data.push([
-                    `Total ${sectionName}`, 
-                    "", 
-                    "", 
-                    "", 
-                    toDisp(sectionEst), 
-                    toDisp(sectionAct), 
-                    toDisp(sectionAct - sectionEst)
-                ]);
-                data.push([]); // Spacer between sections
+        function isDefaultTemplate(id) {
+            return ['Commercial', 'Documentary', 'LiveStream'].includes(id);
+        }
+
+        function renderTemplateEditor(container) {
+            if (!container) return; 
+            const data = tempTemplateData || getAllTemplates()[editingTemplateId];
+            if(!data) return;
+            
+            if (!data.days) data.days = { principal: 10, scouting: 5, preprod: 15 };
+
+            const isReadOnly = isDefaultTemplate(editingTemplateId);
+            const disabledAttr = isReadOnly ? 'disabled' : '';
+            const readOnlyBanner = isReadOnly ? `<div class="mb-4 p-2 bg-yellow-50 text-yellow-800 text-xs border border-yellow-200 rounded flex items-center gap-2"><span class="font-bold">⚠ Default Template:</span> Read-only mode. Click "Clone / New" to create an editable copy.</div>` : '';
+
+            let html = `
+                ${readOnlyBanner}
+                <div class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
+                    <h3 class="text-xs font-bold text-indigo-800 mb-2 uppercase tracking-wide">Production Days Inputs</h3>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div><label class="block text-xs text-indigo-700 mb-1">Principal</label><input type="number" data-days-field="principal" value="${data.days.principal}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}"></div>
+                        <div><label class="block text-xs text-indigo-700 mb-1">Scouting</label><input type="number" data-days-field="scouting" value="${data.days.scouting}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}"></div>
+                        <div><label class="block text-xs text-indigo-700 mb-1">Pre-Prod</label><input type="number" data-days-field="preprod" value="${data.days.preprod}" ${disabledAttr} class="w-full p-1.5 text-sm border border-indigo-200 rounded shadow-sm focus:border-indigo-500 ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white'}"></div>
+                    </div>
+                    <p class="text-[10px] text-indigo-400 mt-2 italic">Updating these automatically adjusts quantities for standard roles.</p>
+                </div>
+                <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded grid grid-cols-3 gap-4">
+                    <div><label class="block text-xs font-bold text-gray-700">Contingency %</label><input type="number" step="0.1" value="${data.contingencyPercentage}" ${disabledAttr} data-template-field="contingencyPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100' : ''}"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Sales Tax %</label><input type="number" step="0.1" value="${data.salesTaxPercentage}" ${disabledAttr} data-template-field="salesTaxPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100' : ''}"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Discount %</label><input type="number" step="0.1" value="${data.discountPercentage}" ${disabledAttr} data-template-field="discountPercentage" class="w-full p-1 border rounded ${isReadOnly ? 'bg-gray-100' : ''}"></div>
+                </div>`;
+
+            Object.entries(data.sections).forEach(([sectionName, section]) => {
+                html += `
+                <div class="mb-4 border rounded-lg overflow-hidden">
+                    <div class="bg-gray-100 p-2 flex justify-between items-center"><h3 class="font-bold text-sm text-gray-700">${sectionName}</h3>${!isReadOnly ? `<button data-template-remove-section="${sectionName}" class="text-red-400 hover:text-red-600">×</button>` : ''}</div>
+                    <div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-gray-50 text-gray-500"><tr><th class="p-2 text-left">Description</th><th class="p-2 text-center w-12">Qty</th><th class="p-2 text-left w-20">Unit</th><th class="p-2 text-right w-24">Rate</th><th class="w-8"></th></tr></thead><tbody>
+                    ${section.items.map(item => `<tr class="border-t hover:bg-gray-50"><td class="p-1"><input class="w-full bg-transparent ${isReadOnly ? 'text-gray-500' : ''}" value="${item.description}" ${disabledAttr} data-template-field="description" data-template-id="${item.id}" data-template-section="${sectionName}"></td><td class="p-1"><input type="number" class="w-full bg-transparent text-center ${isReadOnly ? 'text-gray-500' : 'font-bold text-blue-600'}" value="${item.quantity}" ${disabledAttr} data-template-field="quantity" data-template-id="${item.id}" data-template-section="${sectionName}"></td><td class="p-1"><select class="w-full bg-transparent ${isReadOnly ? 'text-gray-500' : ''}" ${disabledAttr} data-template-field="unit" data-template-id="${item.id}" data-template-section="${sectionName}"><option ${item.unit === 'Day' ? 'selected' : ''}>Day</option><option ${item.unit === 'Week' ? 'selected' : ''}>Week</option><option ${item.unit === 'Flat' ? 'selected' : ''}>Flat</option><option ${item.unit === 'Policy' ? 'selected' : ''}>Policy</option><option ${item.unit === 'Hour' ? 'selected' : ''}>Hour</option></select></td><td class="p-1"><input type="number" class="w-full bg-transparent text-right ${isReadOnly ? 'text-gray-500' : ''}" value="${item.rate}" ${disabledAttr} data-template-field="rate" data-template-id="${item.id}" data-template-section="${sectionName}"></td><td class="p-1 text-center">${!isReadOnly ? `<button data-template-remove-item="${item.id}" data-template-section="${sectionName}" class="text-gray-400 hover:text-red-500">×</button>` : ''}</td></tr>`).join('')}
+                    </tbody></table></div>${!isReadOnly ? `<button data-template-add-item="${sectionName}" class="w-full p-2 text-center text-xs text-blue-500 hover:bg-blue-50">+ Add Line Item</button>` : ''}
+                </div>`;
             });
 
-            // --- 3. Create Sheet & Set Column Widths ---
-            const ws = XLSX.utils.aoa_to_sheet(data);
+            if (!isReadOnly) html += `<button id="addTemplateSectionBtn" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-500 font-medium text-sm">Add New Section</button>`;
+            container.innerHTML = html;
+        }
+        
+        window.editGlobalItem = function(index) { editingGlobalItemIndex = index; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
+        window.cancelEditGlobalItem = function() { editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
+        window.deleteGlobalItem = function(idx) { if (confirm("Remove item?")) { const items = getGlobalItems(); items.splice(idx, 1); saveGlobalItems(items); if(editingGlobalItemIndex === idx) editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); } };
+        window.handleRestore = function(index) {
+            const trash = JSON.parse(localStorage.getItem(trashKey) || '[]');
+            const projectToRestore = trash.splice(index, 1)[0];
+            if (projectToRestore) {
+                delete projectToRestore.deletedTimestamp;
+                localStorage.setItem(storageKeyPrefix + projectToRestore.projectName, JSON.stringify(projectToRestore));
+                localStorage.setItem(trashKey, JSON.stringify(trash));
+                loadBudget(projectToRestore.projectName);
+                render();
+            }
+            closeModal('recoveryModal');
+        };
+        window.handlePermanentDelete = function(index) {
+            if (confirm("Delete forever?")) { const trash = JSON.parse(localStorage.getItem(trashKey) || '[]'); trash.splice(index, 1); localStorage.setItem(trashKey, JSON.stringify(trash)); showRecoveryModal(); }
+        }
+
+        window.handleRestoreAll = function() {
+            const trash = JSON.parse(localStorage.getItem(trashKey) || '[]');
+            if (trash.length === 0) return;
+            if (confirm(`Restore all ${trash.length} projects?`)) {
+                trash.forEach(project => {
+                    delete project.deletedTimestamp;
+                    localStorage.setItem(storageKeyPrefix + project.projectName, JSON.stringify(project));
+                });
+                localStorage.removeItem(trashKey);
+                showRecoveryModal();
+                render(); 
+            }
+        };
+
+        window.handleDeleteAllTrash = function() {
+            if (confirm("Permanently delete ALL projects in trash?")) {
+                localStorage.removeItem(trashKey);
+                showRecoveryModal();
+            }
+        };
+
+        async function handleAnalyzeBudget() {
+            const provider = getSelectedProvider();
+            const key = getStoredApiKey(provider);
+            const outputDiv = document.getElementById('aiAnalysisOutput');
+            outputDiv.innerHTML = '<div class="text-blue-600 animate-pulse">Analyzing...</div>';
+            const simplifiedBudget = { project: budget.projectName, totals: calculateTotals(budget.sections), sections: {} };
+            for (const [name, sec] of Object.entries(budget.sections)) simplifiedBudget.sections[name] = sec.items.map(i => `${i.quantity} ${i.unit} ${i.description} @ ${i.rate}`).join(', ');
+            const prompt = `You are a line producer. Analyze this budget JSON for a Jamaica/Intl project. 1. Missing roles/equip? 2. Rate anomalies (JMD)? 3. Risks? Budget Data: ${JSON.stringify(simplifiedBudget)}`;
+            try { const response = await callUnifiedAI(provider, key, prompt); outputDiv.innerHTML = marked.parse(response); } catch (error) { outputDiv.innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`; }
+        }
+
+        async function handleConsultantChat() {
+            const provider = getSelectedProvider();
+            const key = getStoredApiKey(provider);
+            const input = document.getElementById('aiChatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            const chatHistory = document.getElementById('aiChatHistory');
+            chatHistory.innerHTML += `<div class="ai-message user">${message}</div>`;
+            input.value = '';
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            const loadingMsg = document.createElement('div'); loadingMsg.className = 'ai-message assistant text-gray-400 italic'; loadingMsg.textContent = `Thinking (${provider})...`; chatHistory.appendChild(loadingMsg);
+            try {
+                const response = await callUnifiedAI(provider, key, `You are a film production consultant. Answer concisely: ${message}`);
+                loadingMsg.innerHTML = marked.parse(response); loadingMsg.className = 'ai-message assistant';
+            } catch (error) { loadingMsg.textContent = `Error: ${error.message}`; loadingMsg.classList.add('text-red-500'); }
+        }
+
+        /* --- v19.51 Project Management UI v19.52 --- */
+        function renderProjectManagement() {
+            const container = document.getElementById('project-management-container');
+            if(container) {
+                const templates = getAllTemplates();
+                const templateOptions = Object.keys(templates).map(k => `<option value="${k}">New ${k}</option>`).join('');
+                
+                container.innerHTML = `<div id="project-management" class="flex flex-wrap items-center justify-start gap-x-3 gap-y-2">
+                <select id="projectLoader" aria-label="Load Project" class="bg-white border border-gray-300 text-sm rounded-lg p-2.5">${getProjectList().map(p => `<option value="${p}" ${p === currentProjectName ? 'selected' : ''}>${p}</option>`).join('')}</select>
+                
+                <div class="relative">
+                    <select id="newProjectSelector" aria-label="File Menu" class="appearance-none px-2 py-2 w-[4.5rem] bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold cursor-pointer text-center focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <option value="" disabled selected>File</option>
+                        ${templateOptions}
+                        <option value="" disabled>---</option>
+                        <option value="Duplicate">Duplicate Current</option>
+                        <option value="ImportFile">Import File...</option>
+                        <option value="Recover">Recover Deleted...</option>
+                    </select>
+                </div>
+
+                <button id="exportMooBtn" class="p-2 bg-yellow-400 text-yellow-900 rounded-lg hover:bg-yellow-300 border border-yellow-500 shadow-sm transition-colors flex items-center justify-center" title="Export Project (.moo)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+                
+                <button id="publishBtn" class="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 shadow-sm text-sm font-semibold flex items-center gap-1">
+                    <span>Publish</span>
+                </button>
+
+                <button id="autoAssignBtn" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 border border-indigo-200 transition-colors" title="Auto Assign Roles">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </button>
+
+                <button id="deleteProjectBtn" class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">Delete</button>
+                <button id="currencyToggleBtn" class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">To ${displayCurrency === 'JMD' ? 'USD' : 'JMD'}</button>
+                
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:border-l sm:border-gray-300 sm:pl-3">
+            <button id="exportXlsxBtn" class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Excel</button>
+            <button id="exportPdfBtn" class="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">PDF</button>
+        </div>
+                </div>`;
             
-            // Set column widths for better readability
-            ws['!cols'] = [
-                { wch: 40 }, // Description (wide)
-                { wch: 8 },  // Qty
-                { wch: 10 }, // Unit
-                { wch: 15 }, // Rate
-                { wch: 15 }, // Estimated
-                { wch: 15 }, // Actual
-                { wch: 15 }  // Variance
-            ];
+                document.getElementById('autoAssignBtn')?.addEventListener('click', () => {
+                     alert("Auto Assign Feature:\n\nThis will eventually allow you to auto-fill crew spots from the 'Art of Documentary' database or your uploaded contacts based on tagged skillsets.");
+                });
+                document.getElementById('exportMooBtn')?.addEventListener('click', exportToMoo);
+                
+                document.getElementById('publishBtn')?.addEventListener('click', () => {
+                    const content = `
+                        <div class="text-center p-6 space-y-4">
+                            <div class="inline-block p-4 bg-blue-50 text-blue-600 rounded-full text-4xl mb-2">☁️</div>
+                            <h3 class="text-xl font-bold text-gray-800">Cloud Integration Coming Soon</h3>
+                            <p class="text-gray-600">We are building direct integration to save your budgets to:</p>
+                            
+                            <div class="flex justify-center gap-6 py-4">
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Google Drive">
+                                    <svg class="w-10 h-10" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ff3333"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#00ac47"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ea4335"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">Drive</span>
+                                </div>
 
-            XLSX.utils.book_append_sheet(wb, ws, "Budget Detail");
-            XLSX.writeFile(wb, `${budget.projectName || 'Budget'}.xlsx`); 
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Dropbox">
+                                    <svg class="w-10 h-10" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.8 20L32 32L51.2 20L32 8L12.8 20Z" fill="#0061FF"/><path d="M12.8 44L32 56L51.2 44L32 32L12.8 44Z" fill="#0061FF"/><path d="M12.8 44L32 56V32L12.8 20V44Z" fill="#0061FF"/><path d="M51.2 44L32 56V32L51.2 20V44Z" fill="#0061FF"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">Dropbox</span>
+                                </div>
+
+                                <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="OneDrive">
+                                    <svg class="w-10 h-10" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M42.3 11C35.8 11 30.1 14.8 27.5 20.3 26.5 20 25.4 19.8 24.3 19.8 17.5 19.8 12 25.3 12 32c0 1.2.2 2.3.5 3.4C10.5 36.8 9.3 38.3 9.3 40c0 3.3 2.7 6 6 6h32.1c8.1 0 14.6-6.6 14.6-14.7 0-7.8-6.1-14.2-13.8-14.6C47.3 14.5 45 11 42.3 11z" fill="#0078D4"/></svg>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase">OneDrive</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-yellow-50 border border-yellow-100 p-4 rounded-lg text-left text-sm text-yellow-800 mt-4">
+                                <strong>Need storage?</strong><br>
+                                When this feature launches, users who need to create new cloud accounts will get exclusive discounts on storage plans via our partners.
+                            </div>
+                            <button onclick="closeModal('publishPlaceholderModal')" class="mt-4 px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">Got it</button>
+                        </div>
+                    `;
+                    createModal('publishPlaceholder', 'Publish to Cloud', content, 'max-w-sm');
+                });
+            }
         }
 
-        function downloadOfflineHTML() {
-            const htmlContent = document.documentElement.outerHTML;
-            const blob = new Blob([htmlContent], {type: 'text/html'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `mooBudgetTool_v${APP_VERSION}.html`;
-            a.click();
+        function makeInputDraggable(input) {
+            if (!input || input.dataset.draggable === 'true') return;
+            input.dataset.draggable = 'true';
+            input.style.cursor = 'ew-resize';
+            
+            let startX, startVal;
+            const onMove = (e) => { 
+                const delta = e.clientX - startX; 
+                input.value = Math.max(0, startVal + (delta * 0.2)).toFixed(2); 
+                input.dispatchEvent(new Event('input', {bubbles:true})); 
+            };
+            const onUp = () => { 
+                document.removeEventListener('mousemove', onMove); 
+                document.removeEventListener('mouseup', onUp); 
+            };
+            
+            input.addEventListener('mousedown', (e) => { 
+                if(input === document.activeElement) return; 
+                startX = e.clientX; 
+                startVal = parseFloat(input.value)||0; 
+                document.addEventListener('mousemove', onMove); 
+                document.addEventListener('mouseup', onUp); 
+            });
         }
+
+        function initializeInteractiveInputs() { 
+            ['contingencyPercentage','salesTaxPercentage','discountPercentage'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) makeInputDraggable(el);
+            });
+        }
+        
+        function updateOnlineStatus() { 
+            const isOnline = navigator.onLine;
+            const btn = document.getElementById('loginBtn'); 
+            if(btn) { 
+                btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isOnline ? 'status-online' : 'status-offline'}`; 
+                btn.title = isOnline ? "Online" : "Offline"; 
+            }
+            const aiBtn = document.getElementById('openAiToolsBtn');
+            if(aiBtn) {
+                aiBtn.className = `p-2 border rounded-lg text-sm transition-colors flex items-center justify-center flex-shrink-0 ${isOnline ? 'bg-green-100 border-green-200 text-green-800 hover:bg-green-200' : 'bg-red-100 border-red-200 text-red-800 cursor-not-allowed opacity-75'}`;
+                if(!isOnline) aiBtn.title = "Offline - AI Unavailable";
+            }
+        }
+        
+        function handleLogin() { if (navigator.onLine && confirm("Simulate Login?")) alert("Logged in!"); }
 
      function init() {
-            // 1. Sync Version Number to UI (Tab Title & Footer)
             document.title = `mooBudgetTool v${APP_VERSION}`;
             const footerText = document.querySelector('footer p');
             if(footerText) footerText.innerHTML = `Budget Tool by moo v${APP_VERSION}`;
 
-            // 2. Load Settings & Currency
             displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
             
-            // 3. Load Project or Initialize New
             let projectToLoad = localStorage.getItem(`${storageKeyPrefix}lastLoaded`);
             if (!projectToLoad || !getProjectList().includes(projectToLoad)) projectToLoad = getProjectList()[0];
             projectToLoad ? loadBudget(projectToLoad) : handleNewProject(false);
             
-            // 4. Render & Bind Events
             render();
             bindAppEventListeners();
             
-            // 5. Global Click Listener (Close Crew Popups when clicking outside)
             document.addEventListener('click', (e) => {
                 if(!e.target.closest('.crew-wrapper')) {
                     document.querySelectorAll('.crew-wrapper').forEach(div => div.classList.remove('mobile-active'));
