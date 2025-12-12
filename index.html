@@ -13,12 +13,13 @@
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/assets/cow-512.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263/lucide.min.js">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script>
@@ -71,7 +72,7 @@
         .modal-exit-active { opacity: 0; transition: opacity 0.2s ease-in-out; }
         #settingsModalContent, #aiToolsModalContent { transition: all 0.3s ease-in-out; }
 
-       /* --- Mobile Table Optimized (v19.52 Final) --- */
+  /* --- Mobile Table Optimized (v19.52 Final) --- */
         @media (max-width: 768px) {
             /* 1. Container & Table Structure */
             .table-container { 
@@ -167,6 +168,47 @@
         .drag-handle:active { 
             cursor: grabbing; 
             color: #3b82f6; 
+        }
+
+/* --- SortableJS Visuals (Desktop & Mobile) --- */
+        
+        /* The Ghost: This is the empty space where the item will drop */
+        .sortable-ghost {
+            opacity: 1 !important;
+        }
+        .sortable-ghost td {
+            background-color: #dbeafe !important; /* Light Blue Background */
+            border-top: 2px dashed #2563eb !important; /* Blue Top Border */
+            border-bottom: 2px dashed #2563eb !important; /* Blue Bottom Border */
+            color: transparent !important; /* Hide text in the ghost */
+        }
+        .sortable-ghost td * {
+            visibility: hidden; /* Hide contents in the ghost */
+        }
+
+        /* The Drag: This is the item floating under your finger/mouse */
+        .sortable-drag {
+            background: white !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2) !important;
+            opacity: 0.95 !important;
+            cursor: grabbing !important;
+            display: table !important; /* Keep table row shape */
+        }
+        /* Ensure cells inside the floating drag item keep their width */
+        .sortable-drag td {
+            background: white !important;
+        }
+        /* --- SortableJS Visuals --- */
+        .sortable-ghost {
+            background-color: #dbeafe !important; /* Light Blue */
+            border: 2px dashed #2563eb !important; /* Blue Dashed Border */
+            opacity: 0.8 !important;
+        }
+        .sortable-drag {
+            background-color: #ffffff !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+            transform: scale(1.02);
+            cursor: grabbing !important;
         }
 
         /* --- v19.50 Crew Styles v19.52 --- */
@@ -1305,76 +1347,62 @@ async function callUnifiedAI(provider, apiKey, prompt) {
             if(doRender) render();
         }
 
-        // --- Drag & Drop (Logic) ---
-        let draggedItem = null;
+   // --- Drag & Drop (Powered by SortableJS) ---
         function initializeDragAndDrop() {
-            document.querySelectorAll('.draggable-row').forEach(row => {
-                row.draggable = false;
+            const containers = document.querySelectorAll('tbody[data-section-body]');
+            
+            containers.forEach(container => {
+                // Prevent duplicate initialization
+                if(container._sortable) return;
 
-                const handle = row.querySelector('.drag-handle');
-                if(handle) {
-                    const startDrag = () => { row.draggable = true; };
-                    const endDrag = () => { row.draggable = false; };
+                container._sortable = new Sortable(container, {
+                    group: 'budget-items', // Allows dragging between sections
+                    handle: '.drag-handle', // Restricts drag to the handle icon
+                    animation: 150, // Smooth swap animation
                     
-                    handle.addEventListener('mousedown', startDrag);
-                    handle.addEventListener('mouseup', endDrag);
-                    handle.addEventListener('mouseleave', endDrag);
+                    // Visual Classes (Matches the CSS we just added)
+                    ghostClass: 'sortable-ghost', 
+                    dragClass: 'sortable-drag',
                     
-                    handle.addEventListener('touchstart', (e) => {
-                        startDrag();
-                        row.draggable = true;
-                        row.classList.add('dragging');
-                    }, { passive: true });
+                    // Critical for Desktop/Mobile consistency
+                    forceFallback: true, 
+                    fallbackOnBody: true,
+                    swapThreshold: 0.65,
+                    
+                    // Delays prevent accidental drags while scrolling on mobile
+                    delay: 100, 
+                    delayOnTouchOnly: true,
 
-                    handle.addEventListener('touchend', endDrag);
-                    handle.addEventListener('touchcancel', endDrag);
-		 }
+                    onEnd: function (evt) {
+                        const itemEl = evt.item;
+                        const newIndex = evt.newIndex;
+                        const toSection = evt.to.dataset.sectionBody;
+                        const fromSection = evt.from.dataset.sectionBody;
+                        const itemId = itemEl.dataset.itemId;
 
-                row.addEventListener('dragstart', (e) => { 
-                    if(row.draggable) {
-                        draggedItem = { id: e.target.dataset.itemId, section: e.target.dataset.section }; 
-                        e.target.classList.add('dragging'); 
-                        e.dataTransfer.effectAllowed = 'move'; 
-                    } else {
-                        e.preventDefault(); 
-                    }
-                });
+                        // Only process if position actually changed
+                        if (toSection === fromSection && evt.oldIndex === newIndex) return;
 
-                row.addEventListener('dragover', (e) => {
-                    e.preventDefault(); 
-                    e.dataTransfer.dropEffect = 'move'; 
-                    e.currentTarget.classList.add('drag-over');
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    if (e.clientY < rect.top + rect.height / 2) { 
-                        e.currentTarget.style.borderTop = '3px solid #3b82f6'; 
-                        e.currentTarget.style.borderBottom = 'none'; 
-                    } else { 
-                        e.currentTarget.style.borderTop = 'none'; 
-                        e.currentTarget.style.borderBottom = '3px solid #3b82f6'; 
-                    }
-                });
-
-                row.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    const dropSection = e.currentTarget.closest('[data-section-body]').dataset.sectionBody;
-                    const dropIndex = Array.from(e.currentTarget.parentNode.children).indexOf(e.currentTarget);
-                    moveItem(draggedItem.id, draggedItem.section, dropSection, dropIndex);
-                    resetDragStyles(e.currentTarget);
-                });
-
-                row.addEventListener('dragend', (e) => { 
-                    e.target.classList.remove('dragging'); 
-                    document.querySelectorAll('.drag-over').forEach(el => resetDragStyles(el)); 
-                });
-            });
-
-            document.querySelectorAll('[data-section-body]').forEach(section => {
-                section.addEventListener('dragover', (e) => { e.preventDefault(); });
-                section.addEventListener('drop', (e) => { 
-                    e.preventDefault(); 
-                    if(draggedItem) {
-                        moveItem(draggedItem.id, draggedItem.section, e.currentTarget.dataset.sectionBody, 0); 
-                        resetDragStyles(e.currentTarget); 
+                        // 1. Update Data Model
+                        const fromList = budget.sections[fromSection].items;
+                        
+                        // Find item object
+                        const itemObjIndex = fromList.findIndex(i => i.id === itemId);
+                        if (itemObjIndex > -1) {
+                            const [movedItem] = fromList.splice(itemObjIndex, 1);
+                            
+                            // Insert into new list at specific index
+                            if (!budget.sections[toSection].items) budget.sections[toSection].items = [];
+                            budget.sections[toSection].items.splice(newIndex, 0, movedItem);
+                            
+                            // 2. Update DOM Data Attributes (Critical for next move)
+                            itemEl.dataset.section = toSection;
+                            itemEl.querySelectorAll('[data-section]').forEach(el => el.dataset.section = toSection);
+                            
+                            // 3. Save & Recalculate
+                            pushToHistory(`Moved item to ${toSection}`);
+                            updateCalculations();
+                        }
                     }
                 });
             });
