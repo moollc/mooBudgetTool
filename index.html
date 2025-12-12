@@ -40,7 +40,10 @@
         /* --- Base & Typography --- */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
-        body { font-family: 'Inter', sans-serif; }
+       body { 
+    font-family: 'Inter', sans-serif; 
+    padding-bottom: 50px; /* Space for sticky footer */
+}
 
         html {
             -webkit-text-size-adjust: 100%;
@@ -242,11 +245,11 @@
         /* Print Hiding */
         @media print { #footnote, #loginBtn, footer, #settingsBtn, #openAiToolsBtn { display: none !important; } }
         
-        @media (max-width: 640px) {
-            #bmac-btn-container, #bmc-wbtn {
-                display: none !important;
-            }
+/* --- v19.32 Hide Floating BMC Widget on Mobile 19.52 ---  */
+#bmac-btn-container, #bmc-wbtn {
+            display: none !important; 
         }
+
     </style>
 </head>
 <body class="bg-gray-100">
@@ -284,22 +287,26 @@
 
     <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"></div>
     <div id="global-modal-container"></div>
-<footer class="relative max-w-7xl mx-auto p-4 mt-8 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-        <div class="flex items-center gap-4 z-10 w-full sm:w-auto justify-center sm:justify-start">
-            <p>Budget Tool by moo v19.52</p>
-            <a href="mailto:moo@moo.llc" class="text-blue-600 hover:underline">moo@moo.llc</a>
-        </div>
-        
-        <div class="order-first sm:order-none sm:absolute sm:left-1/2 sm:-translate-x-1/2 z-10 flex items-center gap-3">
-            <button id="settingsBtn" aria-label="Settings" class="p-3 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-full transition-colors" title="Settings">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button id="footerCoffeeBtn" aria-label="Buy me a coffee" class="p-3 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-100 rounded-full transition-colors sm:hidden" title="Buy me a coffee">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
-            </button>
-        </div>
+<footer class="fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-sm border-t border-gray-200 z-50 h-14 px-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div class="max-w-7xl mx-auto h-full grid grid-cols-3 items-center">
+            
+            <div class="flex items-center gap-2 justify-start pl-2">
+                <p class="font-regular text-gray-700 text-xs sm:text-sm">moo <span class="font-normal text-gray-400 text-[10px] sm:text-xs">v19.52</span></p>
+                <a href="mailto:moo@moo.llc" class="hidden sm:block text-blue-500 hover:underline text-xs">moo@moo.llc</a>
+            </div>
+            
+            <div class="flex items-center justify-center gap-4">
+                <button id="settingsBtn" aria-label="Settings" class="w-10 h-10 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors flex items-center justify-center" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
 
-        <div class="hidden sm:block w-10"></div>
+                <button id="footerCoffeeBtn" aria-label="Buy me a coffee" class="w-10 h-10 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 rounded-full transition-colors flex items-center justify-center" title="Buy me a coffee">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                </button>
+            </div>
+
+            <div class="hidden sm:block"></div>
+        </div>
     </footer>
 
     <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="jaysonmy" data-description="Support me on Buy me a coffee!" data-message="Thanks for the coffee!" data-color="#5F7FFF" data-position="Right" data-x_margin="18" data-y_margin="18">
@@ -1378,11 +1385,10 @@ async function callUnifiedAI(provider, apiKey, prompt) {
                         </div>
                     </div>
 
-                    <div>
-                        <h3 class="font-bold text-gray-800 mb-2">Offline Access</h3>
+                    <div class="text-center">
                         <button id="updateBtn" class="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 text-sm font-medium transition-colors">Get Offline HTML (Download)</button>
                         <p class="text-xs text-gray-500 mt-2">Downloads the current state of the tool as a single HTML file.</p>
-                        <div class="mt-4 flex items-center gap-4">
+                        <div class="mt-6 flex justify-center gap-4 border-t pt-4">
                              <button onclick="const btn=document.querySelector('#bmc-wbtn'); if(btn) btn.click(); else window.open('https://buymeacoffee.com/jaysonmy', '_blank');" class="bmc-btn text-sm">☕ Buy me a coffee</button>
                         </div>
                     </div>
@@ -1468,12 +1474,13 @@ async function callUnifiedAI(provider, apiKey, prompt) {
                  ];
 
                  const recentItems = [
+                    { v: "v19.52", t: "Cloud & Context", d: "<b>Cloud & Files:</b> Added 'Publish' placeholder, 'Import File' menu, and .moo export (Yellow Folder).<br><b>Exports:</b> Added PDF/Excel options (Landscape, Fit to Page, Hide Zero).<br><b>AI Assistant:</b> Attach files (Scripts, PDFs) for context.<br><b>UI/UX:</b> Fixed mobile text sizing, removed button borders, updated floating contact popups." },
                     { v: "v19.50", t: "Production Workflow", d: "<b>Crew:</b> Visual Avatars, Native Contact Import, Profile Editor.<br><b>Actions:</b> WhatsApp Call/Msg & Email integration.<br><b>Exports:</b> Professional PDF/Excel with Budget Summaries.<br><b>UX:</b> Branded Splash Screen, Footer Location (🇯🇲), Table Restructure." },
-                    { v: "v19.49", t: "PWA Core", d: "Offline fixes, 'Get Offline Tool' download, Bulk Restore." },
-                    { v: "v19.44", t: "Logic", d: "Production Days calculator; Template 'Type' & 'Cap' fields." }
+                    { v: "v19.49", t: "PWA Core", d: "Offline fixes, 'Get Offline Tool' download, Bulk Restore." }
                  ];
 
                  const archiveItems = [
+                    { v: "v19.44", t: "Logic", d: "Production Days calculator; Template 'Type' & 'Cap' fields." },
                     { v: "v19.40", t: "Stable", d: "Verified Netlify/GH Pages setup." },
                     { v: "v19.36", t: "Feature", d: "Template Manager (Create/Import/Export)." }
                  ];
@@ -1508,7 +1515,7 @@ async function callUnifiedAI(provider, apiKey, prompt) {
 
                             <div class="relative">
                                 <div class="absolute -left-[33px] bg-blue-600 border-4 border-white shadow-md rounded-full w-6 h-6 mt-0"></div>
-                                <h4 class="text-md font-bold text-blue-800 mb-2">Current Release (v19.50)</h4>
+                                <h4 class="text-md font-bold text-blue-800 mb-2">Current Release (v19.52)</h4>
                                 <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
                                     <ul class="space-y-1">
                                         ${renderList(recentItems)}
