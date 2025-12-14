@@ -1,5 +1,5 @@
-/* --- v19.51 Cache Version v19.52 --- */
-const CACHE_NAME = 'moo-budget-v19-52';
+/* --- v19.53 Cache Version (Stages Feature) --- */
+const CACHE_NAME = 'moo-budget-v19-53';
 const OFFLINE_URL = './index.html';
 
 // Cache root and explicit index.html
@@ -28,7 +28,7 @@ const EXTERNAL_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting();
+    self.skipWaiting(); // Forces new SW to take over immediately
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
             await cache.addAll(CRITICAL_ASSETS);
@@ -44,11 +44,14 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
+    event.waitUntil(self.clients.claim()); // Takes control of open clients
     event.waitUntil(
         caches.keys().then((keys) => Promise.all(
             keys.map((key) => {
-                if (key !== CACHE_NAME) return caches.delete(key);
+                if (key !== CACHE_NAME) {
+                    console.log('Clearing old cache:', key);
+                    return caches.delete(key);
+                }
             })
         ))
     );
@@ -61,8 +64,6 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(
             fetch(event.request)
                 .catch(() => {
-                    // Return cached HTML immediately if network fails
-                    // This prevents the "Blank Screen" on mobile/PWA
                     return caches.match(OFFLINE_URL) || caches.match('./');
                 })
         );
@@ -72,22 +73,17 @@ self.addEventListener('fetch', (event) => {
     // 2. Asset Requests (CSS, JS, Images)
     event.respondWith(
         (async () => {
-            // Check cache first for speed/offline capability
             const cachedResponse = await caches.match(event.request);
             if (cachedResponse) return cachedResponse;
 
             try {
-                // If not in cache, fetch from network
                 const networkResponse = await fetch(event.request);
-                
-                // Cache valid responses for next time
                 if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith('http')) {
                     const cache = await caches.open(CACHE_NAME);
                     cache.put(event.request, networkResponse.clone());
                 }
                 return networkResponse;
             } catch (error) {
-                // Return simple offline message if all else fails
                 return new Response("Offline - Content unavailable", { status: 503, headers: { 'Content-Type': 'text/plain' } });
             }
         })()
