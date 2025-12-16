@@ -3720,6 +3720,7 @@ window.applyStagePreset = function(presetName) {
 };
 
 /* --- v19.54 [Stages] - UI V9 (Smart Inputs: Auto-Clear/Restore) --- */
+/* --- v19.54 [Stages] - UI V10 (Persistence Fix + Live Calc) --- */
 function showStagesModal() {
     try {
         // A. Init Data
@@ -3736,7 +3737,8 @@ function showStagesModal() {
 
         Object.entries(budget.sections).forEach(([sectionName, section]) => {
             section.items.forEach(item => {
-                // Defaults
+                // AUTO-INIT: Only runs if stageData is completely missing.
+                // This prevents overwriting your moves when you reload.
                 if (!item.stageData) { 
                     item.stageData = {};
                     let target = 'prod';
@@ -3746,6 +3748,7 @@ function showStagesModal() {
                     item.stageData[target] = { days: item.quantity, rate: item.rate };
                 }
                 
+                // Populate Columns based on SAVED data
                 Object.entries(item.stageData).forEach(([k, d]) => {
                     if (validKeys.includes(k)) {
                         const cost = (parseFloat(d.days)||0) * (parseFloat(d.rate)||0);
@@ -3761,199 +3764,56 @@ function showStagesModal() {
         const topSpenders = allItemsFlat.sort((a, b) => b.cost - a.cost).slice(0, 5);
 
         // C. Render Helpers
-        
-        // 1. Setup Card
         const renderSetupCard = () => `
             <div id="card-setup" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center">
-                <div class="p-3 bg-gray-900 text-white flex-shrink-0">
-                    <h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3>
-                </div>
+                <div class="p-3 bg-gray-900 text-white flex-shrink-0"><h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3></div>
                 <div class="p-3 space-y-4 flex-grow overflow-y-auto">
-                    <div>
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label>
-                        <div class="flex items-center gap-2 border-b border-gray-300 pb-1">
-                            <span class="text-xl text-gray-400">$</span>
-                            <input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-xl font-bold w-full outline-none text-gray-800" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders();">
-                        </div>
-                    </div>
-
-                    <div class="bg-blue-50 p-2 rounded border border-blue-100">
-                        <label class="text-[10px] text-blue-500 uppercase font-bold mb-1 block">Auto-Distribute</label>
-                        <div class="flex gap-1">
-                            <select id="distPresetSelect" class="text-xs border rounded p-1 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none">
-                                <option value="" disabled selected>Select Type...</option>
-                                ${Object.keys(STAGE_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('')}
-                            </select>
-                            <button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 shadow-sm">Apply</button>
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        ${validKeys.map(k => `
-                            <div class="bg-gray-50 p-2 rounded border border-gray-100 relative">
-                                <div class="flex justify-between mb-1 text-[10px] font-bold items-center">
-                                    <div class="flex items-center gap-1">
-                                        <button onclick="toggleStageLock('${k}')" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none">${tl.stages[k].locked ? '🔒' : '🔓'}</button>
-                                        <span>${tl.stages[k].label}</span>
-                                    </div>
-                                    <span class="text-blue-600 font-mono" id="disp_amt_${k}"></span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}>
-                                    <div class="relative w-12 flex-shrink-0">
-                                        <input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}>
-                                        <span class="absolute right-0 top-0 text-xs text-gray-400">%</span>
-                                    </div>
-                                </div>
-                            </div>`).join('')}
-                        <div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div>
-                    </div>
+                    <div><label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label><div class="flex items-center gap-2 border-b border-gray-300 pb-1"><span class="text-xl text-gray-400">$</span><input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-xl font-bold w-full outline-none text-gray-800" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders(); saveBudget();"></div></div>
+                    <div class="bg-blue-50 p-2 rounded border border-blue-100"><label class="text-[10px] text-blue-500 uppercase font-bold mb-1 block">Auto-Distribute</label><div class="flex gap-1"><select id="distPresetSelect" class="text-xs border rounded p-1 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none"><option value="" disabled selected>Select Type...</option>${Object.keys(STAGE_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('')}</select><button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 shadow-sm">Apply</button></div></div>
+                    <div class="space-y-3">${validKeys.map(k => `<div class="bg-gray-50 p-2 rounded border border-gray-100 relative"><div class="flex justify-between mb-1 text-[10px] font-bold items-center"><div class="flex items-center gap-1"><button onclick="toggleStageLock('${k}')" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none">${tl.stages[k].locked ? '🔒' : '🔓'}</button><span>${tl.stages[k].label}</span></div><span class="text-blue-600 font-mono" id="disp_amt_${k}"></span></div><div class="flex items-center gap-2"><input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}><div class="relative w-12 flex-shrink-0"><input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}><span class="absolute right-0 top-0 text-xs text-gray-400">%</span></div></div></div>`).join('')}<div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div></div>
                 </div>
             </div>`;
 
-        // 2. Overview Card
         const renderOverviewCard = () => {
             const burnRate = tl.totalCap > 0 ? (grandTotal / tl.totalCap) * 100 : 0;
             const burnColor = burnRate > 100 ? 'text-red-600' : (burnRate > 85 ? 'text-yellow-600' : 'text-green-600');
             const ringColor = burnRate > 100 ? 'border-red-200' : (burnRate > 85 ? 'border-yellow-200' : 'border-green-200');
-
-            return `
-            <div id="card-overview" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-gray-50 border-r border-gray-200 flex flex-col snap-center">
-                <div class="p-6 flex flex-col items-center text-center border-b border-gray-200 bg-white">
-                    <div id="burnRateRing" class="w-32 h-32 rounded-full border-8 ${ringColor} flex items-center justify-center mb-2 relative transition-colors duration-500">
-                        <div id="burnRateText" class="text-3xl font-bold ${burnColor}">${Math.round(burnRate)}%</div>
-                        <div class="absolute text-[9px] text-gray-400 bottom-6 uppercase tracking-wider">Burn Rate</div>
-                    </div>
-                    <h3 class="text-base font-bold text-gray-800">Budget Health</h3>
-                    <p class="text-xs text-gray-500 mt-1">Est: <strong id="ovGrandTotal">${formatAbbreviated(grandTotal, displayCurrency)}</strong> / Cap: <strong id="ovTotalCap">${formatAbbreviated(tl.totalCap, displayCurrency)}</strong></p>
-                </div>
-                <div class="p-4 flex-grow overflow-y-auto">
-                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Top Spenders</h4>
-                    <div class="space-y-2">
-                        ${topSpenders.map((item, idx) => `
-                            <div class="flex justify-between items-center text-xs p-2 bg-white rounded border border-gray-200 shadow-sm">
-                                <div class="flex items-center gap-2 overflow-hidden">
-                                    <span class="font-bold text-gray-400 w-4">${idx + 1}.</span>
-                                    <div class="min-w-0">
-                                        <div class="truncate font-medium text-gray-700">${item.desc}</div>
-                                        <div class="text-[9px] text-gray-400 uppercase">${item.stage}</div>
-                                    </div>
-                                </div>
-                                <span class="font-mono font-bold text-gray-800 flex-shrink-0">${formatAbbreviated(item.cost, displayCurrency)}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>`;
+            return `<div id="card-overview" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-gray-50 border-r border-gray-200 flex flex-col snap-center"><div class="p-6 flex flex-col items-center text-center border-b border-gray-200 bg-white"><div id="burnRateRing" class="w-32 h-32 rounded-full border-8 ${ringColor} flex items-center justify-center mb-2 relative transition-colors duration-500"><div id="burnRateText" class="text-3xl font-bold ${burnColor}">${Math.round(burnRate)}%</div><div class="absolute text-[9px] text-gray-400 bottom-6 uppercase tracking-wider">Burn Rate</div></div><h3 class="text-base font-bold text-gray-800">Budget Health</h3><p class="text-xs text-gray-500 mt-1">Est: <strong id="ovGrandTotal">${formatAbbreviated(grandTotal, displayCurrency)}</strong> / Cap: <strong id="ovTotalCap">${formatAbbreviated(tl.totalCap, displayCurrency)}</strong></p></div><div class="p-4 flex-grow overflow-y-auto"><h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Top Spenders</h4><div class="space-y-2">${topSpenders.map((item, idx) => `<div class="flex justify-between items-center text-xs p-2 bg-white rounded border border-gray-200 shadow-sm"><div class="flex items-center gap-2 overflow-hidden"><span class="font-bold text-gray-400 w-4">${idx + 1}.</span><div class="min-w-0"><div class="truncate font-medium text-gray-700">${item.desc}</div><div class="text-[9px] text-gray-400 uppercase">${item.stage}</div></div></div><span class="font-mono font-bold text-gray-800 flex-shrink-0">${formatAbbreviated(item.cost, displayCurrency)}</span></div>`).join('')}</div></div></div>`;
         };
 
-        // 3. Stage Column (With Smart Inputs)
         const renderStageColumn = (key) => {
             const config = tl.stages[key];
             const data = stageData[key];
             const cap = tl.totalCap * (config.ratio / 100);
-            
             return `
             <div id="card-${key}" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 flex flex-col h-full bg-white border-r border-gray-200 snap-center">
                 <div class="p-2 bg-white border-b border-gray-100 flex-shrink-0 sticky top-0 z-20 shadow-sm">
                     <div class="flex justify-between items-center mb-2 h-7">
-                        <div class="flex items-center gap-1.5 overflow-hidden">
-                            <button onclick="toggleStageLock('${key}')" class="text-gray-400 hover:text-blue-600 flex-shrink-0 focus:outline-none" title="Lock Allocation">
-                                ${config.locked ? '🔒' : '🔓'}
-                            </button>
-                            <span class="font-bold text-gray-800 text-xs truncate" title="${config.label}">${config.label}</span>
-                        </div>
-                        
+                        <div class="flex items-center gap-1.5 overflow-hidden"><button onclick="toggleStageLock('${key}')" class="text-gray-400 hover:text-blue-600 flex-shrink-0 focus:outline-none" title="Lock">${config.locked ? '🔒' : '🔓'}</button><span class="font-bold text-gray-800 text-xs truncate" title="${config.label}">${config.label}</span></div>
                         <div class="flex items-center gap-3">
-                            <div class="relative w-12 h-6 flex items-center bg-gray-50 border border-gray-200 rounded px-1">
-                                <input type="number" id="header_perc_${key}" value="${config.ratio.toFixed(1)}" 
-                                    class="stage-number-input w-full text-right text-[10px] font-bold bg-transparent focus:outline-none no-spinner pr-2" 
-                                    data-stage-key="${key}"
-                                    ${config.locked ? 'disabled style="opacity:0.5"' : ''}
-                                    onfocus="this.select()">
-                                <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 select-none">%</span>
-                            </div>
-
-                            <div class="flex items-center h-6 bg-gray-50 border border-gray-200 rounded px-1.5">
-                                <span class="text-[8px] text-gray-400 uppercase mr-1 font-bold">Days:</span>
-                                <input type="number" value="${config.days}" data-global-days="${key}" 
-                                    class="w-8 text-center text-[10px] bg-transparent font-bold text-blue-600 focus:outline-none no-spinner" 
-                                    onfocus="this.dataset.old=this.value; this.value=''" 
-                                    onblur="if(this.value==='') this.value=this.dataset.old; updateGlobalDays('${key}', this.value)">
-                            </div>
+                            <div class="relative w-12 h-6 flex items-center bg-gray-50 border border-gray-200 rounded px-1"><input type="number" id="header_perc_${key}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-transparent focus:outline-none no-spinner pr-2" data-stage-key="${key}" ${config.locked ? 'disabled style="opacity:0.5"' : ''} onfocus="this.select()"><span class="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 select-none">%</span></div>
+                            <div class="flex items-center h-6 bg-gray-50 border border-gray-200 rounded px-1.5"><span class="text-[8px] text-gray-400 uppercase mr-1 font-bold">Days:</span><input type="number" value="${config.days}" data-global-days="${key}" class="w-8 text-center text-[10px] bg-transparent font-bold text-blue-600 focus:outline-none no-spinner" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));} else { updateGlobalDays('${key}', this.value); }"></div>
                         </div>
                     </div>
-
-                    <div class="w-full bg-gray-100 rounded-full h-1 mb-1 overflow-hidden">
-                        <div id="bar-${key}" class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div>
-                    </div>
-                    
-                    <div class="flex justify-between text-[9px] text-gray-400 font-mono mb-1">
-                        <span id="total-${key}">${formatAbbreviated(data.total, displayCurrency)}</span>
-                        <span id="limit-${key}">Cap: ${formatAbbreviated(cap, displayCurrency)}</span>
-                    </div>
-                    
+                    <div class="w-full bg-gray-100 rounded-full h-1 mb-1 overflow-hidden"><div id="bar-${key}" class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div></div>
+                    <div class="flex justify-between text-[9px] text-gray-400 font-mono mb-1"><span id="total-${key}">${formatAbbreviated(data.total, displayCurrency)}</span><span id="limit-${key}">Cap: ${formatAbbreviated(cap, displayCurrency)}</span></div>
                     <button onclick="handleStageAddItem('${key}')" class="w-full py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-[10px] font-bold border border-blue-100 transition-colors">+ Item</button>
                 </div>
-
                 <div class="stage-drop-zone flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50 h-full" data-stage-key="${key}">
                     ${data.items.map(item => `
-                        <div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" 
-                             data-item-id="${item.id}" data-stage="${key}">
-                            
-                            <button onclick="removeStageItem('${item.id}', '${item._sec}', '${key}')" 
-                                    class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                &times;
-                            </button>
-
-                            <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${item._sec}')">
-                                <div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-500 hover:text-white transition-colors">
-                                    ${item.crew?.name?.charAt(0) || '👤'}
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="text-xs font-bold text-gray-700 truncate" title="${item.description}">${item.description}</div>
-                                </div>
-                                <div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${key}">
-                                    ${formatAbbreviated(item._sCost, displayCurrency)}
-                                </div>
-                            </div>
-
+                        <div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" data-item-id="${item.id}" data-stage="${key}">
+                            <button onclick="removeStageItem('${item.id}', '${item._sec}', '${key}')" class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">&times;</button>
+                            <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${item._sec}')"><div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-500 hover:text-white transition-colors">${item.crew?.name?.charAt(0) || '👤'}</div><div class="min-w-0 flex-1"><div class="text-xs font-bold text-gray-700 truncate" title="${item.description}">${item.description}</div></div><div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${key}">${formatAbbreviated(item._sCost, displayCurrency)}</div></div>
                             <div class="flex gap-2 items-center h-7">
-                                <div class="relative w-14 h-full">
-                                    <span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span>
-                                    <input type="number" value="${item._sDays}" 
-                                        class="w-full h-full pl-4 pr-1 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all"
-                                        onfocus="this.dataset.old=this.value; this.value=''" 
-                                        onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}"
-                                        oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'days', this.value)">
-                                </div>
-                                <div class="relative flex-1 h-full">
-                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span>
-                                    <input type="number" value="${item._sRate}" 
-                                        class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all"
-                                        onfocus="this.dataset.old=this.value; this.value=''" 
-                                        onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}"
-                                        oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'rate', this.value)">
-                                </div>
+                                <div class="relative w-14 h-full"><span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span><input type="number" value="${item._sDays}" class="w-full h-full pl-4 pr-1 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'days', this.value)"></div>
+                                <div class="relative flex-1 h-full"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span><input type="number" value="${item._sRate}" class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'rate', this.value)"></div>
                             </div>
-                        </div>
-                    `).join('')}
+                        </div>`).join('')}
                 </div>
             </div>`;
         };
 
-        // D. Build Modal
-        const content = `
-            <div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative">
-                <div class="flex items-center gap-2 overflow-x-auto h-8 px-2 bg-gray-50 border-b flex-shrink-0 no-scrollbar">
-                    ${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth'})" class="text-[10px] font-bold uppercase text-gray-500 hover:text-blue-600 px-2">${k}</button>`).join('')}
-                </div>
-                <div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth">
-                    ${renderSetupCard()}
-                    ${renderOverviewCard()}
-                    ${validKeys.map(k => renderStageColumn(k)).join('')}
-                </div>
-            </div>`;
+        const content = `<div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative"><div class="flex items-center gap-2 overflow-x-auto h-8 px-2 bg-gray-50 border-b flex-shrink-0 no-scrollbar">${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth'})" class="text-[10px] font-bold uppercase text-gray-500 hover:text-blue-600 px-2">${k}</button>`).join('')}</div><div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth">${renderSetupCard()}${renderOverviewCard()}${validKeys.map(k => renderStageColumn(k)).join('')}</div></div>`;
 
         createModal('stagesView', '', content, 'max-w-none w-fit bg-transparent shadow-none');
         const header = document.querySelector('#stagesViewModal .bg-gray-50.border-b');
@@ -3961,7 +3821,6 @@ function showStagesModal() {
         const body = document.getElementById('stagesViewBody');
         if(body) body.style.padding = '0';
 
-        // E. Bindings
         setTimeout(() => {
             const bindInput = (el, isInput) => {
                 el.addEventListener(isInput ? 'change' : 'input', (e) => {
@@ -3975,20 +3834,17 @@ function showStagesModal() {
             window.updateAllHeaders = () => {
                 let totalPct = 0;
                 let grandLiveTotal = 0;
-
                 validKeys.forEach(key => {
                     const cfg = budget.targetLock.stages[key];
                     const cap = budget.targetLock.totalCap * (cfg.ratio / 100);
                     totalPct += cfg.ratio;
-
+                    
                     const sIn = document.querySelector(`.stage-slider[data-stage-key="${key}"]`);
                     const nIn = document.getElementById(`setup_perc_${key}`);
                     const hIn = document.getElementById(`header_perc_${key}`);
-                    
                     if(sIn) sIn.value = cfg.ratio;
                     if(nIn && document.activeElement !== nIn) nIn.value = cfg.ratio.toFixed(1);
                     if(hIn && document.activeElement !== hIn) hIn.value = cfg.ratio.toFixed(1);
-
                     document.getElementById(`disp_amt_${key}`).textContent = formatAbbreviated(cap, displayCurrency);
                     document.getElementById(`limit-${key}`).textContent = `Cap: ${formatAbbreviated(cap, displayCurrency)}`;
                     
@@ -3997,7 +3853,6 @@ function showStagesModal() {
                         if(i.stageData && i.stageData[key]) liveTotal += (parseFloat(i.stageData[key].days)||0) * (parseFloat(i.stageData[key].rate)||0);
                     }));
                     grandLiveTotal += liveTotal;
-                    
                     document.getElementById(`total-${key}`).textContent = formatAbbreviated(liveTotal, displayCurrency);
                     const bar = document.getElementById(`bar-${key}`);
                     if(bar) {
@@ -4006,15 +3861,13 @@ function showStagesModal() {
                         bar.className = `h-1 rounded-full transition-all duration-300 ${w>100?'bg-red-500':'bg-blue-500'}`;
                     }
                 });
-
+                
                 const ovTotal = document.getElementById('ovGrandTotal');
                 const ovCap = document.getElementById('ovTotalCap');
                 const ringTxt = document.getElementById('burnRateText');
                 const ring = document.getElementById('burnRateRing');
-                
                 if(ovTotal) ovTotal.textContent = formatAbbreviated(grandLiveTotal, displayCurrency);
                 if(ovCap) ovCap.textContent = formatAbbreviated(budget.targetLock.totalCap, displayCurrency);
-                
                 if(ringTxt && ring) {
                     const br = budget.targetLock.totalCap > 0 ? (grandLiveTotal / budget.targetLock.totalCap) * 100 : 0;
                     ringTxt.textContent = Math.round(br) + '%';
@@ -4023,7 +3876,6 @@ function showStagesModal() {
                     ring.className = `w-32 h-32 rounded-full border-8 ${rc} flex items-center justify-center mb-2 relative transition-colors duration-500`;
                     ringTxt.className = `text-3xl font-bold ${tc}`;
                 }
-
                 const totDisp = document.getElementById('totalRatioDisplay');
                 if(totDisp) {
                     totDisp.textContent = `Total: ${Math.round(totalPct)}%`;
@@ -4036,6 +3888,7 @@ function showStagesModal() {
                 if (item && item.stageData && item.stageData[stageKey]) {
                     item.stageData[stageKey][field] = parseFloat(val) || 0;
                     syncStageToMain(item);
+                    saveBudget(); // <--- Persist immediately
                     const cost = item.stageData[stageKey].days * item.stageData[stageKey].rate;
                     const cEl = document.getElementById(`cost-${itemId}-${stageKey}`);
                     if(cEl) cEl.textContent = formatAbbreviated(cost, displayCurrency);
@@ -4044,7 +3897,12 @@ function showStagesModal() {
                 }
             };
 
-            window.updateGlobalDays = (key, val) => { budget.targetLock.stages[key].days = parseFloat(val)||0; pushToHistory('Updated Days'); };
+            window.updateGlobalDays = (key, val) => { 
+                budget.targetLock.stages[key].days = parseFloat(val)||0; 
+                saveBudget(); // <--- Persist
+                updateAllHeaders();
+            };
+            
             window.toggleStageLock = (key) => { budget.targetLock.stages[key].locked = !budget.targetLock.stages[key].locked; showStagesModal(); };
             
             updateAllHeaders(); 
@@ -4053,7 +3911,6 @@ function showStagesModal() {
 
     } catch(err) { console.error(err); }
 }
-
 
 /* -- P5 -- */
 
@@ -5818,6 +5675,71 @@ window.autoAssignRolesFromContacts = function() {
     }
 };
 
+/* --- v19.54 [Stages] - Drag & Drop Logic (Persist & Calc Fix) --- */
+function initializeStageDragAndDrop() {
+    const containers = document.querySelectorAll('.stage-drop-zone');
+    
+    containers.forEach(container => {
+        // Prevent duplicate initialization
+        if (container._sortable) return;
+
+        container._sortable = new Sortable(container, {
+            group: 'stages', // Allows moving between columns
+            animation: 150,
+            delay: 100, // Prevent accidental drags on touch
+            delayOnTouchOnly: true,
+            ghostClass: 'bg-blue-50', // Visual feedback
+            
+            onEnd: function (evt) {
+                const itemEl = evt.item;
+                const newStageKey = evt.to.dataset.stageKey;
+                const oldStageKey = evt.from.dataset.stageKey;
+                const itemId = itemEl.dataset.itemId;
+
+                // 1. If dropped in the same column, do nothing (reordering not tracked yet)
+                if (newStageKey === oldStageKey) return;
+
+                // 2. Locate the Item in the Budget Data
+                let foundItem = null;
+                // Search all sections to find the item
+                for (const section of Object.values(budget.sections)) {
+                    const match = section.items.find(i => i.id === itemId);
+                    if (match) { foundItem = match; break; }
+                }
+
+                if (foundItem) {
+                    // 3. Initialize stageData if missing (safety check)
+                    if (!foundItem.stageData) foundItem.stageData = {};
+
+                    // 4. DATA MIGRATION: Move values from Old Stage -> New Stage
+                    if (foundItem.stageData[oldStageKey]) {
+                        // Copy existing values (Days/Rate) to new stage
+                        foundItem.stageData[newStageKey] = { 
+                            days: foundItem.stageData[oldStageKey].days, 
+                            rate: foundItem.stageData[oldStageKey].rate 
+                        };
+                        
+                        // Delete from old stage (The Move)
+                        delete foundItem.stageData[oldStageKey];
+                    } else {
+                        // Fallback: If old data was missing, use defaults
+                        foundItem.stageData[newStageKey] = { days: foundItem.quantity, rate: foundItem.rate };
+                    }
+
+                    // 5. MASTER SYNC
+                    syncStageToMain(foundItem); // Recalculate weighted averages
+                    saveBudget(); // <--- CRITICAL: Saves changes to LocalStorage immediately
+                    pushToHistory(`Moved item to ${budget.targetLock.stages[newStageKey].label}`);
+
+                    // 6. UI REFRESH
+                    // We must re-render the modal to update calculations and DOM IDs
+                    showStagesModal(); 
+                    render(); // Update main dashboard
+                }
+            }
+        });
+    });
+}
 document.addEventListener('DOMContentLoaded', init);
 
     </script>
