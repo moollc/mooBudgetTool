@@ -95,6 +95,19 @@
         .modal-exit-active { opacity: 0; transition: opacity 0.2s ease-in-out; }
         #settingsModalContent, #aiToolsModalContent { transition: all 0.3s ease-in-out; }
 
+/* --- v19.56 Editable Preview Styles --- */
+.contenteditable-container {
+    outline: none;
+    min-height: 400px;
+}
+.contenteditable-container:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.contenteditable-container[contenteditable="true"] {
+    cursor: text;
+}
+
   /* --- Mobile Table Optimized (v19.52 Abbreviated) --- */
         @media (max-width: 768px) {
             .table-container { 
@@ -763,6 +776,12 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+/* --- v19.56 Editable Attachment Support --- */
+function isEditableAttachment(attachment) {
+    if (!attachment || !attachment.previewContent) return false;
+    const type = attachment.previewContent.type;
+    return ['text', 'docx', 'xlsx', 'pdf'].includes(type);
+}
         // ---------------------------------------------------------
         // State & Persistence
         // ---------------------------------------------------------
@@ -5029,6 +5048,41 @@ function saveDocumentContent(docId) {
     doc.status = 'Completed';
     saveBudget();
     alert("Document saved!");
+}
+/* --- v19.56 Save Attachment Edits --- */
+function saveAttachmentEdits(attachmentId, docId) {
+    const attachment = budget.attachments.find(a => a.id === attachmentId);
+    if (!attachment || !isEditableAttachment(attachment)) return;
+
+    const editor = document.getElementById('attachmentEditor');
+    if (!editor) return;
+
+    const newContent = editor.innerHTML || editor.textContent;
+
+    // Store raw content based on type
+    if (attachment.previewContent.type === 'docx' || attachment.previewContent.type === 'xlsx') {
+        attachment.previewContent.html = newContent;
+    } else if (attachment.previewContent.type === 'text') {
+        attachment.previewContent.content = editor.textContent;
+    }
+
+    // Optional: store raw text for search/indexing
+    if (!attachment.rawText) attachment.rawText = '';
+    attachment.rawText = editor.textContent || '';
+
+    saveBudget();
+
+    const saveBtn = document.getElementById('saveAttachmentBtn');
+    if (saveBtn) {
+        saveBtn.classList.add('opacity-50');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saved!';
+        setTimeout(() => {
+            if (saveBtn) saveBtn.textContent = 'Save';
+        }, 2000);
+    }
+
+    alert('File edits saved!');
 }
 
 /* --- v19.53 Attach File to Document --- */
