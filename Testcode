@@ -4932,7 +4932,7 @@ function openDocumentViewer(docId, context = 'hub') {
                             </div>
                         </div>
                     </div>
-                    <div id="attachmentPreview" class="border rounded-xl shadow-inner p-4 bg-white min-h-96 overflow-auto">
+                                        <div id="attachmentEditor" class="border rounded-xl shadow-inner p-4 bg-white min-h-96 overflow-auto contenteditable-container" ${editable ? 'contenteditable="false"' : ''}>
                         ${previewHTML}
                     </div>
                     <div class="mt-6 flex justify-center gap-6">
@@ -5159,27 +5159,30 @@ function saveAttachmentEdits(attachmentId, docId) {
     alert('File edits saved!');
 }
 
-/* --- v19.56 Enable/Cancel Editing --- */
+/* --- v19.53 Attachment Editing Controls v19.54 --- */
 function enableAttachmentEditing(attachmentId, docId) {
-    const previewDiv = document.getElementById('attachmentPreview');
+    const editor = document.getElementById('attachmentEditor');
     const editBtn = document.getElementById('editAttachmentBtn');
     const saveControls = document.getElementById('saveControls');
 
-    if (!previewDiv || !editBtn || !saveControls) return;
+    if (!editor || !editBtn || !saveControls) return;
 
-    // Make content editable
-    previewDiv.contentEditable = true;
-    previewDiv.classList.add('border-blue-500', 'ring-2', 'ring-blue-200', 'bg-white');
-    previewDiv.focus();
+    editor.contentEditable = true;
+    editor.classList.add('border-blue-500', 'ring-2', 'ring-blue-200');
+    editor.focus();
 
-    // Hide Edit, show Save/Cancel
     editBtn.classList.add('hidden');
     saveControls.classList.remove('hidden');
-}
 
-function cancelAttachmentEditing(docId) {
-    // Refresh viewer to restore original preview
-    openDocumentViewer(docId);
+    // Live dirty-state Save button activation
+    const activateSave = () => {
+        const saveBtn = saveControls.querySelector('button');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('opacity-50');
+        }
+    };
+    editor.addEventListener('input', activateSave, { once: false });
 }
 
 /* --- v19.53 Attach File to Document --- */
@@ -5269,6 +5272,20 @@ function attachFileToDocument(docId) {
     };
     
     input.click();
+}
+
+/* --- v19.53 Remove Attachment from Document v19.54 --- */
+function removeAttachmentFromDocument(attachmentId, docId) {
+    if (!confirm("Remove this file from the document?")) return;
+
+    if (!budget.attachments) return;
+
+    budget.attachments = budget.attachments.filter(a => a.id !== attachmentId);
+
+    saveBudget();
+
+    // Force full refresh to blank state
+    openDocumentViewer(docId);
 }
 
 /* --- v19.61 Boot Sequence --- */
