@@ -16,6 +16,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263/lucide.min.js">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -93,6 +94,19 @@
         .modal-exit { opacity: 1; }
         .modal-exit-active { opacity: 0; transition: opacity 0.2s ease-in-out; }
         #settingsModalContent, #aiToolsModalContent { transition: all 0.3s ease-in-out; }
+
+/* --- v19.56 Editable Preview Styles --- */
+.contenteditable-container {
+    outline: none;
+    min-height: 400px;
+}
+.contenteditable-container:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.contenteditable-container[contenteditable="true"] {
+    cursor: text;
+}
 
   /* --- Mobile Table Optimized (v19.52 Abbreviated) --- */
         @media (max-width: 768px) {
@@ -408,6 +422,13 @@
     }
 }
 
+/* --- v19.56 Stages Document Cards Responsive --- */
+@media (max-width: 640px) {
+    .doc-card .absolute {
+        opacity: 1 !important;
+    }
+}
+
 /* --- v19.53 Mobile Description Fix --- */
 @media (max-width: 768px) {
     /* Truncate text with ellipsis (...) */
@@ -470,6 +491,12 @@
     .sticky-th { top: 43px; } 
 }
 
+/* --- v19.56 Edit Mode Focus --- */
+#attachmentPreview[contenteditable="true"] {
+    outline: none;
+    cursor: text;
+}
+
     </style>
 
 </head>
@@ -518,6 +545,10 @@
         <div class="flex items-center justify-center gap-4">
             <button id="stagesFooterBtn" aria-label="Production Stages" class="w-10 h-10 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-full transition-colors flex items-center justify-center" title="Production Stages">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="7" x2="7" y1="3" y2="21"/><line x1="17" x2="17" y1="3" y2="21"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="7" y1="7" y2="7"/><line x1="3" x2="7" y1="17" y2="17"/><line x1="17" x2="21" y1="17" y2="17"/><line x1="17" x2="21" y1="7" y2="7"/></svg>
+            </button>
+
+            <button id="docsFooterBtn" aria-label="Production Documents" class="w-10 h-10 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors flex items-center justify-center relative" title="Call Sheets & Reports">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             </button>
 
             <button id="publishFooterBtn" aria-label="Publish" class="w-10 h-10 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors flex items-center justify-center" title="Publish">
@@ -634,6 +665,106 @@ const initialLineItem = {
     rateType: 'negotiable' 
 };
 
+/* v19.53 [Documents] - Default Data Structure --- */
+const defaultCallSheet = {
+    date: new Date().toISOString().split('T')[0],
+    shootDay: "1",
+    totalDays: "1",
+    unitCall: "07:00",
+    breakfast: "06:00",
+    weather: "30°C, Sunny",
+    hospital: "UHWI (876-927-1621)",
+    nearestPolice: "Half Way Tree Station",
+    locations: [
+        { label: "Unit Base", name: "Base Camp", address: "123 Film Street" },
+        { label: "Location 1", name: "Set A", address: "456 Action Ave" }
+    ],
+    schedule: [
+        { scene: "1", set: "INT. OFFICE", desc: "Introduction", cast: "1, 2", pages: "2/8" }
+    ],
+    cast: [
+        { id: 1, name: "Talent A", character: "HERO", pickup: "06:00", makeup: "06:30", set: "07:30" }
+    ],
+    notes: "No social media photos on set."
+};
+
+/* v19.53 [Documents] - Master Template Database (Fixed Icons) --- */
+const DOCUMENT_TEMPLATES = [
+    // Pre-Production
+    { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: '📝', default: true },
+    { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: '📖', default: false },
+    { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: '🔍', default: true },
+    { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: '🎬', default: true },
+    { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: '🎨', default: false },
+    { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: '✅', default: true },
+    { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: '👤', default: false },
+    { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: '🎭', default: false },
+    { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: '📅', default: false },
+    { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: '🗓️', default: false },
+    { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: '📍', default: false },
+    { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: '💰', default: true },
+    { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: '⚖️', default: false },
+    { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: '🚀', default: false },
+
+    // Production
+    { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: '📢', default: true },
+    { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: '📊', default: true },
+    { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: '🎬', default: false },
+    { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: '💄', default: false },
+    { id: 'propList', cat: 'Production', label: 'Prop List', icon: '🔫', default: false },
+    { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: '📞', default: true },
+    { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: '🚗', default: false },
+    { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: '🍱', default: false },
+    { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: '💵', default: false },
+    { id: 'po', cat: 'Production', label: 'Purchase Order', icon: '🧾', default: false },
+    { id: 'timecard', cat: 'Production', label: 'Timecards', icon: '⏱️', default: false },
+    { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: '🤖', default: false },
+    { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: '🌱', default: false },
+
+    // Post-Production
+    { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: '👾', default: false },
+    { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: '📅', default: true },
+    { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: '📦', default: false },
+    { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: '🏆', default: false },
+
+    // Legal / Compliance
+    { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: '🤝', default: true },
+    { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: '🏠', default: true }, // Fixed Emoji
+    { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: '🎥', default: false },
+    { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: '📄', default: false },
+    { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: '🛡️', default: false },
+    { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: '✍️', default: false },
+    { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: '😷', default: false },
+    { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: '⭐', default: false },
+    { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: '📞', default: true }
+];
+
+/* --- v19.54 Template System Foundation v19.55 --- */
+// DO NOT initialize customTemplates here — budget is undefined at this point
+
+// Helper: Get all available templates (built-in + custom)
+// Safe to call anytime — handles missing budget gracefully
+function getAllAvailableTemplates() {
+    const builtIn = DOCUMENT_TEMPLATES.map(t => ({ ...t, isCustom: false }));
+    const custom = (budget && Array.isArray(budget.customTemplates)) 
+        ? budget.customTemplates.map(t => ({ ...t, isCustom: true }))
+        : [];
+    return [...builtIn, ...custom];
+}
+
+// Helper: Ensure customTemplates array exists on current budget
+function ensureCustomTemplates() {
+    if (!budget) return;
+    if (!Array.isArray(budget.customTemplates)) {
+        budget.customTemplates = [];
+    }
+}
+
+// Helper: Save custom templates (call after modifications)
+function saveCustomTemplates() {
+    ensureCustomTemplates();
+    saveBudget();
+}
 
         /* --- v19.51 Helper Functions v19.52 --- */
         // Generate collision-resistant IDs for attachments
@@ -650,6 +781,21 @@ const initialLineItem = {
             return base.substring(0, keep) + '...' + ext;
         }
 
+/* --- v19.56 File Size Formatter --- */
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/* --- v19.56 Editable Attachment Support --- */
+function isEditableAttachment(attachment) {
+    if (!attachment || !attachment.previewContent) return false;
+    const type = attachment.previewContent.type;
+    return ['text', 'docx', 'xlsx', 'pdf'].includes(type);
+}
         // ---------------------------------------------------------
         // State & Persistence
         // ---------------------------------------------------------
@@ -686,7 +832,7 @@ function loadBudget(projectName) {
         if (data) { 
             budget = JSON.parse(data); 
             
-            // v19.54: Ensure AI Context Structure
+            // v19.53: Ensure AI Context Structure
             if (!budget.aiContext) {
                 budget.aiContext = {
                     saveHistory: true, // Auto-on by default
@@ -785,7 +931,7 @@ function loadBudget(projectName) {
         const getSelectedProvider = () => localStorage.getItem(aiProviderStorage) || 'gemini';
         const setSelectedProvider = (provider) => localStorage.setItem(aiProviderStorage, provider);
 
-/* --- v19.54 [AI] - Robust API Call & Offline Check --- */
+/* v19.53 [AI] - Robust API Call & Offline Check --- */
 async function callUnifiedAI(provider, apiKey, prompt) {
     if (!navigator.onLine) throw new Error("You appear to be offline. Please check your connection.");
     
@@ -1258,14 +1404,14 @@ function render() {
             createModal('rateComparison', 'Rate Comparisons (2025 Averages)', content, 'max-w-4xl');
         }
 
-        /* --- v19.51 AI Modal with File Tray v19.52 Persistence & Offline Mode v19.54 --- */
+        /* --- v19.51 AI Modal with File Tray v19.52 Persistence & Offline Mode v19.53 --- */
 function showAIToolsModal() {
     const provider = getSelectedProvider();
     const key = getStoredApiKey(provider);
     const attachments = budget.attachments || [];
     const isOnline = navigator.onLine;
     
-    // v19.54: Check Context
+    // v19.53: Check Context
     const aiContext = budget.aiContext || { saveHistory: true, analysis: "", chat: [] };
     
     // Render Attachment Tray
@@ -1285,7 +1431,7 @@ function showAIToolsModal() {
         </div>` : 
         `<div class="mb-3 p-3 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400 text-xs">No files attached. <button onclick="handleUniversalImport()" class="text-blue-500 hover:underline">Import Context</button></div>`;
 
-    // v19.54: Saved History Rendering
+    // v19.53: Saved History Rendering
     const savedAnalysis = aiContext.analysis || '';
     const savedChat = aiContext.chat.length > 0 ? 
         aiContext.chat.map(msg => `<div class="ai-message ${msg.role === 'user' ? 'user' : 'assistant'}">${msg.content}</div>`).join('') : 
@@ -1337,6 +1483,7 @@ function showSettingsModal(defaultTab = 'general') {
              <button class="flex-1 p-3 hover:bg-gray-50 focus:outline-none whitespace-nowrap ${defaultTab === 'database' ? 'border-b-2 border-blue-500 text-blue-600' : ''}" onclick="switchSettingsTab('database', this)">Line Items</button>
              <button class="flex-1 p-3 hover:bg-gray-50 focus:outline-none whitespace-nowrap ${defaultTab === 'ai' ? 'border-b-2 border-blue-500 text-blue-600' : ''}" onclick="switchSettingsTab('ai', this)">✨ AI Assistant</button>
              <button class="flex-1 p-3 hover:bg-gray-50 focus:outline-none whitespace-nowrap ${defaultTab === 'roadmap' ? 'border-b-2 border-blue-500 text-blue-600' : ''}" onclick="switchSettingsTab('roadmap', this)">Roadmap</button>
+			 <button class="flex-1 p-3 hover:bg-gray-50 focus:outline-none whitespace-nowrap ${defaultTab === 'contacts' ? 'border-b-2 border-blue-500 text-blue-600' : ''}" onclick="switchSettingsTab('contacts', this)">Contacts</button>
         </div>
         <div class="p-6" id="settingsContent">${renderSettingsContent(defaultTab)}</div>
     `;
@@ -1345,21 +1492,48 @@ function showSettingsModal(defaultTab = 'general') {
 }
 
 /* --- v19.53 Film Industry Database --- */
+/* --- v19.55 [Open Gate v1.0] - Industry Line Item Database --- */
+/* Codename: Open Gate - Removing barriers to production knowledge. */
 const FILM_INDUSTRY_ITEMS = [
+    // --- Above the Line ---
+    { description: 'Director', unit: 'Day', rate: 85000 },
+    { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
+    { description: 'Producer', unit: 'Day', rate: 75000 },
+    { description: 'Line Producer', unit: 'Day', rate: 65000 },
+    { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
+    { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
+    { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
+    { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
+
+    // --- Production Dept ---
+    { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
+    { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
     { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
     { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
-    { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
-    { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
+    { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
+    { description: 'Key PA', unit: 'Day', rate: 20000 },
+    { description: 'Set PA', unit: 'Day', rate: 15000 },
+    { description: 'Office PA', unit: 'Day', rate: 15000 },
+    { description: 'Truck PA', unit: 'Day', rate: 18000 },
     { description: 'Location Manager', unit: 'Day', rate: 50000 },
     { description: 'Location Scout', unit: 'Day', rate: 35000 },
-    { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
-    { description: 'Office PA', unit: 'Day', rate: 15000 },
-    { description: 'Set PA', unit: 'Day', rate: 15000 },
-    { description: 'Truck PA', unit: 'Day', rate: 18000 },
+    { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
+    { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
+    { description: 'Security Guard', unit: 'Day', rate: 12000 },
+    { description: 'Craft Service', unit: 'Day', rate: 25000 },
+    { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
+
+    // --- Camera Dept ---
+    { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
     { description: 'Camera Operator', unit: 'Day', rate: 60000 },
-    { description: '1st Assistant Camera (Focus Puller)', unit: 'Day', rate: 45000 },
+    { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
     { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
     { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
+    { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
+    { description: 'Drone Operator', unit: 'Day', rate: 55000 },
+    { description: 'Camera Utility', unit: 'Day', rate: 25000 },
+
+    // --- Lighting & Grip ---
     { description: 'Gaffer', unit: 'Day', rate: 55000 },
     { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
     { description: 'Electrician', unit: 'Day', rate: 30000 },
@@ -1367,24 +1541,37 @@ const FILM_INDUSTRY_ITEMS = [
     { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
     { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
     { description: 'Grip', unit: 'Day', rate: 30000 },
+    { description: 'Generator Operator', unit: 'Day', rate: 35000 },
+
+    // --- Sound ---
     { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
     { description: 'Boom Operator', unit: 'Day', rate: 35000 },
+    { description: 'Sound Utility', unit: 'Day', rate: 25000 },
+
+    // --- Art & Wardrobe ---
     { description: 'Production Designer', unit: 'Day', rate: 65000 },
     { description: 'Art Director', unit: 'Day', rate: 50000 },
+    { description: 'Set Decorator', unit: 'Day', rate: 45000 },
     { description: 'Set Dresser', unit: 'Day', rate: 30000 },
     { description: 'Props Master', unit: 'Day', rate: 45000 },
+    { description: 'Assistant Props', unit: 'Day', rate: 30000 },
+    { description: 'Costume Designer', unit: 'Day', rate: 55000 },
     { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
-    { description: 'Makeup Artist', unit: 'Day', rate: 40000 },
-    { description: 'Hair Stylist', unit: 'Day', rate: 40000 },
+    { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
+    { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
+    { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
+    { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
+
+    // --- Post-Production ---
+    { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
     { description: 'Editor', unit: 'Day', rate: 50000 },
     { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
     { description: 'Colorist', unit: 'Hour', rate: 15000 },
+    { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
     { description: 'VFX Artist', unit: 'Day', rate: 55000 },
     { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
-    { description: 'Craft Service', unit: 'Day', rate: 25000 },
-    { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
-    { description: 'Security Guard', unit: 'Day', rate: 12000 },
-    { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 }
+    { description: 'Composer', unit: 'Flat', rate: 200000 },
+    { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
 ];
 
 function ensureDatabaseSeeded() {
@@ -1539,8 +1726,10 @@ function showRecoveryModal() {
 
 if(footer) {
                 footer.addEventListener('click', (e) => { 
+if (e.target.closest('#docsFooterBtn')) showDocumentsModal();
                     if (e.target.closest('#stagesFooterBtn')) showStagesModal();
-                    if (e.target.closest('#publishFooterBtn')) document.getElementById('publishBtn')?.click(); // Trigger existing logic via ID or duplicate logic below
+                    if (e.target.closest('#publishFooterBtn')) document.getElementById('publishBtn')?.click();
+// Trigger existing logic via ID or duplicate logic below
                     if (e.target.closest('#settingsBtn')) showSettingsModal(); 
                     if (e.target.closest('#footerCoffeeBtn')) {
                         const btn = document.querySelector('#bmc-wbtn');
@@ -1941,6 +2130,7 @@ function bindSettingsEvents(tabName) {
         document.getElementById('dateFormatSelect')?.addEventListener('change', (e) => { setProjectDateFormat(e.target.value); });
         document.getElementById('separatorInput')?.addEventListener('input', (e) => { setProjectNameSeparator(e.target.value); });
     }
+	else if (tabName === 'contacts') { bindContactsEvents(); }
     else if (tabName === 'templates') { bindTemplateEvents(); }
     else if (tabName === 'database') { bindDatabaseEvents(); }
     else if (tabName === 'roadmap') { document.getElementById('toggleRoadmapDetailsBtn')?.addEventListener('click', (e) => { document.querySelectorAll('.roadmap-detail').forEach(el => el.classList.toggle('hidden')); e.target.textContent = e.target.textContent.includes('Expand') ? 'Collapse Details' : 'Expand Details'; }); }
@@ -2053,6 +2243,52 @@ if (tabName === 'general') {
     </div>`;
 }
 
+else if (tabName === 'contacts') {
+        const contacts = getGlobalContacts();
+        return `
+        <div class="space-y-4">
+            <div class="flex justify-between items-center bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                <div>
+                    <h3 class="font-bold text-indigo-900">Crew Database</h3>
+                    <p class="text-xs text-indigo-700">Manage roster for Open Gate Auto-Assign.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('csvImportInput').click()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Import CSV</button>
+                    <input type="file" id="csvImportInput" class="hidden" accept=".csv" onchange="importContactsCSV(this)">
+                    <button onclick="autoAssignRolesFromContacts()" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1"><span>⚡</span> Auto-Assign Budget</button>
+                </div>
+            </div>
+
+            <form id="addContactForm" class="grid grid-cols-12 gap-2 items-end bg-gray-50 p-3 rounded-lg border">
+                <div class="col-span-12 sm:col-span-4">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase">Name</label>
+                    <input type="text" id="cName" class="w-full p-2 border rounded text-sm" required placeholder="Jane Doe">
+                </div>
+                <div class="col-span-12 sm:col-span-4">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase">Default Role</label>
+                    <input type="text" id="cRole" class="w-full p-2 border rounded text-sm" required placeholder="Director, Gaffer...">
+                </div>
+                <div class="col-span-12 sm:col-span-3">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase">Email/Phone</label>
+                    <input type="text" id="cContact" class="w-full p-2 border rounded text-sm" placeholder="jane@film.com">
+                </div>
+                <div class="col-span-12 sm:col-span-1">
+                    <button type="submit" class="w-full p-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">+</button>
+                </div>
+            </form>
+
+            <div class="border rounded-lg overflow-hidden">
+                <div class="bg-gray-100 p-2 text-xs font-bold text-gray-500 flex justify-between">
+                    <span>${contacts.length} Contacts stored</span>
+                    <input type="text" id="contactSearch" placeholder="Search..." class="bg-white border rounded px-2 py-0.5 text-xs font-normal w-32">
+                </div>
+                <div class="max-h-64 overflow-y-auto" id="contactsListBody">
+                    ${renderContactsList(contacts)}
+                </div>
+            </div>
+        </div>`;
+    }
+
 else if (tabName === 'templates') {
         const allTemplates = getAllTemplates();
         if(!editingTemplateId) editingTemplateId = 'Commercial';
@@ -2087,7 +2323,7 @@ else if (tabName === 'templates') {
         `;
     } 
 
-/* --- v19.54 [Settings] - AI Toggle Added --- */
+/* v19.53 [Settings] - AI Toggle Added --- */
 else if (tabName === 'ai') {
     const currentProvider = getSelectedProvider();
     const saveHistory = budget.aiContext ? budget.aiContext.saveHistory : true;
@@ -2250,100 +2486,127 @@ else if (tabName === 'ai') {
         };
 
         /* --- v19.50 Crew Profile Manager v19.52 --- */
-        window.openCrewProfile = function(el, event, itemId, sectionName) {
-            if(event) event.stopPropagation();
+   /* --- v19.54 [Crew] - Contact Card Actions (WA, Call, SMS, Email) --- */
+window.openCrewProfile = function(el, event, itemId, sectionName) {
+    if(event) event.stopPropagation();
+    
+    const section = budget.sections[sectionName];
+    const item = section.items.find(i => i.id === itemId);
+    if(!item) return;
+
+    const crew = item.crew || { name: '', phone: '', email: '' };
+    
+    // 1. Prepare Action Links
+    const cleanPhone = crew.phone ? crew.phone.replace(/\D/g, '') : '';
+    const hasPhone = cleanPhone.length > 6; // Basic validation
+    const hasEmail = crew.email && crew.email.includes('@');
+    
+    const actionsBar = `
+        <div class="flex justify-center gap-3 mb-6 mt-2">
+            ${hasPhone ? `
+                <a href="tel:${cleanPhone}" class="flex flex-col items-center gap-1 group">
+                    <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 border border-green-200 flex items-center justify-center shadow-sm group-hover:bg-green-600 group-hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase">Call</span>
+                </a>
+                <a href="sms:${cleanPhone}" class="flex flex-col items-center gap-1 group">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase">Text</span>
+                </a>
+                <a href="https://wa.me/${cleanPhone}" target="_blank" class="flex flex-col items-center gap-1 group">
+                    <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shadow-sm group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase">WhatsApp</span>
+                </a>
+            ` : ''}
+            ${hasEmail ? `
+                <a href="mailto:${crew.email}" class="flex flex-col items-center gap-1 group">
+                    <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase">Email</span>
+                </a>
+            ` : ''}
+            ${!hasPhone && !hasEmail ? '<span class="text-xs text-gray-400 italic">Enter contact details to enable actions</span>' : ''}
+        </div>
+    `;
+
+    const content = `
+        <form id="crewProfileForm" class="space-y-4 p-1">
+            <div class="text-center">
+                <div class="w-20 h-20 mx-auto rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-3xl shadow-md border-4 border-white">
+                    ${crew.name ? crew.name.substring(0,1).toUpperCase() : '?'}
+                </div>
+                <h3 class="text-lg font-bold text-gray-900 mt-2">${crew.name || 'New Crew Member'}</h3>
+                <p class="text-sm text-blue-600 font-medium">${item.description}</p>
+            </div>
+
+            ${actionsBar}
             
-            const section = budget.sections[sectionName];
-            const item = section.items.find(i => i.id === itemId);
-            if(!item) return;
-
-            const crew = item.crew || { name: '', phone: '', email: '' };
-
-            const content = `
-                <form id="crewProfileForm" class="space-y-6 p-1">
-                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-4">
-                        <div class="w-14 h-14 flex-shrink-0 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-2xl shadow-sm">
-                            ${crew.name ? crew.name.substring(0,1).toUpperCase() : '?'}
-                        </div>
-                        <div class="min-w-0 flex-grow">
-                            <p class="text-xs text-blue-600 font-bold uppercase tracking-wider mb-0.5">Assigning Role</p>
-                            <p class="font-bold text-gray-900 text-lg leading-tight truncate">${item.description}</p>
-                        </div>
-                        
-                        <button type="button" id="importContactBtn" class="flex-shrink-0 p-2 bg-white text-blue-600 rounded-full border border-blue-200 shadow-sm hover:bg-blue-50 transition-colors" title="Import from Device Contacts">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                        </button>
-                    </div>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
-                            <input type="text" id="crewName" value="${crew.name || ''}" placeholder="e.g. Jane Doe" class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm">
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Phone / WhatsApp</label>
-                                <input type="tel" id="crewPhone" value="${crew.phone || ''}" placeholder="+1 876..." class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all shadow-sm">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email Address</label>
-                                <input type="email" id="crewEmail" value="${crew.email || ''}" placeholder="jane@set.com" class="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pt-6 flex flex-col-reverse sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-100 mt-2">
-                        <button type="button" class="w-full sm:w-auto text-red-500 text-sm hover:text-red-700 font-medium py-2 transition-colors" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Clear Assignment</button>
-                        <button type="submit" class="w-full sm:w-auto bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold shadow hover:bg-blue-700 active:transform active:scale-95 transition-all">Save Profile</button>
-                    </div>
-                </form>
-            `;
-
-            createModal('crewProfile', '', content, 'max-w-lg');
-
-            /* --- v19.50 Device Contact Import Logic v19.52 --- */
-            document.getElementById('importContactBtn').addEventListener('click', async () => {
-                const supported = ('contacts' in navigator && 'ContactsManager' in window);
+            <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Contact Details</h4>
+                    <button type="button" id="importContactBtn" class="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        Import
+                    </button>
+                </div>
                 
-                if (supported) {
-                    try {
-                        const props = ['name', 'tel', 'email'];
-                        const opts = { multiple: false };
-                        const contacts = await navigator.contacts.select(props, opts);
-                        
-                        if (contacts.length) {
-                            const contact = contacts[0];
-                            if(contact.name && contact.name[0]) document.getElementById('crewName').value = contact.name[0];
-                            if(contact.tel && contact.tel[0]) document.getElementById('crewPhone').value = contact.tel[0];
-                            if(contact.email && contact.email[0]) document.getElementById('crewEmail').value = contact.email[0];
-                        }
-                    } catch (ex) {
-                        console.log("Contact import cancelled", ex);
-                    }
-                } else {
-                    const nameInput = document.getElementById('crewName');
-                    nameInput.focus();
-                    
-                    const btn = document.getElementById('importContactBtn');
-                    const originalHTML = btn.innerHTML;
-                    btn.innerHTML = '<span class="text-xs text-red-500 font-bold">N/A</span>';
-                    setTimeout(() => btn.innerHTML = originalHTML, 2000);
-                }
-            });
+                <div>
+                    <input type="text" id="crewName" value="${crew.name || ''}" placeholder="Full Name" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="tel" id="crewPhone" value="${crew.phone || ''}" placeholder="Phone" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="email" id="crewEmail" value="${crew.email || ''}" placeholder="Email" class="w-full p-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+            </div>
 
-            document.getElementById('crewProfileForm').addEventListener('submit', (e) => {
-                e.preventDefault();
-                item.crew = {
-                    name: document.getElementById('crewName').value.trim(),
-                    phone: document.getElementById('crewPhone').value.trim(),
-                    email: document.getElementById('crewEmail').value.trim()
-                };
-                pushToHistory(`Assigned ${item.crew.name || 'Crew'} to ${item.description}`);
-                closeModal('crewProfileModal');
-                render(); 
-            });
+            <div class="pt-2 flex justify-between items-center">
+                <button type="button" class="text-red-500 text-xs font-bold hover:text-red-700 px-2" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Unassign</button>
+                <button type="submit" class="bg-gray-900 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-black transition-transform active:scale-95">Save & Close</button>
+            </div>
+        </form>
+    `;
+
+    createModal('crewProfile', '', content, 'max-w-sm');
+
+    // Attach Import Logic (Native)
+    document.getElementById('importContactBtn').addEventListener('click', async () => {
+        if ('contacts' in navigator && 'ContactsManager' in window) {
+            try {
+                const contacts = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: false });
+                if (contacts.length) {
+                    const c = contacts[0];
+                    if(c.name?.[0]) document.getElementById('crewName').value = c.name[0];
+                    if(c.tel?.[0]) document.getElementById('crewPhone').value = c.tel[0];
+                    if(c.email?.[0]) document.getElementById('crewEmail').value = c.email[0];
+                }
+            } catch (ex) { console.log(ex); }
+        } else {
+            alert("Contact import not supported on this device/browser.");
+        }
+    });
+
+    // Attach Save Logic
+    document.getElementById('crewProfileForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        item.crew = {
+            name: document.getElementById('crewName').value.trim(),
+            phone: document.getElementById('crewPhone').value.trim(),
+            email: document.getElementById('crewEmail').value.trim()
         };
+        pushToHistory(`Updated crew: ${item.crew.name}`);
+        closeModal('crewProfileModal');
+        
+        // Refresh Screens
+        render(); 
+        if(document.getElementById('stagesViewModal')) showStagesModal(); 
+    });
+};
 
         window.clearCrewAssignment = function(itemId, sectionName) {
             if(confirm('Remove this person from the role?')) {
@@ -3189,7 +3452,7 @@ async function handleAnalyzeBudget() {
     const simplifiedBudget = { project: budget.projectName, totals: calculateTotals(budget.sections), sections: {} };
     for (const [name, sec] of Object.entries(budget.sections)) simplifiedBudget.sections[name] = sec.items.map(i => `${i.quantity} ${i.unit} ${i.description} @ ${i.rate}`).join(', ');
     
-    // v19.54: Specific Prompt
+    // v19.53: Specific Prompt
     const prompt = `Analyze this budget JSON. 1. Missing roles/equip? 2. Rate anomalies? 3. Risks? Budget Data: ${JSON.stringify(simplifiedBudget)}`;
     
     try { 
@@ -3371,135 +3634,198 @@ function showTargetLockModal() {
     });
 }
 
-/* --- v19.53 [Stages] - Top Spenders & Day Sync, Auto-Sort + Add Button --- */
-/* --- v19.53 [Stages] - Layout Update (Button in Header) --- */
+/* --- v19.54 [Stages] - Logic V3 (Presets, Sync, Proportional Locks) --- */
+
+// 1. Presets for "Distribute" Button
+const STAGE_PRESETS = {
+    'TVC': { 'dev': 10, 'pre': 25, 'prod': 15, 'post': 35, 'dist': 15 },
+    'Music Video': { 'dev': 10, 'pre': 20, 'prod': 15, 'post': 40, 'dist': 15 },
+    'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
+    'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
+};
+
+// 2. Sync Logic (Weighted Average)
+function syncStageToMain(item) {
+    if (!item.stageData) return;
+    let totalDays = 0, totalCost = 0;
+    Object.values(item.stageData).forEach(d => {
+        const days = parseFloat(d.days) || 0;
+        const rate = parseFloat(d.rate) || 0;
+        totalDays += days;
+        totalCost += (days * rate);
+    });
+    if (totalDays > 0) {
+        item.quantity = totalDays;
+        item.rate = totalCost / totalDays;
+        item.unit = 'Day'; 
+    }
+}
+
+// 3. Remove Item Helper
+window.removeStageItem = function(itemId, sectionName, stageKey) {
+    const item = budget.sections[sectionName].items.find(i => i.id === itemId);
+    if (item && item.stageData && item.stageData[stageKey]) {
+        if(confirm("Remove item from this stage?")) {
+            delete item.stageData[stageKey];
+            syncStageToMain(item);
+            pushToHistory(`Removed item from ${stageKey}`);
+            const card = document.querySelector(`.stage-card-item[data-item-id="${itemId}"][data-stage="${stageKey}"]`);
+            if(card) card.remove();
+            updateAllHeaders(); // Recalc totals without full re-render
+            render();
+        }
+    }
+};
+
+// 4. Proportional Slider Balancing
+function balanceStageSliders(changedKey, newValue) {
+    const stages = budget.targetLock.stages;
+    const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+    
+    newValue = Math.max(0, Math.min(100, newValue));
+    
+    // Check locks
+    const lockedKeys = validKeys.filter(k => k !== changedKey && stages[k].locked);
+    const unlockedKeys = validKeys.filter(k => k !== changedKey && !stages[k].locked);
+    
+    const lockedTotal = lockedKeys.reduce((s, k) => s + stages[k].ratio, 0);
+    const maxAvailable = 100 - lockedTotal;
+    
+    if (newValue > maxAvailable) newValue = maxAvailable;
+    stages[changedKey].ratio = newValue;
+    
+    const remaining = 100 - newValue - lockedTotal;
+    
+    if (unlockedKeys.length > 0) {
+        const currentUnlockedTotal = unlockedKeys.reduce((s, k) => s + stages[k].ratio, 0);
+        unlockedKeys.forEach(k => {
+            if (currentUnlockedTotal <= 0) stages[k].ratio = remaining / unlockedKeys.length;
+            else stages[k].ratio = remaining * (stages[k].ratio / currentUnlockedTotal);
+        });
+    }
+}
+
+// 5. Apply Preset Handler
+window.applyStagePreset = function(presetName) {
+    const ratios = STAGE_PRESETS[presetName];
+    if (!ratios) return;
+    Object.keys(ratios).forEach(k => {
+        if (budget.targetLock.stages[k]) {
+            budget.targetLock.stages[k].ratio = ratios[k];
+            budget.targetLock.stages[k].locked = false;
+        }
+    });
+    updateAllHeaders(); 
+    pushToHistory(`Applied ${presetName} preset`);
+};
+
+/* --- v19.54 [Stages] - UI V9 (Smart Inputs: Auto-Clear/Restore) --- */
 function showStagesModal() {
     try {
-        // 1. DATA INITIALIZATION & SELF-HEALING
-        if (!budget.targetLock) {
-            budget.targetLock = {
-                enabled: false, totalCap: 0,
-                stages: {
-                    'dev': { label: 'Development', ratio: 5, days: 0 },
-                    'pre': { label: 'Pre-Production', ratio: 20, days: 0 },
-                    'prod': { label: 'Production', ratio: 55, days: 0 },
-                    'post': { label: 'Post-Production', ratio: 15, days: 0 },
-                    'dist': { label: 'Distribution', ratio: 5, days: 0 }
-                }
-            };
-        }
-        
+        // A. Init Data
+        if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
         const tl = budget.targetLock;
         const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
-        
-        validKeys.forEach(k => {
-            if (!tl.stages[k]) tl.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0 };
-            if (tl.stages[k].days === undefined) tl.stages[k].days = 0;
-        });
+        validKeys.forEach(k => { if (!tl.stages[k]) tl.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false }; });
 
+        // B. Data Prep
         const stageData = {};
         validKeys.forEach(k => stageData[k] = { items: [], total: 0 });
-
         let grandTotal = 0;
         const allItemsFlat = [];
 
-        // Loop through ENTIRE budget to populate Stages
         Object.entries(budget.sections).forEach(([sectionName, section]) => {
             section.items.forEach(item => {
-                const { estimated } = calculateItem(item);
-                
-                // --- AUTO-ASSIGNMENT LOGIC ---
-                let itemStages = item.assignedStage;
-                
-                // If item has no stage, assign one based on Section or Keyword
-                if (!itemStages || (Array.isArray(itemStages) && itemStages.length === 0)) {
-                    const desc = (item.description || '').toLowerCase();
-                    const sec = sectionName.toLowerCase();
-                    
-                    if (/(editor|vfx|color|sound mix|music|post|deliverables)/.test(desc) || sec.includes('post')) itemStages = ['post'];
-                    else if (/(writer|script|option|development|storyboard|research)/.test(desc) || sec.includes('development')) itemStages = ['dev'];
-                    else if (/(casting|scout|location|legal|insurance|rehearsal|travel)/.test(desc) || sec.includes('pre-production')) itemStages = ['pre'];
-                    else if (/(distrib|festival|market|sales|pr |publicist)/.test(desc) || sec.includes('distribution')) itemStages = ['dist'];
-                    else itemStages = ['prod']; // The catch-all
-
-                    item.assignedStage = itemStages; // Persist the fix
+                // Defaults
+                if (!item.stageData) { 
+                    item.stageData = {};
+                    let target = 'prod';
+                    if (/post|edit/.test(item.description.toLowerCase())) target = 'post';
+                    else if (/pre|cast/.test(item.description.toLowerCase())) target = 'pre';
+                    else if (/dev|write/.test(item.description.toLowerCase())) target = 'dev';
+                    item.stageData[target] = { days: item.quantity, rate: item.rate };
                 }
                 
-                if (!Array.isArray(itemStages)) itemStages = [itemStages];
-
-                itemStages.forEach(stageKey => {
-                    if (validKeys.includes(stageKey)) {
-                        stageData[stageKey].items.push({ ...item, _sectionName: sectionName });
-                        stageData[stageKey].total += estimated;
+                Object.entries(item.stageData).forEach(([k, d]) => {
+                    if (validKeys.includes(k)) {
+                        const cost = (parseFloat(d.days)||0) * (parseFloat(d.rate)||0);
+                        stageData[k].items.push({...item, _sDays:d.days, _sRate:d.rate, _sCost:cost, _sec:sectionName});
+                        stageData[k].total += cost;
+                        grandTotal += cost;
+                        if (cost > 0) allItemsFlat.push({ desc: item.description, cost: cost, stage: tl.stages[k].label });
                     }
                 });
-                
-                if (itemStages.some(k => validKeys.includes(k))) {
-                    grandTotal += estimated;
-                    allItemsFlat.push({ desc: item.description, est: estimated, section: sectionName });
-                }
             });
         });
 
-        const topSpenders = allItemsFlat.sort((a, b) => b.est - a.est).slice(0, 5);
+        const topSpenders = allItemsFlat.sort((a, b) => b.cost - a.cost).slice(0, 5);
 
-        // 2. RENDER UI
-        const renderNav = () => `
-            <div id="stageNavBar" class="flex items-center gap-1 overflow-x-auto h-8 px-1 bg-gray-50 border-b border-gray-200 flex-shrink-0 no-scrollbar select-none !rounded-none">
-                <button onclick="scrollToStageCard('card-setup')" class="nav-btn px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:bg-gray-200 rounded-sm transition-colors whitespace-nowrap" data-target="card-setup">Overview</button>
-                <div class="h-3 w-px bg-gray-300 mx-1"></div>
-                ${validKeys.map(k => `<button onclick="scrollToStageCard('card-${k}')" class="nav-btn px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:bg-gray-200 rounded-sm transition-colors whitespace-nowrap" data-target="card-${k}">${tl.stages[k].label}</button>`).join('')}
-                <div class="h-3 w-px bg-gray-300 mx-1"></div>
-                <button onclick="scrollToStageCard('card-files')" class="nav-btn px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:bg-gray-200 rounded-sm transition-colors whitespace-nowrap" data-target="card-files">Files</button>
-            </div>
-        `;
-
+        // C. Render Helpers
+        
+        // 1. Setup Card
         const renderSetupCard = () => `
-            <div id="card-setup" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center relative">
-                <div class="p-4 bg-gray-900 text-white flex-shrink-0">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Target Lock Setup</h3>
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] text-gray-500 uppercase">Total Funding Cap</label>
-                        <div class="flex items-center gap-2 border-b border-gray-700 pb-1">
-                            <span class="text-xl font-bold text-gray-500">$</span>
-                            <input type="number" id="tlTotalCapInput" value="${tl.totalCap}" class="bg-transparent text-2xl font-bold text-white w-full focus:outline-none placeholder-gray-700" placeholder="0.00">
+            <div id="card-setup" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center">
+                <div class="p-3 bg-gray-900 text-white flex-shrink-0">
+                    <h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3>
+                </div>
+                <div class="p-3 space-y-4 flex-grow overflow-y-auto">
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label>
+                        <div class="flex items-center gap-2 border-b border-gray-300 pb-1">
+                            <span class="text-xl text-gray-400">$</span>
+                            <input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-xl font-bold w-full outline-none text-gray-800" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders();">
                         </div>
                     </div>
-                </div>
-                <div class="flex-grow overflow-y-auto p-4 space-y-5">
-                    <div class="flex items-center justify-between">
-                        <p class="text-xs text-gray-500 italic">Adjust percentages to auto-balance budget.</p>
-                        <button id="syncDaysBtn" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 font-bold border border-blue-200" title="Update item quantities based on these days">⚡ Sync Days to Crew</button>
-                    </div>
-                    ${validKeys.map(key => `
-                        <div class="relative bg-gray-50 p-2 rounded border border-gray-100">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-gray-800 text-xs">${tl.stages[key].label}</span>
-                                <div class="flex items-center gap-1">
-                                    <span class="text-[9px] text-gray-400 uppercase">Days:</span>
-                                    <input type="number" min="0" value="${tl.stages[key].days}" data-stage-days="${key}" class="w-12 text-right text-xs p-1 border rounded bg-white focus:border-blue-500 focus:outline-none placeholder-gray-300 font-bold text-blue-600" placeholder="0">
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <input type="range" min="0" max="100" step="0.5" value="${tl.stages[key].ratio}" data-stage-key="${key}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                                <span class="font-mono text-xs font-bold text-blue-600 w-10 text-right" id="disp_perc_${key}">${tl.stages[key].ratio.toFixed(1)}%</span>
-                            </div>
-                            <div class="text-[10px] text-gray-400 text-right mt-1 font-mono" id="disp_amt_${key}">${formatAbbreviated(tl.totalCap * (tl.stages[key].ratio/100), displayCurrency)}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
 
-        const renderOverviewCard = () => `
-            <div id="card-overview" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 h-full bg-gray-50 border-r border-gray-200 flex flex-col snap-center relative">
+                    <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                        <label class="text-[10px] text-blue-500 uppercase font-bold mb-1 block">Auto-Distribute</label>
+                        <div class="flex gap-1">
+                            <select id="distPresetSelect" class="text-xs border rounded p-1 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none">
+                                <option value="" disabled selected>Select Type...</option>
+                                ${Object.keys(STAGE_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('')}
+                            </select>
+                            <button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 shadow-sm">Apply</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        ${validKeys.map(k => `
+                            <div class="bg-gray-50 p-2 rounded border border-gray-100 relative">
+                                <div class="flex justify-between mb-1 text-[10px] font-bold items-center">
+                                    <div class="flex items-center gap-1">
+                                        <button onclick="toggleStageLock('${k}')" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none">${tl.stages[k].locked ? '🔒' : '🔓'}</button>
+                                        <span>${tl.stages[k].label}</span>
+                                    </div>
+                                    <span class="text-blue-600 font-mono" id="disp_amt_${k}"></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}>
+                                    <div class="relative w-12 flex-shrink-0">
+                                        <input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}>
+                                        <span class="absolute right-0 top-0 text-xs text-gray-400">%</span>
+                                    </div>
+                                </div>
+                            </div>`).join('')}
+                        <div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div>
+                    </div>
+                </div>
+            </div>`;
+
+        // 2. Overview Card
+        const renderOverviewCard = () => {
+            const burnRate = tl.totalCap > 0 ? (grandTotal / tl.totalCap) * 100 : 0;
+            const burnColor = burnRate > 100 ? 'text-red-600' : (burnRate > 85 ? 'text-yellow-600' : 'text-green-600');
+            const ringColor = burnRate > 100 ? 'border-red-200' : (burnRate > 85 ? 'border-yellow-200' : 'border-green-200');
+
+            return `
+            <div id="card-overview" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-gray-50 border-r border-gray-200 flex flex-col snap-center">
                 <div class="p-6 flex flex-col items-center text-center border-b border-gray-200 bg-white">
-                    <div class="w-32 h-32 rounded-full border-8 border-gray-100 flex items-center justify-center mb-2 relative">
-                        <div class="text-2xl font-bold ${grandTotal > tl.totalCap && tl.totalCap > 0 ? 'text-red-600' : 'text-green-600'}">${Math.round(tl.totalCap > 0 ? (grandTotal / tl.totalCap) * 100 : 0)}%</div>
+                    <div id="burnRateRing" class="w-32 h-32 rounded-full border-8 ${ringColor} flex items-center justify-center mb-2 relative transition-colors duration-500">
+                        <div id="burnRateText" class="text-3xl font-bold ${burnColor}">${Math.round(burnRate)}%</div>
                         <div class="absolute text-[9px] text-gray-400 bottom-6 uppercase tracking-wider">Burn Rate</div>
                     </div>
                     <h3 class="text-base font-bold text-gray-800">Budget Health</h3>
-                    <p class="text-xs text-gray-500 mt-1">Est: <strong>${formatAbbreviated(grandTotal, displayCurrency)}</strong> / Cap: <strong>${formatAbbreviated(tl.totalCap, displayCurrency)}</strong></p>
+                    <p class="text-xs text-gray-500 mt-1">Est: <strong id="ovGrandTotal">${formatAbbreviated(grandTotal, displayCurrency)}</strong> / Cap: <strong id="ovTotalCap">${formatAbbreviated(tl.totalCap, displayCurrency)}</strong></p>
                 </div>
                 <div class="p-4 flex-grow overflow-y-auto">
                     <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Top Spenders</h4>
@@ -3508,192 +3834,232 @@ function showStagesModal() {
                             <div class="flex justify-between items-center text-xs p-2 bg-white rounded border border-gray-200 shadow-sm">
                                 <div class="flex items-center gap-2 overflow-hidden">
                                     <span class="font-bold text-gray-400 w-4">${idx + 1}.</span>
-                                    <span class="truncate font-medium text-gray-700">${item.desc}</span>
+                                    <div class="min-w-0">
+                                        <div class="truncate font-medium text-gray-700">${item.desc}</div>
+                                        <div class="text-[9px] text-gray-400 uppercase">${item.stage}</div>
+                                    </div>
                                 </div>
-                                <span class="font-mono font-bold text-gray-800 flex-shrink-0">${formatAbbreviated(item.est, displayCurrency)}</span>
+                                <span class="font-mono font-bold text-gray-800 flex-shrink-0">${formatAbbreviated(item.cost, displayCurrency)}</span>
                             </div>
                         `).join('')}
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
+        };
 
+        // 3. Stage Column (With Smart Inputs)
         const renderStageColumn = (key) => {
             const config = tl.stages[key];
             const data = stageData[key];
             const cap = tl.totalCap * (config.ratio / 100);
-            const percentUsed = cap > 0 ? (data.total / cap) * 100 : 0;
-            let progressColor = percentUsed > 100 ? 'bg-red-500' : (percentUsed > 80 ? 'bg-yellow-500' : 'bg-green-500');
-            const visualWidth = Math.min(percentUsed, 100);
-
+            
             return `
-                <div id="card-${key}" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 flex flex-col h-full bg-white border-r border-gray-200 snap-center relative">
-                    <div class="p-3 bg-white border-b border-gray-100 flex-shrink-0 sticky top-0 z-10 shadow-sm">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="font-bold text-gray-800 text-sm truncate">${config.label}</span>
-                            <div class="flex items-center gap-1">
-                                ${config.days > 0 ? `<span class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold">${config.days} Days</span>` : ''}
-                                <span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 border">${config.ratio.toFixed(1)}%</span>
-                            </div>
-                        </div>
-                        <div class="w-full bg-gray-100 rounded-full h-1.5 mb-2 overflow-hidden">
-                            <div class="${progressColor} h-1.5 rounded-full transition-all duration-500" style="width: ${visualWidth}%"></div>
+            <div id="card-${key}" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 flex flex-col h-full bg-white border-r border-gray-200 snap-center">
+                <div class="p-2 bg-white border-b border-gray-100 flex-shrink-0 sticky top-0 z-20 shadow-sm">
+                    <div class="flex justify-between items-center mb-2 h-7">
+                        <div class="flex items-center gap-1.5 overflow-hidden">
+                            <button onclick="toggleStageLock('${key}')" class="text-gray-400 hover:text-blue-600 flex-shrink-0 focus:outline-none" title="Lock Allocation">
+                                ${config.locked ? '🔒' : '🔓'}
+                            </button>
+                            <span class="font-bold text-gray-800 text-xs truncate" title="${config.label}">${config.label}</span>
                         </div>
                         
-                        <button onclick="handleStageAddItem('${key}')" class="w-full py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-xs font-bold border border-blue-100 transition-colors flex justify-center items-center gap-1">
-                            <span>+</span> Add Line Item
-                        </button>
-                    </div>
-
-                    <div class="stage-drop-zone flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50" data-stage-key="${key}">
-                        ${data.items.length > 0 ? data.items.map(item => {
-                            const est = calculateItem(item).estimated;
-                            const dailyRate = config.days > 0 ? (est / config.days) : 0;
-                            const dailyDisplay = dailyRate > 0 ? `~${formatAbbreviated(dailyRate, displayCurrency)}/day` : '—';
-                            return `
-                            <div class="stage-draggable bg-white p-2 rounded border border-gray-200 shadow-sm text-xs group hover:border-blue-400 cursor-grab active:cursor-grabbing relative" 
-                                data-item-id="${item.id}" 
-                                data-origin-section="${item._sectionName}">
-                                <div class="flex justify-between items-start mb-1">
-                                    <span class="font-semibold text-gray-700 line-clamp-2 leading-tight w-3/4">${item.description}</span>
-                                    <span class="font-mono font-bold text-gray-800">${formatAbbreviated(est, displayCurrency)}</span>
-                                </div>
-                                <div class="flex items-center justify-between text-[9px] text-gray-400">
-                                    <div class="flex flex-col gap-0.5">
-                                        <div class="flex items-center gap-1">
-                                            <span>${item.rateType === 'fixed' ? '🔒' : '🤝'}</span>
-                                            <span class="truncate max-w-[80px] opacity-75">${item._sectionName}</span>
-                                        </div>
-                                    </div>
-                                    <div class="font-mono text-blue-400 bg-blue-50 px-1 rounded">${dailyDisplay}</div>
-                                </div>
-                                <button class="absolute top-1 right-1 w-5 h-5 bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                                        title="Remove from this stage"
-                                        onclick="unassignStage(event, '${item.id}', '${item._sectionName}', '${key}')">
-                                    -
-                                </button>
+                        <div class="flex items-center gap-3">
+                            <div class="relative w-12 h-6 flex items-center bg-gray-50 border border-gray-200 rounded px-1">
+                                <input type="number" id="header_perc_${key}" value="${config.ratio.toFixed(1)}" 
+                                    class="stage-number-input w-full text-right text-[10px] font-bold bg-transparent focus:outline-none no-spinner pr-2" 
+                                    data-stage-key="${key}"
+                                    ${config.locked ? 'disabled style="opacity:0.5"' : ''}
+                                    onfocus="this.select()">
+                                <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 select-none">%</span>
                             </div>
-                        `}).join('') : '<div class="h-12 border-2 border-dashed border-gray-200 rounded flex items-center justify-center text-[10px] text-gray-400">Drop items here</div>'} 
-                    </div>
-                </div>
-            `;
-        };
 
-        const renderFilesCard = () => {
-             const attachments = budget.attachments || [];
-            return `
-            <div id="card-files" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 h-full bg-white flex flex-col snap-center relative">
-                <div class="p-4 bg-gray-800 text-white flex-shrink-0">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Project Files</h3>
-                </div>
-                <div class="flex-grow overflow-y-auto p-4 space-y-2 bg-gray-50">
-                    ${attachments.length > 0 ? attachments.map(file => `
-                        <div class="flex items-center justify-between bg-white p-2 rounded border border-gray-200 shadow-sm group hover:border-blue-300 transition-colors">
-                            <div class="flex items-center gap-3 overflow-hidden">
-                                <div class="w-8 h-8 flex-shrink-0 bg-blue-50 text-blue-600 rounded flex items-center justify-center text-[10px] font-bold border border-blue-100">
-                                    ${file.name.split('.').pop().toUpperCase().substring(0,3)}
-                                </div>
-                                <div class="min-w-0">
-                                    <div class="text-xs font-bold text-gray-700 truncate" title="${file.name}">${getAbbreviatedName(file.name)}</div>
-                                </div>
+                            <div class="flex items-center h-6 bg-gray-50 border border-gray-200 rounded px-1.5">
+                                <span class="text-[8px] text-gray-400 uppercase mr-1 font-bold">Days:</span>
+                                <input type="number" value="${config.days}" data-global-days="${key}" 
+                                    class="w-8 text-center text-[10px] bg-transparent font-bold text-blue-600 focus:outline-none no-spinner" 
+                                    onfocus="this.dataset.old=this.value; this.value=''" 
+                                    onblur="if(this.value==='') this.value=this.dataset.old; updateGlobalDays('${key}', this.value)">
                             </div>
-                            <button onclick="removeAttachment('${file.id}'); showStagesModal();" class="text-gray-300 hover:text-red-500 px-2 opacity-60 group-hover:opacity-100 transition-opacity">×</button>
                         </div>
-                    `).join('') : `<div class="text-center py-8 text-gray-400 text-xs italic">No files attached.</div>`}
-                    <button onclick="handleUniversalImport()" class="w-full py-3 mt-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-600 text-xs font-bold transition-colors bg-white">+ Upload File</button>
+                    </div>
+
+                    <div class="w-full bg-gray-100 rounded-full h-1 mb-1 overflow-hidden">
+                        <div id="bar-${key}" class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="flex justify-between text-[9px] text-gray-400 font-mono mb-1">
+                        <span id="total-${key}">${formatAbbreviated(data.total, displayCurrency)}</span>
+                        <span id="limit-${key}">Cap: ${formatAbbreviated(cap, displayCurrency)}</span>
+                    </div>
+                    
+                    <button onclick="handleStageAddItem('${key}')" class="w-full py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-[10px] font-bold border border-blue-100 transition-colors">+ Item</button>
+                </div>
+
+                <div class="stage-drop-zone flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50 h-full" data-stage-key="${key}">
+                    ${data.items.map(item => `
+                        <div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" 
+                             data-item-id="${item.id}" data-stage="${key}">
+                            
+                            <button onclick="removeStageItem('${item.id}', '${item._sec}', '${key}')" 
+                                    class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                &times;
+                            </button>
+
+                            <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${item._sec}')">
+                                <div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-500 hover:text-white transition-colors">
+                                    ${item.crew?.name?.charAt(0) || '👤'}
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-xs font-bold text-gray-700 truncate" title="${item.description}">${item.description}</div>
+                                </div>
+                                <div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${key}">
+                                    ${formatAbbreviated(item._sCost, displayCurrency)}
+                                </div>
+                            </div>
+
+                            <div class="flex gap-2 items-center h-7">
+                                <div class="relative w-14 h-full">
+                                    <span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span>
+                                    <input type="number" value="${item._sDays}" 
+                                        class="w-full h-full pl-4 pr-1 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all"
+                                        onfocus="this.dataset.old=this.value; this.value=''" 
+                                        onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}"
+                                        oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'days', this.value)">
+                                </div>
+                                <div class="relative flex-1 h-full">
+                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span>
+                                    <input type="number" value="${item._sRate}" 
+                                        class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all"
+                                        onfocus="this.dataset.old=this.value; this.value=''" 
+                                        onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}"
+                                        oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'rate', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
             </div>`;
         };
 
+        // D. Build Modal
         const content = `
-            <div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] overflow-hidden bg-white rounded-xl shadow-2xl relative group/carousel">
-                ${renderNav()}
+            <div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative">
+                <div class="flex items-center gap-2 overflow-x-auto h-8 px-2 bg-gray-50 border-b flex-shrink-0 no-scrollbar">
+                    ${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth'})" class="text-[10px] font-bold uppercase text-gray-500 hover:text-blue-600 px-2">${k}</button>`).join('')}
+                </div>
                 <div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth">
                     ${renderSetupCard()}
                     ${renderOverviewCard()}
                     ${validKeys.map(k => renderStageColumn(k)).join('')}
-                    ${renderFilesCard()}
                 </div>
-                <button onclick="scrollCarousel('left')" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/80 hover:bg-white backdrop-blur border border-gray-200 rounded-full shadow-lg flex items-center justify-center text-gray-600 opacity-0 group-hover/carousel:opacity-100 transition-opacity z-20 hidden sm:flex"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                <button onclick="scrollCarousel('right')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/80 hover:bg-white backdrop-blur border border-gray-200 rounded-full shadow-lg flex items-center justify-center text-gray-600 opacity-0 group-hover/carousel:opacity-100 transition-opacity z-20 hidden sm:flex"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-            </div>
-        `;
+            </div>`;
 
         createModal('stagesView', '', content, 'max-w-none w-fit bg-transparent shadow-none');
-        
-        // Modal styling adjustments
         const header = document.querySelector('#stagesViewModal .bg-gray-50.border-b');
-        if(header) {
-            header.classList.remove('justify-between');
-            header.classList.add('relative', 'justify-end'); 
-            header.insertAdjacentHTML('afterbegin', '<div class="absolute inset-x-0 top-4 text-center pointer-events-none"><span class="text-gray-400 font-light tracking-widest text-xl bg-white/90 px-2">STAGES</span></div>');
-            const h2 = header.querySelector('h2');
-            if(h2) h2.style.display = 'none';
-        }
-
+        if(header) header.style.display = 'none';
         const body = document.getElementById('stagesViewBody');
-        if(body) { body.classList.remove('p-4'); body.style.padding = '0'; }
-        const contentDiv = document.getElementById('stagesViewContent');
-        if(contentDiv) { contentDiv.classList.remove('bg-white', 'shadow-xl', 'rounded-lg'); contentDiv.classList.add('bg-transparent', 'shadow-none'); }
+        if(body) body.style.padding = '0';
 
+        // E. Bindings
         setTimeout(() => {
-            // Listeners
-            const capInput = document.getElementById('tlTotalCapInput');
-            if(capInput) {
-                capInput.addEventListener('input', (e) => { budget.targetLock.totalCap = parseFloat(e.target.value) || 0; });
-                capInput.addEventListener('blur', () => { pushToHistory('Updated Total Cap'); showStagesModal(); });
-            }
+            const bindInput = (el, isInput) => {
+                el.addEventListener(isInput ? 'change' : 'input', (e) => {
+                    balanceStageSliders(e.target.dataset.stageKey, parseFloat(e.target.value));
+                    updateAllHeaders(); 
+                });
+            };
+            document.querySelectorAll('.stage-slider').forEach(el => bindInput(el, false));
+            document.querySelectorAll('.stage-number-input').forEach(el => bindInput(el, true));
 
-            document.getElementById('syncDaysBtn')?.addEventListener('click', () => {
-                if(confirm("Sync all item quantities to match Stage Days?")) {
-                    Object.entries(budget.sections).forEach(([_, section]) => {
-                        section.items.forEach(item => {
-                            if (item.unit === 'Day' || item.unit === 'Week') { 
-                                const stages = Array.isArray(item.assignedStage) ? item.assignedStage : [item.assignedStage || 'prod'];
-                                let totalDays = 0;
-                                stages.forEach(k => { if(validKeys.includes(k)) totalDays += (budget.targetLock.stages[k]?.days || 0); });
-                                if (totalDays > 0) item.quantity = totalDays;
-                            }
-                        });
-                    });
-                    pushToHistory(`Synced days`);
-                    showStagesModal(); 
-                    render(); 
+            window.updateAllHeaders = () => {
+                let totalPct = 0;
+                let grandLiveTotal = 0;
+
+                validKeys.forEach(key => {
+                    const cfg = budget.targetLock.stages[key];
+                    const cap = budget.targetLock.totalCap * (cfg.ratio / 100);
+                    totalPct += cfg.ratio;
+
+                    const sIn = document.querySelector(`.stage-slider[data-stage-key="${key}"]`);
+                    const nIn = document.getElementById(`setup_perc_${key}`);
+                    const hIn = document.getElementById(`header_perc_${key}`);
+                    
+                    if(sIn) sIn.value = cfg.ratio;
+                    if(nIn && document.activeElement !== nIn) nIn.value = cfg.ratio.toFixed(1);
+                    if(hIn && document.activeElement !== hIn) hIn.value = cfg.ratio.toFixed(1);
+
+                    document.getElementById(`disp_amt_${key}`).textContent = formatAbbreviated(cap, displayCurrency);
+                    document.getElementById(`limit-${key}`).textContent = `Cap: ${formatAbbreviated(cap, displayCurrency)}`;
+                    
+                    let liveTotal = 0;
+                    Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                        if(i.stageData && i.stageData[key]) liveTotal += (parseFloat(i.stageData[key].days)||0) * (parseFloat(i.stageData[key].rate)||0);
+                    }));
+                    grandLiveTotal += liveTotal;
+                    
+                    document.getElementById(`total-${key}`).textContent = formatAbbreviated(liveTotal, displayCurrency);
+                    const bar = document.getElementById(`bar-${key}`);
+                    if(bar) {
+                        const w = cap > 0 ? (liveTotal/cap)*100 : 0;
+                        bar.style.width = `${Math.min(w,100)}%`;
+                        bar.className = `h-1 rounded-full transition-all duration-300 ${w>100?'bg-red-500':'bg-blue-500'}`;
+                    }
+                });
+
+                const ovTotal = document.getElementById('ovGrandTotal');
+                const ovCap = document.getElementById('ovTotalCap');
+                const ringTxt = document.getElementById('burnRateText');
+                const ring = document.getElementById('burnRateRing');
+                
+                if(ovTotal) ovTotal.textContent = formatAbbreviated(grandLiveTotal, displayCurrency);
+                if(ovCap) ovCap.textContent = formatAbbreviated(budget.targetLock.totalCap, displayCurrency);
+                
+                if(ringTxt && ring) {
+                    const br = budget.targetLock.totalCap > 0 ? (grandLiveTotal / budget.targetLock.totalCap) * 100 : 0;
+                    ringTxt.textContent = Math.round(br) + '%';
+                    const rc = br > 100 ? 'border-red-200' : (br > 85 ? 'border-yellow-200' : 'border-green-200');
+                    const tc = br > 100 ? 'text-red-600' : (br > 85 ? 'text-yellow-600' : 'text-green-600');
+                    ring.className = `w-32 h-32 rounded-full border-8 ${rc} flex items-center justify-center mb-2 relative transition-colors duration-500`;
+                    ringTxt.className = `text-3xl font-bold ${tc}`;
                 }
-            });
 
-            document.querySelectorAll('.stage-slider').forEach(slider => {
-                slider.addEventListener('input', (e) => {
-                    const key = e.target.dataset.stageKey;
-                    const newVal = parseFloat(e.target.value);
-                    const stages = budget.targetLock.stages;
-                    stages[key].ratio = newVal;
-                    // (Balancing logic skipped for brevity, same as before)
-                    document.getElementById(`disp_perc_${key}`).textContent = newVal.toFixed(1) + '%';
-                    document.getElementById(`disp_amt_${key}`).textContent = formatAbbreviated(budget.targetLock.totalCap * (newVal/100), displayCurrency);
-                });
-                slider.addEventListener('change', () => { pushToHistory('Updated Stage Ratios'); showStagesModal(); }); 
-            });
+                const totDisp = document.getElementById('totalRatioDisplay');
+                if(totDisp) {
+                    totDisp.textContent = `Total: ${Math.round(totalPct)}%`;
+                    totDisp.className = `text-center text-[10px] mt-2 font-bold ${Math.round(totalPct)===100?'text-green-600':'text-red-500'}`;
+                }
+            };
+
+            window.updateStageItem = (itemId, sectionName, stageKey, field, val) => {
+                const item = budget.sections[sectionName].items.find(i => i.id === itemId);
+                if (item && item.stageData && item.stageData[stageKey]) {
+                    item.stageData[stageKey][field] = parseFloat(val) || 0;
+                    syncStageToMain(item);
+                    const cost = item.stageData[stageKey].days * item.stageData[stageKey].rate;
+                    const cEl = document.getElementById(`cost-${itemId}-${stageKey}`);
+                    if(cEl) cEl.textContent = formatAbbreviated(cost, displayCurrency);
+                    updateAllHeaders();
+                    render();
+                }
+            };
+
+            window.updateGlobalDays = (key, val) => { budget.targetLock.stages[key].days = parseFloat(val)||0; pushToHistory('Updated Days'); };
+            window.toggleStageLock = (key) => { budget.targetLock.stages[key].locked = !budget.targetLock.stages[key].locked; showStagesModal(); };
             
-             document.querySelectorAll('input[data-stage-days]').forEach(input => {
-                input.addEventListener('blur', (e) => {
-                     const key = e.target.dataset.stageDays;
-                     budget.targetLock.stages[key].days = parseFloat(e.target.value) || 0;
-                     pushToHistory('Updated Stage Days');
-                });
-            });
-
-            updateActiveNav('card-setup');
+            updateAllHeaders(); 
             initializeStageDragAndDrop();
-        }, 100);
-    } catch(err) {
-        console.error(err);
-    }
+        }, 50);
+
+    } catch(err) { console.error(err); }
 }
+
+
+/* -- P5 -- */
 
 /* --- v19.53 [Stages] - Database Search & Smart Add --- */
 
-// 1. The Main Handler (Opens the Menu)
+// 1. Main Handler (Opens the Menu)
 window.handleStageAddItem = function(stageKey) {
     // A. Detect Target Section
     const sectionNames = Object.keys(budget.sections);
@@ -3888,20 +4254,1450 @@ const updateActiveNav = (activeId) => {
     });
 };
 
+/* v19.53 [Documents] - Complete Module --- */
+
+// 1. Data Helper
+function ensureCallSheetData() {
+    if (!budget.callSheet) budget.callSheet = JSON.parse(JSON.stringify(defaultCallSheet));
+}
+
+// 2. Smart Auto-Fill Logic
+function autoFillCallSheetData() {
+    if (!confirm("Overwrite current Call Sheet with crew from Budget?")) return;
+    ensureCallSheetData();
+    const cs = budget.callSheet;
+    
+    const keyRoles = ['Director', 'Producer', '1st AD', 'DOP', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup', 'Costume', 'Medic', 'Manager'];
+    const foundCrew = [];
+
+    Object.values(budget.sections).forEach(sec => {
+        sec.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                const desc = item.description.toLowerCase();
+                const matchedRole = keyRoles.find(r => desc.includes(r.toLowerCase()));
+                if (matchedRole) {
+                    foundCrew.push({ role: matchedRole, name: item.crew.name, phone: item.crew.phone || '' });
+                }
+            }
+        });
+    });
+    
+    if (foundCrew.length > 0) {
+        cs.vipCrew = foundCrew; // Save specifically for PDF generation
+        alert(`✅ Imported ${foundCrew.length} key crew members.`);
+    } else {
+        alert("No assigned crew found in budget line items. Try assigning crew to roles first.");
+    }
+    showCallSheetEditor(); // Refresh view
+}
+
+// 3. PDF Generator (jsPDF + AutoTable)
+function generateCallSheetPDF(shareMode = false) {
+    ensureCallSheetData();
+    const cs = budget.callSheet;
+    const doc = new window.jspdf.jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // -- HEADER --
+    doc.setFillColor(30, 58, 138); // Blue 900
+    doc.rect(0, 0, pageWidth, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text((budget.projectName || "PROJECT TITLE").toUpperCase(), 14, 18);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("PRODUCTION OFFICE: 10A WEST KINGS HOUSE ROAD", 14, 26);
+    
+    doc.setFontSize(26);
+    doc.setFont("helvetica", "bold");
+    const dateStr = new Date(cs.date).toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
+    doc.text(dateStr, pageWidth - 14, 20, { align: 'right' });
+    
+    doc.setFontSize(12);
+    doc.text(`DAY ${cs.shootDay} OF ${cs.totalDays}`, pageWidth - 14, 28, { align: 'right' });
+
+    // -- INFO GRID --
+    let yPos = 50;
+    const drawBox = (x, title, value, color = [243, 244, 246]) => {
+        doc.setFillColor(...color);
+        doc.roundedRect(x, yPos, 60, 20, 2, 2, 'F');
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text(title.toUpperCase(), x + 4, yPos + 6);
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.text(value || "-", x + 4, yPos + 15);
+    };
+
+    drawBox(14, "General Crew Call", cs.unitCall, [219, 234, 254]); // Blue 100
+    drawBox(80, "Breakfast Ready", cs.breakfast, [254, 243, 199]); // Yellow 100
+    drawBox(146, "Weather Forecast", cs.weather || "N/A");
+
+    yPos += 28;
+
+    // -- LOCATIONS --
+    doc.setFontSize(10);
+    doc.setTextColor(30, 58, 138); 
+    doc.text("LOCATIONS", 14, yPos);
+    doc.setDrawColor(200);
+    doc.line(14, yPos + 2, pageWidth - 14, yPos + 2);
+    yPos += 8;
+
+    if(cs.locations) {
+        cs.locations.forEach(loc => {
+            doc.setFontSize(9);
+            doc.setTextColor(100);
+            doc.text((loc.label || "LOC").toUpperCase(), 14, yPos);
+            doc.setTextColor(0);
+            doc.setFont("helvetica", "bold");
+            doc.text(loc.name || "", 45, yPos);
+            doc.setFont("helvetica", "normal");
+            doc.text(loc.address || "", 45, yPos + 5);
+            yPos += 12;
+        });
+    }
+    yPos += 5;
+
+    // -- SCHEDULE --
+    doc.autoTable({
+        startY: yPos,
+        head: [['SCENE', 'SET / DESCRIPTION', 'CAST', 'PGS']],
+        body: cs.schedule.map(s => [s.scene, `${s.set}\n${s.desc}`, s.cast, s.pages]),
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138] },
+        columnStyles: { 0: { fontStyle: 'bold', width: 20 }, 3: { halign: 'center', width: 15 } }
+    });
+
+    // -- CAST --
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 10,
+        head: [['#', 'CAST MEMBER', 'CHARACTER', 'PICKUP', 'MAKEUP', 'ON SET']],
+        body: cs.cast.map(c => [c.id, c.name, c.character, c.pickup, c.makeup, c.set]),
+        theme: 'striped',
+        headStyles: { fillColor: [75, 85, 99] },
+        columnStyles: { 0: { fontStyle: 'bold', width: 10 }, 5: { fontStyle: 'bold', fillColor: [239, 246, 255] } }
+    });
+
+    // -- VIP CONTACTS (Auto-Filled) --
+    if (cs.vipCrew && cs.vipCrew.length > 0) {
+        doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 10,
+            head: [['KEY CREW CONTACTS', 'PHONE']],
+            body: cs.vipCrew.map(c => [`${c.role}: ${c.name}`, c.phone]),
+            theme: 'plain',
+            styles: { fontSize: 8, cellPadding: 1 }
+        });
+    }
+
+    // -- FOOTER --
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.setFillColor(243, 244, 246);
+    doc.rect(14, finalY, pageWidth - 28, 20, 'F');
+    doc.setFontSize(8);
+    doc.setTextColor(0);
+    doc.text("NOTES: " + (cs.notes || ""), 18, finalY + 6, { maxWidth: pageWidth - 36 });
+
+    // OUTPUT
+    const filename = `${budget.projectName}_CallSheet.pdf`;
+    if (shareMode) {
+        const blob = doc.output('blob');
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+            navigator.share({ title: 'Call Sheet', text: `Call Sheet for ${budget.projectName}`, files: [file] }).catch(console.error);
+        } else {
+            alert("System sharing not supported. Downloading file.");
+            doc.save(filename);
+        }
+    } else {
+        doc.save(filename);
+    }
+}
+
+/* --- v19.58 [Documents] - Hub, Preview & Share Module v19.53 --- */
+
+// 1. State Management
+window.docHubState = {
+    mode: 'normal', 
+    selected: new Set(),
+    activeTab: 'All',
+    searchTerm: ''
+};
+
+// 2. Data Integrity
+function ensureDocumentData() {
+    if (!budget.documents) {
+        const defaults = typeof DOCUMENT_TEMPLATES !== 'undefined' ? DOCUMENT_TEMPLATES : [];
+        budget.documents = defaults.filter(t => t.default).map(t => ({ ...t, status: 'Draft', content: null }));
+    }
+    if (!budget.documentTrash) budget.documentTrash = [];
+    if (!budget.callSheet) budget.callSheet = JSON.parse(JSON.stringify(defaultCallSheet));
+}
+
+// 3. Document Action Buttons
+function renderDocActions(docId) {
+    if (window.docHubState.mode === 'select') {
+        const isChecked = window.docHubState.selected.has(docId);
+        return `
+            <div class="mr-3 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}">
+                ${isChecked ? '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>' : ''}
+            </div>`;
+    }
+    // Normal Mode - Icons updated to match Footer
+    return `
+        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <button onclick="event.stopPropagation(); handlePreviewDocument('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors border border-blue-100" title="Preview / Save Image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white transition-colors border border-gray-200" title="Publish / Share">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+            <button onclick="event.stopPropagation(); deleteSingleDoc('${docId}')" class="w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors ml-1 hidden group-hover:flex" title="Delete">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>`;
+}
+
+/* --- v19.53 Document Card Rendering v19.54 --- */
+function renderDocCard(doc, context = 'hub') {
+    const isSelectMode = window.docHubState.mode === 'select';
+    const isSelected = window.docHubState.selected.has(doc.id);
+    const clickHandler = isSelectMode 
+        ? `onclick="toggleDocSelection('${doc.id}')"` 
+        : `onclick="openDocumentViewer('${doc.id}', '${context}')"`; // Unified viewer
+
+    // Mobile: always show buttons; Desktop: show on hover
+    const actionButtons = `
+        <div class="flex gap-1.5 absolute right-2 top-1/2 -translate-y-1/2 
+                      ${context === 'stages' ? 'opacity-100' : 'opacity-0 sm:group-hover:opacity-100'} 
+                      transition-opacity">
+            <button onclick="event.stopPropagation(); openDocumentViewer('${doc.id}', '${context}')" 
+                    class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center border border-blue-100 shadow-sm" 
+                    title="Preview / Edit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button onclick="event.stopPropagation(); handlePublishMenu('${doc.id}')" 
+                    class="w-8 h-8 rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white flex items-center justify-center border border-gray-200 shadow-sm" 
+                    title="Publish / Share">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>`;
+
+    return `
+        <div ${clickHandler} 
+             class="doc-card group relative flex items-center p-3 bg-white border 
+                    ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} 
+                    rounded-lg hover:shadow-md transition-all h-16 w-full select-none cursor-pointer" 
+             data-label="${doc.label.toLowerCase()}">
+            ${isSelectMode ? renderDocActions(doc.id) : `
+                <div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">
+                    ${doc.icon || '📄'}
+                </div>`}
+            <div class="min-w-0 flex-1 flex flex-col justify-center">
+                <span class="text-sm font-bold text-gray-800 truncate leading-tight block" title="${doc.label}">
+                    ${doc.label}
+                </span>
+                <span class="text-[10px] text-gray-400 uppercase leading-tight mt-0.5 block">
+                    ${doc.status || 'Draft'}
+                </span>
+            </div>
+            ${!isSelectMode ? actionButtons : ''}
+        </div>`;
+}
+
+// 5. Main Hub Modal
+function showDocumentsModal(tab = null) {
+    ensureDocumentData();
+    if (tab) window.docHubState.activeTab = tab;
+    const { activeTab, mode, selected } = window.docHubState;
+    const docs = budget.documents;
+    const visibleDocs = activeTab === 'All' ? docs : docs.filter(d => d.cat === activeTab);
+
+    // Header Logic
+    let headerButtons = '';
+    if (mode === 'select') {
+        const count = selected.size;
+        headerButtons = `
+            <button onclick="setDocMode('normal')" class="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded transition-colors">Cancel</button>
+            <button onclick="handleBulkTrash()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-1" ${count === 0 ? 'disabled opacity-50' : ''}><span>Delete (${count})</span></button>`;
+    } else {
+        headerButtons = `
+            <button onclick="setDocMode('select')" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors border border-transparent hover:border-red-100">Select</button>
+            <button onclick="showAddDocumentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap"><span>+</span> Add</button>`;
+    }
+
+    const renderTabs = () => ['All', 'Pre-Prod', 'Production', 'Post-Prod', 'Legal'].map(t => 
+        `<button onclick="showDocumentsModal('${t}')" class="px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider rounded-lg transition-colors border flex-shrink-0 ${activeTab === t ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'}">${t}</button>`
+    ).join('');
+
+    const content = `
+        <div class="flex flex-col h-[75vh] sm:h-[600px] w-full bg-gray-50 overflow-hidden">
+            <div class="p-3 sm:p-4 bg-white border-b flex flex-col gap-3 shadow-sm z-10 flex-shrink-0">
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span>📂</span> Documents</h2>
+                        <button onclick="showBinModal()" class="relative p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            ${budget.documentTrash && budget.documentTrash.length > 0 ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>' : ''}
+                        </button>
+                    </div>
+                    ${mode === 'normal' ? `<div class="relative flex-grow w-full sm:w-auto sm:max-w-xs order-last sm:order-none mt-2 sm:mt-0"><input type="text" id="hubSearchInput" value="${window.docHubState.searchTerm}" placeholder="Search..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 border rounded-lg transition-all outline-none" autocomplete="off"><svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>` : '<div class="flex-grow"></div>'}
+                    <div class="flex items-center gap-2">${headerButtons}</div>
+                </div>
+                <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">${renderTabs()}</div>
+            </div>
+            <div class="p-3 sm:p-4 overflow-y-auto flex-grow bg-gray-50 w-full">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 group/list">
+                    ${visibleDocs.length > 0 ? visibleDocs.map(doc => renderDocCard(doc)).join('') : '<div class="col-span-full text-center py-12 text-xs text-gray-400 italic">No documents found.</div>'}
+                </div>
+            </div>
+        </div>`;
+    
+    createModal('documentsHub', '', content, 'max-w-4xl w-full');
+    const header = document.querySelector('#documentsHubModal .bg-gray-50.border-b');
+    if(header) header.style.display = 'none';
+    const body = document.getElementById('documentsHubBody');
+    if(body) { body.classList.remove('p-4'); body.style.padding = '0'; }
+
+    const searchInput = document.getElementById('hubSearchInput');
+    if(searchInput) {
+        searchInput.focus();
+        const len = searchInput.value.length; 
+        searchInput.setSelectionRange(len, len);
+        searchInput.addEventListener('input', (e) => {
+            window.docHubState.searchTerm = e.target.value.toLowerCase();
+            document.querySelectorAll('.doc-card').forEach(card => card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm)));
+        });
+    }
+}
+
+/* --- v19.54 [Publish] - Universal Share Module (Multi-Format Support) --- */
+
+// 1. Helper: Generate the File Blob
+async function generateDocumentFile(doc, format) {
+    const isPdf = format === 'pdf';
+    const filename = `${budget.projectName}_${doc.label.replace(/\s/g,'_')}.${format}`;
+    const dateStr = new Date().toLocaleDateString();
+
+    let paperHTML = '';
+
+    if (doc.id === 'callSheet') {
+        // High-Fidelity Call Sheet Layout
+        const cs = budget.callSheet;
+        paperHTML = `
+            <div id="render-target" class="bg-white text-black p-8 mx-auto font-sans" style="width: 794px; min-height: 1123px;">
+                <div class="flex justify-between items-end border-b-4 border-blue-900 pb-4 mb-6">
+                    <div>
+                        <h1 class="text-4xl font-bold uppercase text-blue-900 tracking-tight">${budget.projectName}</h1>
+                        <div class="text-sm font-bold tracking-widest text-gray-500 mt-1 uppercase">Call Sheet</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-4xl font-bold text-gray-800">${new Date(cs.date).toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'}).toUpperCase()}</div>
+                        <div class="text-sm font-bold text-gray-500 uppercase">Day ${cs.shootDay} of ${cs.totalDays}</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wider">General Call</div>
+                        <div class="text-2xl font-bold text-blue-900">${cs.unitCall}</div>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                        <div class="text-[10px] font-bold text-yellow-600 uppercase tracking-wider">Breakfast</div>
+                        <div class="text-2xl font-bold text-yellow-900">${cs.breakfast}</div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Weather</div>
+                        <div class="text-xl font-bold text-gray-800 truncate">${cs.weather}</div>
+                    </div>
+                </div>
+                <div class="mb-8">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase border-b-2 border-gray-100 pb-1 mb-3">Locations</h3>
+                    <div class="space-y-3">
+                        ${cs.locations.map(l => `<div><div class="flex items-baseline gap-2"><span class="font-bold text-sm text-blue-900 uppercase min-w-[80px]">${l.label}:</span><span class="font-bold text-base text-gray-900">${l.name}</span></div><div class="text-sm text-gray-600 pl-[88px]">${l.address}</div></div>`).join('')}
+                    </div>
+                </div>
+                <div class="mb-8">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-blue-900 text-white uppercase tracking-wider"><tr><th class="p-2 w-16">Scene</th><th class="p-2">Set / Description</th><th class="p-2 w-20">Cast</th><th class="p-2 text-center w-12">Pgs</th></tr></thead>
+                        <tbody class="divide-y divide-gray-200">${cs.schedule.map(s => `<tr class="bg-white"><td class="p-3 font-bold text-lg text-gray-800 align-top">${s.scene}</td><td class="p-3 align-top"><div class="font-bold text-sm text-gray-900 uppercase">${s.set}</div><div class="text-gray-500 mt-1">${s.desc}</div></td><td class="p-3 font-mono text-gray-600 align-top">${s.cast}</td><td class="p-3 text-center font-bold text-gray-800 align-top">${s.pages}</td></tr>`).join('')}</tbody>
+                    </table>
+                </div>
+                <div class="absolute bottom-8 left-8 right-8 border-t pt-2 text-[10px] text-gray-400 flex justify-between"><span>Generated by mooBudgetTool</span><span>Production Office: 10a West Kings House Rd</span></div>
+            </div>`;
+    } else {
+        // Generic "White Paper" Layout
+        paperHTML = `
+            <div id="render-target" class="bg-white text-black p-8 shadow-lg mx-auto" style="width: 794px; height: 1123px;">
+                <div class="border-b-4 border-gray-800 pb-4 mb-8 flex justify-between items-end">
+                    <div>
+                        <h1 class="text-3xl font-bold uppercase tracking-tight">${budget.projectName}</h1>
+                        <div class="text-sm text-gray-500 uppercase tracking-widest">${doc.cat} / ${doc.label}</div>
+                    </div>
+                    <div class="text-right"><div class="text-xl font-bold text-gray-300">DRAFT</div><div class="text-xs text-gray-400">${dateStr}</div></div>
+                </div>
+                <div class="text-gray-400 text-sm italic p-10 text-center border-2 border-dashed border-gray-100 rounded-lg">
+                    (Document Content Placeholder)<br>Items from ${doc.cat} would appear here.
+                </div>
+                <div class="absolute bottom-8 left-8 right-8 border-t pt-2 text-[10px] text-gray-400">Generated by mooBudgetTool</div>
+            </div>`;
+    }
+
+    const container = document.createElement('div');
+    container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '0';
+    container.innerHTML = paperHTML;
+    document.body.appendChild(container);
+
+    try {
+        const element = document.getElementById('render-target');
+        const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+        let blob;
+        
+        if (isPdf) {
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+            const pdfW = pdf.internal.pageSize.getWidth();
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfImgH = (imgProps.height * pdfW) / imgProps.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfImgH);
+            blob = pdf.output('blob');
+        } else {
+            blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        }
+        document.body.removeChild(container);
+        return new File([blob], filename, { type: isPdf ? 'application/pdf' : 'image/jpeg' });
+    } catch (e) {
+        if(document.body.contains(container)) document.body.removeChild(container);
+        throw e;
+    }
+}
+
+// 2. Multi-File Share Handler
+async function generateAndShare(docId, contact, method) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const btnId = method === 'whatsapp' ? `${contact.id}-whatsapp` : `${contact.id}-email`;
+    const btn = document.querySelector(`button[data-share-btn="${btnId}"]`);
+    const originalContent = btn ? btn.innerHTML : '';
+    if(btn) btn.innerHTML = `<span class="animate-spin">⌛</span>`;
+
+    try {
+        const files = [];
+        if (document.getElementById('fmtPdf').checked) files.push(await generateDocumentFile(doc, 'pdf'));
+        if (document.getElementById('fmtJpg').checked) files.push(await generateDocumentFile(doc, 'jpg'));
+
+        if (files.length === 0) throw new Error("Please select PDF, JPG, or both.");
+
+        const text = `Hi ${contact.name.split(' ')[0]}, please review the attached ${doc.label} for ${budget.projectName}.`;
+
+        // A: Native Share (Mobile - Supports Arrays)
+        if (navigator.canShare && navigator.canShare({ files: files })) {
+            await navigator.share({ title: doc.label, text: text, files: files });
+        } 
+        // B: Desktop Fallback (Download Loop)
+        else {
+            for (const file of files) {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url; a.download = file.name;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                await new Promise(r => setTimeout(r, 500)); // Delay between downloads
+            }
+            
+            if (method === 'whatsapp') {
+                const cleanPhone = contact.phone.replace(/\D/g, ''); 
+                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text + " (Files downloaded)")}`, '_blank');
+            } else if (method === 'email') {
+                window.open(`mailto:${contact.email}?subject=${encodeURIComponent(doc.label)}&body=${encodeURIComponent(text)}`, '_self');
+            }
+            alert(`Files downloaded.\n\nPlease drag them into the ${method === 'whatsapp' ? 'WhatsApp' : 'Email'} window.`);
+        }
+    } catch (err) {
+        alert("Error: " + err.message);
+    } finally {
+        if(btn) btn.innerHTML = originalContent;
+    }
+}
+
+// 3. Main UI Builder
+function handlePublishMenu(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const crewMap = new Map();
+    Object.values(budget.sections).forEach(section => {
+        section.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                const key = item.crew.name.toLowerCase();
+                if (!crewMap.has(key)) {
+                    crewMap.set(key, { 
+                        id: `c_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+                        name: item.crew.name, phone: item.crew.phone, email: item.crew.email || '', role: item.description 
+                    });
+                }
+            }
+        });
+    });
+    const contacts = Array.from(crewMap.values());
+
+    const modalContent = `
+        <div class="flex flex-col max-h-[80vh] h-full">
+            <div class="p-4 bg-white border-b sticky top-0 z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-lg">Share Document</h3>
+                        <p class="text-xs text-gray-500">Distribute <strong>${doc.label}</strong></p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="fmtPdf" class="w-3 h-3 text-blue-600" checked><span class="text-xs font-bold text-gray-700">PDF</span></label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="fmtJpg" class="w-3 h-3 text-blue-600"><span class="text-xs font-bold text-gray-700">JPG</span></label>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-100">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="selectAllCrew" class="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500">
+                        <span class="text-xs font-bold text-gray-600">Select All</span>
+                    </label>
+                    <span class="text-[10px] text-gray-400" id="selectedCountDisplay">0 selected</span>
+                </div>
+            </div>
+            <div class="overflow-y-auto flex-grow bg-white p-2 space-y-1">
+                ${contacts.length > 0 ? contacts.map(c => `
+                    <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-100 group transition-colors">
+                        <div class="flex items-center gap-3 overflow-hidden flex-1">
+                            <input type="checkbox" class="crew-select-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded" value="${c.email}" data-name="${c.name}">
+                            <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">${c.name.charAt(0)}</div>
+                            <div class="min-w-0">
+                                <div class="text-xs font-bold text-gray-800 truncate">${c.name}</div>
+                                <div class="text-[10px] text-gray-500 truncate">${c.role} ${!c.email ? '<span class="text-red-300">(No Email)</span>' : ''}</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 pl-2 border-l ml-2 border-gray-100">
+                            ${c.phone ? `<button data-share-btn="${c.id}-whatsapp" onclick="generateAndShare('${docId}', {id:'${c.id}', name:'${c.name}', phone:'${c.phone}'}, 'whatsapp')" class="w-8 h-8 flex items-center justify-center rounded-full bg-green-50 text-green-600 hover:bg-green-600 hover:text-white transition-colors" title="WhatsApp"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></button>` : ''}
+                            ${c.email ? `<button data-share-btn="${c.id}-email" onclick="generateAndShare('${docId}', {id:'${c.id}', name:'${c.name}', email:'${c.email}'}, 'email')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors" title="Email"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></button>` : ''}
+                        </div>
+                    </div>
+                `).join('') : '<div class="p-6 text-center text-gray-400 text-xs">No crew found. Assign roles in budget first.</div>'}
+            </div>
+            <div class="p-3 bg-white border-t sticky bottom-0 z-10 flex gap-2">
+                <button id="downloadFormatBtn" class="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors text-xs">Download File(s)</button>
+                <button id="sendBulkEmailBtn" class="flex-[2] py-3 bg-gray-800 text-white font-bold rounded-lg shadow-md hover:bg-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs" disabled>
+                    Send Bulk Email (<span id="bulkCount">0</span>)
+                </button>
+            </div>
+        </div>
+    `;
+
+    createModal('publishMenu', '', modalContent, 'max-w-md');
+    const header = document.querySelector('#publishMenuModal .bg-gray-50.border-b');
+    if(header) header.style.display = 'none';
+    const body = document.getElementById('publishMenuBody');
+    if(body) body.classList.remove('p-4');
+
+    // 4. Listeners
+    const selectAll = document.getElementById('selectAllCrew');
+    const checkboxes = document.querySelectorAll('.crew-select-checkbox');
+    const sendBtn = document.getElementById('sendBulkEmailBtn');
+    const countSpan = document.getElementById('bulkCount');
+    const labelSpan = document.getElementById('selectedCountDisplay');
+
+    const updateState = () => {
+        const selected = Array.from(checkboxes).filter(cb => cb.checked);
+        const count = selected.length;
+        sendBtn.disabled = count === 0;
+        countSpan.textContent = count;
+        labelSpan.textContent = `${count} selected`;
+
+        if (count > 0) {
+            const emails = selected.map(cb => cb.value).filter(e => e).join(',');
+            const subject = encodeURIComponent(`${budget.projectName}: ${doc.label}`);
+            const body = encodeURIComponent(`Hi Team,\n\nPlease find the attached ${doc.label}.\n\nRegards,`);
+            sendBtn.onclick = () => {
+                if(!emails) return alert("Selected crew have no emails.");
+                alert("Opening Email Client...\n\nImportant: You must manually attach the downloaded file(s) in bulk mode.");
+                window.location.href = `mailto:?bcc=${emails}&subject=${subject}&body=${body}`;
+            };
+        }
+    };
+
+    selectAll.addEventListener('change', (e) => {
+        checkboxes.forEach(cb => cb.checked = e.target.checked);
+        updateState();
+    });
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+            updateState();
+            selectAll.checked = Array.from(checkboxes).every(c => c.checked);
+        });
+    });
+
+    document.getElementById('downloadFormatBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('downloadFormatBtn');
+        btn.innerHTML = "Generating...";
+        try {
+            const files = [];
+            if (document.getElementById('fmtPdf').checked) files.push(await generateDocumentFile(doc, 'pdf'));
+            if (document.getElementById('fmtJpg').checked) files.push(await generateDocumentFile(doc, 'jpg'));
+            
+            if (files.length === 0) throw new Error("Select PDF or JPG.");
+
+            for (const file of files) {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url; a.download = file.name;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                await new Promise(r => setTimeout(r, 500));
+            }
+        } catch(e) { alert(e.message); }
+        btn.innerHTML = "Download File(s)";
+    });
+}
+
+/* --- Workflow Logic (Toggle, Delete, Restore) --- */
+function setDocMode(newMode) {
+    window.docHubState.mode = newMode;
+    if (newMode === 'normal') window.docHubState.selected.clear();
+    showDocumentsModal(); 
+}
+
+function toggleDocSelection(id) {
+    if (window.docHubState.selected.has(id)) window.docHubState.selected.delete(id);
+    else window.docHubState.selected.add(id);
+    showDocumentsModal();
+}
+
+function deleteSingleDoc(id) {
+    if(confirm("Move this document to the bin?")) {
+        const docIndex = budget.documents.findIndex(d => d.id === id);
+        if(docIndex > -1) {
+            const doc = budget.documents.splice(docIndex, 1)[0];
+            doc.deletedAt = new Date().toISOString();
+            budget.documentTrash.push(doc);
+            saveBudget();
+            showDocumentsModal();
+        }
+    }
+}
+
+function handleBulkTrash() {
+    const count = window.docHubState.selected.size;
+    if(count === 0) return;
+    if(confirm(`Move ${count} items to the bin?`)) {
+        const toTrash = budget.documents.filter(d => window.docHubState.selected.has(d.id));
+        toTrash.forEach(d => d.deletedAt = new Date().toISOString());
+        budget.documentTrash.push(...toTrash);
+        budget.documents = budget.documents.filter(d => !window.docHubState.selected.has(d.id));
+        saveBudget();
+        setDocMode('normal');
+    }
+}
+
+function showAddDocumentModal() {
+    const existingIds = (budget.documents || []).map(d => d.id);
+    const available = DOCUMENT_TEMPLATES.filter(t => !existingIds.includes(t.id));
+    
+    const content = `
+        <div class="p-2">
+            <input type="text" id="docSearch" placeholder="Search templates..." class="w-full p-3 border rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div id="docTemplateList" class="h-64 overflow-y-auto space-y-2">
+                ${renderTemplateList(available)}
+            </div>
+            <div class="mt-4 pt-4 border-t">
+                <p class="text-xs text-gray-500 mb-2 font-bold uppercase">Or create custom</p>
+                <form onsubmit="handleCustomDoc(event)" class="flex gap-2">
+                    <input type="text" id="customDocName" placeholder="Custom Document Name" class="flex-1 p-2 border rounded text-sm" required>
+                    <select id="customDocCat" class="p-2 border rounded text-sm bg-white"><option>Pre-Prod</option><option>Production</option><option>Post-Prod</option><option>Legal</option></select>
+                    <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded text-xs font-bold">Add</button>
+                </form>
+            </div>
+        </div>`;
+    createModal('addDoc', 'Add Document', content, 'max-w-md');
+    
+    document.getElementById('docSearch').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = available.filter(t => t.label.toLowerCase().includes(term));
+        document.getElementById('docTemplateList').innerHTML = renderTemplateList(filtered);
+    });
+}
+
+function renderTemplateList(list) {
+    if(list.length === 0) return '<div class="text-center text-gray-400 text-xs py-4">No matching templates found.</div>';
+    return list.map(t => `
+        <div onclick="addDocument('${t.id}')" class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded cursor-pointer border border-transparent hover:border-blue-100 transition-colors group">
+            <div class="text-xl">${t.icon}</div>
+            <div class="flex-1">
+                <div class="text-sm font-bold text-gray-700 group-hover:text-blue-700">${t.label}</div>
+                <div class="text-[10px] text-gray-400 uppercase">${t.cat}</div>
+            </div>
+            <div class="text-blue-500 font-bold text-lg opacity-0 group-hover:opacity-100">+</div>
+        </div>`).join('');
+}
+
+function addDocument(templateId) {
+    const template = DOCUMENT_TEMPLATES.find(t => t.id === templateId);
+    if(template) {
+        budget.documents.push({ ...template, status: 'Draft', content: null, dateCreated: new Date().toISOString() });
+        saveBudget();
+        closeModal('addDocModal');
+        showDocumentsModal();
+    }
+}
+
+function handleCustomDoc(e) {
+    e.preventDefault();
+    const name = document.getElementById('customDocName').value.trim();
+    const cat = document.getElementById('customDocCat').value;
+    if(name) {
+        budget.documents.push({ id: `cust_${Date.now()}`, label: name, cat: cat, icon: '📄', status: 'Draft', content: null, dateCreated: new Date().toISOString() });
+        saveBudget();
+        closeModal('addDocModal');
+        showDocumentsModal();
+    }
+}
+
+function showBinModal() { 
+    const trash = budget.documentTrash || [];
+    const content = trash.length === 0 ? '<p class="text-center text-gray-400 p-4">Bin is empty.</p>' : 
+        `<div class="space-y-2 p-2">${trash.map((d, i) => `
+            <div class="flex justify-between items-center p-2 bg-red-50 border border-red-100 rounded">
+                <span class="text-sm font-bold text-gray-700">${d.label}</span>
+                <div class="flex gap-2">
+                    <button onclick="restoreDoc(${i})" class="text-xs bg-white border border-gray-300 px-2 py-1 rounded">Restore</button>
+                    <button onclick="permDeleteDoc(${i})" class="text-xs bg-red-600 text-white px-2 py-1 rounded">Delete</button>
+                </div>
+            </div>`).join('')}</div>`;
+    createModal('docBin', 'Recycle Bin', content, 'max-w-sm');
+}
+
+window.restoreDoc = (idx) => {
+    const doc = budget.documentTrash.splice(idx, 1)[0];
+    delete doc.deletedAt;
+    budget.documents.push(doc);
+    saveBudget();
+    closeModal('docBinModal');
+    showDocumentsModal();
+};
+
+window.permDeleteDoc = (idx) => {
+    if(confirm("Delete forever?")) {
+        budget.documentTrash.splice(idx, 1);
+        saveBudget();
+        showBinModal();
+    }
+};
+
+window.permDeleteDoc = (idx) => {
+    if(confirm("Delete forever?")) {
+        budget.documentTrash.splice(idx, 1);
+        saveBudget();
+        showBinModal();
+    }
+};
+
+/* --- v19.54 Document Viewer Modal --- */
+function openDocumentViewer(docId, context = 'hub') {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    // Determine current state
+    const hasContent = !!doc.content;
+    const hasAttachment = budget.attachments && budget.attachments.some(a => a.docId === docId);
+
+    let viewerContent = '';
+
+    if (!hasContent && !hasAttachment) {
+        // Blank state – offer two primary actions
+                    viewerContent = `
+                <div class="p-6 max-w-4xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800">${doc.content.templateLabel || doc.label}</h3>
+                        <div class="flex gap-3 items-center">
+                            ${doc.content.templateId === 'crewList' ? `
+                                <button onclick="autoFillCrewList('${docId}')" 
+                                        class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition-all">
+                                    <span class="text-xl">✨</span>
+                                    Fill
+                                </button>` : ''}
+                            <button onclick="downloadCrewList('${docId}')" 
+                                    class="w-12 h-12 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md flex items-center justify-center transition-all"
+                                    title="Download as JPEG or PDF">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                           </button>
+                        </div>
+                    </div>
+                    <div id="crewListTable" class="space-y-8">
+                        ${doc.content.templateId === 'crewList' ? renderCrewListTable(doc) : 
+                            `<div class="prose prose-sm max-w-none p-8 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                                <p class="text-gray-600 italic">Preview for "${doc.label}"</p>
+                                <p class="text-xs text-gray-400 mt-4">Content rendering for this template is in development.</p>
+                            </div>`
+                        }
+                    </div>
+                </div>`;
+    } else {
+        // Document has content or attachment – existing attachment handling (unchanged)
+        const attachment = budget.attachments?.find(a => a.docId === docId);
+
+ /* --- v19.54 Template Viewer Conditional v19.54 --- */
+        if (doc.content && doc.content.type === 'template') {
+            if (doc.content.templateId === 'crewList') {
+/* --- v19.54 Crew List Fill & Download v19.54 --- */
+                viewerContent = `
+                <div class="p-6 max-w-4xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800">${doc.content.templateLabel || doc.label}</h3>
+                        <div class="flex gap-3 items-center">
+                            <button onclick="autoFillCrewList('${docId}')" 
+                                    class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition-all">
+                                <span class="text-xl">✨</span>
+                                Fill
+                            </button>
+                            <button onclick="downloadCrewList('${docId}')" 
+                                    class="w-12 h-12 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md flex items-center justify-center transition-all"
+                                    title="Download Crew List (JPEG / PDF)">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="crewListTable" class="space-y-8">
+                        ${renderCrewListTable(doc)}
+                    </div>
+                </div>`;
+/* --- v19.54 Generic Template Full-Page Snapshot for Publish v19.54 --- */
+            } else {
+                // Generic template – full-page white layout for reliable publish/share snapshot
+                viewerContent = `
+                <div class="p-12 bg-white" style="min-height: 100vh;">
+                    <div class="max-w-4xl mx-auto">
+                        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">${budget.projectName || 'Project'} - ${doc.label}</h1>
+                        <p class="text-center text-gray-500 mb-12">Generated: ${new Date().toLocaleDateString()}</p>
+                        <div class="bg-gray-50 rounded-xl border border-gray-200 p-20 text-center">
+                            <p class="text-3xl text-gray-700 mb-6">${doc.label}</p>
+                            <p class="text-xl text-gray-500 italic">Document content in development</p>
+                            <p class="text-sm text-gray-400 mt-12">This page is a snapshot for sharing and preview.</p>
+                        </div>
+                        <div class="mt-32 text-center text-xs text-gray-400">
+                            Generated by mooBudgetTool
+                        </div>
+                    </div>
+                </div>`;
+            }
+        }
+                else if (attachment && attachment.previewContent) {
+            const prev = attachment.previewContent;
+            const editable = isEditableAttachment(attachment);
+            let previewHTML = '';
+            let editorMode = false; // Future: could track per-attachment
+
+            if (prev.type === 'image') {
+                previewHTML = `<img src="${prev.data}" alt="${attachment.name}" class="max-w-full h-auto rounded-lg shadow-lg mx-auto">`;
+            }
+            else if (prev.type === 'pdf') {
+                previewHTML = `
+                    <div class="text-center">
+                        <img src="${prev.thumbnail}" alt="PDF Preview" class="max-w-full h-auto rounded-lg shadow-lg mx-auto mb-4">
+                        <p class="text-sm text-gray-600">PDF • ${prev.pageCount} pages</p>
+                        <p class="text-xs text-gray-400 mt-2">Full editable view coming soon</p>
+                    </div>`;
+            }
+            else if (prev.type === 'docx') {
+                previewHTML = prev.html;
+            }
+            else if (prev.type === 'xlsx') {
+                previewHTML = prev.html;
+            }
+            else if (prev.type === 'text') {
+                previewHTML = `<pre class="text-xs bg-gray-100 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">${prev.content}</pre>`;
+            }
+            else {
+                previewHTML = `<p class="text-gray-500 text-center py-12">Preview not available for this file type.</p>`;
+            }
+
+            viewerContent = `
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800">${doc.label}</h3>
+                            <p class="text-sm text-gray-600 mt-1">Attached: ${attachment.name}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            ${editable ? `
+                                <button id="editAttachmentBtn" 
+                                        onclick="enableAttachmentEditing('${attachment.id}', '${docId}')" 
+                                        class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                    Edit
+                                </button>
+                                <div id="saveControls" class="hidden flex items-center gap-2">
+                                    <button onclick="saveAttachmentEdits('${attachment.id}', '${docId}')" 
+                                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+                                        Save
+                                    </button>
+                                    <button onclick="cancelAttachmentEditing('${docId}')" 
+                                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium">
+                                        Cancel
+                                    </button>
+                                </div>` : ''}
+                            <div class="text-right text-xs text-gray-500">
+                                <div>Size: ${formatFileSize(attachment.size)}</div>
+                                <div>Added: ${new Date(attachment.dateAdded).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    </div>
+                                        <div id="attachmentEditor" class="border rounded-xl shadow-inner p-4 bg-white min-h-96 overflow-auto contenteditable-container" ${editable ? 'contenteditable="false"' : ''}>
+                        ${previewHTML}
+                    </div>
+                    <div class="mt-6 flex justify-center gap-6">
+                        <button onclick="attachFileToDocument('${docId}')" 
+                                class="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Replace File
+                        </button>
+                        <button onclick="removeAttachmentFromDocument('${attachment.id}', '${docId}')" 
+                                class="text-sm text-red-600 hover:text-red-800 font-medium">
+                            Remove File
+                        </button>
+                    </div>
+                </div>`;
+        }
+        else {
+            viewerContent = `
+                <div class="text-center py-20">
+                    <div class="text-6xl mb-4 opacity-30">📎</div>
+                    <p class="text-gray-500">No preview available</p>
+                </div>`;
+        }
+    }
+
+    createModal('documentViewer', doc.label, viewerContent, 'max-w-4xl');
+    
+    // Hide default header actions for cleaner look
+    const header = document.querySelector('#documentViewerModal .bg-gray-50.border-b');
+    if (header) header.style.display = 'none';
+    
+    const body = document.getElementById('documentViewerBody');
+    if (body) body.classList.remove('p-4');
+}
+
+/* --- v19.54 Template Picker & Loader --- */
+function startWithTemplate(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const allTemplates = getAllAvailableTemplates();
+
+    const content = `
+        <div class="p-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Choose a Template</h3>
+            <input type="text" id="templateSearch" placeholder="Search templates..." 
+                   class="w-full p-3 border rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div id="templateGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+                ${allTemplates.map(t => `
+                    <div onclick="applyTemplate('${docId}', '${t.id}', ${t.isCustom})" 
+                         class="p-4 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 hover:shadow-md transition-all group">
+                        <div class="text-3xl mb-2 text-center">${t.icon}</div>
+                        <div class="font-bold text-gray-800 text-center">${t.label}</div>
+                        <div class="text-xs text-gray-500 text-center uppercase mt-1">${t.cat}</div>
+                        ${t.isCustom ? '<div class="mt-2 text-[10px] text-blue-600 text-center font-bold">CUSTOM</div>' : ''}
+                    </div>
+                `).join('')}
+            </div>
+            <div class="mt-6 pt-4 border-t text-center">
+                <button onclick="importMtempFile('${docId}')" class="text-sm text-blue-600 hover:underline font-bold">
+                    + Import .mtemp File
+                </button>
+            </div>
+        </div>`;
+
+    createModal('templatePicker', 'Select Template', content, 'max-w-2xl');
+
+    // Search functionality
+    document.getElementById('templateSearch').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = allTemplates.filter(t => 
+            t.label.toLowerCase().includes(term) || t.cat.toLowerCase().includes(term)
+        );
+        document.getElementById('templateGrid').innerHTML = filtered.map(t => `
+            <div onclick="applyTemplate('${docId}', '${t.id}', ${t.isCustom})" 
+                 class="p-4 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 hover:shadow-md transition-all group">
+                <div class="text-3xl mb-2 text-center">${t.icon}</div>
+                <div class="font-bold text-gray-800 text-center">${t.label}</div>
+                <div class="text-xs text-gray-500 text-center uppercase mt-1">${t.cat}</div>
+                ${t.isCustom ? '<div class="mt-2 text-[10px] text-blue-600 text-center font-bold">CUSTOM</div>' : ''}
+            </div>
+        `).join('');
+    });
+}
+
+function applyTemplate(docId, templateId, isCustom) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    let template;
+    if (isCustom) {
+        template = budget.customTemplates.find(t => t.id === templateId);
+    } else {
+        template = DOCUMENT_TEMPLATES.find(t => t.id === templateId);
+    }
+
+    if (!template) {
+        alert("Template not found.");
+        return;
+    }
+
+    // Load template structure into document content
+    doc.content = {
+        type: 'template',
+        templateId: template.id,
+        templateLabel: template.label,
+        fields: template.fields || {}, // Future: define per-template fields
+        data: {} // User-filled values
+    };
+
+    // For now, initialize with placeholder fields
+    if (!template.fields) {
+        doc.content.fields = {
+            projectName: { label: "Project Name", value: budget.projectName || "" },
+            director: { label: "Director", value: "" },
+            producer: { label: "Producer", value: "" },
+            shootDates: { label: "Shoot Dates", value: "" },
+            notes: { label: "Notes", value: "", multiline: true }
+        };
+        doc.content.data = {
+            projectName: budget.projectName || "",
+            director: "",
+            producer: "",
+            shootDates: "",
+            notes: ""
+        };
+    }
+
+    doc.status = 'In Progress';
+    saveBudget();
+    closeModal('templatePickerModal');
+    openDocumentViewer(docId); // Refresh viewer with template editor
+}
+
+/* --- v19.54 .mtemp Import --- */
+function importMtempFile(docId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mtemp,application/json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const imported = JSON.parse(ev.target.result);
+                if (!imported.id || !imported.label) throw new Error("Invalid .mtemp file");
+
+                // Add as custom template
+                budget.customTemplates = budget.customTemplates || [];
+                const exists = budget.customTemplates.find(t => t.id === imported.id);
+                if (exists) {
+                    if (!confirm(`Template "${imported.label}" already exists. Overwrite?`)) return;
+                    Object.assign(exists, imported);
+                } else {
+                    budget.customTemplates.push(imported);
+                }
+
+                saveCustomTemplates();
+                alert(`Imported template: ${imported.label}`);
+                closeModal('templatePickerModal');
+                startWithTemplate(docId); // Reopen picker to show new template
+            } catch (err) {
+                alert("Failed to import .mtemp: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+/* --- v19.54 Save Template Fields --- */
+function saveDocumentContent(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc || !doc.content || doc.content.type !== 'template') return;
+
+    const inputs = document.querySelectorAll('#documentViewerBody [data-field]');
+    inputs.forEach(input => {
+        const key = input.dataset.field;
+        doc.content.data[key] = input.value;
+    });
+
+    doc.status = 'Completed';
+    saveBudget();
+    alert("Document saved!");
+}
+
+/* --- v19.54 Crew Contact List Auto-Fill v19.54 --- */
+function renderCrewListTable(doc) {
+    // Collect assigned crew + map department from section name
+    const crewByDept = {};
+    Object.entries(budget.sections).forEach(([sectionName, section]) => {
+        const dept = sectionName; // Use section as department header
+        if (!crewByDept[dept]) crewByDept[dept] = [];
+        section.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                crewByDept[dept].push({
+                    role: item.description,
+                    name: item.crew.name || '',
+                    phone: item.crew.phone || '',
+                    email: item.crew.email || '',
+                    diet: item.crew.diet || '', // Future: add diet field to crew profile
+                    notes: item.crew.notes || ''
+                });
+            }
+        });
+    });
+
+    if (Object.keys(crewByDept).length === 0) {
+        return `<p class="text-center text-gray-500 py-12">No crew assigned yet. Assign contacts to line items first.</p>`;
+    }
+
+    return Object.entries(crewByDept).map(([dept, members]) => `
+        <div>
+            <h4 class="font-bold text-lg text-gray-800 mb-3 border-b border-gray-200 pb-1">${dept}</h4>
+            <table class="w-full text-sm border-collapse">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-2 text-left font-bold">Name</th>
+                        <th class="p-2 text-left font-bold">Role</th>
+                        <th class="p-2 text-left font-bold">Phone</th>
+                        <th class="p-2 text-left font-bold">Email</th>
+                        <th class="p-2 text-left font-bold">Diet Notes</th>
+                        <th class="p-2 text-left font-bold">Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${members.map(m => `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="p-2 font-medium">${m.name}</td>
+                            <td class="p-2">${m.role}</td>
+                            <td class="p-2">${m.phone}</td>
+                            <td class="p-2"><a href="mailto:${m.email}" class="text-blue-600 hover:underline">${m.email}</a></td>
+                            <td class="p-2">${m.diet}</td>
+                            <td class="p-2">${m.notes}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `).join('');
+}
+
+/* --- v19.54 Crew List Download v19.54 --- */
+async function downloadCrewList(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc || doc.content.templateId !== 'crewList') return;
+
+    const tableHTML = renderCrewListTable(doc);
+    const fullHTML = `
+        <div class="p-12 bg-white">
+            <h1 class="text-3xl font-bold text-center mb-6">${budget.projectName || 'Project'} - Crew Contact List</h1>
+            <p class="text-center text-sm text-gray-500 mb-8">Generated: ${new Date().toLocaleDateString()}</p>
+            ${tableHTML}
+        </div>`;
+
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.innerHTML = `<div id="crewDownloadRender" style="width: 800px;">${fullHTML}</div>`;
+    document.body.appendChild(container);
+
+    try {
+        const canvas = await html2canvas(document.getElementById('crewDownloadRender'), { scale: 2 });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+        // Prompt user
+        const choice = prompt("Download Crew List as:\n1 = PDF\n2 = JPEG\nEnter 1, 2, or 1,2", "1,2");
+        if (!choice) return;
+
+        const wantPdf = choice.includes('1');
+        const wantJpg = choice.includes('2');
+
+        if (wantJpg) {
+            const link = document.createElement('a');
+            link.href = imgData;
+            link.download = `${budget.projectName || 'CrewList'}_CrewList.jpg`;
+            link.click();
+        }
+        if (wantPdf) {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${budget.projectName || 'CrewList'}_CrewList.pdf`);
+        }
+    } catch (e) {
+        alert("Download failed: " + e.message);
+    } finally {
+        document.body.removeChild(container);
+    }
+}
+
+function renderCrewListTable(doc) {
+    const crewByDept = {};
+    Object.entries(budget.sections).forEach(([sectionName, section]) => {
+        const dept = sectionName;
+        if (!crewByDept[dept]) crewByDept[dept] = [];
+        section.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                crewByDept[dept].push({
+                    role: item.description,
+                    name: item.crew.name || '',
+                    phone: item.crew.phone || '',
+                    email: item.crew.email || '',
+                    diet: item.crew.diet || '-',     // Placeholder
+                    notes: item.crew.notes || '-'
+                });
+            }
+        });
+    });
+
+    if (Object.keys(crewByDept).length === 0) {
+        return `<p class="text-center text-gray-500 py-12">No crew assigned. Assign contacts in budget → Auto-Fill.</p>`;
+    }
+
+    return Object.entries(crewByDept).map(([dept, members]) => `
+        <div class="mb-8">
+            <h4 class="font-bold text-xl text-gray-800 mb-4 border-b-2 border-gray-300 pb-2">${dept}</h4>
+            <table class="w-full text-sm border-collapse bg-white shadow-sm rounded-lg overflow-hidden">
+                <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                    <tr>
+                        <th class="p-3 text-left">Name</th>
+                        <th class="p-3 text-left">Role</th>
+                        <th class="p-3 text-left">Phone</th>
+                        <th class="p-3 text-left">Email</th>
+                        <th class="p-3 text-left">Diet Notes</th>
+                        <th class="p-3 text-left">Notes</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    ${members.map(m => `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-3 font-medium">${m.name}</td>
+                            <td class="p-3">${m.role}</td>
+                            <td class="p-3">${m.phone}</td>
+                            <td class="p-3"><a href="mailto:${m.email}" class="text-blue-600 hover:underline">${m.email || '-'}</a></td>
+                            <td class="p-3 text-gray-600">${m.diet}</td>
+                            <td class="p-3 text-gray-600">${m.notes}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `).join('');
+}
+
+function autoFillCrewList(docId) {
+    if (!confirm("Auto-fill Crew Contact List from assigned crew in budget?")) return;
+    const doc = budget.documents.find(d => d.id === docId);
+    if (doc && doc.content && doc.content.type === 'template' && doc.content.templateId === 'crewList') {
+        // Trigger re-render with fresh data
+        alert("Crew list refreshed!");
+        openDocumentViewer(docId);
+    }
+}
+
+/* --- v19.56 Save Attachment Edits --- */
+function saveAttachmentEdits(attachmentId, docId) {
+    const attachment = budget.attachments.find(a => a.id === attachmentId);
+    if (!attachment || !isEditableAttachment(attachment)) return;
+
+    const editor = document.getElementById('attachmentEditor');
+    if (!editor) return;
+
+    const newContent = editor.innerHTML || editor.textContent;
+
+    // Store raw content based on type
+    if (attachment.previewContent.type === 'docx' || attachment.previewContent.type === 'xlsx') {
+        attachment.previewContent.html = newContent;
+    } else if (attachment.previewContent.type === 'text') {
+        attachment.previewContent.content = editor.textContent;
+    }
+
+    // Optional: store raw text for search/indexing
+    if (!attachment.rawText) attachment.rawText = '';
+    attachment.rawText = editor.textContent || '';
+
+    saveBudget();
+
+    const saveBtn = document.getElementById('saveAttachmentBtn');
+    if (saveBtn) {
+        saveBtn.classList.add('opacity-50');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saved!';
+        setTimeout(() => {
+            if (saveBtn) saveBtn.textContent = 'Save';
+        }, 2000);
+    }
+
+    alert('File edits saved!');
+}
+
+/* --- v19.53 Attachment Editing Controls v19.54 --- */
+function enableAttachmentEditing(attachmentId, docId) {
+    const editor = document.getElementById('attachmentEditor');
+    const editBtn = document.getElementById('editAttachmentBtn');
+    const saveControls = document.getElementById('saveControls');
+
+    if (!editor || !editBtn || !saveControls) return;
+
+    editor.contentEditable = true;
+    editor.classList.add('border-blue-500', 'ring-2', 'ring-blue-200');
+    editor.focus();
+
+    editBtn.classList.add('hidden');
+    saveControls.classList.remove('hidden');
+
+    // Live dirty-state Save button activation
+    const activateSave = () => {
+        const saveBtn = saveControls.querySelector('button');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('opacity-50');
+        }
+    };
+    editor.addEventListener('input', activateSave, { once: false });
+}
+
+/* --- v19.53 Attach File to Document --- */
+function attachFileToDocument(docId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = false;
+    input.accept = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.xls,.txt,.rtf,.md';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!budget.attachments) budget.attachments = [];
+
+        const attachment = {
+            id: generateSafeId(),
+            docId: docId,                    // Link to document
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size,
+            dateAdded: new Date().toISOString(),
+            previewContent: null             // Will hold rendered preview
+        };
+
+        // Generate preview content based on type
+        try {
+            const ext = file.name.split('.').pop().toLowerCase();
+            
+            if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
+                // Image: base64 for immediate preview
+                const base64 = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+                attachment.previewContent = { type: 'image', data: base64 };
+            }
+            else if (ext === 'pdf') {
+                // PDF: use pdf.js to render first page thumbnail + embed
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+                const scale = 1.5;
+                const viewport = page.getViewport({ scale });
+                const canvas = document.createElement('canvas');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                attachment.previewContent = { 
+                    type: 'pdf', 
+                    thumbnail: canvas.toDataURL(),
+                    pageCount: pdf.numPages
+                };
+            }
+            else if (ext === 'docx') {
+                // DOCX: Mammoth to HTML
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.convertToHtml({ arrayBuffer });
+                attachment.previewContent = { type: 'docx', html: result.value };
+            }
+            else if (['xlsx','xls'].includes(ext)) {
+                // XLSX: SheetJS to simple table
+                const arrayBuffer = await file.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const html = XLSX.utils.sheet_to_html(firstSheet);
+                attachment.previewContent = { type: 'xlsx', html };
+            }
+            else {
+                // Fallback text
+                const text = await file.text();
+                attachment.previewContent = { 
+                    type: 'text', 
+                    content: text.substring(0, 10000) + (text.length > 10000 ? '\n\n... (truncated)' : '')
+                };
+            }
+        } catch (err) {
+            console.warn('Preview generation failed:', err);
+            attachment.previewContent = { type: 'unknown', error: 'Preview unavailable' };
+        }
+
+        budget.attachments.push(attachment);
+        saveBudget();
+        closeModal('documentViewerModal');
+        openDocumentViewer(docId); // Refresh with preview
+    };
+    
+    input.click();
+}
+
+/* --- v19.53 Remove Attachment from Document v19.54 --- */
+function removeAttachmentFromDocument(attachmentId, docId) {
+    if (!confirm("Remove this file from the document?")) return;
+
+    if (!budget.attachments) return;
+
+    budget.attachments = budget.attachments.filter(a => a.id !== attachmentId);
+
+    saveBudget();
+
+    // Force full refresh to blank state
+    openDocumentViewer(docId);
+}
+
+/* --- v19.61 Boot Sequence --- */
 function init() {
     document.title = `mooBudgetTool v${APP_VERSION}`;
-    
-    // REMOVED: The line that overwrote 'mBT' with 'Budget Tool by moo'
-    
-    // Load saved currency
     displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
-    
-    /* --- v19.53 [Currency] - Fetch Live Rates --- */
     fetchExchangeRates();
 
     let projectToLoad = localStorage.getItem(`${storageKeyPrefix}lastLoaded`);
     if (!projectToLoad || !getProjectList().includes(projectToLoad)) projectToLoad = getProjectList()[0];
-    projectToLoad ? loadBudget(projectToLoad) : handleNewProject(false);
+    
+    // Safety check for first run
+    if (!projectToLoad) handleNewProject(false);
+    else loadBudget(projectToLoad);
     
     render();
     bindAppEventListeners();
@@ -3912,6 +5708,115 @@ function init() {
         }
     });
 }
+
+/* --- v19.55 Contacts Manager (Open Gate Integration) --- */
+
+const getGlobalContacts = () => JSON.parse(localStorage.getItem('moo_contacts') || '[]');
+const saveGlobalContacts = (list) => localStorage.setItem('moo_contacts', JSON.stringify(list));
+
+function renderContactsList(list) {
+    if (list.length === 0) return '<div class="p-4 text-center text-gray-400 text-xs">No contacts yet. Add one or Import CSV.</div>';
+    return list.map((c, i) => `
+        <div class="flex justify-between items-center p-2 border-b hover:bg-gray-50 text-sm group">
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 truncate">${c.name}</div>
+                <div class="text-xs text-gray-500 truncate">${c.role} • ${c.contact || '-'}</div>
+            </div>
+            <button onclick="deleteContact(${i})" class="text-gray-300 hover:text-red-500 px-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+        </div>
+    `).join('');
+}
+
+function bindContactsEvents() {
+    document.getElementById('addContactForm')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('cName').value.trim();
+        const role = document.getElementById('cRole').value.trim();
+        const contact = document.getElementById('cContact').value.trim();
+        if (name && role) {
+            const list = getGlobalContacts();
+            list.unshift({ name, role, contact });
+            saveGlobalContacts(list);
+            window.switchSettingsTab('contacts', document.querySelector('button[onclick*="contacts"]'));
+        }
+    });
+
+    document.getElementById('contactSearch')?.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const all = getGlobalContacts();
+        const filtered = all.filter(c => c.name.toLowerCase().includes(term) || c.role.toLowerCase().includes(term));
+        document.getElementById('contactsListBody').innerHTML = renderContactsList(filtered);
+    });
+}
+
+window.deleteContact = function(idx) {
+    if(confirm("Delete contact?")) {
+        const list = getGlobalContacts();
+        list.splice(idx, 1);
+        saveGlobalContacts(list);
+        window.switchSettingsTab('contacts', document.querySelector('button[onclick*="contacts"]'));
+    }
+};
+
+window.importContactsCSV = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target.result;
+        const lines = text.split('\n');
+        const list = getGlobalContacts();
+        let added = 0;
+        lines.forEach(line => {
+            const cols = line.split(','); 
+            if (cols.length >= 2) {
+                const name = cols[0].trim();
+                const role = cols[1].trim();
+                const contact = cols[2] ? cols[2].trim() : '';
+                if (name && role && name.toLowerCase() !== 'name') { 
+                    list.push({ name, role, contact });
+                    added++;
+                }
+            }
+        });
+        saveGlobalContacts(list);
+        alert(`Imported ${added} contacts.`);
+        window.switchSettingsTab('contacts', document.querySelector('button[onclick*="contacts"]'));
+    };
+    reader.readAsText(file);
+};
+
+window.autoAssignRolesFromContacts = function() {
+    if(!budget) return;
+    const contacts = getGlobalContacts();
+    if(contacts.length === 0) return alert("Contact database is empty.");
+    
+    let matched = 0;
+    Object.values(budget.sections).forEach(section => {
+        section.items.forEach(item => {
+            if (!item.crew || !item.crew.name) {
+                const desc = item.description.toLowerCase();
+                const match = contacts.find(c => desc.includes(c.role.toLowerCase()));
+                if (match) {
+                    item.crew = { 
+                        name: match.name, 
+                        phone: match.contact.includes('@') ? '' : match.contact, 
+                        email: match.contact.includes('@') ? match.contact : '' 
+                    };
+                    matched++;
+                }
+            }
+        });
+    });
+    
+    if (matched > 0) {
+        pushToHistory(`Auto-assigned ${matched} roles from Open Gate`);
+        render();
+        alert(`Success! Assigned ${matched} crew members.`);
+    } else {
+        alert("No matching roles found in current budget.");
+    }
+};
 
 document.addEventListener('DOMContentLoaded', init);
 
