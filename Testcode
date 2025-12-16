@@ -712,6 +712,7 @@ const DOCUMENT_TEMPLATES = [
     { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: '⭐', default: false }
 ];
 
+
         /* --- v19.51 Helper Functions v19.52 --- */
         // Generate collision-resistant IDs for attachments
         function generateSafeId() {
@@ -3770,9 +3771,11 @@ function showStagesModal() {
     }
 }
 
+/* -- P5 -- */
+
 /* --- v19.53 [Stages] - Database Search & Smart Add --- */
 
-// 1. The Main Handler (Opens the Menu)
+// 1. Main Handler (Opens the Menu)
 window.handleStageAddItem = function(stageKey) {
     // A. Detect Target Section
     const sectionNames = Object.keys(budget.sections);
@@ -4130,292 +4133,19 @@ function generateCallSheetPDF(shareMode = false) {
     }
 }
 
-/* --- v19.58 [Documents] - Modular "Light Switch" UI Logic --- */
+/* --- v19.58 [Documents] - Hub, Preview & Share Module v19.53 --- */
 
-// State Management
+// 1. State Management
 window.docHubState = {
-    mode: 'normal', // 'normal' or 'select'
+    mode: 'normal', 
     selected: new Set(),
     activeTab: 'All',
     searchTerm: ''
 };
 
-// The "Light Switch" - Determines which icons are enabled/visible
-function renderDocActions(docId) {
-    // SCENARIO 1: Select Mode (Bulk Actions)
-    if (window.docHubState.mode === 'select') {
-        const isChecked = window.docHubState.selected.has(docId);
-        return `
-            <div class="mr-3 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}">
-                ${isChecked ? '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>' : ''}
-            </div>
-        `;
-    }
-
-    // SCENARIO 2: Normal Mode (Standard Actions)
-    // We use stopPropagation() to ensure clicking a button doesn't trigger the card container
-    return `
-        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-            <button onclick="event.stopPropagation(); handlePreviewDocument('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors border border-blue-100" title="Preview">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white transition-colors border border-gray-200" title="Publish">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            </button>
-            <button onclick="event.stopPropagation(); deleteSingleDoc('${docId}')" class="w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors ml-1 hidden group-hover:flex" title="Delete">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-        </div>
-    `;
-}
-
-// Single Card Renderer - Keeps the main function clean
-function renderDocCard(doc) {
-    const isSelectMode = window.docHubState.mode === 'select';
-    const isSelected = window.docHubState.selected.has(doc.id);
-    
-    // In Select Mode, the whole card is clickable. In Normal, it does nothing (buttons handle actions)
-    const cardClick = isSelectMode ? `onclick="toggleDocSelection('${doc.id}')"` : '';
-    
-    return `
-        <div ${cardClick} class="doc-card group relative flex items-center p-2 bg-white border ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} rounded-lg hover:shadow-md transition-all h-14 w-full select-none cursor-pointer" data-label="${doc.label.toLowerCase()}">
-            
-            ${isSelectMode ? renderDocActions(doc.id) : `<div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">${doc.icon || '📄'}</div>`}
-            
-            <div class="min-w-0 flex-1 flex flex-col justify-center mr-8">
-                <span class="text-xs font-bold ${isSelected && isSelectMode ? 'text-blue-800' : 'text-gray-800'} truncate leading-tight block" title="${doc.label}">${doc.label}</span>
-                <span class="text-[9px] text-gray-400 uppercase leading-tight mt-0.5 block">${doc.status || 'Draft'}</span>
-            </div>
-
-            ${!isSelectMode ? renderDocActions(doc.id) : ''}
-        </div>
-    `;
-}
-
-// 4. UI Implementation (Modal Hub & Editor)
-/* v19.53 [Documents] - Hub UI --- */
-/* v19.53 [Documents] - Compact Hub UI with Search --- */
-/* v19.53 [Documents] - Responsive & Fixed UI --- */
-/* --- v19.58 [Documents] - Hub Main Controller --- */
-function showDocumentsModal(tab = null) {
-    ensureDocumentData(); // Data Integrity Check
-    
-    // Update State if tab provided
-    if (tab) window.docHubState.activeTab = tab;
-    const { activeTab, mode, selected } = window.docHubState;
-    const docs = budget.documents;
-
-    // Filter Logic
-    const visibleDocs = activeTab === 'All' ? docs : docs.filter(d => d.cat === activeTab);
-
-    // Dynamic Header Buttons
-    let actionButtons = '';
-    if (mode === 'select') {
-        const count = selected.size;
-        actionButtons = `
-            <button onclick="setDocMode('normal')" class="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded transition-colors">Cancel</button>
-            <button onclick="handleBulkTrash()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition-transform active:scale-95 flex items-center gap-1" ${count === 0 ? 'disabled opacity-50' : ''}>
-                <span>Delete (${count})</span>
-            </button>
-        `;
-    } else {
-        actionButtons = `
-            <button onclick="setDocMode('select')" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors border border-transparent hover:border-red-100" title="Select Multiple">
-                Select
-            </button>
-            <button onclick="showAddDocumentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-sm transition-transform active:scale-95 whitespace-nowrap">
-                <span>+</span> Add
-            </button>
-        `;
-    }
-
-    // Tab HTML Generator
-    const renderTabs = () => ['All', 'Pre-Prod', 'Production', 'Post-Prod', 'Legal'].map(t => 
-        `<button onclick="showDocumentsModal('${t}')" class="px-3 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider rounded-lg transition-colors border flex-shrink-0 ${activeTab === t ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'}">${t}</button>`
-    ).join('');
-
-    // Main Content HTML
-    const content = `
-        <div class="flex flex-col h-[75vh] sm:h-[600px] w-full bg-gray-50 overflow-hidden">
-            <div class="p-3 sm:p-4 bg-white border-b flex flex-col gap-3 shadow-sm z-10 flex-shrink-0">
-                <div class="flex flex-wrap justify-between items-center gap-2">
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span>📂</span> Documents</h2>
-                        <button onclick="showBinModal()" class="relative p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Recycle Bin">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                            ${budget.documentTrash && budget.documentTrash.length > 0 ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>' : ''}
-                        </button>
-                    </div>
-                    
-                    ${mode === 'normal' ? `
-                    <div class="relative flex-grow w-full sm:w-auto sm:max-w-xs order-last sm:order-none mt-2 sm:mt-0">
-                        <input type="text" id="hubSearchInput" value="${window.docHubState.searchTerm}" placeholder="Search..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 border rounded-lg transition-all outline-none" autocomplete="off">
-                        <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>` : '<div class="flex-grow"></div>'}
-
-                    <div class="flex items-center gap-2">${actionButtons}</div>
-                </div>
-                
-                <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">${renderTabs()}</div>
-            </div>
-
-            <div class="p-3 sm:p-4 overflow-y-auto flex-grow bg-gray-50 w-full">
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 group/list">
-                    ${visibleDocs.length > 0 ? visibleDocs.map(doc => renderDocCard(doc)).join('') : '<div class="col-span-full text-center py-12 text-xs text-gray-400 italic">No documents found.</div>'}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Create and Clean Modal
-    createModal('documentsHub', '', content, 'max-w-4xl w-full');
-    const header = document.querySelector('#documentsHubModal .bg-gray-50.border-b');
-    if(header) header.style.display = 'none';
-    const body = document.getElementById('documentsHubBody');
-    if(body) { body.classList.remove('p-4'); body.style.padding = '0'; }
-
-    // Re-bind Search Listener
-    const searchInput = document.getElementById('hubSearchInput');
-    if(searchInput) {
-        searchInput.focus(); // Keep focus
-        // Restore cursor position trick
-        const len = searchInput.value.length; 
-        searchInput.setSelectionRange(len, len);
-
-        searchInput.addEventListener('input', (e) => {
-            window.docHubState.searchTerm = e.target.value.toLowerCase();
-            // Live filter using CSS for performance
-            document.querySelectorAll('.doc-card').forEach(card => {
-                card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm));
-            });
-        });
-        // Initial filter pass in case search term exists
-        if(window.docHubState.searchTerm) searchInput.dispatchEvent(new Event('input'));
-    }
-}
-
-function showAddDocumentModal() {
-    const existingIds = (budget.documents || []).map(d => d.id);
-    const available = DOCUMENT_TEMPLATES.filter(t => !existingIds.includes(t.id));
-    
-    const content = `
-        <div class="p-2">
-            <input type="text" id="docSearch" placeholder="Search templates..." class="w-full p-3 border rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            
-            <div id="docTemplateList" class="h-64 overflow-y-auto space-y-2">
-                ${renderTemplateList(available)}
-            </div>
-
-            <div class="mt-4 pt-4 border-t">
-                <p class="text-xs text-gray-500 mb-2 font-bold uppercase">Or create custom</p>
-                <form onsubmit="handleCustomDoc(event)" class="flex gap-2">
-                    <input type="text" id="customDocName" placeholder="Custom Document Name" class="flex-1 p-2 border rounded text-sm" required>
-                    <select id="customDocCat" class="p-2 border rounded text-sm bg-white"><option>Pre-Prod</option><option>Production</option><option>Post-Prod</option><option>Legal</option></select>
-                    <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded text-xs font-bold">Add</button>
-                </form>
-            </div>
-        </div>
-    `;
-    createModal('addDoc', 'Add Document', content, 'max-w-md');
-    
-    document.getElementById('docSearch').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const filtered = available.filter(t => t.label.toLowerCase().includes(term));
-        document.getElementById('docTemplateList').innerHTML = renderTemplateList(filtered);
-    });
-}
-
-function renderTemplateList(list) {
-    if(list.length === 0) return '<div class="text-center text-gray-400 text-xs py-4">No matching templates found.</div>';
-    return list.map(t => `
-        <div onclick="addDocument('${t.id}')" class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded cursor-pointer border border-transparent hover:border-blue-100 transition-colors group">
-            <div class="text-xl">${t.icon}</div>
-            <div class="flex-1">
-                <div class="text-sm font-bold text-gray-700 group-hover:text-blue-700">${t.label}</div>
-                <div class="text-[10px] text-gray-400 uppercase">${t.cat}</div>
-            </div>
-            <div class="text-blue-500 font-bold text-lg opacity-0 group-hover:opacity-100">+</div>
-        </div>
-    `).join('');
-}
-
-function showCallSheetEditor() {
-    ensureCallSheetData();
-    const cs = budget.callSheet;
-    
-    // Dynamic Inputs
-    const renderLocRow = (l, i) => `<div class="grid grid-cols-12 gap-2 mb-2"><input class="col-span-3 p-1 border rounded text-xs font-bold bg-gray-50" value="${l.label}" onchange="budget.callSheet.locations[${i}].label=this.value"><input class="col-span-4 p-1 border rounded text-xs" value="${l.name}" placeholder="Name" onchange="budget.callSheet.locations[${i}].name=this.value"><input class="col-span-5 p-1 border rounded text-xs" value="${l.address}" placeholder="Address" onchange="budget.callSheet.locations[${i}].address=this.value"></div>`;
-    const renderSchedRow = (s, i) => `<div class="grid grid-cols-12 gap-1 mb-2 border-b pb-2"><input class="col-span-1 p-1 border rounded text-xs text-center font-bold" value="${s.scene}" onchange="budget.callSheet.schedule[${i}].scene=this.value"><div class="col-span-6"><input class="w-full p-1 border rounded text-xs font-bold mb-1" value="${s.set}" placeholder="Set" onchange="budget.callSheet.schedule[${i}].set=this.value"><input class="w-full p-1 border rounded text-[10px] text-gray-600" value="${s.desc}" placeholder="Description" onchange="budget.callSheet.schedule[${i}].desc=this.value"></div><input class="col-span-3 p-1 border rounded text-xs" value="${s.cast}" placeholder="Cast" onchange="budget.callSheet.schedule[${i}].cast=this.value"><input class="col-span-2 p-1 border rounded text-xs text-center" value="${s.pages}" onchange="budget.callSheet.schedule[${i}].pages=this.value"></div>`;
-    const renderCastRow = (c, i) => `<div class="grid grid-cols-12 gap-1 mb-2 items-center"><input class="col-span-1 p-1 border rounded text-xs text-center font-bold text-gray-400" value="${c.id}" onchange="budget.callSheet.cast[${i}].id=this.value"><input class="col-span-4 p-1 border rounded text-xs font-bold" value="${c.name}" onchange="budget.callSheet.cast[${i}].name=this.value"><input class="col-span-2 p-1 border rounded text-xs" value="${c.character}" onchange="budget.callSheet.cast[${i}].character=this.value"><input class="col-span-2 p-1 border rounded text-xs text-center" value="${c.pickup}" onchange="budget.callSheet.cast[${i}].pickup=this.value"><input class="col-span-3 p-1 border rounded text-xs text-center font-bold bg-blue-50 text-blue-700" value="${c.set}" onchange="budget.callSheet.cast[${i}].set=this.value"></div>`;
-
-    const content = `
-        <div class="flex flex-col h-full bg-gray-50 -m-4">
-            <div class="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-20 shadow-sm">
-                <button onclick="showDocumentsModal()" class="text-xs font-bold text-gray-500 hover:text-gray-800">← Back</button>
-                <div class="flex gap-2">
-                    <button onclick="autoFillCallSheetData()" class="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200">✨ Auto-Fill</button>
-                    <button onclick="generateCallSheetPDF()" class="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 rounded border border-gray-300">Preview PDF</button>
-                    <button onclick="generateCallSheetPDF(true)" class="px-4 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded shadow-sm flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Publish
-                    </button>
-                </div>
-            </div>
-            <div class="flex-grow overflow-y-auto p-4 space-y-6">
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">General Info</h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div><label class="block text-[10px] font-bold text-gray-500">Date</label><input type="date" value="${cs.date}" class="w-full p-2 border rounded text-sm font-bold" onchange="budget.callSheet.date=this.value; saveBudget();"></div>
-                        <div><label class="block text-[10px] font-bold text-gray-500">Unit Call</label><input type="time" value="${cs.unitCall}" class="w-full p-2 border rounded text-sm font-bold" onchange="budget.callSheet.unitCall=this.value; saveBudget();"></div>
-                        <div><label class="block text-[10px] font-bold text-gray-500">Day #</label><div class="flex items-center"><input type="number" value="${cs.shootDay}" class="w-1/2 p-2 border rounded-l text-sm" onchange="budget.callSheet.shootDay=this.value"><span class="bg-gray-100 p-2 border-y border-r text-sm text-gray-500">of</span><input type="number" value="${cs.totalDays}" class="w-1/2 p-2 border rounded-r text-sm" onchange="budget.callSheet.totalDays=this.value"></div></div>
-                        <div><label class="block text-[10px] font-bold text-gray-500">Weather</label><input type="text" value="${cs.weather}" class="w-full p-2 border rounded text-sm" onchange="budget.callSheet.weather=this.value"></div>
-                    </div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Locations</h3>
-                    ${cs.locations.map((l,i) => renderLocRow(l,i)).join('')}
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Shooting Schedule</h3>
-                    <div class="grid grid-cols-12 gap-1 mb-1 text-[9px] font-bold text-gray-400 uppercase"><div class="col-span-1 text-center">Scn</div><div class="col-span-6">Set / Description</div><div class="col-span-3">Cast IDs</div><div class="col-span-2 text-center">Pgs</div></div>
-                    ${cs.schedule.map((s,i) => renderSchedRow(s,i)).join('')}
-                    <button class="mt-2 w-full py-1 text-xs font-bold text-blue-500 border border-dashed border-blue-200 rounded hover:bg-blue-50" onclick="budget.callSheet.schedule.push({scene:'-', set:'', desc:'', cast:'', pages:''}); saveBudget(); showCallSheetEditor();">+ Add Scene</button>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Cast Call</h3>
-                    <div class="grid grid-cols-12 gap-1 mb-1 text-[9px] font-bold text-gray-400 uppercase"><div class="col-span-1 text-center">#</div><div class="col-span-4">Name</div><div class="col-span-2">Role</div><div class="col-span-2 text-center">Pickup</div><div class="col-span-3 text-center">On Set</div></div>
-                    ${cs.cast.map((c,i) => renderCastRow(c,i)).join('')}
-                    <button class="mt-2 w-full py-1 text-xs font-bold text-blue-500 border border-dashed border-blue-200 rounded hover:bg-blue-50" onclick="budget.callSheet.cast.push({id: cs.cast.length+1, name:'', character:'', pickup:'', set:''}); saveBudget(); showCallSheetEditor();">+ Add Cast</button>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-10">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</h3>
-                    <textarea class="w-full p-2 border rounded text-sm h-20" onchange="budget.callSheet.notes=this.value; saveBudget();">${cs.notes}</textarea>
-                </div>
-            </div>
-        </div>
-    `;
-    const modalId = 'callSheetEditor';
-    if(document.getElementById(modalId + 'Modal')) document.getElementById(modalId + 'Modal').remove();
-    createModal(modalId, '', content, 'max-w-3xl h-[90vh]');
-    const header = document.querySelector(`#${modalId}Modal .bg-gray-50.border-b`);
-    if(header) header.style.display = 'none';
-    const body = document.getElementById(`${modalId}Body`);
-    if(body) body.classList.remove('p-4');
-}
-
-/* --- v19.58 [Documents] - COMPLETE HUB MODULE --- */
-
-// 1. State Management (The Memory)
-window.docHubState = {
-    mode: 'normal', // 'normal' or 'select'
-    selected: new Set(),
-    activeTab: 'All',
-    searchTerm: ''
-};
-
-// 1. Data Integrity Helper
+// 2. Data Integrity
 function ensureDocumentData() {
     if (!budget.documents) {
-        // If templates are missing, use defaults
         const defaults = typeof DOCUMENT_TEMPLATES !== 'undefined' ? DOCUMENT_TEMPLATES : [];
         budget.documents = defaults.filter(t => t.default).map(t => ({ ...t, status: 'Draft', content: null }));
     }
@@ -4423,80 +4153,96 @@ function ensureDocumentData() {
     if (!budget.callSheet) budget.callSheet = JSON.parse(JSON.stringify(defaultCallSheet));
 }
 
-
-// 3. The "Light Switch" (Icon Logic)
+// 3. Document Action Buttons
 function renderDocActions(docId) {
-    // MODE A: Select Mode (Checkbox)
     if (window.docHubState.mode === 'select') {
         const isChecked = window.docHubState.selected.has(docId);
         return `
             <div class="mr-3 w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}">
                 ${isChecked ? '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>' : ''}
-            </div>
-        `;
+            </div>`;
     }
-
-    // MODE B: Normal Mode (Action Buttons)
+    // Normal Mode - Icons updated to match Footer
     return `
         <div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-            <button onclick="event.stopPropagation(); handlePreviewDocument('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors border border-blue-100" title="Preview">
+            <button onclick="event.stopPropagation(); handlePreviewDocument('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors border border-blue-100" title="Preview / Save Image">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
-            <button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white transition-colors border border-gray-200" title="Publish">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            <button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white transition-colors border border-gray-200" title="Publish / Share">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
             <button onclick="event.stopPropagation(); deleteSingleDoc('${docId}')" class="w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors ml-1 hidden group-hover:flex" title="Delete">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
-        </div>
-    `;
+        </div>`;
 }
 
-// 4. Card Renderer
-function renderDocCard(doc) {
+/* --- v19.53 Document Card Rendering v19.54 --- */
+function renderDocCard(doc, context = 'hub') {
     const isSelectMode = window.docHubState.mode === 'select';
     const isSelected = window.docHubState.selected.has(doc.id);
-    const cardClick = isSelectMode ? `onclick="toggleDocSelection('${doc.id}')"` : '';
-    
-    return `
-        <div ${cardClick} class="doc-card group relative flex items-center p-2 bg-white border ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} rounded-lg hover:shadow-md transition-all h-14 w-full select-none cursor-pointer" data-label="${doc.label.toLowerCase()}">
-            ${isSelectMode ? renderDocActions(doc.id) : `<div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">${doc.icon || '📄'}</div>`}
-            
-            <div class="min-w-0 flex-1 flex flex-col justify-center mr-8">
-                <span class="text-xs font-bold ${isSelected && isSelectMode ? 'text-blue-800' : 'text-gray-800'} truncate leading-tight block" title="${doc.label}">${doc.label}</span>
-                <span class="text-[9px] text-gray-400 uppercase leading-tight mt-0.5 block">${doc.status || 'Draft'}</span>
-            </div>
+    const clickHandler = isSelectMode 
+        ? `onclick="toggleDocSelection('${doc.id}')"` 
+        : `onclick="openDocumentViewer('${doc.id}', '${context}')"`; // Unified viewer
 
-            ${!isSelectMode ? renderDocActions(doc.id) : ''}
-        </div>
-    `;
+    // Mobile: always show buttons; Desktop: show on hover
+    const actionButtons = `
+        <div class="flex gap-1.5 absolute right-2 top-1/2 -translate-y-1/2 
+                      ${context === 'stages' ? 'opacity-100' : 'opacity-0 sm:group-hover:opacity-100'} 
+                      transition-opacity">
+            <button onclick="event.stopPropagation(); openDocumentViewer('${doc.id}', '${context}')" 
+                    class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center border border-blue-100 shadow-sm" 
+                    title="Preview / Edit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button onclick="event.stopPropagation(); handlePublishMenu('${doc.id}')" 
+                    class="w-8 h-8 rounded-full bg-gray-100 text-gray-700 hover:bg-green-600 hover:text-white flex items-center justify-center border border-gray-200 shadow-sm" 
+                    title="Publish / Share">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>`;
+
+    return `
+        <div ${clickHandler} 
+             class="doc-card group relative flex items-center p-3 bg-white border 
+                    ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} 
+                    rounded-lg hover:shadow-md transition-all h-16 w-full select-none cursor-pointer" 
+             data-label="${doc.label.toLowerCase()}">
+            ${isSelectMode ? renderDocActions(doc.id) : `
+                <div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">
+                    ${doc.icon || '📄'}
+                </div>`}
+            <div class="min-w-0 flex-1 flex flex-col justify-center">
+                <span class="text-sm font-bold text-gray-800 truncate leading-tight block" title="${doc.label}">
+                    ${doc.label}
+                </span>
+                <span class="text-[10px] text-gray-400 uppercase leading-tight mt-0.5 block">
+                    ${doc.status || 'Draft'}
+                </span>
+            </div>
+            ${!isSelectMode ? actionButtons : ''}
+        </div>`;
 }
 
-// 5. MAIN HUB UI (The Window)
+// 5. Main Hub Modal
 function showDocumentsModal(tab = null) {
     ensureDocumentData();
-    
     if (tab) window.docHubState.activeTab = tab;
     const { activeTab, mode, selected } = window.docHubState;
     const docs = budget.documents;
-
     const visibleDocs = activeTab === 'All' ? docs : docs.filter(d => d.cat === activeTab);
 
-    // Dynamic Header Buttons
+    // Header Logic
     let headerButtons = '';
     if (mode === 'select') {
         const count = selected.size;
         headerButtons = `
             <button onclick="setDocMode('normal')" class="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded transition-colors">Cancel</button>
-            <button onclick="handleBulkTrash()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition-transform active:scale-95 flex items-center gap-1" ${count === 0 ? 'disabled opacity-50' : ''}>
-                <span>Delete (${count})</span>
-            </button>
-        `;
+            <button onclick="handleBulkTrash()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-1" ${count === 0 ? 'disabled opacity-50' : ''}><span>Delete (${count})</span></button>`;
     } else {
         headerButtons = `
-            <button onclick="setDocMode('select')" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors border border-transparent hover:border-red-100" title="Select Multiple">Select</button>
-            <button onclick="showAddDocumentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-sm transition-transform active:scale-95 whitespace-nowrap"><span>+</span> Add</button>
-        `;
+            <button onclick="setDocMode('select')" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors border border-transparent hover:border-red-100">Select</button>
+            <button onclick="showAddDocumentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap"><span>+</span> Add</button>`;
     }
 
     const renderTabs = () => ['All', 'Pre-Prod', 'Production', 'Post-Prod', 'Legal'].map(t => 
@@ -4509,31 +4255,22 @@ function showDocumentsModal(tab = null) {
                 <div class="flex flex-wrap justify-between items-center gap-2">
                     <div class="flex items-center gap-3">
                         <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span>📂</span> Documents</h2>
-                        <button onclick="showBinModal()" class="relative p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Recycle Bin">
+                        <button onclick="showBinModal()" class="relative p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             ${budget.documentTrash && budget.documentTrash.length > 0 ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>' : ''}
                         </button>
                     </div>
-                    
-                    ${mode === 'normal' ? `
-                    <div class="relative flex-grow w-full sm:w-auto sm:max-w-xs order-last sm:order-none mt-2 sm:mt-0">
-                        <input type="text" id="hubSearchInput" value="${window.docHubState.searchTerm}" placeholder="Search..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 border rounded-lg transition-all outline-none" autocomplete="off">
-                        <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                    </div>` : '<div class="flex-grow"></div>'}
-
+                    ${mode === 'normal' ? `<div class="relative flex-grow w-full sm:w-auto sm:max-w-xs order-last sm:order-none mt-2 sm:mt-0"><input type="text" id="hubSearchInput" value="${window.docHubState.searchTerm}" placeholder="Search..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 border-transparent focus:bg-white focus:border-blue-500 border rounded-lg transition-all outline-none" autocomplete="off"><svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>` : '<div class="flex-grow"></div>'}
                     <div class="flex items-center gap-2">${headerButtons}</div>
                 </div>
-                
                 <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">${renderTabs()}</div>
             </div>
-
             <div class="p-3 sm:p-4 overflow-y-auto flex-grow bg-gray-50 w-full">
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 group/list">
                     ${visibleDocs.length > 0 ? visibleDocs.map(doc => renderDocCard(doc)).join('') : '<div class="col-span-full text-center py-12 text-xs text-gray-400 italic">No documents found.</div>'}
                 </div>
             </div>
-        </div>
-    `;
+        </div>`;
     
     createModal('documentsHub', '', content, 'max-w-4xl w-full');
     const header = document.querySelector('#documentsHubModal .bg-gray-50.border-b');
@@ -4541,7 +4278,6 @@ function showDocumentsModal(tab = null) {
     const body = document.getElementById('documentsHubBody');
     if(body) { body.classList.remove('p-4'); body.style.padding = '0'; }
 
-    // Re-bind Search
     const searchInput = document.getElementById('hubSearchInput');
     if(searchInput) {
         searchInput.focus();
@@ -4549,15 +4285,294 @@ function showDocumentsModal(tab = null) {
         searchInput.setSelectionRange(len, len);
         searchInput.addEventListener('input', (e) => {
             window.docHubState.searchTerm = e.target.value.toLowerCase();
-            document.querySelectorAll('.doc-card').forEach(card => {
-                card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm));
-            });
+            document.querySelectorAll('.doc-card').forEach(card => card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm)));
         });
-        if(window.docHubState.searchTerm) searchInput.dispatchEvent(new Event('input'));
     }
 }
 
-// 6. Workflow Logic (Toggle, Delete, Restore)
+/* --- v19.54 [Publish] - Universal Share Module (Multi-Format Support) --- */
+
+// 1. Helper: Generate the File Blob
+async function generateDocumentFile(doc, format) {
+    const isPdf = format === 'pdf';
+    const filename = `${budget.projectName}_${doc.label.replace(/\s/g,'_')}.${format}`;
+    const dateStr = new Date().toLocaleDateString();
+
+    let paperHTML = '';
+
+    if (doc.id === 'callSheet') {
+        // High-Fidelity Call Sheet Layout
+        const cs = budget.callSheet;
+        paperHTML = `
+            <div id="render-target" class="bg-white text-black p-8 mx-auto font-sans" style="width: 794px; min-height: 1123px;">
+                <div class="flex justify-between items-end border-b-4 border-blue-900 pb-4 mb-6">
+                    <div>
+                        <h1 class="text-4xl font-bold uppercase text-blue-900 tracking-tight">${budget.projectName}</h1>
+                        <div class="text-sm font-bold tracking-widest text-gray-500 mt-1 uppercase">Call Sheet</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-4xl font-bold text-gray-800">${new Date(cs.date).toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'}).toUpperCase()}</div>
+                        <div class="text-sm font-bold text-gray-500 uppercase">Day ${cs.shootDay} of ${cs.totalDays}</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wider">General Call</div>
+                        <div class="text-2xl font-bold text-blue-900">${cs.unitCall}</div>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                        <div class="text-[10px] font-bold text-yellow-600 uppercase tracking-wider">Breakfast</div>
+                        <div class="text-2xl font-bold text-yellow-900">${cs.breakfast}</div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Weather</div>
+                        <div class="text-xl font-bold text-gray-800 truncate">${cs.weather}</div>
+                    </div>
+                </div>
+                <div class="mb-8">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase border-b-2 border-gray-100 pb-1 mb-3">Locations</h3>
+                    <div class="space-y-3">
+                        ${cs.locations.map(l => `<div><div class="flex items-baseline gap-2"><span class="font-bold text-sm text-blue-900 uppercase min-w-[80px]">${l.label}:</span><span class="font-bold text-base text-gray-900">${l.name}</span></div><div class="text-sm text-gray-600 pl-[88px]">${l.address}</div></div>`).join('')}
+                    </div>
+                </div>
+                <div class="mb-8">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-blue-900 text-white uppercase tracking-wider"><tr><th class="p-2 w-16">Scene</th><th class="p-2">Set / Description</th><th class="p-2 w-20">Cast</th><th class="p-2 text-center w-12">Pgs</th></tr></thead>
+                        <tbody class="divide-y divide-gray-200">${cs.schedule.map(s => `<tr class="bg-white"><td class="p-3 font-bold text-lg text-gray-800 align-top">${s.scene}</td><td class="p-3 align-top"><div class="font-bold text-sm text-gray-900 uppercase">${s.set}</div><div class="text-gray-500 mt-1">${s.desc}</div></td><td class="p-3 font-mono text-gray-600 align-top">${s.cast}</td><td class="p-3 text-center font-bold text-gray-800 align-top">${s.pages}</td></tr>`).join('')}</tbody>
+                    </table>
+                </div>
+                <div class="absolute bottom-8 left-8 right-8 border-t pt-2 text-[10px] text-gray-400 flex justify-between"><span>Generated by mooBudgetTool</span><span>Production Office: 10a West Kings House Rd</span></div>
+            </div>`;
+    } else {
+        // Generic "White Paper" Layout
+        paperHTML = `
+            <div id="render-target" class="bg-white text-black p-8 shadow-lg mx-auto" style="width: 794px; height: 1123px;">
+                <div class="border-b-4 border-gray-800 pb-4 mb-8 flex justify-between items-end">
+                    <div>
+                        <h1 class="text-3xl font-bold uppercase tracking-tight">${budget.projectName}</h1>
+                        <div class="text-sm text-gray-500 uppercase tracking-widest">${doc.cat} / ${doc.label}</div>
+                    </div>
+                    <div class="text-right"><div class="text-xl font-bold text-gray-300">DRAFT</div><div class="text-xs text-gray-400">${dateStr}</div></div>
+                </div>
+                <div class="text-gray-400 text-sm italic p-10 text-center border-2 border-dashed border-gray-100 rounded-lg">
+                    (Document Content Placeholder)<br>Items from ${doc.cat} would appear here.
+                </div>
+                <div class="absolute bottom-8 left-8 right-8 border-t pt-2 text-[10px] text-gray-400">Generated by mooBudgetTool</div>
+            </div>`;
+    }
+
+    const container = document.createElement('div');
+    container.style.position = 'absolute'; container.style.left = '-9999px'; container.style.top = '0';
+    container.innerHTML = paperHTML;
+    document.body.appendChild(container);
+
+    try {
+        const element = document.getElementById('render-target');
+        const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+        let blob;
+        
+        if (isPdf) {
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+            const pdfW = pdf.internal.pageSize.getWidth();
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfImgH = (imgProps.height * pdfW) / imgProps.width;
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfImgH);
+            blob = pdf.output('blob');
+        } else {
+            blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        }
+        document.body.removeChild(container);
+        return new File([blob], filename, { type: isPdf ? 'application/pdf' : 'image/jpeg' });
+    } catch (e) {
+        if(document.body.contains(container)) document.body.removeChild(container);
+        throw e;
+    }
+}
+
+// 2. Multi-File Share Handler
+async function generateAndShare(docId, contact, method) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const btnId = method === 'whatsapp' ? `${contact.id}-whatsapp` : `${contact.id}-email`;
+    const btn = document.querySelector(`button[data-share-btn="${btnId}"]`);
+    const originalContent = btn ? btn.innerHTML : '';
+    if(btn) btn.innerHTML = `<span class="animate-spin">⌛</span>`;
+
+    try {
+        const files = [];
+        if (document.getElementById('fmtPdf').checked) files.push(await generateDocumentFile(doc, 'pdf'));
+        if (document.getElementById('fmtJpg').checked) files.push(await generateDocumentFile(doc, 'jpg'));
+
+        if (files.length === 0) throw new Error("Please select PDF, JPG, or both.");
+
+        const text = `Hi ${contact.name.split(' ')[0]}, please review the attached ${doc.label} for ${budget.projectName}.`;
+
+        // A: Native Share (Mobile - Supports Arrays)
+        if (navigator.canShare && navigator.canShare({ files: files })) {
+            await navigator.share({ title: doc.label, text: text, files: files });
+        } 
+        // B: Desktop Fallback (Download Loop)
+        else {
+            for (const file of files) {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url; a.download = file.name;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                await new Promise(r => setTimeout(r, 500)); // Delay between downloads
+            }
+            
+            if (method === 'whatsapp') {
+                const cleanPhone = contact.phone.replace(/\D/g, ''); 
+                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text + " (Files downloaded)")}`, '_blank');
+            } else if (method === 'email') {
+                window.open(`mailto:${contact.email}?subject=${encodeURIComponent(doc.label)}&body=${encodeURIComponent(text)}`, '_self');
+            }
+            alert(`Files downloaded.\n\nPlease drag them into the ${method === 'whatsapp' ? 'WhatsApp' : 'Email'} window.`);
+        }
+    } catch (err) {
+        alert("Error: " + err.message);
+    } finally {
+        if(btn) btn.innerHTML = originalContent;
+    }
+}
+
+// 3. Main UI Builder
+function handlePublishMenu(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const crewMap = new Map();
+    Object.values(budget.sections).forEach(section => {
+        section.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                const key = item.crew.name.toLowerCase();
+                if (!crewMap.has(key)) {
+                    crewMap.set(key, { 
+                        id: `c_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+                        name: item.crew.name, phone: item.crew.phone, email: item.crew.email || '', role: item.description 
+                    });
+                }
+            }
+        });
+    });
+    const contacts = Array.from(crewMap.values());
+
+    const modalContent = `
+        <div class="flex flex-col max-h-[80vh] h-full">
+            <div class="p-4 bg-white border-b sticky top-0 z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-lg">Share Document</h3>
+                        <p class="text-xs text-gray-500">Distribute <strong>${doc.label}</strong></p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="fmtPdf" class="w-3 h-3 text-blue-600" checked><span class="text-xs font-bold text-gray-700">PDF</span></label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="fmtJpg" class="w-3 h-3 text-blue-600"><span class="text-xs font-bold text-gray-700">JPG</span></label>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-100">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="selectAllCrew" class="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500">
+                        <span class="text-xs font-bold text-gray-600">Select All</span>
+                    </label>
+                    <span class="text-[10px] text-gray-400" id="selectedCountDisplay">0 selected</span>
+                </div>
+            </div>
+            <div class="overflow-y-auto flex-grow bg-white p-2 space-y-1">
+                ${contacts.length > 0 ? contacts.map(c => `
+                    <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-100 group transition-colors">
+                        <div class="flex items-center gap-3 overflow-hidden flex-1">
+                            <input type="checkbox" class="crew-select-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded" value="${c.email}" data-name="${c.name}">
+                            <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">${c.name.charAt(0)}</div>
+                            <div class="min-w-0">
+                                <div class="text-xs font-bold text-gray-800 truncate">${c.name}</div>
+                                <div class="text-[10px] text-gray-500 truncate">${c.role} ${!c.email ? '<span class="text-red-300">(No Email)</span>' : ''}</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 pl-2 border-l ml-2 border-gray-100">
+                            ${c.phone ? `<button data-share-btn="${c.id}-whatsapp" onclick="generateAndShare('${docId}', {id:'${c.id}', name:'${c.name}', phone:'${c.phone}'}, 'whatsapp')" class="w-8 h-8 flex items-center justify-center rounded-full bg-green-50 text-green-600 hover:bg-green-600 hover:text-white transition-colors" title="WhatsApp"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></button>` : ''}
+                            ${c.email ? `<button data-share-btn="${c.id}-email" onclick="generateAndShare('${docId}', {id:'${c.id}', name:'${c.name}', email:'${c.email}'}, 'email')" class="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors" title="Email"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></button>` : ''}
+                        </div>
+                    </div>
+                `).join('') : '<div class="p-6 text-center text-gray-400 text-xs">No crew found. Assign roles in budget first.</div>'}
+            </div>
+            <div class="p-3 bg-white border-t sticky bottom-0 z-10 flex gap-2">
+                <button id="downloadFormatBtn" class="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg border border-gray-300 hover:bg-gray-200 transition-colors text-xs">Download File(s)</button>
+                <button id="sendBulkEmailBtn" class="flex-[2] py-3 bg-gray-800 text-white font-bold rounded-lg shadow-md hover:bg-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs" disabled>
+                    Send Bulk Email (<span id="bulkCount">0</span>)
+                </button>
+            </div>
+        </div>
+    `;
+
+    createModal('publishMenu', '', modalContent, 'max-w-md');
+    const header = document.querySelector('#publishMenuModal .bg-gray-50.border-b');
+    if(header) header.style.display = 'none';
+    const body = document.getElementById('publishMenuBody');
+    if(body) body.classList.remove('p-4');
+
+    // 4. Listeners
+    const selectAll = document.getElementById('selectAllCrew');
+    const checkboxes = document.querySelectorAll('.crew-select-checkbox');
+    const sendBtn = document.getElementById('sendBulkEmailBtn');
+    const countSpan = document.getElementById('bulkCount');
+    const labelSpan = document.getElementById('selectedCountDisplay');
+
+    const updateState = () => {
+        const selected = Array.from(checkboxes).filter(cb => cb.checked);
+        const count = selected.length;
+        sendBtn.disabled = count === 0;
+        countSpan.textContent = count;
+        labelSpan.textContent = `${count} selected`;
+
+        if (count > 0) {
+            const emails = selected.map(cb => cb.value).filter(e => e).join(',');
+            const subject = encodeURIComponent(`${budget.projectName}: ${doc.label}`);
+            const body = encodeURIComponent(`Hi Team,\n\nPlease find the attached ${doc.label}.\n\nRegards,`);
+            sendBtn.onclick = () => {
+                if(!emails) return alert("Selected crew have no emails.");
+                alert("Opening Email Client...\n\nImportant: You must manually attach the downloaded file(s) in bulk mode.");
+                window.location.href = `mailto:?bcc=${emails}&subject=${subject}&body=${body}`;
+            };
+        }
+    };
+
+    selectAll.addEventListener('change', (e) => {
+        checkboxes.forEach(cb => cb.checked = e.target.checked);
+        updateState();
+    });
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+            updateState();
+            selectAll.checked = Array.from(checkboxes).every(c => c.checked);
+        });
+    });
+
+    document.getElementById('downloadFormatBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('downloadFormatBtn');
+        btn.innerHTML = "Generating...";
+        try {
+            const files = [];
+            if (document.getElementById('fmtPdf').checked) files.push(await generateDocumentFile(doc, 'pdf'));
+            if (document.getElementById('fmtJpg').checked) files.push(await generateDocumentFile(doc, 'jpg'));
+            
+            if (files.length === 0) throw new Error("Select PDF or JPG.");
+
+            for (const file of files) {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url; a.download = file.name;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                await new Promise(r => setTimeout(r, 500));
+            }
+        } catch(e) { alert(e.message); }
+        btn.innerHTML = "Download File(s)";
+    });
+}
+
+/* --- Workflow Logic (Toggle, Delete, Restore) --- */
 function setDocMode(newMode) {
     window.docHubState.mode = newMode;
     if (newMode === 'normal') window.docHubState.selected.clear();
@@ -4596,6 +4611,194 @@ function handleBulkTrash() {
     }
 }
 
+function showAddDocumentModal() {
+    const existingIds = (budget.documents || []).map(d => d.id);
+    const available = DOCUMENT_TEMPLATES.filter(t => !existingIds.includes(t.id));
+    
+    const content = `
+        <div class="p-2">
+            <input type="text" id="docSearch" placeholder="Search templates..." class="w-full p-3 border rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div id="docTemplateList" class="h-64 overflow-y-auto space-y-2">
+                ${renderTemplateList(available)}
+            </div>
+            <div class="mt-4 pt-4 border-t">
+                <p class="text-xs text-gray-500 mb-2 font-bold uppercase">Or create custom</p>
+                <form onsubmit="handleCustomDoc(event)" class="flex gap-2">
+                    <input type="text" id="customDocName" placeholder="Custom Document Name" class="flex-1 p-2 border rounded text-sm" required>
+                    <select id="customDocCat" class="p-2 border rounded text-sm bg-white"><option>Pre-Prod</option><option>Production</option><option>Post-Prod</option><option>Legal</option></select>
+                    <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded text-xs font-bold">Add</button>
+                </form>
+            </div>
+        </div>`;
+    createModal('addDoc', 'Add Document', content, 'max-w-md');
+    
+    document.getElementById('docSearch').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = available.filter(t => t.label.toLowerCase().includes(term));
+        document.getElementById('docTemplateList').innerHTML = renderTemplateList(filtered);
+    });
+}
+
+function renderTemplateList(list) {
+    if(list.length === 0) return '<div class="text-center text-gray-400 text-xs py-4">No matching templates found.</div>';
+    return list.map(t => `
+        <div onclick="addDocument('${t.id}')" class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded cursor-pointer border border-transparent hover:border-blue-100 transition-colors group">
+            <div class="text-xl">${t.icon}</div>
+            <div class="flex-1">
+                <div class="text-sm font-bold text-gray-700 group-hover:text-blue-700">${t.label}</div>
+                <div class="text-[10px] text-gray-400 uppercase">${t.cat}</div>
+            </div>
+            <div class="text-blue-500 font-bold text-lg opacity-0 group-hover:opacity-100">+</div>
+        </div>`).join('');
+}
+
+function addDocument(templateId) {
+    const template = DOCUMENT_TEMPLATES.find(t => t.id === templateId);
+    if(template) {
+        budget.documents.push({ ...template, status: 'Draft', content: null, dateCreated: new Date().toISOString() });
+        saveBudget();
+        closeModal('addDocModal');
+        showDocumentsModal();
+    }
+}
+
+function handleCustomDoc(e) {
+    e.preventDefault();
+    const name = document.getElementById('customDocName').value.trim();
+    const cat = document.getElementById('customDocCat').value;
+    if(name) {
+        budget.documents.push({ id: `cust_${Date.now()}`, label: name, cat: cat, icon: '📄', status: 'Draft', content: null, dateCreated: new Date().toISOString() });
+        saveBudget();
+        closeModal('addDocModal');
+        showDocumentsModal();
+    }
+}
+
+function showBinModal() { 
+    const trash = budget.documentTrash || [];
+    const content = trash.length === 0 ? '<p class="text-center text-gray-400 p-4">Bin is empty.</p>' : 
+        `<div class="space-y-2 p-2">${trash.map((d, i) => `
+            <div class="flex justify-between items-center p-2 bg-red-50 border border-red-100 rounded">
+                <span class="text-sm font-bold text-gray-700">${d.label}</span>
+                <div class="flex gap-2">
+                    <button onclick="restoreDoc(${i})" class="text-xs bg-white border border-gray-300 px-2 py-1 rounded">Restore</button>
+                    <button onclick="permDeleteDoc(${i})" class="text-xs bg-red-600 text-white px-2 py-1 rounded">Delete</button>
+                </div>
+            </div>`).join('')}</div>`;
+    createModal('docBin', 'Recycle Bin', content, 'max-w-sm');
+}
+
+window.restoreDoc = (idx) => {
+    const doc = budget.documentTrash.splice(idx, 1)[0];
+    delete doc.deletedAt;
+    budget.documents.push(doc);
+    saveBudget();
+    closeModal('docBinModal');
+    showDocumentsModal();
+};
+
+window.permDeleteDoc = (idx) => {
+    if(confirm("Delete forever?")) {
+        budget.documentTrash.splice(idx, 1);
+        saveBudget();
+        showBinModal();
+    }
+};
+
+window.permDeleteDoc = (idx) => {
+    if(confirm("Delete forever?")) {
+        budget.documentTrash.splice(idx, 1);
+        saveBudget();
+        showBinModal();
+    }
+};
+
+/* --- v19.54 Document Viewer Modal --- */
+function openDocumentViewer(docId, context = 'hub') {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    // Determine current state
+    const hasContent = !!doc.content;
+    const hasAttachment = budget.attachments && budget.attachments.some(a => a.docId === docId);
+
+    let viewerContent = '';
+
+    if (!hasContent && !hasAttachment) {
+        // Blank state – offer two primary actions
+        viewerContent = `
+            <div class="text-center py-12 px-6">
+                <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center text-5xl">
+                    ${doc.icon || '📄'}
+                </div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">${doc.label}</h3>
+                <p class="text-sm text-gray-500 mb-8">This document is empty. Choose how to start:</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md mx-auto">
+                    <button onclick="startWithTemplate('${docId}')" 
+                            class="py-4 px-6 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md transition-transform hover:scale-105">
+                        <div class="text-3xl mb-2">📝</div>
+                        Use Template
+                    </button>
+                    <button onclick="attachFileToDocument('${docId}')" 
+                            class="py-4 px-6 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-md transition-transform hover:scale-105">
+                        <div class="text-3xl mb-2">📎</div>
+                        Attach Existing File
+                    </button>
+                </div>
+            </div>`;
+    } else {
+        // Existing content/attachment – placeholder for future preview/editor
+        viewerContent = `
+            <div class="text-center py-20">
+                <div class="text-6xl mb-4 opacity-30">🔒</div>
+                <p class="text-gray-500">Preview & Editor coming in next batch</p>
+                <p class="text-xs text-gray-400 mt-4">Document ID: ${docId}</p>
+            </div>`;
+    }
+
+    createModal('documentViewer', doc.label, viewerContent, 'max-w-4xl');
+    
+    // Hide default header actions for cleaner look
+    const header = document.querySelector('#documentViewerModal .bg-gray-50.border-b');
+    if (header) header.style.display = 'none';
+    
+    const body = document.getElementById('documentViewerBody');
+    if (body) body.classList.remove('p-4');
+}
+
+/* --- v19.54 Blank State Actions --- */
+function startWithTemplate(docId) {
+    alert("Template selection system will be implemented in Batch 2");
+    // Placeholder – will open template picker
+}
+
+function attachFileToDocument(docId) {
+    // Reuse universal import but tag attachment to specific document
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = false;
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (!budget.attachments) budget.attachments = [];
+        budget.attachments.push({
+            id: generateSafeId(),
+            docId: docId,           // ← New link
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            dateAdded: new Date().toISOString(),
+            content: null
+        });
+        
+        saveBudget();
+        closeModal('documentViewerModal');
+        openDocumentViewer(docId); // Refresh with attached file
+    };
+    input.click();
+}
+
 /* --- v19.61 Boot Sequence --- */
 function init() {
     document.title = `mooBudgetTool v${APP_VERSION}`;
@@ -4619,8 +4822,8 @@ function init() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', init);
 
+document.addEventListener('DOMContentLoaded', init);
 
     </script>
 </body>
