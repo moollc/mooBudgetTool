@@ -12,6 +12,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/assets/cow-512.png">
 
+	<script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -61,18 +62,38 @@
     </script>
 
     <style>
-        /* --- Base & Typography --- */
+       /* --- Base & Typography --- */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
-       body { 
-    font-family: 'Inter', sans-serif; 
-    padding-bottom: 50px; /* Space for sticky footer */
-}
+        body { 
+            font-family: 'Inter', sans-serif; 
+            padding-bottom: 50px; /* Space for sticky footer */
+            background-color: #f3f4f6;
+            
+            /* --- COMPATIBILITY FIXES START --- */
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%; 
+        }
 
         html {
             -webkit-text-size-adjust: 100%;
             text-size-adjust: 100%;
         }
+
+        /* --- Scrollbar & Selection Fixes --- */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { 
+            -ms-overflow-style: none; 
+            scrollbar-width: none; /* Firefox Support */
+        }
+
+        .noselect {
+            -webkit-user-select: none; /* Safari Support */
+            user-select: none;
+        }
+        /* --- COMPATIBILITY FIXES END --- */
+
+        /* --- Layout & Responsiveness --- */
 
         /* --- Layout & Responsiveness --- */
         @media (min-width: 768px) {
@@ -1494,7 +1515,17 @@ function showSettingsModal(defaultTab = 'general') {
 /* --- v19.53 Film Industry Database --- */
 /* --- v19.55 [Open Gate v1.0] - Industry Line Item Database --- */
 /* Codename: Open Gate - Removing barriers to production knowledge. */
+/* --- v19.54 [Open Gate v1.1] - Expanded Industry Database --- */
 const FILM_INDUSTRY_ITEMS = [
+    // --- Development (New Section) ---
+    { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
+    { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
+    { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
+    { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
+    { description: 'Researcher', unit: 'Day', rate: 25000 },
+    { description: 'Concept Artist', unit: 'Day', rate: 40000 },
+    { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+
     // --- Above the Line ---
     { description: 'Director', unit: 'Day', rate: 85000 },
     { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
@@ -1574,11 +1605,33 @@ const FILM_INDUSTRY_ITEMS = [
     { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
 ];
 
+/* --- v19.54 [Open Gate] - Smart DB Sync --- */
 function ensureDatabaseSeeded() {
     try {
-        const current = getGlobalItems();
-        if (current.length === 0) saveGlobalItems(FILM_INDUSTRY_ITEMS);
-    } catch(e) { console.warn("DB Seed skipped"); }
+        let current = getGlobalItems();
+        
+        // If empty, seed everything
+        if (current.length === 0) {
+            saveGlobalItems(FILM_INDUSTRY_ITEMS);
+            return;
+        }
+
+        // Smart Merge: Add missing master items to user's local DB
+        let addedCount = 0;
+        const currentDescMap = new Set(current.map(i => i.description.toLowerCase()));
+
+        FILM_INDUSTRY_ITEMS.forEach(masterItem => {
+            if (!currentDescMap.has(masterItem.description.toLowerCase())) {
+                current.push(masterItem);
+                addedCount++;
+            }
+        });
+
+        if (addedCount > 0) {
+            saveGlobalItems(current);
+            console.log(`Open Gate: Added ${addedCount} missing roles to local database.`);
+        }
+    } catch(e) { console.warn("DB Seed skipped", e); }
 }
 // Run check immediately
 ensureDatabaseSeeded();
@@ -3097,7 +3150,7 @@ function renderProjectManagement() {
                     <button id="exportPdfBtn" class="px-3 py-2.5 bg-gray-600 text-white text-sm font-bold rounded-lg hover:bg-gray-700 shadow-sm transition-colors">PDF</button>
                 </div>
 
-                <button id="publishBtn" class="hidden"></button>
+                <button id="publishBtn" class="hidden" aria-hidden="true" aria-label="Publish Budget"></button>
             </div>
         </div>`;
 
@@ -3644,6 +3697,118 @@ const STAGE_PRESETS = {
     'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
 };
 
+/* ==========================================================================
+   mBTPublisher (Centralized Export Engine)
+   Handles: PDF Generation, System Sharing, WhatsApp, Email, & Safe Downloads
+   ========================================================================== */
+const mBTPublisher = {
+    
+    // Default Settings for HTML2PDF
+    settings: {
+        margin: 0.3,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    },
+
+    /**
+     * MAIN FUNCTION: Converts an HTML Element to PDF
+     * @param {string|HTMLElement} elementOrId - The DOM element to print
+     * @param {string} filename - Desired filename (e.g. "Budget_v1")
+     * @param {string} mode - 'download' (default) or 'share' (mobile menu)
+     */
+    async exportToPDF(elementOrId, filename, mode = 'download') {
+        const element = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
+        if (!element) return alert("Error: Content to export not found.");
+
+        // 1. Sanitize Filename
+        const safeName = filename.replace(/[^a-z0-9]/gi, '_') + '.pdf';
+
+        // 2. UI Prep (Hide buttons/controls during screenshot)
+        const ignoredElements = element.querySelectorAll('button, .no-print, input[type="file"]');
+        ignoredElements.forEach(el => el.style.opacity = '0');
+
+        try {
+            // 3. Generate PDF
+            const worker = html2pdf().set(this.settings).from(element);
+
+            if (mode === 'download') {
+                await worker.save(safeName);
+            } 
+            else if (mode === 'share') {
+                // Generate Blob for sharing
+                const pdfBlob = await worker.output('blob');
+                await this.smartShare(pdfBlob, safeName, "Document Shared via MooBudget");
+            }
+
+        } catch (err) {
+            console.error("mBTPublisher Failed:", err);
+            alert("Export failed. Please check the console.");
+        } finally {
+            // 4. Cleanup (Show buttons again)
+            ignoredElements.forEach(el => el.style.opacity = '1');
+        }
+    },
+
+    /**
+     * SMART SHARE: Handles the "Windows Error" automatically
+     */
+    async smartShare(blob, filename, title) {
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        
+        // Critical Check: Browsers block 'navigator.share' on file:/// protocols
+        const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+        const canShare = isSecure && navigator.share && navigator.canShare && navigator.canShare({ files: [file] });
+
+        if (canShare) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: title,
+                    text: `Here is the document: ${filename}`
+                });
+            } catch (err) {
+                console.warn("Share cancelled/failed. Downloading instead.");
+                this.forceDownload(blob, filename);
+            }
+        } else {
+            // Silently fall back to download if system share isn't allowed
+            this.forceDownload(blob, filename);
+        }
+    },
+
+    /**
+     * HELPER: Forces a browser download
+     */
+    forceDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    },
+
+    /**
+     * HELPER: WhatsApp Link Generator
+     */
+    shareWhatsApp(phone, text) {
+        if (!phone) return alert("No phone number provided.");
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+    },
+
+    /**
+     * HELPER: Email Link Generator
+     */
+    shareEmail(email, subject, body) {
+        if (!email) return alert("No email address provided.");
+        window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+};
+
 // 2. Sync Logic (Weighted Average)
 function syncStageToMain(item) {
     if (!item.stageData) return;
@@ -3678,29 +3843,48 @@ window.removeStageItem = function(itemId, sectionName, stageKey) {
 };
 
 // 4. Proportional Slider Balancing
+/* --- v19.54 [Stages] - Logic V3 (Fixed Slider Math) --- */
 function balanceStageSliders(changedKey, newValue) {
     const stages = budget.targetLock.stages;
     const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
     
-    newValue = Math.max(0, Math.min(100, newValue));
+    // 1. Sanitize Input
+    newValue = parseFloat(newValue);
+    if (isNaN(newValue)) newValue = 0;
     
-    // Check locks
+    // 2. Identify Locked vs Unlocked
     const lockedKeys = validKeys.filter(k => k !== changedKey && stages[k].locked);
     const unlockedKeys = validKeys.filter(k => k !== changedKey && !stages[k].locked);
     
-    const lockedTotal = lockedKeys.reduce((s, k) => s + stages[k].ratio, 0);
+    // 3. Calculate Limits
+    const lockedTotal = lockedKeys.reduce((sum, k) => sum + (stages[k].ratio || 0), 0);
     const maxAvailable = 100 - lockedTotal;
     
+    // 4. Constraint Check: Active slider cannot exceed (100% - Locked Total)
     if (newValue > maxAvailable) newValue = maxAvailable;
+    if (newValue < 0) newValue = 0;
+    
+    // 5. Apply New Value to Active Stage
     stages[changedKey].ratio = newValue;
     
-    const remaining = 100 - newValue - lockedTotal;
+    // 6. Distribute Remainder among Unlocked Stages
+    const remaining = Math.max(0, 100 - newValue - lockedTotal);
     
     if (unlockedKeys.length > 0) {
-        const currentUnlockedTotal = unlockedKeys.reduce((s, k) => s + stages[k].ratio, 0);
+        const currentUnlockedTotal = unlockedKeys.reduce((sum, k) => sum + (stages[k].ratio || 0), 0);
+        
         unlockedKeys.forEach(k => {
-            if (currentUnlockedTotal <= 0) stages[k].ratio = remaining / unlockedKeys.length;
-            else stages[k].ratio = remaining * (stages[k].ratio / currentUnlockedTotal);
+            let newRatio;
+            // Bug Fix: If other sliders are bottomed out (0), distribute remainder equally 
+            // so they can "grow back" when the main slider is reduced.
+            if (currentUnlockedTotal <= 0.01) {
+                newRatio = remaining / unlockedKeys.length;
+            } else {
+                // Otherwise, maintain relative proportions
+                const share = stages[k].ratio / currentUnlockedTotal;
+                newRatio = remaining * share;
+            }
+            stages[k].ratio = newRatio;
         });
     }
 }
@@ -3719,41 +3903,56 @@ window.applyStagePreset = function(presetName) {
     pushToHistory(`Applied ${presetName} preset`);
 };
 
-/* --- v19.54 [Stages] - UI V11 (Stable, Aligned, Live Calc) --- */
+/* --- v19.54 [Stages] - UI V19 (Database Search + Full Titles) --- */
 function showStagesModal() {
     try {
-        // A. Init Data
+        // 1. Setup Data & Constants
         if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
         const tl = budget.targetLock;
         const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+        
+        // DISPLAY MAPPING (Long Titles for Cards, Short for Nav)
+        const STAGE_LABELS = {
+            dev: 'Development',
+            pre: 'Pre-Production',
+            prod: 'Production',
+            post: 'Post-Production',
+            dist: 'Distribution'
+        };
+
         validKeys.forEach(k => { if (!tl.stages[k]) tl.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false }; });
 
-        // B. Data Prep
         const stageData = {};
         validKeys.forEach(k => stageData[k] = { items: [], total: 0 });
         let grandTotal = 0;
         const allItemsFlat = [];
 
+        // 2. Build Columns
         Object.entries(budget.sections).forEach(([sectionName, section]) => {
             section.items.forEach(item => {
-                // Ensure defaults
                 if (!item.stageData) { 
                     item.stageData = {};
-                    let target = 'prod';
-                    const lower = item.description.toLowerCase();
-                    if (/post|edit/.test(lower)) target = 'post';
-                    else if (/pre|cast/.test(lower)) target = 'pre';
-                    else if (/dev|write/.test(lower)) target = 'dev';
-                    item.stageData[target] = { days: item.quantity, rate: item.rate };
+                    if (item.assignedStage) {
+                        const targets = Array.isArray(item.assignedStage) ? item.assignedStage : [item.assignedStage];
+                        targets.forEach(t => { if(validKeys.includes(t)) item.stageData[t] = { days: item.quantity, rate: item.rate }; });
+                    } 
+                    if (Object.keys(item.stageData).length === 0) {
+                        let target = 'prod';
+                        const lower = item.description.toLowerCase();
+                        if (/post|edit|vfx|sound|color/.test(lower)) target = 'post';
+                        else if (/pre|cast|scout|recc/.test(lower)) target = 'pre';
+                        else if (/dev|write|script|pitch|story/.test(lower)) target = 'dev';
+                        else if (/dist|market|fest/.test(lower)) target = 'dist';
+                        item.stageData[target] = { days: item.quantity, rate: item.rate };
+                    }
                 }
-                
                 Object.entries(item.stageData).forEach(([k, d]) => {
                     if (validKeys.includes(k)) {
                         const cost = (parseFloat(d.days)||0) * (parseFloat(d.rate)||0);
                         stageData[k].items.push({...item, _sDays:d.days, _sRate:d.rate, _sCost:cost, _sec:sectionName});
                         stageData[k].total += cost;
                         grandTotal += cost;
-                        if (cost > 0) allItemsFlat.push({ desc: item.description, cost: cost, stage: tl.stages[k].label });
+                        if (cost > 0) allItemsFlat.push({ desc: item.description, cost: cost, stage: STAGE_LABELS[k] });
                     }
                 });
             });
@@ -3761,14 +3960,56 @@ function showStagesModal() {
 
         const topSpenders = allItemsFlat.sort((a, b) => b.cost - a.cost).slice(0, 5);
 
-        // C. Render Helpers
+        // --- HELPER: Card HTML ---
+        const getCardHTML = (item, key) => `
+            <div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" data-item-id="${item.id}" data-stage="${key}">
+                <button onclick="removeStageItem('${item.id}', '${item._sec}', '${key}')" class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">&times;</button>
+                <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${item._sec}')"><div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-500 hover:text-white transition-colors">${item.crew?.name?.charAt(0) || '👤'}</div><div class="min-w-0 flex-1"><div class="text-xs font-bold text-gray-700 truncate" title="${item.description}">${item.description}</div></div><div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${key}">${formatAbbreviated(item._sCost, displayCurrency)}</div></div>
+                <div class="flex gap-2 items-center h-7">
+                    <div class="relative w-14 h-full"><span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span><input type="number" value="${item._sDays}" class="w-full h-full pl-4 pr-1 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem(this, '${item.id}', '${item._sec}', 'days')"></div>
+                    <div class="relative flex-1 h-full"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span><input type="number" value="${item._sRate}" class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem(this, '${item.id}', '${item._sec}', 'rate')"></div>
+                </div>
+            </div>`;
+
+        // 3. Render Views
         const renderSetupCard = () => `
-            <div id="card-setup" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center">
-                <div class="p-3 bg-gray-900 text-white flex-shrink-0"><h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3></div>
-                <div class="p-3 space-y-4 flex-grow overflow-y-auto">
+            <div id="card-setup" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center relative">
+                <div class="p-3 bg-gray-900 text-white flex-shrink-0 flex justify-between items-center">
+                    <h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3>
+                    <button onclick="toggleBulkActionsMenu()" class="text-gray-400 hover:text-white transition-colors" title="Bulk Actions">⚙️</button>
+                </div>
+                
+                <div id="bulkActionsMenu" class="hidden absolute top-10 right-2 w-48 bg-white border border-gray-200 shadow-xl rounded-lg z-50 overflow-hidden text-left">
+                    <div class="p-2 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase bg-gray-50">Bulk Actions</div>
+                    <button onclick="handleStageBulkAction('syncDays')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2"><span>📅</span> Sync Days to Stage</button>
+                    <button onclick="handleStageBulkAction('dedupe')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 flex items-center gap-2"><span>🧹</span> Remove Duplicates</button>
+                    <div class="border-t border-gray-100 my-1"></div>
+                    <button onclick="handleStageBulkAction('lockAll')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"><span>🔒</span> Lock All</button>
+                    <button onclick="handleStageBulkAction('unlockAll')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"><span>🔓</span> Unlock All</button>
+                </div>
+
+                <div class="p-3 space-y-4 flex-grow overflow-y-auto" onclick="document.getElementById('bulkActionsMenu').classList.add('hidden')">
                     <div><label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label><div class="flex items-center gap-2 border-b border-gray-300 pb-1"><span class="text-xl text-gray-400">$</span><input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-xl font-bold w-full outline-none text-gray-800" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders(); saveBudget();"></div></div>
                     <div class="bg-blue-50 p-2 rounded border border-blue-100"><label class="text-[10px] text-blue-500 uppercase font-bold mb-1 block">Auto-Distribute</label><div class="flex gap-1"><select id="distPresetSelect" class="text-xs border rounded p-1 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none"><option value="" disabled selected>Select Type...</option>${Object.keys(STAGE_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('')}</select><button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 shadow-sm">Apply</button></div></div>
-                    <div class="space-y-3">${validKeys.map(k => `<div class="bg-gray-50 p-2 rounded border border-gray-100 relative"><div class="flex justify-between mb-1 text-[10px] font-bold items-center"><div class="flex items-center gap-1"><button onclick="toggleStageLock('${k}')" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none">${tl.stages[k].locked ? '🔒' : '🔓'}</button><span>${tl.stages[k].label}</span></div><span class="text-blue-600 font-mono" id="disp_amt_${k}"></span></div><div class="flex items-center gap-2"><input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}><div class="relative w-12 flex-shrink-0"><input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}><span class="absolute right-0 top-0 text-xs text-gray-400">%</span></div></div></div>`).join('')}<div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div></div>
+                    <div class="space-y-3">${validKeys.map(k => `
+                        <div class="bg-gray-50 p-2 rounded border border-gray-100 relative stage-control-group" data-key="${k}">
+                            <div class="flex justify-between mb-1 text-[10px] font-bold items-center">
+                                <div class="flex items-center gap-1">
+                                    <button onclick="toggleStageLock('${k}', this)" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none lock-btn">${tl.stages[k].locked ? '🔒' : '🔓'}</button>
+                                    <span>${STAGE_LABELS[k]}</span>
+                                </div>
+                                <span class="text-blue-600 font-mono" id="disp_amt_${k}"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}>
+                                <div class="relative w-12 flex-shrink-0">
+                                    <input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}>
+                                    <span class="absolute right-0 top-0 text-xs text-gray-400">%</span>
+                                </div>
+                            </div>
+                        </div>`).join('')}
+                        <div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div>
+                    </div>
                 </div>
             </div>`;
 
@@ -3785,9 +4026,12 @@ function showStagesModal() {
             const cap = tl.totalCap * (config.ratio / 100);
             return `
             <div id="card-${key}" class="stage-card min-w-[300px] w-full sm:w-[320px] flex-shrink-0 flex flex-col h-full bg-white border-r border-gray-200 snap-center">
-                <div class="p-2 bg-white border-b border-gray-100 flex-shrink-0 sticky top-0 z-20 shadow-sm">
+                <div class="p-2 bg-white border-b border-gray-100 flex-shrink-0 sticky top-0 z-20 shadow-sm stage-header-group" data-key="${key}">
                     <div class="flex justify-between items-center mb-2 h-7">
-                        <div class="flex items-center gap-1.5 overflow-hidden"><button onclick="toggleStageLock('${key}')" class="text-gray-400 hover:text-blue-600 flex-shrink-0 focus:outline-none" title="Lock">${config.locked ? '🔒' : '🔓'}</button><span class="font-bold text-gray-800 text-xs truncate" title="${config.label}">${config.label}</span></div>
+                        <div class="flex items-center gap-1.5 overflow-hidden">
+                            <button onclick="toggleStageLock('${key}', this)" class="text-gray-400 hover:text-blue-600 flex-shrink-0 focus:outline-none lock-btn" title="Lock">${config.locked ? '🔒' : '🔓'}</button>
+                            <span class="font-bold text-gray-800 text-xs truncate" title="${STAGE_LABELS[key]}">${STAGE_LABELS[key]}</span>
+                        </div>
                         <div class="flex items-center gap-3">
                             <div class="relative w-12 h-6 flex items-center bg-gray-50 border border-gray-200 rounded px-1"><input type="number" id="header_perc_${key}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-transparent focus:outline-none no-spinner pr-2" data-stage-key="${key}" ${config.locked ? 'disabled style="opacity:0.5"' : ''} onfocus="this.select()"><span class="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 select-none">%</span></div>
                             <div class="flex items-center h-6 bg-gray-50 border border-gray-200 rounded px-1.5"><span class="text-[8px] text-gray-400 uppercase mr-1 font-bold">Days:</span><input type="number" value="${config.days}" data-global-days="${key}" class="w-8 text-center text-[10px] bg-transparent font-bold text-blue-600 focus:outline-none no-spinner" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));} else { updateGlobalDays('${key}', this.value); }"></div>
@@ -3795,23 +4039,40 @@ function showStagesModal() {
                     </div>
                     <div class="w-full bg-gray-100 rounded-full h-1 mb-1 overflow-hidden"><div id="bar-${key}" class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div></div>
                     <div class="flex justify-between text-[9px] text-gray-400 font-mono mb-1"><span id="total-${key}">${formatAbbreviated(data.total, displayCurrency)}</span><span id="limit-${key}">Cap: ${formatAbbreviated(cap, displayCurrency)}</span></div>
-                    <button onclick="handleStageAddItem('${key}')" class="w-full py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-[10px] font-bold border border-blue-100 transition-colors">+ Item</button>
+                    <button onclick="openStageSearch('${key}')" class="w-full py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-[10px] font-bold border border-blue-100 transition-colors">+ Item</button>
                 </div>
                 <div class="stage-drop-zone flex-grow overflow-y-auto p-2 space-y-2 bg-gray-50 h-full" data-stage-key="${key}">
-                    ${data.items.map(item => `
-                        <div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" data-item-id="${item.id}" data-stage="${key}">
-                            <button onclick="removeStageItem('${item.id}', '${item._sec}', '${key}')" class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">&times;</button>
-                            <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${item._sec}')"><div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-500 hover:text-white transition-colors">${item.crew?.name?.charAt(0) || '👤'}</div><div class="min-w-0 flex-1"><div class="text-xs font-bold text-gray-700 truncate" title="${item.description}">${item.description}</div></div><div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${key}">${formatAbbreviated(item._sCost, displayCurrency)}</div></div>
-                            <div class="flex gap-2 items-center h-7">
-                                <div class="relative w-10 h-full"><span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span><input type="number" value="${item._sDays}" class="w-full h-full pl-3 pr-0.5 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'days', this.value)"></div>
-                                <div class="relative flex-1 h-full"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span><input type="number" value="${item._sRate}" class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" onfocus="this.dataset.old=this.value; this.value=''" onblur="if(this.value===''){this.value=this.dataset.old; this.dispatchEvent(new Event('input'));}" oninput="updateStageItem('${item.id}', '${item._sec}', '${key}', 'rate', this.value)"></div>
-                            </div>
-                        </div>`).join('')}
+                    ${data.items.map(item => getCardHTML(item, key)).join('')}
                 </div>
             </div>`;
         };
 
-        const content = `<div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative"><div class="flex items-center gap-2 overflow-x-auto h-8 px-2 bg-gray-50 border-b flex-shrink-0 no-scrollbar">${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth'})" class="text-[10px] font-bold uppercase text-gray-500 hover:text-blue-600 px-2">${k}</button>`).join('')}</div><div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth">${renderSetupCard()}${renderOverviewCard()}${validKeys.map(k => renderStageColumn(k)).join('')}</div></div>`;
+        // --- NEW SEARCH OVERLAY HTML ---
+        const searchOverlayHTML = `
+            <div id="stageSearchOverlay" class="absolute inset-0 bg-black/50 z-[100] hidden flex items-start justify-center pt-10">
+                <div class="bg-white rounded-lg shadow-2xl w-80 sm:w-96 flex flex-col max-h-[80%] overflow-hidden animate-fade-in-up">
+                    <div class="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h4 class="text-xs font-bold uppercase text-gray-500">Database Search</h4>
+                        <button onclick="closeStageSearch()" class="text-gray-400 hover:text-red-500 text-lg leading-none">&times;</button>
+                    </div>
+                    <div class="p-2 border-b border-gray-100">
+                        <input id="stageSearchInput" type="text" placeholder="Search items (e.g. Director, Camera)..." class="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" oninput="filterStageSearch()">
+                    </div>
+                    <div id="stageSearchResults" class="flex-grow overflow-y-auto p-2 space-y-1 bg-white"></div>
+                </div>
+            </div>
+        `;
+
+        const content = `
+            <div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative">
+                ${searchOverlayHTML}
+                <div class="flex items-center gap-2 overflow-x-auto h-8 px-2 bg-gray-50 border-b flex-shrink-0 no-scrollbar">
+                    ${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth'})" class="text-[10px] font-bold uppercase text-gray-500 hover:text-blue-600 px-2">${k.toUpperCase()}</button>`).join('')}
+                </div>
+                <div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth">
+                    ${renderSetupCard()}${renderOverviewCard()}${validKeys.map(k => renderStageColumn(k)).join('')}
+                </div>
+            </div>`;
 
         createModal('stagesView', '', content, 'max-w-none w-fit bg-transparent shadow-none');
         const header = document.querySelector('#stagesViewModal .bg-gray-50.border-b');
@@ -3819,7 +4080,6 @@ function showStagesModal() {
         const body = document.getElementById('stagesViewBody');
         if(body) body.style.padding = '0';
 
-        // E. Bindings (No-Flash Logic)
         setTimeout(() => {
             const bindInput = (el, isInput) => {
                 el.addEventListener(isInput ? 'change' : 'input', (e) => {
@@ -3833,6 +4093,7 @@ function showStagesModal() {
             window.updateAllHeaders = () => {
                 let totalPct = 0;
                 let grandLiveTotal = 0;
+                const activeEl = document.activeElement; 
                 validKeys.forEach(key => {
                     const cfg = budget.targetLock.stages[key];
                     const cap = budget.targetLock.totalCap * (cfg.ratio / 100);
@@ -3840,18 +4101,16 @@ function showStagesModal() {
                     const sIn = document.querySelector(`.stage-slider[data-stage-key="${key}"]`);
                     const nIn = document.getElementById(`setup_perc_${key}`);
                     const hIn = document.getElementById(`header_perc_${key}`);
-                    if(sIn) sIn.value = cfg.ratio;
-                    if(nIn && document.activeElement !== nIn) nIn.value = cfg.ratio.toFixed(1);
-                    if(hIn && document.activeElement !== hIn) hIn.value = cfg.ratio.toFixed(1);
+                    if(sIn && activeEl !== sIn) sIn.value = cfg.ratio;
+                    if(nIn && activeEl !== nIn) nIn.value = cfg.ratio.toFixed(1);
+                    if(hIn && activeEl !== hIn) hIn.value = cfg.ratio.toFixed(1);
                     document.getElementById(`disp_amt_${key}`).textContent = formatAbbreviated(cap, displayCurrency);
                     document.getElementById(`limit-${key}`).textContent = `Cap: ${formatAbbreviated(cap, displayCurrency)}`;
-                    
                     let liveTotal = 0;
                     Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
                         if(i.stageData && i.stageData[key]) liveTotal += (parseFloat(i.stageData[key].days)||0) * (parseFloat(i.stageData[key].rate)||0);
                     }));
                     grandLiveTotal += liveTotal;
-                    
                     document.getElementById(`total-${key}`).textContent = formatAbbreviated(liveTotal, displayCurrency);
                     const bar = document.getElementById(`bar-${key}`);
                     if(bar) {
@@ -3860,6 +4119,7 @@ function showStagesModal() {
                         bar.className = `h-1 rounded-full transition-all duration-300 ${w>100?'bg-red-500':'bg-blue-500'}`;
                     }
                 });
+                // Overview & Ring
                 const ovTotal = document.getElementById('ovGrandTotal');
                 const ovCap = document.getElementById('ovTotalCap');
                 const ringTxt = document.getElementById('burnRateText');
@@ -3876,27 +4136,190 @@ function showStagesModal() {
                 }
                 const totDisp = document.getElementById('totalRatioDisplay');
                 if(totDisp) {
-                    totDisp.textContent = `Total: ${Math.round(totalPct)}%`;
-                    totDisp.className = `text-center text-[10px] mt-2 font-bold ${Math.round(totalPct)===100?'text-green-600':'text-red-500'}`;
+                    const rounded = Math.round(totalPct);
+                    totDisp.textContent = `Total: ${rounded}%`;
+                    totDisp.className = `text-center text-[10px] mt-2 font-bold ${rounded===100?'text-green-600':'text-red-500'}`;
                 }
             };
 
-            window.updateStageItem = (itemId, sectionName, stageKey, field, val) => {
+            window.updateStageItem = (inputEl, itemId, sectionName, field) => {
+                const stageKey = inputEl.closest('[data-stage]').dataset.stage;
                 const item = budget.sections[sectionName].items.find(i => i.id === itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
-                    item.stageData[stageKey][field] = parseFloat(val) || 0;
+                    const val = parseFloat(inputEl.value) || 0;
+                    item.stageData[stageKey][field] = val;
                     syncStageToMain(item);
-                    saveBudget(); // <--- PERSIST DATA
+                    saveBudget(); 
                     const cost = item.stageData[stageKey].days * item.stageData[stageKey].rate;
                     const cEl = document.getElementById(`cost-${itemId}-${stageKey}`);
                     if(cEl) cEl.textContent = formatAbbreviated(cost, displayCurrency);
-                    updateAllHeaders(); // Live Header Update
-                    render(); // Live Main BG Update
+                    updateAllHeaders(); 
+                    render();
                 }
             };
 
+            // --- DATABASE SEARCH LOGIC ---
+            let activeSearchStage = null;
+            
+            window.openStageSearch = (key) => {
+                activeSearchStage = key;
+                const overlay = document.getElementById('stageSearchOverlay');
+                const input = document.getElementById('stageSearchInput');
+                overlay.classList.remove('hidden');
+                input.value = '';
+                input.focus();
+                filterStageSearch(); // Show all initially
+            };
+
+            window.closeStageSearch = () => {
+                document.getElementById('stageSearchOverlay').classList.add('hidden');
+                activeSearchStage = null;
+            };
+
+            window.filterStageSearch = () => {
+                const term = document.getElementById('stageSearchInput').value.toLowerCase();
+                const container = document.getElementById('stageSearchResults');
+                const items = (typeof FILM_INDUSTRY_ITEMS !== 'undefined') ? FILM_INDUSTRY_ITEMS : [];
+                
+                const matches = items.filter(i => i.description.toLowerCase().includes(term));
+                
+                if (matches.length === 0 && term.length > 0) {
+                     container.innerHTML = `<div onclick="confirmAddCustomStageItem('${term}')" class="p-2 text-xs text-blue-600 font-bold cursor-pointer hover:bg-blue-50 border border-dashed border-blue-200 rounded text-center">+ Create Custom: "${term}"</div>`;
+                     return;
+                }
+
+                container.innerHTML = matches.map(i => `
+                    <div onclick="addDatabaseItemToStage('${i.description}', ${i.rate}, '${i.unit}')" class="flex justify-between items-center p-2 hover:bg-gray-100 rounded cursor-pointer border-b border-gray-50 last:border-0 group">
+                        <div>
+                            <div class="text-xs font-bold text-gray-700 group-hover:text-blue-600">${i.description}</div>
+                            <div class="text-[9px] text-gray-400">${i.unit}</div>
+                        </div>
+                        <div class="text-xs font-mono font-bold text-gray-500">${formatAbbreviated(i.rate, displayCurrency)}</div>
+                    </div>
+                `).join('');
+            };
+
+            window.addDatabaseItemToStage = (desc, rate, unit) => {
+                if(!activeSearchStage) return;
+                
+                // 1. Create Logic (SAFE MATH UPDATE)
+                const safeRate = parseFloat(rate) || 0; // <--- This prevents NaN
+                
+                const newItem = {
+                    id: Date.now().toString(),
+                    description: desc,
+                    quantity: budget.targetLock.stages[activeSearchStage].days || 1,
+                    rate: safeRate, // Use safe rate
+                    unit: unit || 'Day',
+                    section: 'Above The Line', 
+                    stageData: {},
+                    assignedStage: activeSearchStage
+                };
+                newItem.stageData[activeSearchStage] = { days: newItem.quantity, rate: safeRate };
+                
+                // ... rest of function remains the same ...
+                
+                // Add to Budget
+                let secKey = 'Above The Line';
+                if(!budget.sections[secKey]) secKey = Object.keys(budget.sections)[0];
+                budget.sections[secKey].items.push(newItem);
+                
+                // 2. Surgical Insert
+                pushToHistory(`Added ${desc} to ${STAGE_LABELS[activeSearchStage]}`);
+                const container = document.querySelector(`.stage-drop-zone[data-stage-key="${activeSearchStage}"]`);
+                if(container) {
+                    // Use Safe Rate here too
+                    const vizItem = { ...newItem, _sDays: newItem.quantity, _sRate: safeRate, _sCost: newItem.quantity * safeRate, _sec: secKey };
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = getCardHTML(vizItem, activeSearchStage);
+                    container.appendChild(wrapper.firstElementChild);
+                }
+
+                saveBudget();
+                updateAllHeaders();
+                render();
+                closeStageSearch();
+            };
+
+            window.confirmAddCustomStageItem = (term) => {
+                addDatabaseItemToStage(term, 0, 'Day'); // Default custom item
+            };
+
+            // --- BULK ACTIONS ---
+            window.handleStageBulkAction = (action) => {
+                const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+                let changed = false;
+                if (action === 'lockAll' || action === 'unlockAll') {
+                    const isLocked = (action === 'lockAll');
+                    validKeys.forEach(k => budget.targetLock.stages[k].locked = isLocked);
+                    document.querySelectorAll('.lock-btn').forEach(btn => btn.textContent = isLocked ? '🔒' : '🔓');
+                    document.querySelectorAll('input[data-stage-key]').forEach(inp => {
+                        inp.disabled = isLocked;
+                        inp.style.opacity = isLocked ? '0.5' : '1';
+                    });
+                    changed = true;
+                }
+                else if (action === 'syncDays') {
+                    if(confirm("Sync Days will overwrite individual item days with the Stage Days setting. Continue?")) {
+                        validKeys.forEach(k => {
+                            const targetDays = budget.targetLock.stages[k].days;
+                            if(targetDays > 0) {
+                                Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                                    if(i.stageData && i.stageData[k]) {
+                                        i.stageData[k].days = targetDays;
+                                        const domInp = document.querySelector(`.stage-card-item[data-item-id="${i.id}"][data-stage="${k}"] input[oninput*="'days'"]`);
+                                        if(domInp) domInp.value = targetDays;
+                                    }
+                                }));
+                            }
+                        });
+                        changed = true;
+                        updateAllHeaders();
+                    }
+                } 
+                else if (action === 'dedupe') {
+                    if(confirm("Remove duplicates? This keeps only the first instance of an item in each stage.")) {
+                        validKeys.forEach(k => {
+                            const seen = new Set();
+                            Object.values(budget.sections).forEach(sec => {
+                                sec.items.forEach(i => {
+                                    if(i.stageData && i.stageData[k]) {
+                                        const key = i.description.toLowerCase();
+                                        if(seen.has(key)) { 
+                                            delete i.stageData[k]; 
+                                            const domCard = document.querySelector(`.stage-card-item[data-item-id="${i.id}"][data-stage="${k}"]`);
+                                            if(domCard) domCard.remove();
+                                        }
+                                        else seen.add(key);
+                                    }
+                                });
+                            });
+                        });
+                        changed = true;
+                        updateAllHeaders();
+                    }
+                }
+                document.getElementById('bulkActionsMenu').classList.add('hidden');
+                if (changed) {
+                    saveBudget(); 
+                    render(); 
+                }
+            };
+
+            window.toggleBulkActionsMenu = () => document.getElementById('bulkActionsMenu').classList.toggle('hidden');
+            window.toggleStageLock = (key, btnEl) => {
+                budget.targetLock.stages[key].locked = !budget.targetLock.stages[key].locked;
+                saveBudget();
+                const allLockBtns = document.querySelectorAll(`button[onclick^="toggleStageLock('${key}'"]`);
+                allLockBtns.forEach(btn => btn.textContent = budget.targetLock.stages[key].locked ? '🔒' : '🔓');
+                const inputs = document.querySelectorAll(`input[data-stage-key="${key}"]`);
+                inputs.forEach(inp => {
+                    inp.disabled = budget.targetLock.stages[key].locked;
+                    inp.style.opacity = inp.disabled ? '0.5' : '1';
+                });
+            };
+            
             window.updateGlobalDays = (key, val) => { budget.targetLock.stages[key].days = parseFloat(val)||0; saveBudget(); updateAllHeaders(); };
-            window.toggleStageLock = (key) => { budget.targetLock.stages[key].locked = !budget.targetLock.stages[key].locked; showStagesModal(); };
             
             updateAllHeaders(); 
             initializeStageDragAndDrop();
@@ -4049,50 +4472,6 @@ window.addStageItemToBudget = function(desc, rate, unit, stageKey, targetSection
     }
 };
 
-function initializeStageDragAndDrop() {
-    const containers = document.querySelectorAll('.stage-drop-zone');
-    containers.forEach(container => {
-        if(container._sortableStage) return;
-
-        container._sortableStage = new Sortable(container, {
-            group: { name: 'stages-shared', pull: 'clone', put: true },
-            animation: 0, 
-            ghostClass: 'bg-blue-50',
-            dragClass: 'opacity-90',
-            delay: 150, 
-            delayOnTouchOnly: true, 
-            sort: false,
-            
-            onEnd: function(evt) {
-                const itemEl = evt.item;
-                const newStageKey = evt.to.dataset.stageKey;
-                const oldStageKey = evt.from.dataset.stageKey;
-                if (newStageKey === oldStageKey) return; 
-
-                const itemId = itemEl.dataset.itemId;
-                const sectionName = itemEl.dataset.originSection;
-                const section = budget.sections[sectionName];
-
-                if (section) {
-                    const item = section.items.find(i => i.id === itemId);
-                    if (item) {
-                        let stages = Array.isArray(item.assignedStage) ? item.assignedStage : [item.assignedStage || 'prod'];
-                        const isCtrlPressed = evt.originalEvent.ctrlKey || evt.originalEvent.metaKey;
-
-                        if (!stages.includes(newStageKey)) stages.push(newStageKey);
-                        if (!isCtrlPressed) stages = stages.filter(s => s !== oldStageKey);
-                        
-                        item.assignedStage = stages;
-                        pushToHistory(isCtrlPressed ? `Cloned item to ${newStageKey.toUpperCase()}` : `Moved item to ${newStageKey.toUpperCase()}`);
-
-                        itemEl.remove();
-                        showStagesModal(); 
-                    }
-                }
-            }
-        });
-    });
-}
 
 /* --- Navigation Helpers --- */
 window.scrollToStageCard = (id) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); updateActiveNav(id); };
@@ -4847,204 +5226,157 @@ window.permDeleteDoc = (idx) => {
     }
 };
 
-/* --- v19.54 Document Viewer Modal --- */
+/* --- v19.54 Document Viewer Modal & Safe PDF Export --- */
 function openDocumentViewer(docId, context = 'hub') {
     const doc = budget.documents.find(d => d.id === docId);
     if (!doc) return;
 
-    // Determine current state
-    const hasContent = !!doc.content;
+    // 1. Determine State
+    const isTemplate = doc.content && doc.content.type === 'template';
     const hasAttachment = budget.attachments && budget.attachments.some(a => a.docId === docId);
+
+    // 2. Safe Title Logic (Escapes quotes to prevent syntax errors)
+    let rawLabel = (doc.content && doc.content.templateLabel) ? doc.content.templateLabel : doc.label;
+    // Remove special chars for the filename, keep spaces for the title
+    const safeFilename = rawLabel.replace(/[^a-z0-9 ]/gi, '_'); 
+    
+    // We escape the label for HTML attributes to prevent breaking the onclick
+    const escapedLabel = rawLabel.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 
     let viewerContent = '';
 
-    if (!hasContent && !hasAttachment) {
-        // Blank state – offer two primary actions
-                    viewerContent = `
-                <div class="p-6 max-w-4xl mx-auto">
+    // --- SCENARIO A: Template (Crew List, etc.) ---
+    if (isTemplate) {
+        if (doc.content.templateId === 'crewList') {
+            viewerContent = `
+                <div class="p-6 max-w-4xl mx-auto" id="docViewerContent">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-800">${doc.content.templateLabel || doc.label}</h3>
+                        <h3 class="text-xl font-bold text-gray-800">${rawLabel}</h3>
                         <div class="flex gap-3 items-center">
-                            ${doc.content.templateId === 'crewList' ? `
-                                <button onclick="autoFillCrewList('${docId}')" 
-                                        class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition-all">
-                                    <span class="text-xl">✨</span>
-                                    Fill
-                                </button>` : ''}
-                            <button onclick="downloadCrewList('${docId}')" 
-                                    class="w-12 h-12 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md flex items-center justify-center transition-all"
-                                    title="Download as JPEG or PDF">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                           </button>
-                        </div>
-                    </div>
-                    <div id="crewListTable" class="space-y-8">
-                        ${doc.content.templateId === 'crewList' ? renderCrewListTable(doc) : 
-                            `<div class="prose prose-sm max-w-none p-8 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                                <p class="text-gray-600 italic">Preview for "${doc.label}"</p>
-                                <p class="text-xs text-gray-400 mt-4">Content rendering for this template is in development.</p>
-                            </div>`
-                        }
-                    </div>
-                </div>`;
-    } else {
-        // Document has content or attachment – existing attachment handling (unchanged)
-        const attachment = budget.attachments?.find(a => a.docId === docId);
-
- /* --- v19.54 Template Viewer Conditional v19.54 --- */
-        if (doc.content && doc.content.type === 'template') {
-            if (doc.content.templateId === 'crewList') {
-/* --- v19.54 Crew List Fill & Download v19.54 --- */
-                viewerContent = `
-                <div class="p-6 max-w-4xl mx-auto">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-800">${doc.content.templateLabel || doc.label}</h3>
-                        <div class="flex gap-3 items-center">
-                            <button onclick="autoFillCrewList('${docId}')" 
-                                    class="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition-all">
-                                <span class="text-xl">✨</span>
-                                Fill
+                            <button onclick="autoFillCrewList('${docId}')" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md transition-all text-sm">
+                                <span>✨</span> Fill
                             </button>
-                            <button onclick="downloadCrewList('${docId}')" 
-                                    class="w-12 h-12 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md flex items-center justify-center transition-all"
-                                    title="Download Crew List (JPEG / PDF)">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
+                            <button onclick="handleDocumentShare('${safeFilename}')" class="w-10 h-10 bg-gray-800 text-white rounded-lg hover:bg-gray-900 shadow-md flex items-center justify-center transition-all" title="Download PDF">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             </button>
                         </div>
                     </div>
-                    <div id="crewListTable" class="space-y-8">
+                    <div id="crewListTable" class="space-y-8 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
                         ${renderCrewListTable(doc)}
                     </div>
                 </div>`;
-/* --- v19.54 Generic Template Full-Page Snapshot for Publish v19.54 --- */
-            } else {
-                // Generic template – full-page white layout for reliable publish/share snapshot
-                viewerContent = `
-                <div class="p-12 bg-white" style="min-height: 100vh;">
+        } else {
+            // Generic Template
+            viewerContent = `
+                <div class="p-12 bg-white" id="docViewerContent" style="min-height: 100vh;">
                     <div class="max-w-4xl mx-auto">
-                        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">${budget.projectName || 'Project'} - ${doc.label}</h1>
+                        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">${budget.projectName || 'Project'} - ${rawLabel}</h1>
                         <p class="text-center text-gray-500 mb-12">Generated: ${new Date().toLocaleDateString()}</p>
                         <div class="bg-gray-50 rounded-xl border border-gray-200 p-20 text-center">
-                            <p class="text-3xl text-gray-700 mb-6">${doc.label}</p>
-                            <p class="text-xl text-gray-500 italic">Document content in development</p>
-                            <p class="text-sm text-gray-400 mt-12">This page is a snapshot for sharing and preview.</p>
-                        </div>
-                        <div class="mt-32 text-center text-xs text-gray-400">
-                            Generated by mooBudgetTool
+                            <p class="text-3xl text-gray-700 mb-6">${rawLabel}</p>
+                            <p class="text-xl text-gray-500 italic">Template Content</p>
                         </div>
                     </div>
+                    <div class="fixed bottom-6 right-6">
+                         <button onclick="handleDocumentShare('${safeFilename}')" class="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 transition-transform font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Download PDF
+                        </button>
+                    </div>
                 </div>`;
-            }
         }
-                else if (attachment && attachment.previewContent) {
+    } 
+    // --- SCENARIO B: Attachment (File) ---
+    else if (hasAttachment) {
+        const attachment = budget.attachments.find(a => a.docId === docId);
+        if (attachment && attachment.previewContent) {
             const prev = attachment.previewContent;
-            const editable = isEditableAttachment(attachment);
+            
             let previewHTML = '';
-            let editorMode = false; // Future: could track per-attachment
-
-            if (prev.type === 'image') {
-                previewHTML = `<img src="${prev.data}" alt="${attachment.name}" class="max-w-full h-auto rounded-lg shadow-lg mx-auto">`;
-            }
-            else if (prev.type === 'pdf') {
-                previewHTML = `
-                    <div class="text-center">
-                        <img src="${prev.thumbnail}" alt="PDF Preview" class="max-w-full h-auto rounded-lg shadow-lg mx-auto mb-4">
-                        <p class="text-sm text-gray-600">PDF • ${prev.pageCount} pages</p>
-                        <p class="text-xs text-gray-400 mt-2">Full editable view coming soon</p>
-                    </div>`;
-            }
-            else if (prev.type === 'docx') {
-                previewHTML = prev.html;
-            }
-            else if (prev.type === 'xlsx') {
-                previewHTML = prev.html;
-            }
-            else if (prev.type === 'text') {
-                previewHTML = `<pre class="text-xs bg-gray-100 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">${prev.content}</pre>`;
-            }
-            else {
-                previewHTML = `<p class="text-gray-500 text-center py-12">Preview not available for this file type.</p>`;
-            }
+            if (prev.type === 'image') previewHTML = `<img src="${prev.data}" class="max-w-full h-auto rounded-lg shadow-lg mx-auto">`;
+            else if (prev.type === 'pdf') previewHTML = `<div class="text-center"><img src="${prev.thumbnail}" class="max-w-full h-auto rounded-lg shadow-lg mx-auto mb-4"><p>PDF • ${prev.pageCount} pages</p></div>`;
+            else if (prev.type === 'text' || prev.type === 'docx') previewHTML = prev.html || `<pre class="whitespace-pre-wrap">${prev.content}</pre>`;
+            else previewHTML = `<p class="text-gray-500 py-12 text-center">Preview not available.</p>`;
 
             viewerContent = `
-                <div class="p-6">
+                <div class="p-6" id="docViewerContent">
                     <div class="flex justify-between items-center mb-6">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-800">${doc.label}</h3>
-                            <p class="text-sm text-gray-600 mt-1">Attached: ${attachment.name}</p>
+                            <h3 class="text-xl font-bold text-gray-800">${rawLabel}</h3>
+                            <p class="text-sm text-gray-600 mt-1">File: ${attachment.name}</p>
                         </div>
-                        <div class="flex items-center gap-3">
-                            ${editable ? `
-                                <button id="editAttachmentBtn" 
-                                        onclick="enableAttachmentEditing('${attachment.id}', '${docId}')" 
-                                        class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                    </svg>
-                                    Edit
-                                </button>
-                                <div id="saveControls" class="hidden flex items-center gap-2">
-                                    <button onclick="saveAttachmentEdits('${attachment.id}', '${docId}')" 
-                                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
-                                        Save
-                                    </button>
-                                    <button onclick="cancelAttachmentEditing('${docId}')" 
-                                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-medium">
-                                        Cancel
-                                    </button>
-                                </div>` : ''}
-                            <div class="text-right text-xs text-gray-500">
-                                <div>Size: ${formatFileSize(attachment.size)}</div>
-                                <div>Added: ${new Date(attachment.dateAdded).toLocaleDateString()}</div>
-                            </div>
+                        <div class="flex gap-2">
+                             <button onclick="handleDocumentShare('${safeFilename}')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-bold text-sm">Download</button>
+                             <button onclick="removeAttachmentFromDocument('${attachment.id}', '${docId}')" class="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-bold text-sm">Remove</button>
                         </div>
                     </div>
-                                        <div id="attachmentEditor" class="border rounded-xl shadow-inner p-4 bg-white min-h-96 overflow-auto contenteditable-container" ${editable ? 'contenteditable="false"' : ''}>
+                    <div class="border rounded-xl shadow-inner p-4 bg-white min-h-[400px] overflow-auto">
                         ${previewHTML}
                     </div>
-                    <div class="mt-6 flex justify-center gap-6">
-                        <button onclick="attachFileToDocument('${docId}')" 
-                                class="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                            Replace File
-                        </button>
-                        <button onclick="removeAttachmentFromDocument('${attachment.id}', '${docId}')" 
-                                class="text-sm text-red-600 hover:text-red-800 font-medium">
-                            Remove File
-                        </button>
-                    </div>
                 </div>`;
         }
-        else {
-            viewerContent = `
-                <div class="text-center py-20">
-                    <div class="text-6xl mb-4 opacity-30">📎</div>
-                    <p class="text-gray-500">No preview available</p>
-                </div>`;
-        }
+    } 
+    // --- SCENARIO C: Empty ---
+    else {
+        viewerContent = `
+            <div class="p-12 text-center">
+                <div class="text-6xl mb-4 opacity-20">📄</div>
+                <h3 class="text-xl font-bold text-gray-400">Empty Document</h3>
+                <p class="text-gray-500 mb-8">Upload a file or choose a template.</p>
+                <div class="flex justify-center gap-4">
+                     <button onclick="document.getElementById('docInput_${docId}').click()" class="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Upload File</button>
+                </div>
+            </div>`;
     }
 
-    createModal('documentViewer', doc.label, viewerContent, 'max-w-4xl');
-    
-    // Hide default header actions for cleaner look
+    createModal('documentViewer', rawLabel, viewerContent, 'max-w-5xl');
+
+    // Hide default header for cleaner look
     const header = document.querySelector('#documentViewerModal .bg-gray-50.border-b');
     if (header) header.style.display = 'none';
-    
     const body = document.getElementById('documentViewerBody');
     if (body) body.classList.remove('p-4');
+}
+
+/* --- Updated Share Handler using mBTPublisher --- */
+function handleDocumentShare(filename) {
+    const element = document.getElementById('docViewerContent');
+    const safeName = filename || 'Document';
+
+    // One line to rule them all
+    mBTPublisher.exportToPDF(element, safeName, 'share');
+}
+
+// Overwrite old function name if it exists to prevent errors
+window.downloadCrewList = function(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if(doc) handleDocumentShare(doc.label);
+};
+
+/* --- Helper: PDF/Share Handler --- */
+function handleDocumentShare(filename) {
+    const element = document.getElementById('docViewerContent');
+    if (!element) return alert("Nothing to share!");
+
+    const opt = {
+        margin: 0.5,
+        filename: `${filename.replace(/[^a-z0-9]/gi, '_')}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    if (typeof html2pdf !== 'undefined') {
+        // Temporarily hide buttons for clean PDF
+        const buttons = element.querySelectorAll('button');
+        buttons.forEach(b => b.style.display = 'none');
+        
+        html2pdf().set(opt).from(element).save().then(() => {
+            buttons.forEach(b => b.style.display = ''); // Restore buttons
+        });
+    } else {
+        alert("PDF Saver not loaded. Please refresh.");
+    }
 }
 
 /* --- v19.54 Template Picker & Loader --- */
@@ -5668,64 +6000,77 @@ window.autoAssignRolesFromContacts = function() {
     }
 };
 
-/* --- v19.54 [Stages] - Drag & Drop V11 (Cloning Mode) --- */
+/* --- v19.54 [Stages] - Drag & Drop V17 (Zero-Flicker + Safe Rewire) --- */
 function initializeStageDragAndDrop() {
     const containers = document.querySelectorAll('.stage-drop-zone');
     
     containers.forEach(container => {
-        if (container._sortable) return;
+        // Prevent double-binding on the same container
+        if (container._sortableStage) return;
 
-        container._sortable = new Sortable(container, {
+        container._sortableStage = new Sortable(container, {
             group: {
-                name: 'stages',
-                pull: 'clone', // <--- THIS KEEPS THE ORIGINAL ITEM IN PLACE
+                name: 'stages-shared',
+                pull: 'clone', // Copy to new stage (keep history)
                 put: true
             },
-            animation: 150,
-            sort: false, // Disable sorting within list for performance
-            delay: 100, 
-            delayOnTouchOnly: true,
-            ghostClass: 'bg-blue-100', // Visual feedback
+            animation: 0, 
+            ghostClass: 'bg-blue-50',
+            dragClass: 'opacity-90',
+            delay: 150, 
+            delayOnTouchOnly: true, 
+            sort: false,
             
-            onEnd: function (evt) {
+            onEnd: function(evt) {
                 const itemEl = evt.item;
                 const newStageKey = evt.to.dataset.stageKey;
                 const oldStageKey = evt.from.dataset.stageKey;
                 const itemId = itemEl.dataset.itemId;
 
-                // If dropped in same list, ignore
-                if (newStageKey === oldStageKey) return;
+                // If dropped in the same column, do nothing
+                if (newStageKey === oldStageKey) return; 
 
-                // Remove the temporary DOM element created by Sortable (we re-render properly below)
-                itemEl.remove(); 
-
-                // 1. Locate Item
+                // 1. Data Model Update
                 let foundItem = null;
-                for (const section of Object.values(budget.sections)) {
+                let foundSection = null;
+
+                // Locate the item in the main budget
+                for (const [secName, section] of Object.entries(budget.sections)) {
                     const match = section.items.find(i => i.id === itemId);
-                    if (match) { foundItem = match; break; }
+                    if (match) { foundItem = match; foundSection = secName; break; }
                 }
 
                 if (foundItem) {
                     if (!foundItem.stageData) foundItem.stageData = {};
-
-                    // 2. CLONE LOGIC: Add new stage data (Do NOT delete old)
-                    // We copy the days/rate from the source stage to the new stage as a starting point
-                    const sourceData = foundItem.stageData[oldStageKey] || { days: foundItem.quantity, rate: foundItem.rate };
                     
-                    foundItem.stageData[newStageKey] = { 
-                        days: sourceData.days, 
-                        rate: sourceData.rate 
-                    };
+                    // Copy existing data to new stage
+                    const source = foundItem.stageData[oldStageKey] || { days: foundItem.quantity, rate: foundItem.rate };
+                    foundItem.stageData[newStageKey] = { days: source.days, rate: source.rate };
 
-                    // 3. Sync & Save
+                    // 2. DOM Surgery (Prevent Flicker)
+                    // Update the card's context so it talks to the new stage data
+                    itemEl.dataset.stage = newStageKey;
+                    
+                    // Fix the Remove (X) Button to target the NEW stage
+                    const removeBtn = itemEl.querySelector('button[onclick^="removeStageItem"]');
+                    if (removeBtn) {
+                        removeBtn.setAttribute('onclick', `removeStageItem('${itemId}', '${foundSection}', '${newStageKey}')`);
+                    }
+
+                    // Fix the Cost Display ID so live math works
+                    const costEl = itemEl.querySelector(`[id^="cost-"]`);
+                    if(costEl) costEl.id = `cost-${itemId}-${newStageKey}`;
+
+                    // 3. Save & Recalc (No Modal Refresh)
                     syncStageToMain(foundItem);
                     saveBudget(); 
-                    pushToHistory(`Cloned item to ${budget.targetLock.stages[newStageKey].label}`);
-
-                    // 4. Refresh UI to show the new card and update totals
-                    showStagesModal(); 
-                    render(); 
+                    
+                    // Update the Headers/Bars only (fast)
+                    if(typeof updateAllHeaders === 'function') updateAllHeaders();
+                    
+                    // Silent Background Render (Updates main budget underneath)
+                    // NOTE: We do NOT call showStagesModal() here. That causes the flash.
+                    if(typeof render === 'function') render(); 
                 }
             }
         });
