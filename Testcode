@@ -1218,8 +1218,6 @@ const RenderEngine = {
     }
 };
 
-/* --- P2 --- */
-
 /* --- v19.52 v19.53 --- */
 
 /* --- v19.53 [Interaction] - Toggle Rate Type --- */
@@ -1484,129 +1482,203 @@ function showSettingsModal(defaultTab = 'general') {
     bindSettingsEvents(defaultTab);
 }
 
-/* --- v19.53 Film Industry Database --- */
-/* --- v19.55 [Open Gate v1.0] - Industry Line Item Database --- */
-/* Codename: Open Gate - Removing barriers to production knowledge. */
-/* --- v19.54 [Open Gate v1.1] - Expanded Industry Database --- */
-const FILM_INDUSTRY_ITEMS = [
-    // --- Development (New Section) ---
-    { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
-    { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
-    { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
-    { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
-    { description: 'Researcher', unit: 'Day', rate: 25000 },
-    { description: 'Concept Artist', unit: 'Day', rate: 40000 },
-    { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+/* --- v19.53 Film Industry Database, Open Gate v 1.1 Expanded Industry Database v19.54 --- */
+/* ==========================================================================
+   mBTOG (Open Gate Engine) v1.0
+   The Knowledge Hub: Rates, Contacts, Telemetry, and External Data Ingestion.
+   ========================================================================== */
+/* --- v19.54 [Open Gate] - Industry Database Engine --- */
+const mBTOG = {
+    settings: {
+        optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
+        location: localStorage.getItem('moo_og_loc') || 'Jamaica'
+    },
+    
+    // In-Memory Stores
+    rates: [],    
+    contacts: [], 
+    
+    init() {
+        this.loadRates();
+        this.loadContacts();
+        console.log(`Open Gate Initialized: ${this.rates.length} rates loaded.`);
+    },
 
-    // --- Above the Line ---
-    { description: 'Director', unit: 'Day', rate: 85000 },
-    { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
-    { description: 'Producer', unit: 'Day', rate: 75000 },
-    { description: 'Line Producer', unit: 'Day', rate: 65000 },
-    { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
-    { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
-    { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
-    { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
-
-    // --- Production Dept ---
-    { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
-    { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
-    { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
-    { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
-    { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
-    { description: 'Key PA', unit: 'Day', rate: 20000 },
-    { description: 'Set PA', unit: 'Day', rate: 15000 },
-    { description: 'Office PA', unit: 'Day', rate: 15000 },
-    { description: 'Truck PA', unit: 'Day', rate: 18000 },
-    { description: 'Location Manager', unit: 'Day', rate: 50000 },
-    { description: 'Location Scout', unit: 'Day', rate: 35000 },
-    { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
-    { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
-    { description: 'Security Guard', unit: 'Day', rate: 12000 },
-    { description: 'Craft Service', unit: 'Day', rate: 25000 },
-    { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
-
-    // --- Camera Dept ---
-    { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
-    { description: 'Camera Operator', unit: 'Day', rate: 60000 },
-    { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
-    { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
-    { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
-    { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
-    { description: 'Drone Operator', unit: 'Day', rate: 55000 },
-    { description: 'Camera Utility', unit: 'Day', rate: 25000 },
-
-    // --- Lighting & Grip ---
-    { description: 'Gaffer', unit: 'Day', rate: 55000 },
-    { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
-    { description: 'Electrician', unit: 'Day', rate: 30000 },
-    { description: 'Key Grip', unit: 'Day', rate: 50000 },
-    { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
-    { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
-    { description: 'Grip', unit: 'Day', rate: 30000 },
-    { description: 'Generator Operator', unit: 'Day', rate: 35000 },
-
-    // --- Sound ---
-    { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
-    { description: 'Boom Operator', unit: 'Day', rate: 35000 },
-    { description: 'Sound Utility', unit: 'Day', rate: 25000 },
-
-    // --- Art & Wardrobe ---
-    { description: 'Production Designer', unit: 'Day', rate: 65000 },
-    { description: 'Art Director', unit: 'Day', rate: 50000 },
-    { description: 'Set Decorator', unit: 'Day', rate: 45000 },
-    { description: 'Set Dresser', unit: 'Day', rate: 30000 },
-    { description: 'Props Master', unit: 'Day', rate: 45000 },
-    { description: 'Assistant Props', unit: 'Day', rate: 30000 },
-    { description: 'Costume Designer', unit: 'Day', rate: 55000 },
-    { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
-    { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
-    { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
-    { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
-    { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
-
-    // --- Post-Production ---
-    { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
-    { description: 'Editor', unit: 'Day', rate: 50000 },
-    { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
-    { description: 'Colorist', unit: 'Hour', rate: 15000 },
-    { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
-    { description: 'VFX Artist', unit: 'Day', rate: 55000 },
-    { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
-    { description: 'Composer', unit: 'Flat', rate: 200000 },
-    { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
-];
-
-/* --- v19.54 [Open Gate] - Smart DB Sync --- */
-function ensureDatabaseSeeded() {
-    try {
-        let current = getGlobalItems();
+    // --- 1. Data Loading ---
+    loadRates() {
+        const stored = JSON.parse(localStorage.getItem('prodBudget_v5_globalItems') || '[]');
         
-        // If empty, seed everything
-        if (current.length === 0) {
-            saveGlobalItems(FILM_INDUSTRY_ITEMS);
-            return;
+        // Auto-seed ONLY if empty (Safety fallback)
+        if (stored.length === 0) {
+            console.log("Open Gate: Seeding default database...");
+            this.rates = this._getJamaicaDatabase(); 
+            this.saveRates();
+        } else {
+            this.rates = stored;
         }
+    },
 
-        // Smart Merge: Add missing master items to user's local DB
-        let addedCount = 0;
-        const currentDescMap = new Set(current.map(i => i.description.toLowerCase()));
+    saveRates() {
+        localStorage.setItem('prodBudget_v5_globalItems', JSON.stringify(this.rates));
+    },
 
-        FILM_INDUSTRY_ITEMS.forEach(masterItem => {
-            if (!currentDescMap.has(masterItem.description.toLowerCase())) {
-                current.push(masterItem);
-                addedCount++;
+    loadContacts() {
+        this.contacts = JSON.parse(localStorage.getItem('moo_contacts') || '[]');
+    },
+
+    saveContacts() {
+        localStorage.setItem('moo_contacts', JSON.stringify(this.contacts));
+    },
+
+    // --- 2. Database Options (The requested feature) ---
+    loadJamaicaDefaults() {
+        if(confirm("Load 'Jamaica Database' (2025 Rates)?\n\nThis will add standard Jamaican rates to your database. Existing items will not be deleted.")) {
+            const defaults = this._getJamaicaDatabase();
+            const count = this.ingest(defaults, 'rate');
+            
+            // Refresh UI if Settings is open
+            if(typeof window.switchSettingsTab === 'function') {
+                window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]'));
             }
-        });
-
-        if (addedCount > 0) {
-            saveGlobalItems(current);
-            console.log(`Open Gate: Added ${addedCount} missing roles to local database.`);
+            
+            alert(`Success.\n${count} new items added to your database.`);
         }
-    } catch(e) { console.warn("DB Seed skipped", e); }
-}
-// Run check immediately
-ensureDatabaseSeeded();
+    },
+
+    // --- 3. Ingestion & Telemetry ---
+    async addExternalDatabase(url) {
+        if(!url) return alert("Please enter a valid URL.");
+        alert(`Open Gate Link: Architecture ready.\nTarget: ${url}`);
+    },
+
+    ingest(items, type = 'rate') {
+        let added = 0;
+        if (type === 'rate') {
+            const existing = new Set(this.rates.map(i => i.description.toLowerCase()));
+            items.forEach(i => {
+                if (!existing.has(i.description.toLowerCase())) {
+                    this.rates.push({ description: i.description, unit: i.unit || 'Day', rate: parseFloat(i.rate) || 0 });
+                    added++;
+                }
+            });
+            if (added > 0) this.saveRates();
+        } 
+        return added;
+    },
+
+    broadcastRate(role, rate, unit) {
+        if (!this.settings.optInSharing) return;
+        // console.log("Telemetry:", role, rate);
+    },
+
+    setPrivacy(optIn) {
+        this.settings.optInSharing = optIn;
+        localStorage.setItem('moo_og_share', optIn);
+    },
+
+    search(term, type = 'all') {
+        term = term.toLowerCase();
+        const results = { rates: [], contacts: [] };
+        if (type === 'all' || type === 'rate') results.rates = this.rates.filter(i => i.description.toLowerCase().includes(term));
+        if (type === 'all' || type === 'contact') results.contacts = this.contacts.filter(c => c.name.toLowerCase().includes(term));
+        return results;
+    },
+
+    // --- 4. The Jamaica Database (Default List) ---
+    _getJamaicaDatabase() {
+        return [
+            // --- Development ---
+            { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
+            { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
+            { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
+            { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
+            { description: 'Researcher', unit: 'Day', rate: 25000 },
+            { description: 'Concept Artist', unit: 'Day', rate: 40000 },
+            { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+
+            // --- Above the Line ---
+            { description: 'Director', unit: 'Day', rate: 85000 },
+            { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
+            { description: 'Producer', unit: 'Day', rate: 75000 },
+            { description: 'Line Producer', unit: 'Day', rate: 65000 },
+            { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
+            { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
+            { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
+            { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
+
+            // --- Production Dept ---
+            { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
+            { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
+            { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
+            { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
+            { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
+            { description: 'Key PA', unit: 'Day', rate: 20000 },
+            { description: 'Set PA', unit: 'Day', rate: 15000 },
+            { description: 'Office PA', unit: 'Day', rate: 15000 },
+            { description: 'Truck PA', unit: 'Day', rate: 18000 },
+            { description: 'Location Manager', unit: 'Day', rate: 50000 },
+            { description: 'Location Scout', unit: 'Day', rate: 35000 },
+            { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
+            { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
+            { description: 'Security Guard', unit: 'Day', rate: 12000 },
+            { description: 'Craft Service', unit: 'Day', rate: 25000 },
+            { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
+
+            // --- Camera Dept ---
+            { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
+            { description: 'Camera Operator', unit: 'Day', rate: 60000 },
+            { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
+            { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
+            { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
+            { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
+            { description: 'Drone Operator', unit: 'Day', rate: 55000 },
+            { description: 'Camera Utility', unit: 'Day', rate: 25000 },
+
+            // --- Lighting & Grip ---
+            { description: 'Gaffer', unit: 'Day', rate: 55000 },
+            { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
+            { description: 'Electrician', unit: 'Day', rate: 30000 },
+            { description: 'Key Grip', unit: 'Day', rate: 50000 },
+            { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
+            { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
+            { description: 'Grip', unit: 'Day', rate: 30000 },
+            { description: 'Generator Operator', unit: 'Day', rate: 35000 },
+
+            // --- Sound ---
+            { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
+            { description: 'Boom Operator', unit: 'Day', rate: 35000 },
+            { description: 'Sound Utility', unit: 'Day', rate: 25000 },
+
+            // --- Art & Wardrobe ---
+            { description: 'Production Designer', unit: 'Day', rate: 65000 },
+            { description: 'Art Director', unit: 'Day', rate: 50000 },
+            { description: 'Set Decorator', unit: 'Day', rate: 45000 },
+            { description: 'Set Dresser', unit: 'Day', rate: 30000 },
+            { description: 'Props Master', unit: 'Day', rate: 45000 },
+            { description: 'Assistant Props', unit: 'Day', rate: 30000 },
+            { description: 'Costume Designer', unit: 'Day', rate: 55000 },
+            { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
+            { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
+            { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
+            { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
+            { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
+
+            // --- Post-Production ---
+            { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
+            { description: 'Editor', unit: 'Day', rate: 50000 },
+            { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
+            { description: 'Colorist', unit: 'Hour', rate: 15000 },
+            { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
+            { description: 'VFX Artist', unit: 'Day', rate: 55000 },
+            { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
+            { description: 'Composer', unit: 'Flat', rate: 200000 },
+            { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
+        ];
+    }
+};
+
+// Initialize immediately
+mBTOG.init();
 
 /* --- v19.53 Add Item Modal with Search Engine Update v19.54 --- */
 function showItemSelectorModal(sectionName) {
@@ -1956,6 +2028,7 @@ function handleUpdate(sectionName, itemId, field, value, description) {
     }
 }
 
+/* --- P2 --- */
 
         function handleAddExisting(sectionName, desc, unit, rate) {
             const newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit: unit, multiplier: 1, rate: rate, actual: 0 };
@@ -2152,8 +2225,6 @@ function handleUpdate(sectionName, itemId, field, value, description) {
             render();
         }
 
-/* --- P3 --- */
-
 // --- Settings & AI Handlers ---
 /* --- v19.53 Settings Logic (Search & Line Items) --- */
 window.switchSettingsTab = function(tabName, btn) {
@@ -2197,7 +2268,7 @@ function bindDatabaseEvents() {
                 if(existingIdx >= 0) items.splice(existingIdx, 1);
                 items.unshift({ description: desc, unit, rate }); 
             }
-            saveGlobalItems(items);
+            mBTOG.rates = items; mBTOG.saveRates();
             window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]'));
         }
     });
@@ -2416,11 +2487,34 @@ else if (tabName === 'ai') {
 }
 
  else if (tabName === 'database') {
-        const globalItems = getGlobalItems();
+        const globalItems = mBTOG.rates;;
         const editItem = editingGlobalItemIndex > -1 ? globalItems[editingGlobalItemIndex] : null;
         return `
         <div class="space-y-4">
-            <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100 mb-4"><p class="text-xs text-yellow-800">These items appear first in the "Add Line Item" list.</p></div>
+<div class="bg-gray-100 p-3 rounded mb-4 border border-gray-200">
+                <!-- 1. External Link -->
+                <label class="text-[10px] font-bold text-gray-500 uppercase">🔗 Connect External Database</label>
+                <div class="flex gap-2 mt-1 mb-3">
+                    <input type="text" id="ogExternalUrl" placeholder="https://example.com/rates.json" class="flex-1 text-xs p-2 border rounded">
+                    <button onclick="mBTOG.addExternalDatabase(document.getElementById('ogExternalUrl').value)" class="bg-gray-800 text-white text-xs font-bold px-3 rounded">Connect</button>
+                </div>
+
+                <!-- 2. Local Presets (The Requested Option) -->
+                <label class="text-[10px] font-bold text-gray-500 uppercase block border-t border-gray-200 pt-2 mt-2">📚 Local Presets</label>
+                <button onclick="mBTOG.loadJamaicaDefaults()" class="mt-2 w-full text-left flex items-center gap-3 px-3 py-2 bg-white border border-gray-300 rounded hover:bg-green-50 hover:border-green-200 transition-colors shadow-sm group">
+                    <span class="text-2xl group-hover:scale-110 transition-transform">🇯🇲</span>
+                    <div>
+                        <div class="text-xs font-bold text-gray-800 group-hover:text-green-700">Jamaica Database</div>
+                        <div class="text-[9px] text-gray-400">Load 2025 Standard Industry Rates</div>
+                    </div>
+                </button>
+
+                <!-- 3. Telemetry -->
+                <div class="mt-3 pt-2 border-t border-gray-200 flex items-center gap-2">
+                     <input type="checkbox" id="ogOptIn" ${typeof mBTOG !== 'undefined' && mBTOG.settings.optInSharing ? 'checked' : ''} onchange="mBTOG.setPrivacy(this.checked)">
+                     <span class="text-[10px] text-gray-500">Contribute anonymized rates to Open Gate Global Stats</span>
+                </div>
+            </div>
             
             <form id="addGlobalItemForm" class="grid grid-cols-12 gap-2 items-end bg-gray-50 p-3 rounded-lg border ${editItem ? 'border-blue-300 bg-blue-50' : ''}">
                 <div class="col-span-12 sm:col-span-5"><label class="block text-xs font-semibold text-gray-500 mb-1">Description</label><input type="text" id="dbDesc" aria-label="Description" class="w-full text-sm p-2 border rounded" required value="${editItem ? editItem.description : ''}"></div>
@@ -3082,8 +3176,6 @@ function removeAttachment(id) {
             a.click();
         }
 
-/* --- P4 --- */
-
 /* --- v19.53 Project Management UI Consolidated, Minimal & Fitted --- */
 function renderProjectManagement() {
     const container = document.getElementById('project-management-container');
@@ -3445,7 +3537,7 @@ function renderTemplateEditor(container) {
 
 window.editGlobalItem = function(index) { editingGlobalItemIndex = index; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
 window.cancelEditGlobalItem = function() { editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); };
-window.deleteGlobalItem = function(idx) { if (confirm("Remove item?")) { const items = getGlobalItems(); items.splice(idx, 1); saveGlobalItems(items); if(editingGlobalItemIndex === idx) editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); } };
+window.deleteGlobalItem = function(idx) { if (confirm("Remove item?")) { const items = getGlobalItems(); items.splice(idx, 1); mBTOG.rates = items; mBTOG.saveRates(); if(editingGlobalItemIndex === idx) editingGlobalItemIndex = -1; window.switchSettingsTab('database', document.querySelector('button[onclick*="database"]')); } };
 window.handleRestore = function(index) {
     const trash = JSON.parse(localStorage.getItem(trashKey) || '[]');
     const projectToRestore = trash.splice(index, 1)[0];
@@ -3804,6 +3896,9 @@ const mBTME = {
         });
     }
 };
+
+
+/* --- P3 --- */
 
 /* ==========================================================================
    mBTPublisher (Centralized Export Engine)
@@ -4278,17 +4373,20 @@ function showStagesModal() {
             window.filterStageSearch = () => {
                 const term = document.getElementById('stageSearchInput').value.toLowerCase();
                 const container = document.getElementById('stageSearchResults');
-                const items = (typeof FILM_INDUSTRY_ITEMS !== 'undefined') ? FILM_INDUSTRY_ITEMS : [];
+                
+                // v19.54 Fix: Connect to Open Gate Engine (mBTOG)
+                // Falls back to empty array if engine not ready
+                const items = (typeof mBTOG !== 'undefined') ? mBTOG.rates : [];
                 
                 const matches = items.filter(i => i.description.toLowerCase().includes(term));
                 
                 if (matches.length === 0 && term.length > 0) {
-                     container.innerHTML = `<div onclick="confirmAddCustomStageItem('${term}')" class="p-2 text-xs text-blue-600 font-bold cursor-pointer hover:bg-blue-50 border border-dashed border-blue-200 rounded text-center">+ Create Custom: "${term}"</div>`;
+                     container.innerHTML = `<div onclick="confirmAddCustomStageItem('${term.replace(/'/g, "\\'")}')" class="p-2 text-xs text-blue-600 font-bold cursor-pointer hover:bg-blue-50 border border-dashed border-blue-200 rounded text-center">+ Create Custom: "${term}"</div>`;
                      return;
                 }
 
                 container.innerHTML = matches.map(i => `
-                    <div onclick="addDatabaseItemToStage('${i.description}', ${i.rate}, '${i.unit}')" class="flex justify-between items-center p-2 hover:bg-gray-100 rounded cursor-pointer border-b border-gray-50 last:border-0 group">
+                    <div onclick="addDatabaseItemToStage('${i.description.replace(/'/g, "\\'")}', ${i.rate}, '${i.unit}')" class="flex justify-between items-center p-2 hover:bg-gray-100 rounded cursor-pointer border-b border-gray-50 last:border-0 group">
                         <div>
                             <div class="text-xs font-bold text-gray-700 group-hover:text-blue-600">${i.description}</div>
                             <div class="text-[9px] text-gray-400">${i.unit}</div>
@@ -4298,45 +4396,74 @@ function showStagesModal() {
                 `).join('');
             };
 
-            window.addDatabaseItemToStage = (desc, rate, unit) => {
+          window.addDatabaseItemToStage = (desc, rate, unit) => {
                 if(!activeSearchStage) return;
                 
-                // 1. Create Logic (SAFE MATH UPDATE)
-                const safeRate = parseFloat(rate) || 0; // <--- This prevents NaN
+                // 1. Auto-Detect Target Section based on Stage
+                const sectionNames = Object.keys(budget.sections);
+                let targetSectionName = null;
+
+                // Simple keyword matching
+                if (activeSearchStage === 'post') targetSectionName = sectionNames.find(s => /post|edit/.test(s.toLowerCase()));
+                else if (activeSearchStage === 'dev') targetSectionName = sectionNames.find(s => /development|creative/.test(s.toLowerCase()));
+                else if (activeSearchStage === 'pre') targetSectionName = sectionNames.find(s => /pre|staff/.test(s.toLowerCase()));
+                else if (activeSearchStage === 'dist') targetSectionName = sectionNames.find(s => /distribution|market/.test(s.toLowerCase()));
                 
+                // Fallback: Default to "Production" or the first available section
+                if (!targetSectionName) {
+                    targetSectionName = sectionNames.find(s => s.toLowerCase().includes('production')) || sectionNames[0];
+                }
+
+                if (!targetSectionName) return alert("Error: No sections found in budget.");
+
+                // 2. Create the Item
+                const safeRate = parseFloat(rate) || 0;
+                const defaultDays = budget.targetLock.stages[activeSearchStage].days || 1;
+
                 const newItem = {
-                    id: Date.now().toString(),
+                    id: crypto.randomUUID(),
                     description: desc,
-                    quantity: budget.targetLock.stages[activeSearchStage].days || 1,
-                    rate: safeRate, // Use safe rate
+                    quantity: defaultDays,
                     unit: unit || 'Day',
-                    section: 'Above The Line', 
-                    stageData: {},
-                    assignedStage: activeSearchStage
+                    rate: safeRate,
+                    multiplier: 1,
+                    actual: 0,
+                    rateType: 'negotiable',
+                    assignedStage: [activeSearchStage], // Tag it
+                    stageData: {}
                 };
-                newItem.stageData[activeSearchStage] = { days: newItem.quantity, rate: safeRate };
+
+                // Initialize stage-specific data
+                newItem.stageData[activeSearchStage] = { days: defaultDays, rate: safeRate };
                 
-                // ... rest of function remains the same ...
+                // 3. Add to Main Budget
+                budget.sections[targetSectionName].items.push(newItem);
+                pushToHistory(`Added ${desc} to ${targetSectionName}`);
                 
-                // Add to Budget
-                let secKey = 'Above The Line';
-                if(!budget.sections[secKey]) secKey = Object.keys(budget.sections)[0];
-                budget.sections[secKey].items.push(newItem);
-                
-                // 2. Surgical Insert
-                pushToHistory(`Added ${desc} to ${STAGE_LABELS[activeSearchStage]}`);
+                // 4. Update the Visual UI (Immediate Card Append)
                 const container = document.querySelector(`.stage-drop-zone[data-stage-key="${activeSearchStage}"]`);
                 if(container) {
-                    // Use Safe Rate here too
-                    const vizItem = { ...newItem, _sDays: newItem.quantity, _sRate: safeRate, _sCost: newItem.quantity * safeRate, _sec: secKey };
+                    const vizItem = { 
+                        ...newItem, 
+                        _sDays: defaultDays, 
+                        _sRate: safeRate, 
+                        _sCost: defaultDays * safeRate, 
+                        _sec: targetSectionName 
+                    };
+                    
                     const wrapper = document.createElement('div');
-                    wrapper.innerHTML = getCardHTML(vizItem, activeSearchStage);
+                    wrapper.innerHTML = RenderEngine.stageCard(vizItem, activeSearchStage);
                     container.appendChild(wrapper.firstElementChild);
                 }
 
+                // 5. Save & Cleanup
                 saveBudget();
-                updateAllHeaders();
-                render();
+                updateAllHeaders(); // Recalculate stage totals
+                
+                // Debounced Render (updates main view in background)
+                clearTimeout(window._renderDebounce);
+                window._renderDebounce = setTimeout(() => { if(typeof render === 'function') render(); }, 500);
+
                 closeStageSearch();
             };
 
@@ -4492,8 +4619,6 @@ window.syncStageToMain = function(item) {
     // Helper to sync specific stage changes back to main item if needed
     // Currently stage data is separate, but we keep this stub for future "Two-Way Sync" features.
 };
-
-/* -- P5 -- */
 
 /* --- v19.53 [Stages] - Database Search & Smart Add --- */
 
@@ -4831,9 +4956,7 @@ function ensureDocumentData() {
     if (!budget.callSheet) budget.callSheet = JSON.parse(JSON.stringify(defaultCallSheet));
 }
 
-
 /* --- v19.53 Document Card Rendering v19.54 --- */
-
 
 // 5. Main Hub Modal
 function showDocumentsModal(tab = null) {
@@ -5972,6 +6095,8 @@ function removeAttachmentFromDocument(attachmentId, docId) {
     // Force full refresh to blank state
     openDocumentViewer(docId);
 }
+
+
 
 /* --- v19.61 Boot Sequence --- */
 function init() {
