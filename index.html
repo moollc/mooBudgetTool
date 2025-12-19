@@ -64,6 +64,7 @@
     </script>
 
     <style>
+/* --- Generic notes: Use flexboxes as much as possible, --- */
        /* --- Base & Typography --- */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
@@ -360,6 +361,7 @@
             display: none; 
         }
 
+
         /* --- Drag and Drop --- */
         .draggable-row { cursor: grab; transition: all 0.2s ease-in-out; }
         .draggable-row:active { cursor: grabbing; }
@@ -469,6 +471,21 @@
             outline: none;
             cursor: text;
         }
+
+/* Fix for Stage Cards: Forces cursor to 'Move' and disables text selection */
+.stage-card-item {
+    cursor: move; /* Shows the hand icon */
+    user-select: none; /* Prevents text highlighting */
+    -webkit-user-select: none;
+    touch-action: none; /* Improves touch dragging */
+}
+
+/* Allow text selection ONLY inside the inputs */
+.stage-card-item input {
+    user-select: text;
+    cursor: text;
+    pointer-events: auto; /* Ensures you can click into inputs */
+}
 
     </style>
 
@@ -1079,10 +1096,62 @@ const RenderEngine = {
         return `<div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"><button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center border border-blue-100 transition-colors" title="Share"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button><button onclick="event.stopPropagation(); deleteSingleDoc('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors border border-transparent hover:border-red-100" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>`;
     },
 
-    stageCard(item, stageKey) {
-        const cost = (parseFloat(item._sDays)||0) * (parseFloat(item._sRate)||0);
-        return `<div class="stage-card-item bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-400 transition-all relative" data-item-id="${item.id}" data-stage="${stageKey}"><button onclick="removeStageItem('${item.id}', '${this.esc(item._sec)}', '${stageKey}')" class="absolute -top-1.5 -right-1.5 bg-white text-gray-300 hover:text-red-500 border border-gray-200 hover:border-red-200 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10">&times;</button><div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openCrewProfile(this, event, '${item.id}', '${this.esc(item._sec)}')"><div class="w-7 h-7 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-[10px] text-gray-500 font-bold border border-gray-200 hover:bg-blue-50 hover:text-white transition-colors">${item.crew?.name?.charAt(0) || '👤'}</div><div class="min-w-0 flex-1"><div class="text-xs font-bold text-gray-700 truncate" title="${this.esc(item.description)}">${this.esc(item.description)}</div></div><div class="text-xs font-mono font-bold text-blue-600 flex-shrink-0" id="cost-${item.id}-${stageKey}">${formatAbbreviated(cost, displayCurrency)}</div></div><div class="flex gap-2 items-center h-7"><div class="relative w-14 h-full"><span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">D</span><input type="number" value="${item._sDays}" class="w-full h-full pl-4 pr-1 text-center text-xs font-bold bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" oninput="updateStageItem(this, '${item.id}', '${this.esc(item._sec)}', 'days')"></div><div class="relative flex-1 h-full"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 font-bold select-none">$</span><input type="number" value="${item._sRate}" class="w-full h-full pl-4 pr-2 text-right text-xs font-mono bg-gray-50 border border-gray-200 rounded focus:bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none transition-all" oninput="updateStageItem(this, '${item.id}', '${this.esc(item._sec)}', 'rate')"></div></div></div>`;
-    }
+stageCard: (item, stageKey) => {
+        // Data Logic
+        const d = (item.stageData && item.stageData[stageKey]) ? item.stageData[stageKey] : { days: item.quantity, rate: item.rate };
+        const days = parseFloat(d.days) || 0;
+        const rate = parseFloat(d.rate) || 0;
+        const cost = days * rate;
+        
+        // Safety Strings
+        const safeId = item.id;
+        // Escape quotes to prevent breaking the HTML string
+        const safeSec = (item._sec || '').replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+        const safeDesc = (item.description || '').replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+
+        // --- THE FIX ---
+        // We match your function signature: openCrewProfile(element, event, id, section)
+        const dblClickAction = `openCrewProfile(this, event, '${safeId}', '${safeSec}')`;
+
+        return `
+        <div class="stage-card-item bg-white p-2 rounded border border-gray-200 shadow-sm text-xs relative group hover:border-blue-300 transition-colors cursor-pointer" 
+             data-item-id="${safeId}" 
+             data-stage="${stageKey}"
+             data-stage-key="${stageKey}"
+             title="Double-click for Contact Card"
+             ondblclick="${dblClickAction}">
+            
+            <div class="flex justify-between items-center mb-1 pr-5">
+                <span class="font-bold text-gray-700 truncate mr-2 pointer-events-none">${safeDesc}</span>
+                
+                <span class="font-mono font-bold text-blue-600 whitespace-nowrap pointer-events-none" id="cost-${safeId}-${stageKey}">
+                    ${formatAbbreviated(cost, displayCurrency)}
+                </span>
+                
+                <button onclick="event.stopPropagation(); removeStageItem('${safeId}', '${safeSec}', '${stageKey}')" 
+                        class="text-gray-300 hover:text-red-500 absolute top-1 right-1 px-1">×</button>
+            </div>
+            
+            <div class="flex gap-2">
+                <div class="w-14 flex-shrink-0">
+                    <label class="block text-[8px] text-gray-400 uppercase pointer-events-none">Days</label>
+                    <input type="number" value="${days}" 
+                           onclick="event.stopPropagation()"
+                           ondblclick="event.stopPropagation()"
+                           onchange="updateStageItem('${safeId}', '${safeSec}', '${stageKey}', 'days', this.value)"
+                           class="w-full bg-gray-50 border border-gray-200 rounded px-1 py-0.5 text-center font-bold focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-[8px] text-gray-400 uppercase pointer-events-none">Rate</label>
+                    <input type="number" value="${rate}" 
+                           onclick="event.stopPropagation()" 
+                           ondblclick="event.stopPropagation()"
+                           onchange="updateStageItem('${safeId}', '${safeSec}', '${stageKey}', 'rate', this.value)"
+                           class="w-full bg-gray-50 border border-gray-200 rounded px-1 py-0.5 text-right text-gray-600 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none">
+                </div>
+            </div>
+        </div>`;
+    },
 };
 
 /* --- v19.52 v19.53 --- */
@@ -2047,17 +2116,18 @@ function handleUpdate(sectionName, itemId, field, value, description) {
 }
 
 
-        function handleAddExisting(sectionName, desc, unit, rate) {
-            const newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit: unit, multiplier: 1, rate: rate, actual: 0 };
-            budget.sections[sectionName].items.push(newItem);
-            pushToHistory(`Added '${desc}' to ${sectionName}`);
-            const tableBody = document.querySelector(`tbody[data-section-body="${sectionName}"]`);
-            if (tableBody) {
-                tableBody.insertAdjacentHTML('beforeend', renderLineItem(newItem, sectionName));
-                initializeDragAndDrop();
-            }
-            updateCalculations();
-        }
+function handleAddExisting(sectionName, desc, unit, rate) {
+    const newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit: unit, multiplier: 1, rate: rate, actual: 0 };
+    budget.sections[sectionName].items.push(newItem);
+    pushToHistory(`Added '${desc}' to ${sectionName}`);
+    const tableBody = document.querySelector(`tbody[data-section-body="${sectionName}"]`);
+    if (tableBody) {
+        // UPDATED: Using the centralized engine
+        tableBody.insertAdjacentHTML('beforeend', RenderEngine.lineItem(newItem, sectionName));
+        initializeDragAndDrop();
+    }
+    updateCalculations();
+}
 
         function handleRemoveItem(sectionName, itemId) {
             const itemIndex = budget.sections[sectionName].items.findIndex(i => i.id === itemId);
@@ -3191,15 +3261,15 @@ function removeAttachment(id) {
         }
 
 /* --- P3 --- */
-
-/* --- v19.53 Project Management UI Consolidated, Minimal & Fitted --- */
+/* --- v19.53 Project Management UI Consolidated v19.54 --- */
 function renderProjectManagement() {
     const container = document.getElementById('project-management-container');
     if (container) {
         const templates = getAllTemplates();
         const templateOptions = Object.keys(templates).map(k => `<option value="${k}">New ${k}</option>`).join('');
 
-        const currencyOptions = (typeof FILM_CURRENCIES !== 'undefined' ? FILM_CURRENCIES : [{ code: 'JMD', label: 'JMD' }, { code: 'USD', label: 'USD' }])
+        // v19.54: Uses FILM_CURRENCIES from Part 2
+        const currencyOptions = (typeof FILM_CURRENCIES !== 'undefined' ? FILM_CURRENCIES : [{ code: 'JMD', label: 'JMD' }])
             .map(c => `<option value="${c.code}" ${displayCurrency === c.code ? 'selected' : ''}>${c.code}</option>`)
             .join('');
 
@@ -3264,30 +3334,19 @@ function renderProjectManagement() {
                     <div class="inline-block p-4 bg-blue-50 text-blue-600 rounded-full text-4xl mb-2">☁️</div>
                     <h3 class="text-xl font-bold text-gray-800">Cloud Integration Coming Soon</h3>
                     <p class="text-gray-600">Save directly to Google Drive, Dropbox, or OneDrive.</p>
-                    <div class="flex justify-center gap-6 py-4">
-                        <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Google Drive">
-                            <svg class="w-10 h-10" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ff3333"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/><path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#00ac47"/><path d="m43.85 23.05 25.3-43.8h50.6l-25.3 43.8z" fill="#ea4335"/><path d="m106 66.85-25.3 43.8h-50.6l25.3-43.8z" fill="#ffba00" transform="translate(-32 -23)"/></svg>
-                            <span class="text-[10px] font-bold text-gray-500 uppercase">Drive</span>
-                        </div>
-                        <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="Dropbox">
-                            <svg class="w-10 h-10" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.8 20L32 32L51.2 20L32 8L12.8 20Z" fill="#0061FF"/><path d="M12.8 44L32 56L51.2 44L32 32L12.8 44Z" fill="#0061FF"/><path d="M12.8 44L32 56V32L12.8 20V44Z" fill="#0061FF"/><path d="M51.2 44L32 56V32L51.2 20V44Z" fill="#0061FF"/></svg>
-                            <span class="text-[10px] font-bold text-gray-500 uppercase">Dropbox</span>
-                        </div>
-                        <div class="flex flex-col items-center gap-2 opacity-80 hover:opacity-100 transition-opacity" title="OneDrive">
-                            <svg class="w-10 h-10" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M42.3 11C35.8 11 30.1 14.8 27.5 20.3 26.5 20 25.4 19.8 24.3 19.8 17.5 19.8 12 25.3 12 32c0 1.2.2 2.3.5 3.4C10.5 36.8 9.3 38.3 9.3 40c0 3.3 2.7 6 6 6h32.1c8.1 0 14.6-6.6 14.6-14.7 0-7.8-6.1-14.2-13.8-14.6C47.3 14.5 45 11 42.3 11z" fill="#0078D4"/></svg>
-                            <span class="text-[10px] font-bold text-gray-500 uppercase">OneDrive</span>
-                        </div>
-                    </div>
-                    <div class="bg-yellow-50 border border-yellow-100 p-4 rounded-lg text-left text-sm text-yellow-800 mt-4">
-                        <strong>Need storage?</strong><br>
-                        When this feature launches, users who need to create new cloud accounts will get exclusive discounts on storage plans via our partners.
-                    </div>
                     <button onclick="closeModal('publishPlaceholderModal')" class="mt-4 px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">Got it</button>
                 </div>
             `;
             createModal('publishPlaceholder', 'Publish to Cloud', content, 'max-w-sm');
         });
     }
+}
+
+function initializeInteractiveInputs() { 
+    ['contingencyPercentage','salesTaxPercentage','discountPercentage'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) makeInputDraggable(el);
+    });
 }
 
 function makeInputDraggable(input) {
@@ -3312,13 +3371,6 @@ function makeInputDraggable(input) {
         startVal = parseFloat(input.value)||0; 
         document.addEventListener('mousemove', onMove); 
         document.addEventListener('mouseup', onUp); 
-    });
-}
-
-function initializeInteractiveInputs() { 
-    ['contingencyPercentage','salesTaxPercentage','discountPercentage'].forEach(id => {
-        const el = document.getElementById(id);
-        if(el) makeInputDraggable(el);
     });
 }
 
@@ -3347,9 +3399,7 @@ function bindTemplateEvents() {
     });
 
     document.getElementById('createTemplateBtn')?.addEventListener('click', () => {
-        const isDefault = ['Commercial', 'Documentary', 'LiveStream'].includes(editingTemplateId);
-        const suggestedName = isDefault ? `New ${editingTemplateId}` : '';
-        const name = prompt("Enter new template name (e.g., 'Music Video'):", suggestedName);
+        const name = prompt("Enter new template name (e.g., 'Music Video'):");
         if (name) {
             const allTemplates = getAllTemplates();
             if(allTemplates[name]) return alert("Template name already exists.");
@@ -3792,6 +3842,7 @@ const STAGE_PRESETS = {
     'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
     'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
 };
+
 
 /* ==========================================================================
    mBTME (Moo Budget Tool Modal Engine) v1.0
@@ -5045,9 +5096,47 @@ window.applyTemplate = function(docId, templateId, isCustom) {
     setTimeout(() => openDocumentViewer(docId), 200);
 };
 
+
 /* --- P4--- */
 
 // ------------ STAGES ------------------------------------------------------ //
+
+/* --- v19.70 [Stages] - Math Engine (DRY Principle) --- */
+const mBTStagesEngine = {
+    // Returns { grandTotal, stageTotals: {dev: $, ...}, totalCap: $ }
+    getMetrics: function() {
+        const tl = budget.targetLock || { totalCap: 0, stages: {} };
+        const result = {
+            grandTotal: 0,
+            stageTotals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
+            totalCap: tl.totalCap || 0
+        };
+
+        Object.values(budget.sections).forEach(sec => {
+            sec.items.forEach(item => {
+                if (item.stageData) {
+                    Object.entries(item.stageData).forEach(([key, data]) => {
+                        const k = key.toLowerCase();
+                        if (result.stageTotals[k] !== undefined) {
+                            const cost = (parseFloat(data.days) || 0) * (parseFloat(data.rate) || 0);
+                            result.stageTotals[k] += cost;
+                            result.grandTotal += cost;
+                        }
+                    });
+                }
+            });
+        });
+        return result;
+    },
+
+    // Returns Status Object for Ring/Bars
+    getBurnStatus: function(current, cap) {
+        const pct = cap > 0 ? (current / cap) * 100 : 0;
+        if (pct > 100) return { color: 'text-red-600', bg: 'bg-red-500', ring: 'border-red-200', pct };
+        if (pct > 85) return { color: 'text-yellow-600', bg: 'bg-blue-500', ring: 'border-yellow-200', pct }; // Blue for "Near Limit" visual
+        return { color: 'text-green-600', bg: 'bg-green-500', ring: 'border-green-200', pct };
+    }
+};
 
 /* --- v19.54 [Stages] - UI Helpers & Database Search --- */
 
@@ -5214,6 +5303,70 @@ window.addStageItemToBudget = function(desc, rate, unit, stageKey, targetSection
     }
 };
 
+// 4. Logic: Remove Item from Stage (With Math Sync)
+window.removeStageItem = function(itemId, sectionName, stageKey) {
+    if(!confirm("Remove this item from the stage?")) return;
+
+    // Find the item
+    const item = budget.sections[sectionName]?.items.find(i => i.id === itemId);
+    
+    if (item && item.stageData) {
+        // 1. DELETE the data for this specific stage
+        delete item.stageData[stageKey];
+
+        // 2. SYNC (The Fix)
+        // Recalculate the Main Budget immediately.
+        // If this was the last stage, syncStageToMain will correctly set qty to 0.
+        if (typeof syncStageToMain === 'function') {
+            syncStageToMain(item);
+        }
+
+        saveBudget();
+
+        // 3. Surgical DOM Removal (No Flicker)
+        // We try both selectors to be safe (data-stage and data-stage-key)
+        const card = document.querySelector(`.stage-card-item[data-item-id="${itemId}"][data-stage="${stageKey}"]`) 
+                  || document.querySelector(`.stage-card-item[data-item-id="${itemId}"][data-stage-key="${stageKey}"]`);
+        
+        if (card) card.remove();
+
+        // 4. Update Header Totals
+        if(typeof window.updateAllHeaders === 'function') {
+            window.updateAllHeaders();
+        }
+
+        // 5. Update Background Budget
+        if(typeof render === 'function') render(); 
+    }
+};
+
+// 5. Logic: Update Stage Item (Syncs Days & Rates to Main Budget)
+window.updateStageItem = function(itemId, sectionName, stageKey, field, value) {
+    const item = budget.sections[sectionName]?.items.find(i => i.id === itemId);
+    
+    if (item && item.stageData && item.stageData[stageKey]) {
+        // 1. Update Data
+        item.stageData[stageKey][field] = parseFloat(value) || 0;
+        
+        // 2. Sync to Main Budget (Run on BOTH days and rate changes)
+        if (typeof syncStageToMain === 'function') syncStageToMain(item);
+
+        // 3. Visuals (Card Cost)
+        const d = item.stageData[stageKey];
+        const cost = (parseFloat(d.days) || 0) * (parseFloat(d.rate) || 0);
+        
+        const costEl = document.getElementById(`cost-${itemId}-${stageKey}`);
+        if(costEl) costEl.textContent = formatAbbreviated(cost, displayCurrency);
+
+        // 4. Global Updates & Background Refresh
+        if(typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+        saveBudget();
+        
+        // Triggers the Main Budget table to repaint with new totals immediately
+        if(typeof render === 'function') render();
+    }
+};
+
 /* --- v19.54 [Stages] - Logic V3 (Restored) --- */
 
 // 1. Proportional Slider Balancing
@@ -5319,14 +5472,15 @@ function showStagesModal() {
 
         const topSpenders = allItemsFlat.sort((a, b) => b.cost - a.cost).slice(0, 5);
 
-        // 3. Render Helper: Setup Card
+   // 3. Render Helper: Setup Card (v19.71 - Better Spacing)
         const renderSetupCard = () => `
             <div id="card-setup" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-white border-r border-gray-200 flex flex-col snap-center relative">
-                <div class="p-3 bg-gray-900 text-white flex-shrink-0 flex justify-between items-center">
+                <div class="px-3 py-2 bg-gray-900 text-white flex-shrink-0 flex justify-between items-center">
                     <h3 class="text-xs font-bold uppercase tracking-widest">Setup</h3>
                     <button onclick="toggleBulkActionsMenu()" class="text-gray-400 hover:text-white transition-colors">⚙️</button>
                 </div>
-                <div id="bulkActionsMenu" class="hidden absolute top-10 right-2 w-48 bg-white border border-gray-200 shadow-xl rounded-lg z-50 overflow-hidden text-left">
+                
+                <div id="bulkActionsMenu" class="hidden absolute top-8 right-2 w-48 bg-white border border-gray-200 shadow-xl rounded-lg z-50 overflow-hidden text-left">
                     <div class="p-2 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase bg-gray-50">Bulk Actions</div>
                     <button onclick="handleStageBulkAction('syncDays')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2"><span>📅</span> Sync Days</button>
                     <button onclick="handleStageBulkAction('dedupe')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 flex items-center gap-2"><span>🧹</span> Remove Dupes</button>
@@ -5335,52 +5489,97 @@ function showStagesModal() {
                     <button onclick="handleStageBulkAction('unlockAll')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"><span>🔓</span> Unlock All</button>
                 </div>
                 
-                <div class="p-3 space-y-4 flex-grow overflow-y-auto" onclick="document.getElementById('bulkActionsMenu').classList.add('hidden')">
-                    <div>
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label>
-                        <div class="flex items-center gap-2 border-b border-gray-300 pb-1">
-                            <span class="text-xl text-gray-400">$</span>
-                            <input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-xl font-bold w-full outline-none text-gray-800" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders(); saveBudget();">
+                <div class="px-3 py-2 space-y-3 flex-grow overflow-y-auto" onclick="document.getElementById('bulkActionsMenu').classList.add('hidden')">
+                    
+                    <div class="space-y-2 border-b border-gray-100 pb-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">Total Cap</label>
+                            <div class="flex items-center gap-1 w-32 border-b border-gray-300">
+                                <span class="text-sm text-gray-400">$</span>
+                                <input id="tlTotalCapInput" type="number" value="${tl.totalCap}" class="bg-transparent text-sm font-bold w-full outline-none text-gray-800 text-right" onchange="budget.targetLock.totalCap=parseFloat(this.value); updateAllHeaders(); saveBudget();">
+                            </div>
                         </div>
-                    </div>
-                    <div class="bg-blue-50 p-2 rounded border border-blue-100">
-                        <label class="text-[10px] text-blue-500 uppercase font-bold mb-1 block">Auto-Distribute</label>
-                        <div class="flex gap-1">
-                            <select id="distPresetSelect" class="text-xs border rounded p-1 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none">
-                                <option value="" disabled selected>Select Type...</option>
+
+                        <div class="flex items-center gap-2">
+                            <select id="distPresetSelect" class="text-[10px] border rounded px-1 py-0.5 flex-grow bg-white focus:ring-1 focus:ring-blue-500 outline-none h-6">
+                                <option value="" disabled selected>Auto-Distribute...</option>
                                 ${Object.keys(STAGE_PRESETS).map(k => `<option value="${k}">${k}</option>`).join('')}
                             </select>
-                            <button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-blue-700 shadow-sm">Apply</button>
+                            <button onclick="applyStagePreset(document.getElementById('distPresetSelect').value)" class="bg-blue-50 text-blue-600 border border-blue-100 px-2 h-6 rounded text-[10px] font-bold hover:bg-blue-100">Apply</button>
                         </div>
                     </div>
-                    <div class="space-y-3">
+
+                    <div class="space-y-1">
                         ${validKeys.map(k => `
-                        <div class="bg-gray-50 p-2 rounded border border-gray-100 relative stage-control-group" data-key="${k}">
-                            <div class="flex justify-between mb-1 text-[10px] font-bold items-center">
-                                <div class="flex items-center gap-1">
-                                    <button onclick="toggleStageLock('${k}', this)" class="text-gray-400 hover:text-blue-600 w-4 focus:outline-none lock-btn">${tl.stages[k].locked ? '🔒' : '🔓'}</button>
-                                    <span>${STAGE_LABELS[k]}</span>
+                        <div class="bg-gray-50 px-2 py-1.5 rounded border border-gray-100 relative stage-control-group hover:border-gray-300 transition-colors" data-key="${k}">
+                            <div class="flex justify-between items-center mb-0.5">
+                                <div class="flex items-center gap-3">
+                                    <button onclick="toggleStageLock('${k}', this)" class="text-gray-400 hover:text-blue-600 w-3 focus:outline-none lock-btn transition-transform active:scale-90" title="Lock Stage">${tl.stages[k].locked ? '🔒' : '🔓'}</button>
+                                    <span class="text-[10px] font-bold text-gray-700 uppercase tracking-tight">${STAGE_LABELS[k]}</span>
                                 </div>
-                                <span class="text-blue-600 font-mono" id="disp_amt_${k}"></span>
+                                <span class="text-[9px] font-mono font-bold text-gray-500" id="disp_amt_${k}"></span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider flex-grow h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 ${tl.stages[k].locked ? 'opacity-50' : ''}" ${tl.stages[k].locked ? 'disabled' : ''}>
-                                <div class="relative w-12 flex-shrink-0">
-                                    <input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" class="stage-number-input w-full text-right text-xs font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none pr-3" ${tl.stages[k].locked ? 'disabled' : ''}>
-                                    <span class="absolute right-0 top-0 text-xs text-gray-400">%</span>
+                            
+                            <div class="flex items-center gap-2 h-5">
+                                <div class="relative flex-grow h-full flex items-center">
+                                    <div class="absolute inset-x-0 h-1.5 bg-gray-200 rounded-full overflow-hidden z-0"></div>
+                                    
+                                    <div id="setup_bar_${k}" class="absolute left-0 h-1.5 rounded-full transition-all duration-300 z-0 bg-green-500" style="width: 0%"></div>
+
+                                    <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" 
+                                           class="stage-slider absolute inset-0 w-full h-full appearance-none bg-transparent z-10 cursor-pointer focus:outline-none
+                                                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 
+                                                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white 
+                                                  [&::-webkit-slider-thumb]:border-[1.5px] [&::-webkit-slider-thumb]:border-gray-400 
+                                                  [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:mt-[-1px]"
+                                           ${tl.stages[k].locked ? 'disabled' : ''}>
+                                </div>
+
+                                <div class="relative w-9 flex-shrink-0">
+                                    <input type="number" id="setup_perc_${k}" value="${tl.stages[k].ratio.toFixed(1)}" data-stage-key="${k}" 
+                                           class="stage-number-input w-full text-right text-[10px] font-bold bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none p-0" 
+                                           ${tl.stages[k].locked ? 'disabled' : ''}>
+                                    <span class="absolute -right-1 top-0 text-[8px] text-gray-400 scale-75">%</span>
                                 </div>
                             </div>
                         </div>`).join('')}
-                        <div class="text-center text-[10px] text-gray-400 mt-2" id="totalRatioDisplay">Total: 100%</div>
                     </div>
+                    
+                    <div class="text-center text-[9px] text-gray-400 pt-1 border-t border-gray-100" id="totalRatioDisplay">Total: 100%</div>
                 </div>
             </div>`;
 
-        // 4. Render Helper: Overview Card
+       // 4. Render Helper: Overview Card (Time Analysis)
         const renderOverviewCard = () => {
             const burnRate = tl.totalCap > 0 ? (grandTotal / tl.totalCap) * 100 : 0;
             const burnColor = burnRate > 100 ? 'text-red-600' : (burnRate > 85 ? 'text-yellow-600' : 'text-green-600');
             const ringColor = burnRate > 100 ? 'border-red-200' : (burnRate > 85 ? 'border-yellow-200' : 'border-green-200');
+            
+            // --- TIME ANALYSIS LOGIC ---
+            const timeData = {};
+            Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                if (!timeData[i.id]) timeData[i.id] = { name: i.description, days: 0, stages: [] };
+                
+                if (i.stageData) {
+                    Object.entries(i.stageData).forEach(([k, d]) => {
+                        if (parseFloat(d.days) > 0) {
+                            timeData[i.id].days += parseFloat(d.days);
+                            if (!timeData[i.id].stages.includes(k.toUpperCase())) timeData[i.id].stages.push(k.toUpperCase());
+                        }
+                    });
+                } else {
+                    timeData[i.id].days += parseFloat(i.quantity) || 0;
+                }
+            }));
+
+            // Sort by Days (Descending)
+            const topTimeConsumers = Object.values(timeData)
+                .filter(x => x.days > 0)
+                .sort((a, b) => b.days - a.days)
+                .slice(0, 5);
+
+            const maxDays = topTimeConsumers[0]?.days || 1;
+
             return `
             <div id="card-overview" class="stage-card min-w-[300px] flex-shrink-0 h-full bg-gray-50 border-r border-gray-200 flex flex-col snap-center">
                 <div class="p-6 flex flex-col items-center text-center border-b border-gray-200 bg-white">
@@ -5391,21 +5590,36 @@ function showStagesModal() {
                     <h3 class="text-base font-bold text-gray-800">Budget Health</h3>
                     <p class="text-xs text-gray-500 mt-1">Est: <strong id="ovGrandTotal">${formatAbbreviated(grandTotal, displayCurrency)}</strong> / Cap: <strong id="ovTotalCap">${formatAbbreviated(tl.totalCap, displayCurrency)}</strong></p>
                 </div>
-                <div class="p-4 flex-grow overflow-y-auto">
-                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Top Spenders</h4>
-                    <div class="space-y-2">
-                        ${topSpenders.map((item, idx) => `
-                            <div class="flex justify-between items-center text-xs p-2 bg-white rounded border border-gray-200 shadow-sm">
-                                <div class="flex items-center gap-2 overflow-hidden">
-                                    <span class="font-bold text-gray-400 w-4">${idx + 1}.</span>
-                                    <div class="min-w-0">
-                                        <div class="truncate font-medium text-gray-700">${item.desc}</div>
-                                        <div class="text-[9px] text-gray-400 uppercase">${item.stage}</div>
-                                    </div>
+                
+                <div class="p-4 flex-grow overflow-y-auto flex flex-col">
+                    <h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Longest Engagements (Days)</h4>
+                    
+                    <div class="space-y-3 bg-white p-3 rounded border border-gray-200 shadow-sm flex-grow mb-4">
+                        ${topTimeConsumers.map((item, idx) => {
+                            const w = (item.days / maxDays) * 100;
+                            return `
+                            <div>
+                                <div class="flex justify-between items-center text-[10px] mb-1">
+                                    <span class="font-bold text-gray-700 w-4">${idx+1}.</span>
+                                    <span class="font-bold text-gray-600 truncate flex-grow">${item.name}</span>
+                                    <span class="font-mono font-bold text-blue-600">${item.days}d</span>
                                 </div>
-                                <span class="font-mono font-bold text-gray-800 flex-shrink-0">${formatAbbreviated(item.cost, displayCurrency)}</span>
-                            </div>`).join('')}
+                                <div class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-500" style="width: ${w}%"></div>
+                                </div>
+                                <div class="text-[8px] text-gray-400 text-right mt-0.5">${item.stages.join('/')}</div>
+                            </div>`;
+                        }).join('')}
+                        ${topTimeConsumers.length === 0 ? '<div class="text-center text-xs text-gray-400 italic">No days scheduled</div>' : ''}
                     </div>
+
+                    <button onclick="openAnalyticsHub()" 
+                            class="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 font-bold rounded-lg border border-gray-200 hover:border-blue-200 shadow-sm flex items-center justify-center gap-2 transition-all group mt-auto">
+                        <span class="bg-blue-100 text-blue-600 p-1 rounded group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                        </span>
+                        <span class="text-xs">Open Analytics Hub</span>
+                    </button>
                 </div>
             </div>`;
         };
@@ -5444,7 +5658,7 @@ function showStagesModal() {
             </div>`;
         };
 
-        // 6. Main Modal Content
+    // 6. Main Modal Content
         const content = `
             <div class="flex flex-col h-[80vh] sm:h-[600px] w-full max-w-[95vw] bg-white rounded-xl shadow-2xl overflow-hidden relative">
                 <div id="stageSearchOverlay" class="absolute inset-0 bg-black/50 z-[100] hidden flex items-start justify-center pt-10"></div>
@@ -5464,23 +5678,108 @@ function showStagesModal() {
                 </div>
 
                 <div class="flex-grow relative overflow-hidden">
-                    <button onclick="document.getElementById('stagesCarousel').scrollBy({left: -320, behavior: 'smooth'})" 
-                            class="absolute left-0 top-0 bottom-0 z-20 w-10 bg-gradient-to-r from-black/5 to-transparent hover:from-black/10 flex items-center justify-center text-gray-400 hover:text-gray-600 opacity-0 hover:opacity-100 transition-opacity focus:outline-none">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                    </button>
-
                     <div id="stagesCarousel" class="flex flex-row overflow-x-auto h-full snap-x snap-mandatory scroll-smooth no-scrollbar">
                         ${renderSetupCard()}
                         ${renderOverviewCard()}
                         ${validKeys.map(k => renderStageColumn(k)).join('')}
                     </div>
 
-                    <button onclick="document.getElementById('stagesCarousel').scrollBy({left: 320, behavior: 'smooth'})" 
-                            class="absolute right-0 top-0 bottom-0 z-20 w-10 bg-gradient-to-l from-black/5 to-transparent hover:from-black/10 flex items-center justify-center text-gray-400 hover:text-gray-600 opacity-0 hover:opacity-100 transition-opacity focus:outline-none">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                    </button>
-                </div>
+                    </div>
             </div>`;
+
+// Analytics Hub
+window.openAnalyticsHub = function() {
+    // 1. Data Crunching
+    let allItems = [];
+    let deptTotals = {};
+    let grandTotal = 0;
+
+    // Calculate totals based on STAGE DATA (More accurate than main budget)
+    Object.entries(budget.sections).forEach(([secName, section]) => {
+        let secTotal = 0;
+        section.items.forEach(item => {
+            let itemTotal = 0;
+            // Sum up active stages
+            if (item.stageData) {
+                Object.values(item.stageData).forEach(d => {
+                    itemTotal += (parseFloat(d.days) || 0) * (parseFloat(d.rate) || 0);
+                });
+            } else {
+                // Fallback for non-staged items
+                itemTotal = (item.quantity * item.rate);
+            }
+
+            if (itemTotal > 0) {
+                grandTotal += itemTotal;
+                secTotal += itemTotal;
+                allItems.push({ name: item.description, sec: secName, total: itemTotal });
+            }
+        });
+        if (secTotal > 0) deptTotals[secName] = secTotal;
+    });
+
+    // Sort Drivers by TOTAL (Descending)
+    allItems.sort((a, b) => b.total - a.total);
+    const topDrivers = allItems.slice(0, 10); // Top 10 items
+
+    // Sort Depts by TOTAL
+    const topDepts = Object.entries(deptTotals)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 6); 
+
+    // 2. Build Content
+    const content = `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-2 h-[500px] overflow-y-auto">
+        <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <h3 class="text-sm font-bold text-gray-800 uppercase mb-4 flex items-center gap-2">
+                <span class="bg-red-100 text-red-600 p-1 rounded">⚠️</span> Primary Cost Drivers
+            </h3>
+            <div class="space-y-3">
+                ${topDrivers.map((item, idx) => {
+                    const percent = ((item.total / grandTotal) * 100).toFixed(1);
+                    return `
+                    <div class="relative text-xs">
+                        <div class="flex justify-between items-end mb-1 relative z-10">
+                            <span class="font-bold text-gray-700">${idx+1}. ${item.name}</span>
+                            <div class="text-right">
+                                <span class="font-bold block text-gray-900">${formatAbbreviated(item.total, displayCurrency)}</span>
+                                <span class="text-[10px] text-gray-400">${percent}%</span>
+                            </div>
+                        </div>
+                        <div class="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-red-400" style="width: ${percent * 4}%"></div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+
+        <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <h3 class="text-sm font-bold text-gray-800 uppercase mb-4 flex items-center gap-2">
+                <span class="bg-blue-100 text-blue-600 p-1 rounded">🍰</span> Dept. Breakdown
+            </h3>
+            <div class="space-y-4">
+                ${topDepts.map(([name, total]) => {
+                    const percent = ((total / grandTotal) * 100).toFixed(1);
+                    return `
+                    <div class="text-xs">
+                        <div class="flex justify-between mb-1">
+                            <span class="font-bold text-gray-600">${name}</span>
+                            <span class="font-bold text-gray-900">${percent}%</span>
+                        </div>
+                        <div class="h-2 w-full bg-gray-200 rounded-full overflow-hidden flex">
+                            <div class="h-full bg-blue-600" style="width: ${percent}%"></div>
+                        </div>
+                        <div class="text-right text-[10px] text-gray-400 mt-0.5">${formatAbbreviated(total, displayCurrency)}</div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+    </div>`;
+
+    // 3. Open Modal
+    createModal('analyticsHub', 'Budget Intelligence', content, 'max-w-4xl');
+};
 
         // 7. Launch Modal with Special Overrides
         createModal('stagesView', '', content, 'max-w-none w-fit bg-transparent shadow-none');
@@ -5502,65 +5801,91 @@ function showStagesModal() {
             document.querySelectorAll('.stage-slider').forEach(el => bindInput(el, false));
             document.querySelectorAll('.stage-number-input').forEach(el => bindInput(el, true));
 
-            window.updateAllHeaders = () => {
-                let totalPct = 0;
-                let grandLiveTotal = 0;
-                const activeEl = document.activeElement; 
+           window.updateAllHeaders = () => {
+                // 1. Get Fresh Math from Engine (DRY)
+                const metrics = mBTStagesEngine.getMetrics();
+                const activeEl = document.activeElement;
+                let totalSliderPct = 0;
+                
                 validKeys.forEach(key => {
                     const cfg = budget.targetLock.stages[key];
-                    const cap = budget.targetLock.totalCap * (cfg.ratio / 100);
-                    totalPct += cfg.ratio;
+                    // Calculate Cap based on TOTAL CAP * SLIDER %
+                    const cap = metrics.totalCap * (cfg.ratio / 100);
+                    const liveTotal = metrics.stageTotals[key]; // From Engine
+                    totalSliderPct += cfg.ratio;
                     
+                    // --- A. Sync Inputs (Prevent fighting the user while typing) ---
                     const sIn = document.querySelector(`.stage-slider[data-stage-key="${key}"]`);
                     const nIn = document.getElementById(`setup_perc_${key}`);
                     const hIn = document.getElementById(`header_perc_${key}`);
-                    
                     if(sIn && activeEl !== sIn) sIn.value = cfg.ratio;
                     if(nIn && activeEl !== nIn) nIn.value = cfg.ratio.toFixed(1);
                     if(hIn && activeEl !== hIn) hIn.value = cfg.ratio.toFixed(1);
                     
+                    // --- B. Text Displays ---
                     const dispAmt = document.getElementById(`disp_amt_${key}`);
                     if(dispAmt) dispAmt.textContent = formatAbbreviated(cap, displayCurrency);
                     
                     const limitEl = document.getElementById(`limit-${key}`);
                     if(limitEl) limitEl.textContent = `Cap: ${formatAbbreviated(cap, displayCurrency)}`;
                     
-                    let liveTotal = 0;
-                    Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
-                        if(i.stageData && i.stageData[key]) liveTotal += (parseFloat(i.stageData[key].days)||0) * (parseFloat(i.stageData[key].rate)||0);
-                    }));
-                    grandLiveTotal += liveTotal;
-                    
                     const totalEl = document.getElementById(`total-${key}`);
                     if(totalEl) totalEl.textContent = formatAbbreviated(liveTotal, displayCurrency);
                     
-                    const bar = document.getElementById(`bar-${key}`);
-                    if(bar) {
-                        const w = cap > 0 ? (liveTotal/cap)*100 : 0;
-                        bar.style.width = `${Math.min(w,100)}%`;
-                        bar.className = `h-1 rounded-full transition-all duration-300 ${w>100?'bg-red-500':'bg-blue-500'}`;
+                    // --- C. THERMOMETER LOGIC (SETUP CARD) ---
+                    const setupBar = document.getElementById(`setup_bar_${key}`);
+                    if (setupBar) {
+                        // Calculate % of the TOTAL CAP used by this stage
+                        const globalPct = metrics.totalCap > 0 ? (liveTotal / metrics.totalCap) * 100 : 0;
+                        setupBar.style.width = `${Math.min(globalPct, 100)}%`;
+                        
+                        // Compare Usage vs Slider Limit
+                        let colorClass = 'bg-green-500'; // Default: Safe (Green)
+                        let shadowClass = '';
+
+                        if (globalPct > cfg.ratio) {
+                            // Over Limit -> Red
+                            colorClass = 'bg-red-500'; 
+                            shadowClass = 'shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+                        } else if (globalPct >= (cfg.ratio * 0.95)) {
+                            // Within 95% of Limit -> Blue
+                            colorClass = 'bg-blue-500';
+                        }
+                        
+                        setupBar.className = `absolute left-0 h-2 rounded-full transition-all duration-300 z-0 ${colorClass} ${shadowClass}`;
+                    }
+
+                    // --- D. Header Bars (Mini) ---
+                    const headerBar = document.getElementById(`bar-${key}`);
+                    if(headerBar) {
+                        const w = cap > 0 ? (liveTotal / cap) * 100 : 0;
+                        headerBar.style.width = `${Math.min(w, 100)}%`;
+                        headerBar.className = `h-1 rounded-full transition-all duration-300 ${w > 100 ? 'bg-red-500' : 'bg-blue-500'}`;
                     }
                 });
+
+                // --- E. Update Overview Ring ---
+                const status = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
                 
                 const ovTotal = document.getElementById('ovGrandTotal');
                 const ovCap = document.getElementById('ovTotalCap');
-                const ringTxt = document.getElementById('burnRateText');
+                if(ovTotal) ovTotal.textContent = formatAbbreviated(metrics.grandTotal, displayCurrency);
+                if(ovCap) ovCap.textContent = formatAbbreviated(metrics.totalCap, displayCurrency);
+                
                 const ring = document.getElementById('burnRateRing');
-                if(ovTotal) ovTotal.textContent = formatAbbreviated(grandLiveTotal, displayCurrency);
-                if(ovCap) ovCap.textContent = formatAbbreviated(budget.targetLock.totalCap, displayCurrency);
+                const ringTxt = document.getElementById('burnRateText');
                 if(ringTxt && ring) {
-                    const br = budget.targetLock.totalCap > 0 ? (grandLiveTotal / budget.targetLock.totalCap) * 100 : 0;
-                    ringTxt.textContent = Math.round(br) + '%';
-                    const rc = br > 100 ? 'border-red-200' : (br > 85 ? 'border-yellow-200' : 'border-green-200');
-                    const tc = br > 100 ? 'text-red-600' : (br > 85 ? 'text-yellow-600' : 'text-green-600');
-                    ring.className = `w-32 h-32 rounded-full border-8 ${rc} flex items-center justify-center mb-2 relative transition-colors duration-500`;
-                    ringTxt.className = `text-3xl font-bold ${tc}`;
+                    ringTxt.textContent = Math.round(status.pct) + '%';
+                    ringTxt.className = `text-3xl font-bold ${status.color}`;
+                    ring.className = `w-32 h-32 rounded-full border-8 ${status.ring} flex items-center justify-center mb-2 relative transition-colors duration-500`;
                 }
+
+                // --- F. Total Ratio Warning ---
                 const totDisp = document.getElementById('totalRatioDisplay');
                 if(totDisp) {
-                    const rounded = Math.round(totalPct);
+                    const rounded = Math.round(totalSliderPct);
                     totDisp.textContent = `Total: ${rounded}%`;
-                    totDisp.className = `text-center text-[10px] mt-2 font-bold ${rounded===100?'text-green-600':'text-red-500'}`;
+                    totDisp.className = `text-center text-[10px] mt-2 font-bold ${rounded === 100 ? 'text-green-600' : 'text-red-500'}`;
                 }
             };
             
@@ -5782,76 +6107,119 @@ function initializeStageDragAndDrop() {
     const containers = document.querySelectorAll('.stage-drop-zone');
     
     containers.forEach(container => {
-        // Prevent double-binding on the same container
         if (container._sortableStage) return;
 
         container._sortableStage = new Sortable(container, {
             group: {
                 name: 'stages-shared',
-                pull: 'clone', // Copy to new stage (keep history)
+                pull: 'clone', 
                 put: true
             },
             animation: 0, 
             ghostClass: 'bg-blue-50',
             dragClass: 'opacity-90',
-            delay: 150, 
-            delayOnTouchOnly: true, 
-            sort: false,
+            sort: false, 
             
-            onEnd: function(evt) {
-                const itemEl = evt.item;
+            // --- HYBRID TOUCH SETTINGS (Restored) ---
+            delay: 150,               // Prevents accidental drags on mobile
+            delayOnTouchOnly: true,   // Keeps desktop dragging instant
+            // ----------------------------------------
+
+            // Prevent dragging when clicking inputs/buttons
+            filter: 'input, button', 
+            preventOnFilter: false,
+
+            onEnd: function (evt) {
                 const newStageKey = evt.to.dataset.stageKey;
                 const oldStageKey = evt.from.dataset.stageKey;
-                const itemId = itemEl.dataset.itemId;
+                const itemId = evt.item.dataset.itemId;
 
-                // If dropped in the same column, do nothing
-                if (newStageKey === oldStageKey) return; 
+                if (!newStageKey || newStageKey === oldStageKey) return; 
 
-                // 1. Data Model Update
+                // 1. Data Logic
                 let foundItem = null;
-                let foundSection = null;
-
-                // Locate the item in the main budget
-                for (const [secName, section] of Object.entries(budget.sections)) {
-                    const match = section.items.find(i => i.id === itemId);
-                    if (match) { foundItem = match; foundSection = secName; break; }
+                for (const section of Object.values(budget.sections)) {
+                    foundItem = section.items.find(i => i.id === itemId);
+                    if (foundItem) break;
                 }
 
                 if (foundItem) {
                     if (!foundItem.stageData) foundItem.stageData = {};
                     
-                    // Copy existing data to new stage
+                    // Deep Freeze: Copy values, break link
                     const source = foundItem.stageData[oldStageKey] || { days: foundItem.quantity, rate: foundItem.rate };
-                    foundItem.stageData[newStageKey] = { days: source.days, rate: source.rate };
+                    foundItem.stageData[newStageKey] = { 
+                        days: parseFloat(source.days) || 0, 
+                        rate: parseFloat(source.rate) || 0 
+                    };
 
-                    // 2. DOM Surgery (Prevent Flicker)
-                    // Update the card's context so it talks to the new stage data
-                    itemEl.dataset.stage = newStageKey;
-                    
-                    // Fix the Remove (X) Button to target the NEW stage
-                    const removeBtn = itemEl.querySelector('button[onclick^="removeStageItem"]');
-                    if (removeBtn) {
-                        removeBtn.setAttribute('onclick', `removeStageItem('${itemId}', '${foundSection}', '${newStageKey}')`);
-                    }
-
-                    // Fix the Cost Display ID so live math works
-                    const costEl = itemEl.querySelector(`[id^="cost-"]`);
-                    if(costEl) costEl.id = `cost-${itemId}-${newStageKey}`;
-
-                    // 3. Save & Recalc (No Modal Refresh)
-                    syncStageToMain(foundItem);
+                    // Sync & Save
+                    if(typeof syncStageToMain === 'function') syncStageToMain(foundItem);
                     saveBudget(); 
+
+                    // --- 2. DOM REFRESH (With Timing Fix) ---
+                    // We wait 10ms to let Sortable finish placing the clone.
+                    setTimeout(() => {
+                        const droppedCard = evt.to.querySelector(`.stage-card-item[data-item-id="${itemId}"]`);
+                        if (droppedCard) {
+                            // Generate Fresh HTML
+                            const freshHtml = RenderEngine.stageCard(foundItem, newStageKey);
+                            
+                            // Swap
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = freshHtml;
+                            droppedCard.replaceWith(tempDiv.firstElementChild);
+                        }
+                    }, 10);
                     
-                    // Update the Headers/Bars only (fast)
-                    if(typeof updateAllHeaders === 'function') updateAllHeaders();
-                    
-                    // Silent Background Render (Updates main budget underneath)
-                    // NOTE: We do NOT call showStagesModal() here. That causes the flash.
+                    // 3. Global Updates
+                    if(typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
                     if(typeof render === 'function') render(); 
                 }
             }
         });
     });
+}
+
+/// Helper: Sync Stage Totals (Days & Cost) to Main Budget
+// Handles "Blended Rates" correctly (Total Cost / Total Days)
+function syncStageToMain(item) {
+    if (!item || !item.stageData) return;
+    
+    const stageKeys = Object.keys(item.stageData);
+    if (stageKeys.length === 0) return;
+
+    // 1. Calculate Real Totals & Detect Rate Variance
+    let totalDays = 0;
+    let totalCost = 0;
+    let uniqueRates = new Set(); 
+
+    stageKeys.forEach(key => {
+        const d = item.stageData[key];
+        const days = parseFloat(d.days) || 0;
+        const rate = parseFloat(d.rate) || 0;
+        
+        if (days > 0) {
+            totalDays += days;
+            totalCost += (days * rate);
+            uniqueRates.add(rate); // Track unique rates (e.g., 25k and 50k)
+        }
+    });
+
+    // 2. Update Master Quantity
+    item.quantity = totalDays;
+
+    // 3. Update Master Rate (The "Effective/Blended Rate")
+    // Scenario: 200k cost / 6 days = 33.33k Rate
+    if (totalDays > 0) {
+        item.rate = totalCost / totalDays;
+    } else {
+        item.rate = 0;
+    }
+
+    // 4. Set Flag for UI Renderer
+    // If uniqueRates has more than 1 entry (e.g. 25k AND 50k), it's a mixed rate.
+    item.isMixedRate = (uniqueRates.size > 1);
 }
 
 /* --- v19.55 [Documents] - Viewer Integration & Builder Launch --- */
