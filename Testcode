@@ -3234,6 +3234,59 @@ function handleUniversalImport() {
 
     input.click();
 }
+/* --- v19.54 Auto-Assign Modal --- */
+window.openAutoAssignModal = function() {
+    const contacts = (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG && mBTOG.contacts) || []);
+
+    const content = `
+        <div class="p-6 max-w-md mx-auto space-y-6">
+            <h3 class="text-xl font-bold text-gray-800 text-center">Auto-Assign Crew</h3>
+            <p class="text-sm text-gray-600 text-center">Match budget roles with your contact database</p>
+            
+            <div class="space-y-4">
+                <button id="autoAssignPersonalBtn" class="w-full p-4 bg-teal-50 hover:bg-teal-100 rounded-xl border-2 border-teal-200 transition-all flex items-center justify-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M15 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <div class="text-left">
+                        <div class="font-bold text-teal-800">Auto-Assign from Personal Contacts</div>
+                        <div class="text-xs text-teal-600">${contacts.length} contacts available</div>
+                    </div>
+                </button>
+                
+                <button disabled class="w-full p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 opacity-60 cursor-not-allowed flex items-center justify-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                        <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                        <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                    </svg>
+                    <div class="text-left">
+                        <div class="font-bold text-gray-600">Auto-Assign from AoD Database</div>
+                        <div class="text-xs text-gray-500">Coming soon – location & availability matching</div>
+                    </div>
+                </button>
+            </div>
+            
+            <div class="pt-4 border-t text-center">
+                <button onclick="mBTME.close('autoAssignModal')" class="text-sm text-gray-500 hover:text-gray-700 font-bold">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    mBTME.open('autoAssignModal', 'Auto-Assign Crew', content, 'max-w-md', {
+        onOpen: () => {
+            document.getElementById('autoAssignPersonalBtn')?.addEventListener('click', () => {
+                mBTME.close('autoAssignModal');
+                const result = mBTAssign.assignFromContacts();
+                alert(result.message + (result.skipped > 0 ? `\n${result.skipped} already assigned` : ''));
+            });
+        }
+    });
+};
 
 function removeAttachment(id) {
     if(!budget || !budget.attachments) return;
@@ -3284,6 +3337,18 @@ function renderProjectManagement() {
                     </select>
                 </div>
             </div>
+
+<!-- Crew-Vendor Button -->
+                <button onclick="openCrewVendorsHub()"
+                        class="p-2.5 bg-blue-400 text-white rounded-lg hover:bg-blue-300 border border-blue-500 shadow-sm transition-colors flex items-center justify-center"
+                        title="Crew & Vendors – Manage Assigned, Contacts, Auto-Assign">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M15 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </button>
 
             <div class="flex items-center gap-1.5 flex-shrink-0">
                 
@@ -4251,43 +4316,52 @@ function showDocumentsModal(tab = null) {
         window.docHubState.searchTerm = e.target.value.toLowerCase();
         document.querySelectorAll('.doc-card').forEach(card => card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm)));
     });
-/* --- v19.54 Document Share Contact Selector --- */
+
+/* --- v19.54 Document Share Contact Selector v19.54 --- */
 window.openDocumentShareSelector = function(docId) {
     const doc = budget.documents.find(d => d.id === docId);
     if (!doc) return;
 
-    const contacts = getGlobalContacts();
-    
-    let contactList = contacts.length > 0 ? 
+    // Robust contact loading – fallback to mBTOG.contacts if getGlobalContacts not ready
+    const contacts = (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG && mBTOG.contacts) || []);
+
+    let contactList = contacts.length > 0 ?
         contacts.map((c, i) => `
-            <div onclick="shareDocumentToContact('${docId}', ${i})" 
+            <div onclick="shareDocumentToContact('${docId}', ${i})"
                  class="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
                 <div>
-                    <div class="font-bold text-gray-800">${c.name}</div>
-                    <div class="text-xs text-gray-500">${c.role} • ${c.contact || 'No contact'}</div>
+                    <div class="font-bold text-gray-800">${c.name || 'Unnamed Contact'}</div>
+                    <div class="text-xs text-gray-500">${c.role || ''} • ${c.contact || 'No contact info'}</div>
                 </div>
                 <div class="text-gray-400">→</div>
             </div>
         `).join('') :
         `<div class="p-8 text-center text-gray-400">
-            <div class="text-2xl mb-2">person</div>
+            <div class="text-2xl mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </div>
             <p>No contacts in database yet</p>
-            <button onclick="mBTME.close('docShareContacts'); window.switchSettingsTab('contacts', document.querySelector('button[onclick*=\"contacts\"]'))" 
+            <button onclick="mBTME.close('docShareContacts'); window.switchSettingsTab('contacts', document.querySelector('button[onclick*=\"contacts\"]'))"
                     class="mt-4 text-xs text-blue-600 hover:underline font-bold">Add Contacts →</button>
         </div>`;
 
     const content = `
         <div class="p-4">
             <h3 class="text-lg font-bold text-gray-800 mb-4">Share ${doc.label}</h3>
-            <input type="text" id="contactSearchInput" placeholder="Search contacts..." 
+            <input type="text" id="contactSearchInput" placeholder="Search contacts..."
                    class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            
+           
             <div id="contactListContainer" class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50">
                 ${contactList}
             </div>
-            
+           
             <div class="mt-4 pt-4 border-t text-center">
-                <button onclick="openDocumentShareMenu('${docId}'); mBTME.close('docShareContacts')" 
+                <button onclick="openDocumentShareMenu('${docId}'); mBTME.close('docShareContacts')"
                         class="text-xs text-gray-500 hover:text-gray-700 font-bold">Or share as file →</button>
             </div>
         </div>
@@ -4300,18 +4374,18 @@ window.openDocumentShareSelector = function(docId) {
                 search.focus();
                 search.addEventListener('input', (e) => {
                     const term = e.target.value.toLowerCase();
-                    const filtered = contacts.filter(c => 
-                        c.name.toLowerCase().includes(term) || 
-                        c.role.toLowerCase().includes(term) ||
+                    const filtered = contacts.filter(c =>
+                        (c.name && c.name.toLowerCase().includes(term)) ||
+                        (c.role && c.role.toLowerCase().includes(term)) ||
                         (c.contact && c.contact.toLowerCase().includes(term))
                     );
                     document.getElementById('contactListContainer').innerHTML = filtered.length > 0 ?
                         filtered.map((c, i) => `
-                            <div onclick="shareDocumentToContact('${docId}', contacts.indexOf(c))" 
+                            <div onclick="shareDocumentToContact('${docId}', contacts.indexOf(c))"
                                  class="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
                                 <div>
-                                    <div class="font-bold text-gray-800">${c.name}</div>
-                                    <div class="text-xs text-gray-500">${c.role} • ${c.contact || 'No contact'}</div>
+                                    <div class="font-bold text-gray-800">${c.name || 'Unnamed'}</div>
+                                    <div class="text-xs text-gray-500">${c.role || ''} • ${c.contact || 'No contact'}</div>
                                 </div>
                                 <div class="text-gray-400">→</div>
                             </div>
@@ -4325,7 +4399,7 @@ window.openDocumentShareSelector = function(docId) {
 
 window.shareDocumentToContact = async function(docId, contactIndex) {
     const doc = budget.documents.find(d => d.id === docId);
-    const contacts = getGlobalContacts();
+    const contacts = (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG && mBTOG.contacts) || []);
     const contact = contacts[contactIndex];
     if (!doc || !contact) return;
 
@@ -4336,13 +4410,13 @@ window.shareDocumentToContact = async function(docId, contactIndex) {
     try {
         const files = await mBTPublisher.toFileFromHTML('', fileNameBase, ['pdf', 'jpg'], doc);
         
-        // Track export
+        // Track export history
         if (!doc.exportHistory) doc.exportHistory = [];
         doc.exportHistory.push({
             timestamp: new Date().toISOString(),
             format: 'PDF + JPG',
             method: 'Contact Share',
-            recipient: contact.name
+            recipient: contact.name || 'Unknown'
         });
         doc.lastExport = new Date().toISOString();
         doc.status = 'Exported';
@@ -4351,16 +4425,228 @@ window.shareDocumentToContact = async function(docId, contactIndex) {
         const shared = await mBTPublisher.share(files, `${budget.projectName} - ${doc.label}`);
         
         if (shared) {
-            alert(`Sent to ${contact.name}!`);
+            alert(`Sent to ${contact.name || 'contact'}!`);
         } else {
-            alert(`Files downloaded — send manually to ${contact.name}`);
+            alert(`Files downloaded — send manually to ${contact.name || 'contact'}`);
         }
         
-        showDocumentsModal(); // Refresh hub
+        showDocumentsModal(); // Refresh hub to update status/timestamp
     } catch (err) {
         console.error("Share failed:", err);
         alert("Export failed — check console");
     }
+};
+
+/* --- v19.54 mBTAssign Engine --- */
+const mBTAssign = {
+    // Core reusable auto-assign from personal contacts
+    assignFromContacts(constraints = {}) {
+        const defaults = {
+            source: 'personal',          // 'personal' or 'aod' (future)
+            skipAssigned: true,          // Skip items already with crew
+            matchStrength: 'contains'    // 'exact' or 'contains'
+        };
+        const opts = { ...defaults, ...constraints };
+
+        const contacts = opts.source === 'personal' 
+            ? (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG && mBTOG.contacts) || [])
+            : []; // AoD placeholder
+
+        if (contacts.length === 0) {
+            return { assigned: 0, skipped: 0, message: 'No contacts available' };
+        }
+
+        let assigned = 0;
+        let skipped = 0;
+
+        Object.values(budget.sections).forEach(section => {
+            section.items.forEach(item => {
+                if (opts.skipAssigned && item.crew && item.crew.name) {
+                    skipped++;
+                    return;
+                }
+
+                const roleLower = item.description.toLowerCase();
+                const match = contacts.find(c => {
+                    if (!c.role) return false;
+                    const contactRoleLower = c.role.toLowerCase();
+                    return opts.matchStrength === 'exact' 
+                        ? roleLower === contactRoleLower 
+                        : roleLower.includes(contactRoleLower);
+                });
+
+                if (match) {
+                    item.crew = {
+                        name: match.name,
+                        phone: match.contact && !match.contact.includes('@') ? match.contact : '',
+                        email: match.contact && match.contact.includes('@') ? match.contact : ''
+                    };
+                    assigned++;
+                }
+            });
+        });
+
+        if (assigned > 0) {
+            saveBudget();
+            render();
+        }
+
+        return { 
+            assigned, 
+            skipped, 
+            total: assigned + skipped,
+            message: assigned > 0 ? `${assigned} crew assigned` : 'No matches found'
+        };
+    },
+
+    // Future AoD integration placeholder
+    assignFromAoD(filters = {}) {
+        alert('AoD auto-assign coming soon – location & availability matching');
+        return { assigned: 0, skipped: 0 };
+    }
+};
+
+/* --- v19.54 Crew & Vendors Hub --- */
+window.openCrewVendorsHub = function() {
+    // Extract assigned crew from budget
+    const assignedCrew = [];
+    Object.values(budget.sections).forEach(section => {
+        section.items.forEach(item => {
+            if (item.crew && item.crew.name) {
+                assignedCrew.push({
+                    name: item.crew.name,
+                    role: item.description,
+                    section: sectionName,
+                    phone: item.crew.phone || '',
+                    email: item.crew.email || ''
+                });
+            }
+        });
+    });
+
+    // Personal contacts from Open Gate
+    const personalContacts = (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG && mBTOG.contacts) || []);
+
+    const content = `
+        <div class="flex flex-col h-[80vh] max-h-[600px]">
+            <!-- Tabs -->
+            <div class="flex border-b bg-gray-50">
+                <button id="tabAssigned" class="flex-1 px-4 py-3 text-sm font-bold text-gray-700 border-b-2 border-blue-500">Assigned in Budget (${assignedCrew.length})</button>
+                <button id="tabPersonal" class="flex-1 px-4 py-3 text-sm font-bold text-gray-600 hover:text-gray-800">Personal Contacts (${personalContacts.length})</button>
+                <button id="tabAutoAssign" class="flex-1 px-4 py-3 text-sm font-bold text-gray-600 hover:text-gray-800">Auto-Assign</button>
+            </div>
+            
+            <!-- Tab Content -->
+            <div class="flex-grow overflow-hidden">
+                <!-- Assigned in Budget Tab -->
+                <div id="contentAssigned" class="h-full flex flex-col">
+                    <input type="text" id="searchAssigned" placeholder="Search assigned crew..." class="m-4 p-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div id="assignedList" class="flex-grow overflow-y-auto px-4 pb-4">
+                        ${assignedCrew.length > 0 ? assignedCrew.map(c => `
+                            <div class="flex items-center justify-between p-3 bg-white border rounded-lg mb-2">
+                                <div>
+                                    <div class="font-bold text-gray-800">${c.name}</div>
+                                    <div class="text-xs text-gray-500">${c.role} • ${c.section}</div>
+                                </div>
+                                <div class="flex gap-2">
+                                    ${c.phone ? `<a href="tel:${c.phone}" class="text-green-600"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></a>` : ''}
+                                    ${c.email ? `<a href="mailto:${c.email}" class="text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a>` : ''}
+                                </div>
+                            </div>
+                        `).join('') : '<div class="p-8 text-center text-gray-400">No crew assigned yet</div>'}
+                    </div>
+                </div>
+                
+                <!-- Personal Contacts Tab -->
+                <div id="contentPersonal" class="h-full hidden flex flex-col">
+                    <input type="text" id="searchPersonal" placeholder="Search personal contacts..." class="m-4 p-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div id="personalList" class="flex-grow overflow-y-auto px-4 pb-4">
+                        ${personalContacts.length > 0 ? personalContacts.map(c => `
+                            <div class="flex items-center justify-between p-3 bg-white border rounded-lg mb-2">
+                                <div>
+                                    <div class="font-bold text-gray-800">${c.name || 'Unnamed'}</div>
+                                    <div class="text-xs text-gray-500">${c.role || ''} • ${c.contact || 'No contact'}</div>
+                                </div>
+                                <button onclick="window.switchSettingsTab('contacts')" class="text-blue-600 hover:underline text-xs">Edit →</button>
+                            </div>
+                        `).join('') : '<div class="p-8 text-center text-gray-400">No personal contacts. Add in Settings → Contacts</div>'}
+                    </div>
+                </div>
+                
+                <!-- Auto-Assign Tab -->
+                <div id="contentAutoAssign" class="h-full hidden p-6">
+                    <div class="space-y-4">
+                        <button id="autoAssignPersonalBtn" class="w-full p-4 bg-teal-50 hover:bg-teal-100 rounded-xl border-2 border-teal-200 transition-all flex items-center justify-center gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M15 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <div class="text-left">
+                                <div class="font-bold text-teal-800">Auto-Assign from Personal Contacts</div>
+                                <div class="text-xs text-teal-600">${personalContacts.length} contacts available</div>
+                            </div>
+                        </button>
+                        
+                        <button disabled class="w-full p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 opacity-60 cursor-not-allowed flex items-center justify-center gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                                <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                            </svg>
+                            <div class="text-left">
+                                <div class="font-bold text-gray-600">Auto-Assign from AoD Database</div>
+                                <div class="text-xs text-gray-500">Coming soon – location & availability matching</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    mBTME.open('crewVendorsHub', 'Crew & Vendors', content, 'max-w-2xl', {
+        onOpen: () => {
+            // Tab switching
+            const tabs = {
+                assigned: document.getElementById('tabAssigned'),
+                personal: document.getElementById('tabPersonal'),
+                autoAssign: document.getElementById('tabAutoAssign')
+            };
+            const contents = {
+                assigned: document.getElementById('contentAssigned'),
+                personal: document.getElementById('contentPersonal'),
+                autoAssign: document.getElementById('contentAutoAssign')
+            };
+            const showTab = (tab) => {
+                Object.values(tabs).forEach(t => t.classList.remove('border-blue-500', 'text-blue-600'));
+                Object.values(contents).forEach(c => c.classList.add('hidden'));
+                tabs[tab].classList.add('border-blue-500', 'text-blue-600');
+                contents[tab].classList.remove('hidden');
+            };
+            tabs.assigned.onclick = () => showTab('assigned');
+            tabs.personal.onclick = () => showTab('personal');
+            tabs.autoAssign.onclick = () => showTab('autoAssign');
+
+            // Search assigned
+            document.getElementById('searchAssigned').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                document.querySelectorAll('#assignedList > div').forEach(div => {
+                    const text = div.textContent.toLowerCase();
+                    div.style.display = text.includes(term) ? '' : 'none';
+                });
+            });
+
+            // Auto-Assign button
+            document.getElementById('autoAssignPersonalBtn')?.addEventListener('click', () => {
+                mBTME.close('crewVendorsHub');
+                const result = mBTAssign.assignFromContacts();
+                alert(result.message + (result.skipped > 0 ? `\n${result.skipped} already assigned` : ''));
+            });
+        }
+    });
 };
 
 }
@@ -5088,34 +5374,45 @@ function showBinModal() {
 }
 
 /* --- v19.54 Document Trash Handler --- */
+/* --- v19.54 Document Trash Handler v19.54 --- */
 window.handleDocTrash = function(docId) {
-    if (confirm('Move to bin?')) {
-        const doc = budget.documents.find(d => d.id === docId);
-        if (doc) {
-            doc.deletedAt = new Date().toISOString();
-            budget.documentTrash = (budget.documentTrash || []).push(doc);
-            budget.documents = budget.documents.filter(d => d.id !== docId);
-            saveBudget();
-            showDocumentsModal(); // Refresh hub
-            console.log('Document moved to trash:', doc.label);
-        } else {
-            console.error('Document not found:', docId);
-            alert('Error - document not found');
-        }
-    }
-};
+    if (!confirm('Move to bin?')) return;
 
-window.restoreDoc = (idx) => {
-    const doc = budget.documentTrash.splice(idx, 1)[0];
-    delete doc.deletedAt;
-    budget.documents.push(doc);
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) {
+        alert('Document not found');
+        return;
+    }
+
+    // Mark as deleted and move to trash
+    doc.deletedAt = new Date().toISOString();
+
+    // Ensure trash array exists and push document
+    if (!budget.documentTrash) budget.documentTrash = [];
+    budget.documentTrash.push(doc);
+
+    // Remove from active documents
+    budget.documents = budget.documents.filter(d => d.id !== docId);
+
     saveBudget();
-    closeModal('docBinModal');
+
+    // Refresh Documents Hub to update list and bin badge
     showDocumentsModal();
 };
 
-window.permDeleteDoc = (idx) => {
-    if(confirm("Delete forever?")) {
+window.restoreDoc = function(idx) {
+    const doc = budget.documentTrash.splice(idx, 1)[0];
+    if (doc) {
+        delete doc.deletedAt;
+        budget.documents.push(doc);
+        saveBudget();
+        showDocumentsModal();
+    }
+    closeModal('docBinModal');
+};
+
+window.permDeleteDoc = function(idx) {
+    if (confirm("Delete forever?")) {
         budget.documentTrash.splice(idx, 1);
         saveBudget();
         showBinModal();
