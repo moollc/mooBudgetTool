@@ -1086,14 +1086,52 @@ const RenderEngine = {
         const isSelectMode = window.docHubState && window.docHubState.mode === 'select';
         const isSelected = window.docHubState && window.docHubState.selected.has(doc.id);
         const clickAction = isSelectMode ? `toggleDocSelection('${doc.id}')` : `openDocumentViewer('${doc.id}', '${context}')`;
-        const safeLabel = this.esc(doc.label);
+        const safeLabel = this.esc(doc.label || 'Untitled');
+        const status = doc.status || 'Draft';
+        const lastExport = doc.lastExport ? new Date(doc.lastExport).toLocaleDateString() : 'Never';
 
-        return `<div onclick="${clickAction}" class="doc-card group relative flex items-center p-3 bg-white border ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} rounded-lg hover:shadow-md transition-all h-16 w-full select-none cursor-pointer" data-label="${safeLabel.toLowerCase()}">${isSelectMode ? `<div class="mr-3 w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}">${isSelected ? '✓' : ''}</div>` : `<div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">${doc.icon || '📄'}</div>`}<div class="min-w-0 flex-1 flex flex-col justify-center"><span class="text-sm font-bold text-gray-800 truncate leading-tight block" title="${safeLabel}">${safeLabel}</span><span class="text-[10px] text-gray-400 uppercase leading-tight mt-0.5 block">${this.esc(doc.status || 'Draft')}</span></div>${!isSelectMode ? RenderEngine.docActions(doc.id, context) : ''}</div>`;
+        const statusColor = {
+            'Draft': 'bg-gray-100 text-gray-600',
+            'In Progress': 'bg-blue-100 text-blue-700',
+            'Ready': 'bg-green-100 text-green-700',
+            'Exported': 'bg-purple-100 text-purple-700'
+        }[status] || 'bg-gray-100 text-gray-600';
+
+        return `<div onclick="${clickAction}" class="doc-card group relative flex items-center p-3 bg-white border ${isSelected && isSelectMode ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-gray-200'} rounded-lg hover:shadow-md transition-all h-16 w-full select-none cursor-pointer" data-label="${safeLabel.toLowerCase()}">
+            ${isSelectMode ? `<div class="mr-3 w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}">${isSelected ? '✓' : ''}</div>` : `<div class="w-10 h-10 rounded-md bg-gray-50 flex-shrink-0 flex items-center justify-center text-lg mr-3 border border-gray-100 shadow-sm">${doc.icon || '📄'}</div>`}
+            <div class="min-w-0 flex-1 flex flex-col justify-center">
+                <span class="text-sm font-bold text-gray-800 truncate leading-tight block" title="${safeLabel}">${safeLabel}</span>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold ${statusColor}">${status}</span>
+                    <span class="text-[9px] text-gray-400">Exported: ${lastExport}</span>
+                </div>
+            </div>
+            ${!isSelectMode ? RenderEngine.docActions(doc.id, context) : ''}
+        </div>`;
     },
 
     // 7. Document Actions (Aeroplane Share + Delete)
     docActions(docId, context = 'hub') {
-        return `<div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"><button onclick="event.stopPropagation(); handlePublishMenu('${docId}')" class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center border border-blue-100 transition-colors" title="Share"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button><button onclick="event.stopPropagation(); deleteSingleDoc('${docId}')" class="w-8 h-8 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors border border-transparent hover:border-red-100" title="Delete"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>`;
+        return `<div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 bg-white pl-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <!-- Share: Paper-plane SVG → Contact Selector with Validation -->
+            <button onclick="event.stopPropagation(); if(typeof openDocumentShareSelector === 'function') { openDocumentShareSelector('${docId}'); } else { console.error('Share function missing'); alert('Share feature unavailable - check console'); }" 
+                    class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center border border-blue-100 transition-colors" 
+                    title="Share with Contact">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+            <!-- Delete: Trash SVG → Move to Bin with Validation -->
+            <button onclick="event.stopPropagation(); if(typeof handleDocTrash === 'function') { handleDocTrash('${docId}'); } else { console.error('Trash function missing'); alert('Delete feature unavailable - check console'); }" 
+                    class="w-8 h-8 flex items-center justify-center rounded-full text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors border border-transparent hover:border-red-100" 
+                    title="Move to Bin">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        </div>`;
     },
 
 stageCard: (item, stageKey) => {
@@ -4213,6 +4251,118 @@ function showDocumentsModal(tab = null) {
         window.docHubState.searchTerm = e.target.value.toLowerCase();
         document.querySelectorAll('.doc-card').forEach(card => card.classList.toggle('hidden', !card.dataset.label.includes(window.docHubState.searchTerm)));
     });
+/* --- v19.54 Document Share Contact Selector --- */
+window.openDocumentShareSelector = function(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const contacts = getGlobalContacts();
+    
+    let contactList = contacts.length > 0 ? 
+        contacts.map((c, i) => `
+            <div onclick="shareDocumentToContact('${docId}', ${i})" 
+                 class="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
+                <div>
+                    <div class="font-bold text-gray-800">${c.name}</div>
+                    <div class="text-xs text-gray-500">${c.role} • ${c.contact || 'No contact'}</div>
+                </div>
+                <div class="text-gray-400">→</div>
+            </div>
+        `).join('') :
+        `<div class="p-8 text-center text-gray-400">
+            <div class="text-2xl mb-2">person</div>
+            <p>No contacts in database yet</p>
+            <button onclick="mBTME.close('docShareContacts'); window.switchSettingsTab('contacts', document.querySelector('button[onclick*=\"contacts\"]'))" 
+                    class="mt-4 text-xs text-blue-600 hover:underline font-bold">Add Contacts →</button>
+        </div>`;
+
+    const content = `
+        <div class="p-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Share ${doc.label}</h3>
+            <input type="text" id="contactSearchInput" placeholder="Search contacts..." 
+                   class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <div id="contactListContainer" class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50">
+                ${contactList}
+            </div>
+            
+            <div class="mt-4 pt-4 border-t text-center">
+                <button onclick="openDocumentShareMenu('${docId}'); mBTME.close('docShareContacts')" 
+                        class="text-xs text-gray-500 hover:text-gray-700 font-bold">Or share as file →</button>
+            </div>
+        </div>
+    `;
+
+    mBTME.open('docShareContacts', `Send to Contact`, content, 'max-w-md', {
+        onOpen: () => {
+            const search = document.getElementById('contactSearchInput');
+            if (search && contacts.length > 0) {
+                search.focus();
+                search.addEventListener('input', (e) => {
+                    const term = e.target.value.toLowerCase();
+                    const filtered = contacts.filter(c => 
+                        c.name.toLowerCase().includes(term) || 
+                        c.role.toLowerCase().includes(term) ||
+                        (c.contact && c.contact.toLowerCase().includes(term))
+                    );
+                    document.getElementById('contactListContainer').innerHTML = filtered.length > 0 ?
+                        filtered.map((c, i) => `
+                            <div onclick="shareDocumentToContact('${docId}', contacts.indexOf(c))" 
+                                 class="flex items-center justify-between p-3 hover:bg-gray-50 rounded cursor-pointer border-b border-gray-100 last:border-0">
+                                <div>
+                                    <div class="font-bold text-gray-800">${c.name}</div>
+                                    <div class="text-xs text-gray-500">${c.role} • ${c.contact || 'No contact'}</div>
+                                </div>
+                                <div class="text-gray-400">→</div>
+                            </div>
+                        `).join('') :
+                        `<div class="p-8 text-center text-gray-400">No matching contacts</div>`;
+                });
+            }
+        }
+    });
+};
+
+window.shareDocumentToContact = async function(docId, contactIndex) {
+    const doc = budget.documents.find(d => d.id === docId);
+    const contacts = getGlobalContacts();
+    const contact = contacts[contactIndex];
+    if (!doc || !contact) return;
+
+    mBTME.close('docShareContacts');
+
+    const fileNameBase = `${budget.projectName || 'Document'}_${doc.label}`;
+    
+    try {
+        const files = await mBTPublisher.toFileFromHTML('', fileNameBase, ['pdf', 'jpg'], doc);
+        
+        // Track export
+        if (!doc.exportHistory) doc.exportHistory = [];
+        doc.exportHistory.push({
+            timestamp: new Date().toISOString(),
+            format: 'PDF + JPG',
+            method: 'Contact Share',
+            recipient: contact.name
+        });
+        doc.lastExport = new Date().toISOString();
+        doc.status = 'Exported';
+        saveBudget();
+
+        const shared = await mBTPublisher.share(files, `${budget.projectName} - ${doc.label}`);
+        
+        if (shared) {
+            alert(`Sent to ${contact.name}!`);
+        } else {
+            alert(`Files downloaded — send manually to ${contact.name}`);
+        }
+        
+        showDocumentsModal(); // Refresh hub
+    } catch (err) {
+        console.error("Share failed:", err);
+        alert("Export failed — check console");
+    }
+};
+
 }
 
 /* --- P4 --- */
@@ -4936,6 +5086,24 @@ function showBinModal() {
             </div>`).join('')}</div>`;
     createModal('docBin', 'Recycle Bin', content, 'max-w-sm');
 }
+
+/* --- v19.54 Document Trash Handler --- */
+window.handleDocTrash = function(docId) {
+    if (confirm('Move to bin?')) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if (doc) {
+            doc.deletedAt = new Date().toISOString();
+            budget.documentTrash = (budget.documentTrash || []).push(doc);
+            budget.documents = budget.documents.filter(d => d.id !== docId);
+            saveBudget();
+            showDocumentsModal(); // Refresh hub
+            console.log('Document moved to trash:', doc.label);
+        } else {
+            console.error('Document not found:', docId);
+            alert('Error - document not found');
+        }
+    }
+};
 
 window.restoreDoc = (idx) => {
     const doc = budget.documentTrash.splice(idx, 1)[0];
@@ -6175,6 +6343,37 @@ function syncStageToMain(item) {
     item.isMixedRate = (uniqueRates.size > 1);
 }
 
+/* --- v19.54 Document Builder Entry Point --- */
+window.initializeDocumentBuilder = function(docId) {
+    const doc = budget.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    // Mark as builder type
+    if (!doc.content) doc.content = {};
+    doc.content.isBuilder = true;
+    doc.content.isDynamic = true;
+
+    // Route to specific builder based on templateId or label
+    if (doc.templateId === 'callSheet' || doc.label.toLowerCase().includes('call sheet')) {
+        initializeCallSheetBuilder(docId);
+        return;
+    }
+
+    // Future builders go here
+    if (doc.templateId === 'crewList' || doc.label.toLowerCase().includes('crew list')) {
+        // initializeCrewListBuilder(docId); // Coming soon
+        alert("Crew List builder coming soon!");
+        return;
+    }
+
+    // Default: Generic template form (fallback)
+    doc.content.type = 'template';
+    doc.content.data = {};
+    doc.status = 'In Progress';
+    saveBudget();
+    openDocumentViewer(docId);
+};
+
 /* --- v19.55 [Documents] - Viewer Integration & Builder Launch --- */
 
 // 1. New Helper: Initialize Builder from Empty State
@@ -6273,30 +6472,33 @@ function openDocumentViewer(docId) {
         return;
     }
 
-    // --- D. EMPTY STATE (The Choice) ---
+        // --- D. EMPTY STATE – Template-Aware Builder Button ---
+    const docLabel = doc.label || 'Document';
+    const builderLabel = docLabel.includes('Call Sheet') ? 'Build Call Sheet' : `Build ${docLabel}`;
+
     const viewerContent = `
         <div class="flex flex-col h-full items-center justify-center bg-gray-50 p-8 text-center">
             <div class="bg-white p-10 rounded-2xl shadow-xl border border-gray-100 max-w-lg w-full">
                 <div class="text-6xl mb-6 opacity-20">📄</div>
-                <h3 class="text-2xl font-bold text-gray-800 mb-2">Empty Document</h3>
+                <h3 class="text-2xl font-bold text-gray-800 mb-2">Empty ${docLabel}</h3>
                 <p class="text-gray-500 mb-8 text-sm">Choose how to initialize this document:</p>
-                
+               
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button onclick="document.getElementById('viewerUpload_${docId}').click()" class="group p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center gap-2">
                         <span class="text-2xl group-hover:scale-110 transition-transform">📤</span>
                         <span class="font-bold text-gray-700 text-sm group-hover:text-blue-700">Upload File</span>
                     </button>
-                    
-                    <button onclick="initializeCallSheetBuilder('${docId}')" class="group p-4 border-2 border-dashed border-green-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-2">
+                   
+                    <button onclick="initializeDocumentBuilder('${docId}')" class="group p-4 border-2 border-dashed border-green-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all flex flex-col items-center gap-2">
                         <span class="text-2xl group-hover:scale-110 transition-transform">🏗️</span>
-                        <span class="font-bold text-gray-700 text-sm group-hover:text-green-700">Build Call Sheet</span>
+                        <span class="font-bold text-gray-700 text-sm group-hover:text-green-700">${builderLabel}</span>
                     </button>
                 </div>
-                
+               
                 <div class="mt-4 pt-4 border-t">
                     <button onclick="startWithTemplate('${docId}')" class="text-xs text-gray-400 hover:text-gray-600 font-bold uppercase tracking-wider">Browse Other Templates</button>
                 </div>
-                
+               
                 <input type="file" id="viewerUpload_${docId}" class="hidden" onchange="handleDocUploadTrigger(this, '${docId}')">
             </div>
         </div>`;
