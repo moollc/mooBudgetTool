@@ -544,65 +544,220 @@
             }
         }
 
-/* --- mBTDB v4.0 Styles (High Visibility & Edge-to-Edge) --- */
+/* --- mBTDB v9.0 Styles (Stable & Print Ready) --- */
 
-/* 1. The Canvas */
+/* 1. Canvas */
 .grid-stack { 
-    background-color: #cbd5e1; /* Slate-300 */
+    background-color: #e2e8f0; 
     min-height: 100vh; 
+    padding-bottom: 400px;
 }
 
-/* 2. The Widgets (Edge-to-Edge) */
+/* 2. Widgets (Clean Single Border) */
 .grid-stack-item-content {
     background-color: white !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 4px !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-    padding: 0 !important; /* Removes padding for edge-to-edge look */
     display: flex; 
     flex-direction: column;
     overflow: hidden !important;
+    height: 100% !important; /* <--- THIS FIXES THE MID-WIDGET TRAIL */
 }
 
-/* 3. Edit Mode */
+/* 3. Edit Mode Overrides */
 .editing-mode .grid-stack-item-content {
-    border: 1px dashed #64748b !important;
+    border: 2px dashed #94a3b8 !important; 
+    box-shadow: none !important;
     z-index: 10;
 }
-.editing-mode .widget-header, .editing-mode .widget-controls { display: flex !important; }
-.widget-header, .widget-controls { display: none !important; }
 
-/* 4. Inputs (High Contrast) - NEW */
+/* 4. Controls (Header & Buttons) */
+.widget-header { 
+    display: none !important; 
+    background-color: #f8fafc; 
+    border-bottom: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    height: 30px;
+    align-items: center; justify-content: space-between;
+    cursor: move;
+}
+.editing-mode .widget-header { display: flex !important; }
+.widget-controls { display: none !important; }
+.editing-mode .widget-controls { display: flex !important; }
+
+/* 5. Inputs (Clean & distinct) */
 .mbt-input {
     width: 100%;
-    background-color: #f8fafc; /* Slate-50 */
-    border: 1px solid #cbd5e1; /* Slate-300 */
-    color: #0f172a; /* Slate-900 */
-    padding: 2px 4px;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0; /* Subtle border */
+    color: #0f172a;
+    padding: 3px 5px;
     font-size: 11px;
     border-radius: 2px;
     outline: none;
     transition: all 0.2s;
 }
-.mbt-input:focus { background-color: white; border-color: #2563eb; ring: 1px solid #2563eb; }
-.mbt-input::placeholder { color: #94a3b8; }
+.mbt-input:focus {
+    background-color: white;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f6;
+}
+.mbt-input::placeholder { color: #cbd5e1; font-style: italic; }
 
-/* 5. Tables - NEW */
-.mbt-table th { background-color: #e2e8f0; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 10px; padding: 4px; border-bottom: 2px solid #cbd5e1; }
-.mbt-table td { border-bottom: 1px solid #f1f5f9; padding: 0; }
+/* 6. Tables */
+.mbt-table th { 
+    background-color: #f1f5f9; 
+    color: #475569; 
+    font-weight: 800; 
+    text-transform: uppercase; 
+    font-size: 10px; 
+    padding: 6px; 
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+.mbt-table td { 
+    border-bottom: 1px solid #f1f5f9; 
+    padding: 2px; 
+    vertical-align: middle;
+}
 .mbt-table tr:last-child td { border-bottom: none; }
 
-/* 6. Icons */
-.icon-btn { cursor: pointer; color: #64748b; padding: 2px; border-radius: 2px; }
-.icon-btn:hover { background-color: #e2e8f0; color: #0f172a; }
-
-/* 7. Resize Handles (Preserved from v3.4) */
-.editing-mode .ui-resizable-handle { display: block !important; z-index: 100; }
+/* 7. Resize Handles (Fix for "Can't Resize") */
+.ui-resizable-handle { display: none !important; }
+.editing-mode .ui-resizable-handle { display: block !important; }
 .editing-mode .ui-resizable-se {
-    width: 20px !important; height: 20px !important; right: 4px !important; bottom: 4px !important;
-    background: radial-gradient(circle, #94a3b8 2px, transparent 2.5px);
+    width: 15px !important; height: 15px !important;
+    right: 2px !important; bottom: 2px !important;
+    background: radial-gradient(circle, #64748b 2px, transparent 2.5px);
     background-size: 4px 4px;
+    cursor: se-resize;
+    z-index: 999 !important; /* Force on top */
 }
 
+/* 8. STANDARD CALL SHEET PRINT MODE */
+@media print {
+    body { background: white; font-family: 'Helvetica', 'Arial', sans-serif; -webkit-print-color-adjust: exact; }
+    
+    /* Hide Everything Else */
+    body > *:not(#documentViewerModal) { display: none !important; }
+    
+    /* Reset Canvas */
+    #mBTDB_Container, #mBTDB_Workspace, .grid-stack {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+    }
+/* --- mBTDB Print Modes (Standard vs Graphic) --- */
+
+/* Base Print Reset (Applies to both) */
+.print-container {
+    background: white;
+    width: 100%;
+    position: absolute; top: 0; left: 0; z-index: 9999;
+    padding: 20px;
+}
+.print-container .widget-header, 
+.print-container .widget-controls, 
+.print-container .ui-resizable-handle,
+.print-container .icon-btn { 
+    display: none !important; 
+}
+.print-container textarea { resize: none !important; }
+
+/* OPTION A: Standard Sheet View (Dense, High Contrast) */
+.print-standard .grid-stack {
+    display: block !important;
+    height: auto !important;
+}
+.print-standard .grid-stack-item {
+    position: relative !important;
+    float: left !important; /* Allows side-by-side if width < 12 */
+    top: auto !important; left: auto !important; /* Removes grid gaps */
+    margin-bottom: 0 !important;
+    box-shadow: none !important;
+    border: 1px solid black !important;
+    margin-right: -1px; /* Collapse borders */
+    margin-bottom: -1px;
+}
+.print-standard .grid-stack-item-content {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+.print-standard .mbt-input {
+    background: transparent !important;
+    border: none !important;
+    padding: 1px !important;
+    font-size: 9px !important;
+    font-weight: 600;
+    color: black !important;
+}
+.print-standard .mbt-table th {
+    background: #ddd !important;
+    color: black !important;
+    border-bottom: 1px solid black !important;
+    padding: 2px !important;
+    font-size: 9px !important;
+}
+.print-standard .mbt-table td {
+    border-bottom: 1px solid #ccc !important;
+    padding: 1px !important;
+}
+
+/* OPTION B: Graphic View (Preserves Screen Layout) */
+.print-graphic .grid-stack-item {
+    /* Keeps original absolute positioning */
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+}
+.print-graphic .mbt-input {
+    border: none !important;
+    background: transparent !important;
+}
+    /* Tighten Layout */
+    .grid-stack-item {
+        position: relative !important;
+        width: 100% !important;
+        left: auto !important; top: auto !important;
+        margin-bottom: 10px !important; /* Tight spacing */
+        break-inside: avoid;
+        page-break-inside: avoid;
+        display: block !important;
+    }
+
+    /* Borders & Contrast */
+    .grid-stack-item-content {
+        border: 2px solid #000 !important; /* Solid Black Borders */
+        box-shadow: none !important;
+        border-radius: 0 !important; /* Sharp corners */
+    }
+
+    /* Hide UI */
+    #mBTDB_Header, .widget-header, .widget-controls, .ui-resizable-handle, .icon-btn, .input-action-btn { 
+        display: none !important; 
+    }
+
+    /* Dense Text */
+    .mbt-input, textarea {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        color: black !important;
+        font-weight: 600;
+        font-size: 10px !important;
+        resize: none;
+    }
+    
+    /* Table Density */
+    .mbt-table th { background-color: #ddd !important; color: black !important; border-bottom: 1px solid black !important; padding: 2px !important; }
+    .mbt-table td { border-bottom: 1px solid #ccc !important; padding: 2px !important; }
+}
     </style>
 
 </head>
@@ -4912,25 +5067,25 @@ const mBTAssign = {
 
 /* --- P4 --- */
 /* ==========================================================================
-   mBTDB v4.0 - Production Release (Safe Upgrade)
+   mBTDB v9.0 - Stability & Standard Print
    ========================================================================== */
 window.mBTDB = {
     state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1 },
     
-    // SVGs (Crisp, Vector Icons)
     icons: {
-        drag: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>`,
+        trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+        plus: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
         user: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
         cloud: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>`,
-        wand: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2 11 5"/></svg>`,
-        sync: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8"/><path d="M22 12.5a10 10 0 0 1-18.8 4.3L2.5 16"/></svg>`,
-        grid: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
-        list: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+        save: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path></svg>`,
         undo: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`,
         redo: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>`,
         copy: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
         print: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>`,
-        close: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+        close: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+        wand: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="M3 21l9-9"/><path d="M12.2 6.2 11 5"/></svg>`,
+        grid: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
+        list: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`
     },
 
     templates: {
@@ -4938,14 +5093,12 @@ window.mBTDB = {
         'callSheet': {
             label: "Daily Call Sheet",
             widgets: [
-                { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts' }, 
-                { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics' }, // Merged
-                { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule' },
-                { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast' },
-                { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew' },
-                { id: 'notes_gen', x: 0, y: 26, w: 4, h: 6, type: 'richText', label: "General Notes" },
-                { id: 'notes_extras', x: 4, y: 26, w: 4, h: 6, type: 'richText', label: "Extras / Bg" },
-                { id: 'notes_walkies', x: 8, y: 26, w: 4, h: 6, type: 'richText', label: "Walkies / Dept" }
+                { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts', label: "Key Contacts" }, 
+                { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics', label: "Logistics" },
+                { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule', label: "Schedule" },
+                { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast', label: "Cast List" },
+                { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew', label: "Crew List" },
+                { id: 'notes', x: 0, y: 26, w: 12, h: 4, type: 'richText', label: "General Notes" }
             ]
         }
     },
@@ -4953,47 +5106,89 @@ window.mBTDB = {
     // --- 1. Core Logic ---
     open: function(docId) {
         this.state.currentDocId = docId;
-        this.state.history = []; this.state.historyPointer = -1;
-
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc) return;
 
         if (!doc.content) doc.content = { data: {}, widgets: [] };
+        // Initial Template Load
         if (!doc.content.widgets || doc.content.widgets.length === 0) {
             const tKey = this.templates[doc.type] ? doc.type : 'default';
             doc.content.widgets = JSON.parse(JSON.stringify(this.templates[tKey].widgets));
             if(!doc.content.data.meta) doc.content.data = this._generateDefaultData();
         }
 
-        this._pushHistory(doc);
         mBTME.open('documentViewerModal', 'Document Viewer', '<div id="mBTDB_Container"></div>', 'w-full h-full max-w-full', { noPadding: true, hideHeader: true });
         this.renderFrame();
     },
 
+    close: function() {
+        mBTME.close('documentViewerModal');
+        // Hard Close Fallback
+        const el = document.getElementById('documentViewerModal');
+        if(el) el.style.display = 'none';
+        // Cleanup Print Mode
+        document.body.classList.remove('print-mode');
+    },
+
     toggleEditMode: function() {
+        // 1. If we are currently editing, SAVE the layout before closing
+        if (this.state.isEditing && this.state.grid) {
+            this._saveLayoutState(); 
+        }
+
         this.state.isEditing = !this.state.isEditing;
         const container = document.getElementById('mBTDB_Workspace');
         const grid = this.state.grid;
-        if (this.state.isEditing) { container.classList.add('editing-mode'); grid.setStatic(false); grid.enable(); } 
-        else { container.classList.remove('editing-mode'); grid.setStatic(true); grid.disable(); }
+
+        if (this.state.isEditing) {
+            container.classList.add('editing-mode');
+            grid.setStatic(false);
+            grid.enable();
+        } else {
+            container.classList.remove('editing-mode');
+            grid.setStatic(true);
+            grid.disable();
+        }
         this._updateHeaderButtons();
-        this.renderFrame(); 
+        // We do NOT call renderFrame() here to avoid visual jumping. 
+        // We just toggle the CSS class and Gridstack state.
     },
 
-    // --- 2. Features & Automation ---
-
-    syncFromBudget: function() {
-        if(!confirm("Overwrite empty fields with data from your Budget? Existing data will be kept.")) return;
+    // NEW HELPER: Force save of all widget positions
+    _saveLayoutState: function() {
+        if (!this.state.grid) return;
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
-        const defaults = this._generateDefaultData();
         
-        // Non-destructive Merge
-        if(!doc.content.data.crew || doc.content.data.crew.length === 0) doc.content.data.crew = defaults.crew;
-        if(!doc.content.data.contacts.director) doc.content.data.contacts = defaults.contacts;
+        this.state.grid.engine.nodes.forEach(node => {
+            const widget = doc.content.widgets.find(w => w.id === node.id);
+            if (widget) {
+                widget.x = node.x;
+                widget.y = node.y;
+                widget.w = node.w;
+                widget.h = node.h;
+            }
+        });
         
         this._triggerSave();
+    },
+
+    // --- 2. Smart Features ---
+
+    autoFillWidget: function(type, docId) {
+        if(!confirm(`Auto-fill ${type}? This appends data.`)) return;
+        if(type === 'contacts') {
+            const roles = ['director', 'producer', '1st ad'];
+            roles.forEach(r => {
+                const c = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(r));
+                if(c) this.updateData(docId, `contacts.${r === '1st ad' ? 'ad' : r}`, `${c.name} ${c.contact||''}`);
+            });
+        }
+        else if(type === 'crew') {
+            Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                if(i.crew && i.crew.name) this.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone });
+            }));
+        }
         this.renderFrame();
-        alert("Synced!");
     },
 
     autoFillWeather: async function(docId, index, name) {
@@ -5004,57 +5199,17 @@ window.mBTDB = {
             const geo = await geoRes.json();
             if(!geo.results) throw new Error("Loc not found");
             const { latitude, longitude } = geo.results[0];
-            const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+            const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,wind_speed_10m_max,precipitation_probability_max&timezone=auto`);
             const wData = await wRes.json();
             const today = wData.daily;
-            const str = `High: ${today.temperature_2m_max[0]}° L: ${today.temperature_2m_min[0]}°\nSun: ${today.sunrise[0].split('T')[1]} / ${today.sunset[0].split('T')[1]}`;
+            
+            const code = today.weather_code[0];
+            let icon = "☀️"; if(code > 3) icon = "☁️"; if(code > 50) icon = "🌧️"; if(code > 90) icon = "⛈️";
+            const str = `${icon} ${today.temperature_2m_max[0]}°C / ${today.temperature_2m_min[0]}°C\n💨 ${today.wind_speed_10m_max[0]}km/h  💧 ${today.precipitation_probability_max[0]}%\nSun: ${today.sunrise[0].split('T')[1]} / ${today.sunset[0].split('T')[1]}`;
+            
             this.updateRow(docId, 'locations', index, 'weather', str);
             this.renderFrame();
         } catch(e) { alert("Weather Failed"); if(btn) btn.innerHTML = "☁️"; }
-    },
-
-    aiCleanup: async function(docId, path, text) {
-        if(!text) return;
-        // Check for key in localStorage (Generic approach)
-        if(!localStorage.getItem('mBT_API_KEY') && !window.API_KEY) return alert("AI functionality requires an API Key.");
-        
-        const btn = document.activeElement;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = "✨...";
-        
-        try {
-            // Placeholder for AI Call - In a real scenario, fetch OpenAI/Gemini here
-            // For now, we simulate a polish to prevent crashing if no backend
-            alert("AI Feature: In a full build, this sends prompt to API. (Simulated)");
-            btn.innerHTML = originalText;
-        } catch(e) { alert("AI Error"); btn.innerHTML = originalText; }
-    },
-
-    printToPDF: function() {
-        // Fix for "Blank Page" issue:
-        // We clone the workspace, force it to be full height (no scroll), render, then remove.
-        const original = document.getElementById('mBTDB_Workspace');
-        const clone = original.cloneNode(true);
-        
-        // Style clone for print
-        clone.id = "mBTDB_Print_Container";
-        clone.style.position = 'absolute';
-        clone.style.top = '0';
-        clone.style.left = '0';
-        clone.style.width = '1200px'; // Fixed print width
-        clone.style.height = 'auto';
-        clone.style.overflow = 'visible';
-        clone.style.zIndex = '9999';
-        clone.style.background = 'white';
-        clone.classList.remove('editing-mode'); // Ensure clean view
-        
-        document.body.appendChild(clone);
-        
-        // Use mBTPublisher on the CLONE
-        mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`);
-        
-        // Cleanup after small delay to allow capture
-        setTimeout(() => { document.body.removeChild(clone); }, 1000);
     },
 
     // --- 3. Rendering ---
@@ -5067,7 +5222,10 @@ window.mBTDB = {
             <div id="mBTDB_Header" class="bg-slate-800 text-white p-2 flex justify-between items-center sticky top-0 z-50 shadow-md print:hidden">
                 <div class="flex items-center gap-2">
                     <h2 class="font-black text-sm tracking-tight text-slate-200">📄 ${RenderEngine.esc(doc.label)}</h2>
-                    <button onclick="mBTDB.syncFromBudget()" class="text-[10px] bg-blue-900 px-2 py-0.5 rounded text-blue-200 hover:bg-blue-800 border border-blue-700 flex gap-1 items-center" title="Pull Budget Data">${this.icons.sync} Sync</button>
+                    <div class="flex bg-slate-700 rounded overflow-hidden border border-slate-600">
+                        <button onclick="mBTDB.syncFromBudget()" class="text-[10px] px-2 py-1 text-slate-200 hover:bg-slate-600 border-r border-slate-600" title="Pull Budget Data">Sync Budget</button>
+                        <button onclick="mBTDB.syncFromPrevious()" class="text-[10px] px-2 py-1 text-slate-200 hover:bg-slate-600" title="Pull Previous Call Sheet">Sync Prev</button>
+                    </div>
                 </div>
                 <div class="flex gap-2 items-center" id="mBTDB_Buttons"></div>
             </div>`;
@@ -5090,15 +5248,7 @@ window.mBTDB = {
             this._loadWidgetsToGrid(doc);
             this._updateHeaderButtons();
             
-            this.state.grid.on('change', (e, items) => {
-                if(!items) return;
-                const docRef = budget.documents.find(d => d.id === this.state.currentDocId);
-                items.forEach(item => {
-                    const w = docRef.content.widgets.find(x => x.id === item.id);
-                    if(w) { w.x = item.x; w.y = item.y; w.w = item.w; w.h = item.h; }
-                });
-                this._triggerSave(); 
-            });
+            this.state.grid.on('change', (e, items) => { this._triggerSave(); });
         }, 50);
     },
 
@@ -5116,22 +5266,24 @@ window.mBTDB = {
 
     _generateWidgetHTML: function(widget, doc) {
         const data = doc.content.data;
-        let extraControls = '';
-        if(widget.type === 'contacts') {
-            extraControls = `<button onclick="mBTDB.toggleVertical('${widget.id}')" class="icon-btn" title="Toggle Grid/List">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
-        }
-
+        // Clean Title Fallback
+        const cleanTitle = widget.label || (widget.type.charAt(0).toUpperCase() + widget.type.slice(1));
+        
+        // Header Controls
+        let tools = '';
+        if(widget.type === 'contacts') tools += `<button onclick="mBTDB.toggleVertical('${widget.id}')" class="icon-btn" title="Layout">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
+        tools += `<button onclick="mBTDB.autoFillWidget('${widget.type}', '${doc.id}')" class="icon-btn text-purple-500" title="Auto Fill">${this.icons.wand}</button>`;
+        
         const controls = `
-            <div class="widget-header px-2 py-1 flex justify-between items-center bg-slate-100 border-b border-slate-200 handle cursor-move">
-                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">${widget.label || widget.type}</span>
+            <div class="widget-header">
+                <input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-xs uppercase text-slate-600 w-32 outline-none">
                 <div class="flex items-center gap-1">
-                    ${extraControls}
-                    <button onclick="mBTDB.deleteWidget('${widget.id}')" class="icon-btn hover:text-red-600">×</button>
+                    ${tools}
+                    <button onclick="mBTDB.deleteWidget('${widget.id}')" class="icon-btn hover:text-red-600">${this.icons.trash}</button>
                 </div>
             </div>`;
         
         let content = '';
-        // Legacy Support: Route old 'weather'/'locations' to new 'logistics'
         if (widget.type === 'contacts') content = this._renderContacts(doc.id, data, widget);
         else if (widget.type === 'logistics' || widget.type === 'weather' || widget.type === 'locations') content = this._renderLogistics(doc.id, data);
         else if (widget.type === 'schedule') content = this._renderSchedule(doc.id, data);
@@ -5142,7 +5294,7 @@ window.mBTDB = {
         return `
             <div class="grid-stack-item-content">
                 ${controls}
-                <div class="widget-body flex-grow overflow-hidden relative">${content}</div>
+                <div class="widget-body flex-grow overflow-y-auto relative text-slate-800 h-full">${content}</div>
             </div>`;
     },
 
@@ -5153,31 +5305,25 @@ window.mBTDB = {
         const html = `
              <div class="flex flex-wrap gap-4 items-end justify-between">
                 <div class="w-full sm:w-auto flex-grow">
-                    <input value="${d.meta.productionTitle || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-2xl font-black uppercase w-full outline-none text-slate-900 placeholder-slate-300 bg-transparent mb-1" placeholder="PRODUCTION TITLE">
+                    <input value="${d.meta.productionTitle || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-3xl font-black uppercase w-full outline-none text-slate-900 bg-transparent mb-1" placeholder="PRODUCTION TITLE">
                     <div class="flex gap-4">
-                        <div class="flex items-center gap-1"><span class="text-[9px] font-black text-slate-400 uppercase">Date</span><input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value)" class="mbt-input w-auto font-bold"></div>
-                        <div class="flex items-center gap-1"><span class="text-[9px] font-black text-slate-400 uppercase">Call</span><input type="time" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" class="mbt-input w-auto bg-yellow-300 font-bold border-yellow-400"></div>
+                        <div class="flex items-center gap-1"><span class="text-[9px] font-black text-slate-400 uppercase">Date</span><input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="mbt-input w-auto font-bold"></div>
+                        <div class="flex items-center gap-1"><span class="text-[9px] font-black text-slate-400 uppercase">Call</span><input type="text" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input w-16 bg-yellow-300 font-bold border-yellow-400 text-center" placeholder="00:00"></div>
+                        <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 rounded"><span class="text-[9px] font-black text-slate-400 uppercase">Day</span><span class="text-xs font-black text-slate-800">${this.calcShootDay(d.meta.shootDate)}</span></div>
                     </div>
                 </div>
-                <div class="w-48 text-right">
-                     <div class="text-[9px] font-black text-slate-400 uppercase mb-0.5">Company</div>
-                     <input value="${d.meta.productionCompany || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionCompany', this.value)" class="mbt-input text-right font-bold" placeholder="Company Name">
-                </div>
+                <div class="w-48 text-right"><input value="${d.meta.productionCompany || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionCompany', this.value)" class="mbt-input text-right font-bold" placeholder="Company Name"></div>
             </div>`;
         document.getElementById('mBTDB_MetaArea').innerHTML = html;
     },
 
     _renderContacts: function(docId, d, widget) {
         const gridClass = widget.vertical ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3";
-        const renderField = (path, val, label, roleQuery) => `
+        const renderField = (path, val, label, role) => `
             <div class="relative">
-                <div class="flex justify-between items-center mb-0.5">
-                    <div class="text-[9px] font-bold text-slate-500 uppercase">${label}</div>
-                    <button onclick="mBTDB.pullFromOpenGate('${docId}', '${path}', '${roleQuery}')" class="text-blue-500 hover:text-blue-700" title="Link Contact">${this.icons.user}</button>
-                </div>
+                <div class="flex justify-between items-center mb-0.5"><div class="text-[9px] font-bold text-slate-500 uppercase">${label}</div><div class="icon-btn" onclick="mBTDB.pullFromOpenGate('${docId}', '${path}', '${role}')">${this.icons.user}</div></div>
                 <input value="${val||''}" onchange="mBTDB.updateData('${docId}', '${path}', this.value)" class="mbt-input font-bold">
             </div>`;
-
         return `<div class="grid ${gridClass} gap-2 p-2 h-full overflow-y-auto">
             ${renderField('contacts.director', d.contacts.director, 'Director', 'director')}
             ${renderField('contacts.producer', d.contacts.producer, 'Producer', 'producer')}
@@ -5186,29 +5332,30 @@ window.mBTDB = {
     },
 
     _renderLogistics: function(docId, d) {
-        return `<div class="flex flex-col h-full overflow-hidden">
+        return `<div class="flex flex-col h-full">
             <div class="p-2 border-b border-slate-100 bg-slate-50 flex gap-2 items-center">
                 <span class="text-[9px] font-bold text-slate-400 uppercase">Sun:</span>
                 <input value="${d.meta.sunriseSunset||''}" onchange="mBTDB.updateData('${docId}','meta.sunriseSunset',this.value)" class="mbt-input w-32" placeholder="06:00 / 18:00">
             </div>
             <div class="flex-grow overflow-y-auto p-2 space-y-2">
                 ${(d.locations||[]).map((l,i) => `
-                    <div class="flex gap-2 items-start border-b border-slate-100 pb-2 mb-2 last:border-0">
-                        <div class="w-1/2 space-y-1">
+                    <div class="flex flex-wrap gap-2 items-start border-b border-slate-100 pb-2 mb-2">
+                        <div class="w-full sm:w-1/3 space-y-1">
                             <input value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="mbt-input font-black uppercase" placeholder="LOC NAME">
-                            <textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="mbt-input h-10 resize-none" placeholder="Address...">${l.address}</textarea>
-                            <input value="${l.hospital}" onchange="mBTDB.updateRow('${docId}','locations',${i},'hospital',this.value)" class="mbt-input" placeholder="Nearest Hospital">
+                            <input type="text" value="${l.timeOnLocation||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="mbt-input" placeholder="Time @ Loc">
                         </div>
-                        <div class="w-1/2 space-y-1">
+                        <div class="w-full sm:w-1/3 space-y-1">
+                            <textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="mbt-input h-16 resize-none" placeholder="Address...">${l.address}</textarea>
+                        </div>
+                        <div class="w-full sm:w-1/4 space-y-1 flex-grow">
                             <div class="flex gap-1">
-                                <textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="mbt-input h-16 resize-none" placeholder="Weather info...">${l.weather}</textarea>
-                                <button id="w-btn-${i}" onclick="mBTDB.autoFillWeather('${docId}', ${i}, '${l.name}')" class="bg-blue-100 text-blue-600 w-6 flex items-center justify-center rounded hover:bg-blue-200 border border-blue-200" title="Auto Weather">${this.icons.cloud}</button>
+                                <textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="mbt-input h-16 resize-none" placeholder="Weather...">${l.weather}</textarea>
+                                <button id="w-btn-${i}" onclick="mBTDB.autoFillWeather('${docId}', ${i}, '${l.name}')" class="bg-blue-50 text-blue-600 w-6 flex items-center justify-center rounded border border-blue-200">${this.icons.cloud}</button>
                             </div>
-                            <input value="${l.mapLink}" onchange="mBTDB.updateRow('${docId}','locations',${i},'mapLink',this.value)" class="mbt-input text-blue-600 underline cursor-pointer" placeholder="Map Link">
                         </div>
                     </div>
                 `).join('')}
-                <button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-1 bg-slate-100 text-[9px] font-bold text-slate-500 hover:bg-slate-200 rounded border border-slate-200">+ Add Location</button>
+                <button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-1 bg-slate-50 text-[9px] font-bold text-slate-500 hover:bg-slate-100 rounded border border-slate-200">${this.icons.plus} Add Location</button>
             </div>
         </div>`;
     },
@@ -5217,26 +5364,21 @@ window.mBTDB = {
         return `<div class="h-full flex flex-col">
             <div class="flex-grow overflow-auto">
                 <table class="w-full text-xs mbt-table border-collapse min-w-[600px]">
-                    <thead>
-                        <tr><th class="w-12">Time</th><th class="w-12">Scn</th><th>Description</th><th class="w-24">Cast</th><th class="w-8">I/E</th><th class="w-24">Loc</th><th class="w-24">Note</th><th class="w-6"></th></tr>
-                    </thead>
+                    <thead><tr><th class="w-12">Time</th><th class="w-12">Scn</th><th>Description</th><th class="w-24">Cast</th><th class="w-8">I/E</th><th class="w-24">Loc</th><th class="w-24">Note</th><th class="w-6"></th></tr></thead>
                     <tbody>
                         ${d.schedule.map((row, i) => `
                             <tr class="${row.type==='meal'?'bg-amber-50':''}">
-                                <td><input value="${row.time}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" class="mbt-input text-center font-bold bg-transparent border-0"></td>
-                                
+                                <td><input value="${row.time}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input text-center font-bold bg-transparent border-0"></td>
                                 ${row.type==='meal' 
                                 ? `<td colspan="4"><input value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="mbt-input text-center font-black uppercase text-amber-900 bg-transparent border-0 tracking-widest"></td>`
-                                : `
-                                    <td><input value="${row.scene}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'scene',this.value)" class="mbt-input text-center font-bold bg-transparent border-0"></td>
-                                    <td><input value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="mbt-input bg-transparent border-0"></td>
-                                    <td><input value="${row.cast}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'cast',this.value)" class="mbt-input text-center bg-transparent border-0"></td>
-                                    <td><input value="${row.ie}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'ie',this.value)" class="mbt-input text-center text-[9px] uppercase bg-transparent border-0"></td>
-                                `}
-                                
+                                : `<td><input value="${row.scene}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'scene',this.value)" class="mbt-input text-center font-bold bg-transparent border-0"></td>
+                                   <td><input value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="mbt-input bg-transparent border-0"></td>
+                                   <td><input value="${row.cast}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'cast',this.value)" class="mbt-input text-center bg-transparent border-0"></td>
+                                   <td><input value="${row.ie}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'ie',this.value)" class="mbt-input text-center text-[9px] uppercase bg-transparent border-0"></td>`
+                                }
                                 <td><input value="${row.loc}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'loc',this.value)" class="mbt-input bg-transparent border-0"></td>
                                 <td><input value="${row.note}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'note',this.value)" class="mbt-input italic text-slate-500 bg-transparent border-0"></td>
-                                <td class="text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','schedule',${i})" class="text-slate-300 hover:text-red-500">×</button></td>
+                                <td class="text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','schedule',${i}, 'schedule')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -5253,21 +5395,22 @@ window.mBTDB = {
         return `<div class="h-full flex flex-col">
             <div class="flex-grow overflow-auto">
                 <table class="w-full mbt-table border-collapse">
-                    <thead><tr><th>Dept</th><th>Pos</th><th>Name</th><th>Contact</th><th class="w-12">Call</th></tr></thead>
+                    <thead><tr><th>Dept</th><th>Pos</th><th>Name</th><th>Contact</th><th class="w-12">Call</th><th class="w-6"></th></tr></thead>
                     <tbody>
                         ${(d.crew||[]).map((c,i) => `
                             <tr>
                                 <td><input value="${c.department||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="mbt-input font-bold uppercase text-[9px] text-slate-500 border-0 bg-transparent"></td>
                                 <td><input value="${c.position||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="mbt-input font-bold border-0 bg-transparent"></td>
-                                <td><input value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="mbt-input border-0 bg-transparent"></td>
+                                <td><div class="relative"><input value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="mbt-input border-0 bg-transparent"><div class="input-action-btn" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position||'crew'}')">${this.icons.user}</div></div></td>
                                 <td><input value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="mbt-input text-[9px] border-0 bg-transparent"></td>
-                                <td><input type="time" value="${c.callTime||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" class="mbt-input text-center border-0 bg-transparent"></td>
+                                <td><input type="text" value="${c.callTime||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input text-center border-0 bg-transparent"></td>
+                                <td class="text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td>
                             </tr>`).join('')}
                     </tbody>
                 </table>
             </div>
              <div class="p-1 border-t border-slate-200 widget-controls">
-                <button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-slate-100 text-slate-600 text-[9px] font-bold py-1 rounded border border-slate-200">+ Add Crew</button>
+                <button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-slate-50 text-slate-600 text-[9px] font-bold py-1 rounded border border-slate-200">+ Add Crew</button>
             </div>
         </div>`;
     },
@@ -5276,16 +5419,18 @@ window.mBTDB = {
         return `<div class="h-full flex flex-col">
             <div class="flex-grow overflow-auto">
                 <table class="w-full mbt-table border-collapse min-w-[500px]">
-                    <thead><tr><th>Role</th><th>Actor</th><th class="w-8">Stat</th><th class="w-12">Pick</th><th class="w-12">HMU</th><th class="w-12">Call</th></tr></thead>
+                    <thead><tr><th>Role</th><th>Actor</th><th>Contact</th><th class="w-8">Stat</th><th class="w-12">Pick</th><th class="w-12">HMU</th><th class="w-12">Call</th><th class="w-6"></th></tr></thead>
                     <tbody>
                         ${(d.cast||[]).map((c,i) => `
                             <tr>
                                 <td><input value="${c.character||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="mbt-input font-bold text-slate-600 border-0 bg-transparent"></td>
-                                <td><input value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="mbt-input font-black border-0 bg-transparent"></td>
+                                <td><div class="relative"><input value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="mbt-input font-black border-0 bg-transparent"><div class="input-action-btn" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div></div></td>
+                                <td><input value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'contact',this.value)" class="mbt-input text-[9px] border-0 bg-transparent"></td>
                                 <td><input value="${c.status||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'status',this.value)" class="mbt-input text-center uppercase border-0 bg-transparent"></td>
-                                <td><input type="time" value="${c.pickup||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" class="mbt-input text-center border-0 bg-transparent"></td>
-                                <td><input type="time" value="${c.hmu||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" class="mbt-input text-center border-0 bg-transparent"></td>
-                                <td><input type="time" value="${c.setCall||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" class="mbt-input text-center font-bold bg-yellow-50 border-0"></td>
+                                <td><input type="text" value="${c.pickup||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input text-center border-0 bg-transparent"></td>
+                                <td><input type="text" value="${c.hmu||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input text-center border-0 bg-transparent"></td>
+                                <td><input type="text" value="${c.setCall||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input text-center font-bold bg-yellow-50 border-0"></td>
+                                <td class="text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td>
                             </tr>`).join('')}
                     </tbody>
                 </table>
@@ -5300,8 +5445,7 @@ window.mBTDB = {
         const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
         return `<div class="h-full flex flex-col">
             <div class="flex-grow relative">
-                <textarea onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="w-full h-full p-2 text-xs text-slate-800 bg-transparent border-0 outline-none resize-none" placeholder="Notes...">${val||''}</textarea>
-                <button onclick="mBTDB.aiCleanup('${docId}', 'additional.${widgetId}', '${val}')" class="absolute bottom-2 right-2 bg-purple-100 text-purple-600 p-1 rounded-full hover:bg-purple-200 widget-controls" title="AI Cleanup">${this.icons.wand}</button>
+                <textarea onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="w-full h-full p-2 text-xs text-slate-800 bg-transparent border-0 outline-none resize-none" placeholder="Type notes here...">${val||''}</textarea>
             </div>
         </div>`;
     },
@@ -5311,6 +5455,11 @@ window.mBTDB = {
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
         const w = doc.content.widgets.find(x => x.id === wid);
         if(w) { w.vertical = !w.vertical; this.renderFrame(); }
+    },
+    updateWidgetLabel: function(docId, widgetId, newLabel) {
+        const doc = budget.documents.find(d => d.id === docId);
+        const w = doc.content.widgets.find(x => x.id === widgetId);
+        if(w) { w.label = newLabel; this._triggerSave(); }
     },
     updateData: function(docId, path, value) {
         const doc = budget.documents.find(d => d.id === docId);
@@ -5322,42 +5471,166 @@ window.mBTDB = {
     },
     updateRow: function(docId, section, index, key, value) {
         const doc = budget.documents.find(d => d.id === docId);
-        if(doc.content.data[section][index]) { doc.content.data[section][index][key] = value; this._triggerSave(); }
+        if(doc.content.data[section][index]) { 
+            doc.content.data[section][index][key] = value; 
+            this._triggerSave(); 
+            
+            // Auto-snap height when data changes
+            // We map section names back to widget types to find the ID
+            const type = (section === 'locations') ? 'logistics' : section;
+            const widget = doc.content.widgets.find(w => w.type === type);
+            if(widget) this._autoResizeWidget(widget.id);
+        }
     },
-    addRow: function(docId, section, type) {
+    addRow: function(docId, section, type, presetData) {
         const doc = budget.documents.find(d => d.id === docId);
         if(!doc.content.data[section]) doc.content.data[section] = [];
-        let newRow = { id: Date.now() };
-        if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" };
-        else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"" };
-        else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" };
-        else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"" };
+        let newRow = presetData || { id: Date.now() };
+        if(!presetData) {
+            if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" };
+            else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"", contact:"" };
+            else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" };
+            else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"", timeOnLocation:"" };
+        }
         doc.content.data[section].push(newRow);
         this._triggerSave();
         this.renderFrame();
+        
+        const widget = doc.content.widgets.find(w => w.type === (section === 'locations' ? 'logistics' : section));
+        if(widget) this._autoResizeWidget(widget.id);
     },
-    deleteRow: function(docId, section, index) {
+    deleteRow: function(docId, section, index, widgetType) {
         const doc = budget.documents.find(d => d.id === docId);
         doc.content.data[section].splice(index, 1);
         this._triggerSave();
         this.renderFrame();
-    },
-    _updateHeaderButtons: function() {
-        const btnContainer = document.getElementById('mBTDB_Buttons');
-        if(!btnContainer) return;
-        const isEd = this.state.isEditing;
         
-        btnContainer.innerHTML = `
-            <div class="flex gap-1 mr-2 border-r border-slate-600 pr-2">
-                <button onclick="mBTDB.undo()" class="p-1 hover:bg-slate-700 rounded text-slate-300" title="Undo">${this.icons.undo}</button>
-                <button onclick="mBTDB.redo()" class="p-1 hover:bg-slate-700 rounded text-slate-300" title="Redo">${this.icons.redo}</button>
-                <button onclick="mBTDB.snapshotDoc()" class="p-1 hover:bg-blue-900 rounded text-blue-300" title="Clone">${this.icons.cloud}</button>
-            </div>
-            ${isEd ? `<select id="mBTDB_WidgetSelect" class="bg-slate-700 text-xs text-white h-6 rounded mr-1"><option value="richText">Notes</option><option value="schedule">Schedule</option><option value="cast">Cast</option><option value="crew">Crew</option><option value="logistics">Logistics</option><option value="contacts">Contacts</option></select><button onclick="mBTDB.addWidget()" class="text-green-400 font-bold mr-2">+</button>` : ''}
-            <button onclick="mBTDB.toggleEditMode()" class="${isEd ? 'bg-green-600' : 'bg-blue-600'} text-white px-3 py-1 rounded text-xs font-bold shadow">${isEd ? 'Done' : 'Edit'}</button>
-            <button onclick="mBTDB.printToPDF()" class="bg-slate-700 text-white px-3 py-1 rounded text-xs font-bold hover:bg-slate-600">PDF</button>
-            <button onclick="mBTME.close('documentViewerModal')" class="bg-red-900 text-red-200 px-2 py-1 rounded hover:text-white">×</button>
-        `;
+        const widget = doc.content.widgets.find(w => w.type === (widgetType || section));
+        if(widget) this._autoResizeWidget(widget.id);
+    },
+    deleteWidget: function(id) {
+        if(!confirm("Delete widget?")) return;
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`);
+        if(el) this.state.grid.removeWidget(el);
+        doc.content.widgets = doc.content.widgets.filter(w => w.id !== id);
+        this._triggerSave();
+    },
+    addWidget: function() {
+        const type = document.getElementById('mBTDB_WidgetSelect').value;
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        
+        // CHANGE: Default w changed from 12 (Full) to 6 (Half)
+        // This allows it to slot into empty spaces to the left/right.
+        const w = { 
+            id: type+'_'+Date.now(), 
+            type, 
+            w: 6, 
+            h: 4, 
+            autoPosition: true, 
+            label: type.toUpperCase() 
+        };
+
+        const html = this._generateWidgetHTML(w, doc);
+        
+        // GridStack will now hunt for the first available 6x4 gap
+        const node = this.state.grid.addWidget({ 
+            w: 6, 
+            h: 4, 
+            content: html, 
+            id: w.id, 
+            autoPosition: true 
+        });
+
+        w.x = node.gridstackNode.x; 
+        w.y = node.gridstackNode.y;
+        doc.content.widgets.push(w);
+        this._triggerSave();
+    },
+    _autoResizeWidget: function(widgetId) {
+        const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`);
+        if(!el) return;
+        
+        const body = el.querySelector('.widget-body');
+        if(!body) return;
+        
+        // Calculate exact pixel height of the content (inputs + rows)
+        // We temporarily set height to 'auto' to get the true natural height
+        const currentHeight = body.style.height;
+        body.style.height = 'auto';
+        const contentHeight = body.scrollHeight + 45; // +45px for header/padding
+        body.style.height = currentHeight; // Restore for smooth animation
+
+        // Convert pixels to Grid Units (approx 60px-70px per row depending on your CSS)
+        // We use Math.ceil to ensure we don't cut off text
+        let newH = Math.ceil(contentHeight / 60); 
+        if(newH < 3) newH = 3; // Minimum height to prevent crushing
+
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        const w = doc.content.widgets.find(x => x.id === widgetId);
+        
+        // Only update if the size actually changed
+        if(w && w.h !== newH) { 
+            w.h = newH;
+            // Force Gridstack to resize exactly to this height
+            this.state.grid.update(el, { h: newH }); 
+            this._triggerSave();
+        }
+    },
+    formatTime: function(el) {
+        let val = el.value.replace(/[^0-9]/g, '');
+        if(val.length === 4) {
+            el.value = val.substring(0,2) + ':' + val.substring(2,4);
+            el.dispatchEvent(new Event('change'));
+        }
+    },
+    saveTemplate: function() {
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        const name = prompt("Name this template:", doc.label + " Template");
+        if(!name) return;
+        const tmpl = { id: 'tmpl_' + Date.now(), label: name, widgets: JSON.parse(JSON.stringify(doc.content.widgets)) };
+        if(!budget.templates) budget.templates = [];
+        budget.templates.push(tmpl);
+        saveBudget();
+        alert(`Template "${name}" saved!`);
+    },
+    calcShootDay: function(dateStr) {
+        if(!budget.startDate) return "1 of 1";
+        const start = new Date(budget.startDate);
+        const current = new Date(dateStr);
+        if(isNaN(start) || isNaN(current)) return "1 of 1";
+        const diffTime = current - start;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        return `Day ${diffDays}`;
+    },
+    syncFromBudget: function() {
+        if(!confirm("Overwrite empty fields with data from your Budget?")) return;
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        const defaults = this._generateDefaultData();
+        if(!doc.content.data.crew || doc.content.data.crew.length === 0) doc.content.data.crew = defaults.crew;
+        if(!doc.content.data.contacts.director) doc.content.data.contacts = defaults.contacts;
+        this._triggerSave();
+        this.renderFrame();
+    },
+    syncFromPrevious: function() {
+        const others = budget.documents.filter(d => d.type === 'callSheet' && d.id !== this.state.currentDocId);
+        if(others.length === 0) return alert("No previous Call Sheets found.");
+        others.sort((a,b) => new Date(b.created) - new Date(a.created));
+        const prev = others[0];
+        if(!confirm(`Pull data from "${prev.label}"?`)) return;
+        
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        const currentMeta = JSON.parse(JSON.stringify(doc.content.data.meta));
+        doc.content.data = JSON.parse(JSON.stringify(prev.content.data));
+        doc.content.data.meta = currentMeta; 
+        
+        this._triggerSave();
+        this.renderFrame();
+    },
+    _triggerSave: function() {
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+        saveBudget();
+        this._pushHistory(doc);
     },
     _pushHistory: function(doc) {
         if (this.state.historyPointer < this.state.history.length - 1) this.state.history = this.state.history.slice(0, this.state.historyPointer + 1);
@@ -5384,56 +5657,18 @@ window.mBTDB = {
         if(document.getElementById('documentsHubModal')) showDocumentsModal(window.docHubState ? window.docHubState.activeTab : null);
         mBTDB.open(newDoc.id);
     },
-    addWidget: function() {
-        const type = document.getElementById('mBTDB_WidgetSelect').value;
-        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
-        const w = { id: type+'_'+Date.now(), type, w:12, h:4, autoPosition:true };
-        const html = this._generateWidgetHTML(w, doc);
-        const node = this.state.grid.addWidget({ w:12, h:4, content:html, id:w.id, autoPosition:true });
-        w.x = node.gridstackNode.x; w.y = node.gridstackNode.y;
-        doc.content.widgets.push(w);
-        this._triggerSave();
-    },
-    deleteWidget: function(id) {
-        if(!confirm("Delete?")) return;
-        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
-        const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`);
-        if(el) this.state.grid.removeWidget(el);
-        doc.content.widgets = doc.content.widgets.filter(w => w.id !== id);
-        this._triggerSave();
-    },
-    _triggerSave: function() {
-        const doc = budget.documents.find(d => d.id === this.state.currentDocId);
-        saveBudget();
-        this._pushHistory(doc);
-    },
-    _generateDefaultData: function() {
-        const findRole = (q) => {
-            for(const sec of Object.values(budget.sections)) {
-                const i = sec.items.find(x => x.description.toLowerCase().includes(q) && x.crew && x.crew.name);
-                if(i) return `${i.crew.name} ${i.crew.phone||''}`;
-            }
-            return "";
-        };
-        const crewList = [];
-        Object.entries(budget.sections).forEach(([k, s]) => {
-            s.items.forEach(i => { if(i.crew && i.crew.name) crewList.push({id:Date.now()+Math.random(), department:k, position:i.description, name:i.crew.name, callTime:"08:00"}); });
-        });
-        return {
-            meta: { productionTitle: budget.projectName||"", productionCompany: budget.company||"", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00", sunriseSunset: "06:00 / 18:00" },
-            contacts: { director: findRole('director'), producer: findRole('producer'), ad: findRole('1st ad') },
-            schedule: [], crew: crewList, cast: [],
-            locations: [{name:"Base Camp", address:"", weather:"", hospital:"", mapLink:""}],
-            additional: {}
-        };
-    },
     pullFromOpenGate: function(docId, path, roleQuery) {
         if (typeof mBTOG === 'undefined' || !mBTOG.contacts) return alert("Open Gate Database not loaded.");
         const matches = mBTOG.contacts.filter(c => c.role && c.role.toLowerCase().includes(roleQuery.toLowerCase()));
         if (matches.length === 0) return alert(`No contacts found for "${roleQuery}".`);
         const apply = (c) => {
-            const val = `${c.name} ${c.contact ? '('+c.contact+')' : ''}`;
-            this.updateData(docId, path, val);
+            const parts = path.split('.');
+            if(parts.length === 3 && (parts[0] === 'crew' || parts[0] === 'cast')) {
+                this.updateRow(docId, parts[0], parseInt(parts[1]), parts[2], c.name);
+                if(c.contact) this.updateRow(docId, parts[0], parseInt(parts[1]), 'contact', c.contact);
+            } else {
+                this.updateData(docId, path, `${c.name} ${c.contact ? '('+c.contact+')' : ''}`);
+            }
             this.renderFrame(); 
         };
         if (matches.length === 1) apply(matches[0]);
@@ -5442,6 +5677,95 @@ window.mBTDB = {
             const idx = parseInt(choice)-1;
             if(matches[idx]) apply(matches[idx]);
         }
+    },
+    // --- 3. Printing (mBTPublisher Integration) ---
+
+    printToPDF: function(mode) {
+        // 1. Verify Publisher exists
+        if (typeof mBTPublisher === 'undefined' || !mBTPublisher.exportToPDF) {
+            return alert("mBTPublisher engine not found.");
+        }
+
+        // 2. Clone the workspace to avoid messing up the live view
+        const original = document.getElementById('mBTDB_Workspace');
+        const clone = original.cloneNode(true);
+        
+        // 3. Configure the Clone
+        clone.id = "mBTDB_Print_Container";
+        clone.classList.remove('editing-mode');
+        clone.classList.add('print-container'); // Base reset
+        clone.classList.add(mode === 'standard' ? 'print-standard' : 'print-graphic'); // Apply Mode
+        
+        // Force inputs to have their values (cloning doesn't always carry input values)
+        const originalInputs = original.querySelectorAll('input, textarea');
+        const cloneInputs = clone.querySelectorAll('input, textarea');
+        originalInputs.forEach((input, i) => {
+            if(cloneInputs[i]) cloneInputs[i].value = input.value;
+        });
+
+        // 4. Mount, Print, Destroy
+        document.body.appendChild(clone);
+        
+        // Use the Publisher
+        const filename = `${budget.projectName}_CallSheet_${mode}`;
+        mBTPublisher.exportToPDF('mBTDB_Print_Container', filename);
+
+        // Cleanup after delay to allow capture
+        setTimeout(() => { document.body.removeChild(clone); }, 2000);
+    },
+
+    // --- Header Update ---
+
+    _updateHeaderButtons: function() {
+        const btnContainer = document.getElementById('mBTDB_Buttons');
+        if(!btnContainer) return;
+        const isEd = this.state.isEditing;
+        
+        // Print Dropdown HTML
+        const printMenu = `
+            <div class="relative group inline-block">
+                <button class="bg-slate-700 text-white px-3 py-1 rounded text-xs font-bold hover:bg-slate-600 flex items-center gap-1">
+                    ${this.icons.print} Print ▼
+                </button>
+                <div class="absolute right-0 mt-1 w-32 bg-white rounded shadow-xl border border-slate-200 hidden group-hover:block z-50">
+                    <button onclick="mBTDB.printToPDF('standard')" class="block w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 font-bold">📄 Standard</button>
+                    <button onclick="mBTDB.printToPDF('graphic')" class="block w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100">🖼️ Graphic</button>
+                </div>
+            </div>
+        `;
+
+        btnContainer.innerHTML = `
+            <div class="flex gap-1 mr-2 border-r border-slate-600 pr-2">
+                <button onclick="mBTDB.undo()" class="p-1 hover:bg-slate-700 rounded text-slate-300" title="Undo">${this.icons.undo}</button>
+                <button onclick="mBTDB.redo()" class="p-1 hover:bg-slate-700 rounded text-slate-300" title="Redo">${this.icons.redo}</button>
+                <button onclick="mBTDB.snapshotDoc()" class="p-1 hover:bg-blue-900 rounded text-blue-300" title="Clone">${this.icons.copy}</button>
+                <button onclick="mBTDB.saveTemplate()" class="p-1 hover:bg-blue-900 rounded text-green-300" title="Save Template">${this.icons.save}</button>
+            </div>
+            ${isEd ? `<select id="mBTDB_WidgetSelect" class="bg-slate-700 text-xs text-white h-6 rounded mr-1"><option value="richText">Note</option><option value="schedule">Schedule</option><option value="cast">Cast</option><option value="crew">Crew</option><option value="logistics">Logistics</option><option value="contacts">Contacts</option></select><button onclick="mBTDB.addWidget()" class="text-green-400 font-bold mr-2">${this.icons.plus}</button>` : ''}
+            <button onclick="mBTDB.toggleEditMode()" class="${isEd ? 'bg-green-600' : 'bg-blue-600'} text-white px-3 py-1 rounded text-xs font-bold shadow">${isEd ? 'Done' : 'Edit'}</button>
+            ${printMenu}
+            <button onclick="mBTDB.close()" class="bg-red-900 text-red-200 px-2 py-1 rounded hover:text-white">${this.icons.close}</button>
+        `;
+    },
+    aiCleanup: async function(docId, path, text) {
+        if(!text) return;
+        if(!localStorage.getItem('mBT_API_KEY') && !window.API_KEY) return alert("AI functionality requires an API Key.");
+        const btn = document.activeElement;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = "✨...";
+        try {
+            alert("AI Feature: In a full build, this sends prompt to API. (Simulated)");
+            btn.innerHTML = originalText;
+        } catch(e) { alert("AI Error"); btn.innerHTML = originalText; }
+    },
+    _generateDefaultData: function() {
+        return {
+            meta: { productionTitle: budget.projectName||"", productionCompany: budget.company||"", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00" },
+            contacts: { director: "", producer: "", ad: "" },
+            schedule: [], crew: [], cast: [],
+            locations: [{name:"Base Camp", address:"", weather:"", hospital:"", mapLink:""}],
+            additional: {}
+        };
     }
 };
 window.CallSheetBuilder = { render: function(docId) { mBTDB.open(docId); } };
