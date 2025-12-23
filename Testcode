@@ -947,6 +947,8 @@
     }
 
 
+
+
 /* ================= TIER 5: MODULE CONTROLLERS & SMART FEATURES ================= */
 
     /* ========= v19.55 mBTME: MODAL ENGINE (Window orchestration) v19.55 ========= */
@@ -1791,7 +1793,7 @@
         // ... (Other tab logic for contacts, templates, ai, roadmap, and database follows same integrity protocol)
     }
 
-/* =======  TIER 5: Part 4 ========== */
+/* ======== TIER 5: Part 2 ======== */
 
     /* --- 1. Personnel Hub Intelligence (Interaction behavior) --- */
     window.toggleCrewPopup = function(el, event) {
@@ -1812,7 +1814,6 @@
         const hasPhone = cleanPhone.length > 6;
         const hasEmail = crew.email && crew.email.includes('@');
 
-        // --- Logistics Resolution: Local WhatsApp Link Construction ---
         const waLink = `https://wa.me/${(cleanPhone.length === 10 && (cleanPhone.startsWith('876') || cleanPhone.startsWith('658'))) ? '1'+cleanPhone : cleanPhone}`;
 
         const actionsBar = `
@@ -1849,9 +1850,7 @@
                     <h3 class="text-xl font-black text-slate-900 mt-4 uppercase tracking-tighter">${RenderEngine.esc(crew.name || 'Anonymous Personnel')}</h3>
                     <p class="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 inline-block px-3 py-1 rounded-full mt-1">${RenderEngine.esc(item.description)}</p>
                 </div>
-
                 ${actionsBar}
-                
                 <div class="bg-slate-50 p-5 rounded-3xl border border-slate-100 space-y-4">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Digital Profile</h4>
@@ -1865,16 +1864,15 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="pt-4 flex justify-between items-center gap-4">
-                    <button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${safeId}', '${safeSection}')">Remove Member</button>
+                    <button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Remove Member</button>
                     <button type="submit" class="flex-grow py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Verify & Synchronize</button>
                 </div>
             </form>`;
 
         mBTME.open('crewProfile', 'Personnel Profile', content, 'max-w-sm');
 
-        document.getElementById('importContactBtn').addEventListener('click', async () => {
+        document.getElementById('importContactBtn')?.addEventListener('click', async () => {
             if ('contacts' in navigator && 'ContactsManager' in window) {
                 try {
                     const contacts = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: false });
@@ -1888,14 +1886,13 @@
             } else { alert("Device infrastructure does not support native contact selection."); }
         });
 
-        document.getElementById('crewProfileForm').addEventListener('submit', (e) => {
+        document.getElementById('crewProfileForm')?.addEventListener('submit', (e) => {
             e.preventDefault();
             item.crew = { 
                 name: document.getElementById('crewName').value.trim(), 
                 phone: document.getElementById('crewPhone').value.trim(), 
                 email: document.getElementById('crewEmail').value.trim() 
             };
-            // --- Brain Handshake: Sync math and UI after profile record synchronization ---
             if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
             mBTME.close('crewProfileModal');
             if(typeof render === 'function') render(); 
@@ -1916,10 +1913,33 @@
 
     /* --- 2. Export Orchestration: Industry PDF Logic (mBTLE Handshake) --- */
     function exportToPdf() {
-        const content = ``; // Preserved logic
+        const content = `
+            <div class="p-6 space-y-6">
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">PDF Export Configuration</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="pdfFitToPageModal" checked class="w-5 h-5 rounded-lg border-slate-200 text-blue-600">
+                        <span class="text-sm font-bold text-slate-700">Fit to Page Width</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="pdfLandscapeModal" class="w-5 h-5 rounded-lg border-slate-200 text-blue-600">
+                        <span class="text-sm font-bold text-slate-700">Landscape Mode</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="pdfHideZeroQtyModal" class="w-5 h-5 rounded-lg border-slate-200 text-blue-600">
+                        <span class="text-sm font-bold text-slate-700">Hide Zero Quantities</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" id="pdfStagesModal" class="w-5 h-5 rounded-lg border-slate-200 text-blue-600">
+                        <span class="text-sm font-bold text-slate-700">Include Stage Summary</span>
+                    </label>
+                </div>
+                <button id="confirmPdfExport" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all">Generate PDF Binary</button>
+            </div>`;
+        
         mBTME.open('pdfExport', 'Industry PDF Export', content, 'max-w-md', {
             onOpen: () => {
-                document.getElementById('confirmPdfExport').addEventListener('click', () => {
+                document.getElementById('confirmPdfExport')?.addEventListener('click', () => {
                     const opts = {
                         fit: document.getElementById('pdfFitToPageModal').checked,
                         hideZero: document.getElementById('pdfHideZeroQtyModal').checked,
@@ -1927,13 +1947,9 @@
                         stages: document.getElementById('pdfStagesModal').checked
                     };
                     mBTME.close('pdfExportModal');
-                    
-                    // --- Logic Handshake: Math reconciliation before data serialization ---
                     if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
                     const { jsPDF } = window.jspdf;
                     const doc = new jsPDF({ orientation: opts.landscape ? 'landscape' : 'portrait' });
-
-                    // Formatting, summary table, and item mapping follow hardening protocol...
                     doc.save(`${(budget.projectName || 'Budget').replace(/\s+/g, '_')}.pdf`);
                 });
             }
@@ -1950,22 +1966,19 @@
         input.onchange = async (e) => {
             const files = Array.from(e.target.files);
             if (!files.length) return;
-            let budgetImported = false; let attachedCount = 0;
+            let attachedCount = 0;
 
             for (const file of files) {
                 const ext = file.name.split('.').pop().toLowerCase();
-                // --- Resolution: Project binary logic ---
                 if (ext === 'moo' || (ext === 'json' && file.name.includes('Budget'))) {
                     try {
                         const text = await file.text();
                         const imported = JSON.parse(text);
                         if (!imported.sections || !imported.projectName) throw new Error("Format Resolution Failure");
-                        // (Conflict handling and storage sequence preserved)
-                        budgetImported = true;
+                        budget = mBTState.wrap(imported);
+                        if(typeof render === 'function') render();
                     } catch (err) { alert(`Import Failure: ${err.message}`); }
-                } 
-                // --- Resolution: Metadata Attachment ---
-                else if (budget) {
+                } else if (budget) {
                     if (!budget.attachments) budget.attachments = [];
                     budget.attachments.push({
                         id: crypto.randomUUID(), name: file.name, type: file.type,
@@ -1975,9 +1988,7 @@
                     attachedCount++;
                 }
             }
-            if (attachedCount > 0) saveBudget();
-            if (typeof render === 'function') render();
-            // User feedback using master icons...
+            if (attachedCount > 0) { if(typeof saveBudget === 'function') saveBudget(); if(typeof render === 'function') render(); }
             document.body.removeChild(input);
         };
         input.click();
@@ -1987,23 +1998,19 @@
     function removeAttachment(id) {
         if(!budget || !budget.attachments) return;
         budget.attachments = budget.attachments.filter(a => a.id !== id);
-        saveBudget();
+        if(typeof saveBudget === 'function') saveBudget();
         if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
         if(typeof showAIToolsModal === 'function') showAIToolsModal();
     }
 
     function downloadOfflineHTML() {
-        const htmlContent = document.documentElement.outerHTML;
-        const blob = new Blob([htmlContent], {type: 'text/html'});
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        a.href = URL.createObjectURL(new Blob([document.documentElement.outerHTML], {type: 'text/html'}));
         a.download = `mooBudgetTool_v${APP_VERSION}.html`;
         a.click();
     }
 
-/* ======= TIER 5: Part 5 ========= */
-
-    /* --- 1. Template Management Orchestration (Module events) --- */
+    /* --- 5. Template Orchestration (Module events) --- */
     function bindTemplateEvents() {
         document.getElementById('templateSelector')?.addEventListener('change', (e) => {
             editingTemplateId = e.target.value;
@@ -2026,7 +2033,7 @@
         });
 
         document.getElementById('saveTemplateChangesBtn')?.addEventListener('click', () => {
-            if(isDefaultTemplate(editingTemplateId)) return alert("Default logic resolution protected. Create a clone to modify.");
+            if(isDefaultTemplate(editingTemplateId)) return alert("Default logic protected.");
             if (tempTemplateData && editingTemplateId) {
                 const allTemplates = getAllTemplates();
                 allTemplates[editingTemplateId] = tempTemplateData;
@@ -2040,15 +2047,12 @@
         if(editorContainer) {
             renderTemplateEditor(editorContainer);
             if(isDefaultTemplate(editingTemplateId)) return; 
-
             editorContainer.addEventListener('change', (e) => {
                 const target = e.target;
                 if(!tempTemplateData) tempTemplateData = JSON.parse(JSON.stringify(getAllTemplates()[editingTemplateId]));
-
                 if (target.dataset.daysField) {
                      if(!tempTemplateData.days) tempTemplateData.days = { principal: 10, scouting: 5, preprod: 15 };
                      tempTemplateData.days[target.dataset.daysField] = parseFloat(target.value) || 0;
-                     // --- Logic Handshake: Scaling quantities based on new day counts ---
                      recalculateTemplateQuantities(tempTemplateData);
                      renderTemplateEditor(editorContainer);
                 } else if (target.dataset.templateField) {
@@ -2066,34 +2070,7 @@
         }
     }
 
-    /* --- 2. Intelligence Suite: AI Integration (mBTLE Synced) --- */
-    async function handleAnalyzeBudget() {
-        const provider = getSelectedProvider();
-        const key = getStoredApiKey(provider);
-        const outputDiv = document.getElementById('aiAnalysisOutput');
-        outputDiv.innerHTML = `<div class="p-8 text-center text-blue-600 font-black uppercase tracking-widest animate-pulse">${mBTAssets.sparkle} Running Neural Analysis...</div>`;
-        
-        // --- Brain Handshake: Reconcile logic before data serialization for AI ---
-        mBTLE.reconcile();
-        const simplifiedBudget = { 
-            project: budget.projectName, 
-            totals: { subtotal: budget.subtotal, grandTotal: budget.grandTotal }, 
-            sections: {} 
-        };
-        for (const [name, sec] of Object.entries(budget.sections)) {
-            simplifiedBudget.sections[name] = sec.items.map(i => `${i.quantity} ${i.unit} ${i.description} @ ${i.rate}`).join(', ');
-        }
-        
-        try { 
-            const response = await callUnifiedAI(provider, key, `Analyze this production budget for anomalies or regional optimizations: ${JSON.stringify(simplifiedBudget)}`); 
-            outputDiv.innerHTML = marked.parse(response);
-            if (budget.aiContext?.saveHistory) { budget.aiContext.analysis = outputDiv.innerHTML; }
-        } catch (error) { 
-            outputDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg font-bold">Neural Uplink Resolution Failure: ${error.message}</div>`; 
-        }
-    }
-
-    /* --- 3. Interaction Handlers: Draggable Percentage Controls --- */
+    /* --- 6. Interaction Handlers: Draggable Percentage Controls --- */
     function initializeInteractiveInputs() { 
         ['contingencyPercentage','salesTaxPercentage','discountPercentage'].forEach(id => {
             const el = document.getElementById(id);
@@ -2105,7 +2082,6 @@
         if (!input || input.dataset.draggable === 'true') return;
         input.dataset.draggable = 'true';
         input.style.cursor = 'ew-resize';
-        
         let startX, startVal;
         const onMove = (e) => { 
             const delta = e.clientX - startX; 
@@ -2115,10 +2091,8 @@
         const onUp = () => { 
             document.removeEventListener('mousemove', onMove); 
             document.removeEventListener('mouseup', onUp); 
-            // --- Handshake: Reconcile math after drag completion ---
             if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
         };
-        
         input.addEventListener('mousedown', (e) => { 
             if(input === document.activeElement) return; 
             startX = e.clientX; 
@@ -2128,38 +2102,23 @@
         });
     }
 
-   /* ======== TIER 5: Part 6 =========== */
-
     /* ========= mBT SWITCHBOARD: Document Synchronization Hub ========= */
-    // Logic Resolution: High-speed bi-directional data flow between dynamic UI and budget state.
-    // These functions are mapped to window to allow for string-based event injection in dynamic HTML.
-
     window.updateMtempField = function(docId, section, key, value) {
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc || !doc.content || !doc.content.data) return;
-        
-        // --- Data Normalization: Ensuring path existence before record ---
         if (!doc.content.data[section]) doc.content.data[section] = {};
-        
-        // --- Security Handshake: Sanitizing input through Tier 4 utility ---
-        const secureValue = RenderEngine.esc(value);
-        doc.content.data[section][key] = secureValue;
-        
-        // --- Brain Handshake: Reconcile financial state on record change ---
+        doc.content.data[section][key] = RenderEngine.esc(value);
         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
     };
 
     window.updateMtempTable = function(docId, tableKey, rowIndex, colIndex, value) {
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc || !doc.content || !doc.content.data) return;
-        
-        // --- Grid Initialization: Securing table structure for new data ---
         if (!doc.content.data.tables) doc.content.data.tables = {};
         if (!doc.content.data.tables[tableKey]) {
             const spec = doc.content.fields.tables[tableKey];
             doc.content.data.tables[tableKey] = JSON.parse(JSON.stringify(spec.rows || []));
         }
-        
         const table = doc.content.data.tables[tableKey];
         if (table[rowIndex]) {
             table[rowIndex][colIndex] = RenderEngine.esc(value);
@@ -2171,273 +2130,127 @@
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc || !doc.content) return;
         const spec = doc.content.fields.tables[tableKey];
-        
         if (!doc.content.data.tables) doc.content.data.tables = {};
         if (!doc.content.data.tables[tableKey]) {
             doc.content.data.tables[tableKey] = JSON.parse(JSON.stringify(spec.rows || []));
         }
-        
-        // --- Structural Logic: Pattern matching for new row generation ---
         const newRow = new Array(spec.columns.length).fill('');
         doc.content.data.tables[tableKey].push(newRow);
-        
-        // --- Interface Resolution: Refreshing viewer to manifest new row ---
         if (typeof openDocumentViewer === 'function') openDocumentViewer(docId);
     };
 
     window.removeMtempRow = function(docId, tableKey, rowIndex) {
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc || !doc.content.data.tables || !doc.content.data.tables[tableKey]) return;
-        
         doc.content.data.tables[tableKey].splice(rowIndex, 1);
-        
-        // --- Environment Refresh: Triggering UI and math synchronization ---
         if (typeof openDocumentViewer === 'function') openDocumentViewer(docId);
         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
     };
 
-    /* --- 1. Global Template Selection (Registry Orchestration) --- */
-    window.startWithTemplate = function(docId) {
-        const sourceTemplates = (typeof mBTOG !== 'undefined' && mBTOG.templates) ? mBTOG.templates : [];
-        const custom = budget.customTemplates || [];
-        const all = [...sourceTemplates, ...custom];
-
-        const content = `
-            <div class="p-6 bg-gray-50 h-[520px] flex flex-col">
-                <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-2">Library Resolution</h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto p-2 no-scrollbar">
-                    ${all.map(t => `
-                        <button onclick="applyTemplate('${docId}', '${t.id}', ${!!custom.find(c=>c.id===t.id)})" 
-                                class="flex flex-col items-center p-6 bg-white border border-gray-100 rounded-2xl hover:border-blue-50 hover:shadow-xl transition-all text-center group">
-                            <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">${t.icon || '📄'}</div>
-                            <div class="font-bold text-gray-800 text-xs leading-tight mb-1">${t.label}</div>
-                            <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">${t.cat}</div>
-                        </button>
-                    `).join('')}
-                    <button onclick="importMtempFile('${docId}')" class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-200 rounded-2xl bg-blue-50/30 hover:bg-blue-50 transition-all text-center group">
-                        <div class="text-blue-500 mb-1 group-hover:scale-110 transition-transform">${mBTAssets.plus}</div>
-                        <div class="font-black text-blue-600 text-[10px] uppercase tracking-widest">Import .mtemp</div>
-                    </button>
-                </div>
-            </div>`;
-        mBTME.open('templatePicker', 'Select Template', content, 'max-w-4xl');
-    };
-
-    window.applyTemplate = function(docId, templateId, isCustom) {
-        const doc = budget.documents.find(d => d.id === docId);
-        if (!doc) return;
-        const library = isCustom ? (budget.customTemplates || []) : (typeof mBTOG !== 'undefined' ? mBTOG.templates : []);
-        const source = library.find(t => t.id === templateId);
-        if (!source) return;
-
-        // --- Persistence Protocol: Sealing template structure to document content ---
-        doc.content = {
-            type: 'template',
-            templateId: source.id,
-            templateLabel: source.label,
-            isDynamic: source.isDynamic || false,
-            htmlTemplate: source.htmlTemplate || '',
-            printCss: source.printCss || '',
-            fields: JSON.parse(JSON.stringify(source.fields || {})),
-            data: {}
-        };
-        doc.status = 'In Progress';
-        
-        mBTME.close('templatePickerModal');
-        setTimeout(() => openDocumentViewer(docId), 200);
-    };
-
-    /* --- 2. Global Event Listeners (Bridge Infrastructure) --- */
-    function bindAppEventListeners() {
-        // --- Persistence Handshake: Secure project binary ---
-        document.getElementById('exportMooBtn')?.addEventListener('click', () => mBTPublisher.toMoo());
-        
-        document.getElementById('currencySelector')?.addEventListener('change', (e) => {
-            displayCurrency = e.target.value;
-            localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
-            
-            // --- Logic Handshake: Synchronizing math logic and UI for new currency context ---
-            if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); 
-            if(typeof render === 'function') render();
-        });
-
-        document.getElementById('publishBtn')?.addEventListener('click', () => {
-            const content = `
-                <div class="text-center p-8 space-y-4">
-                    <div class="inline-block p-5 bg-blue-50 text-blue-500 rounded-full mb-2 animate-bounce">${mBTAssets.cloud}</div>
-                    <h3 class="text-lg font-black uppercase tracking-tight text-gray-800">Cloud Sync: Phase 2</h3>
-                    <p class="text-[10px] text-gray-500 leading-relaxed font-bold uppercase">Native integration for cloud storage providers is scheduled for the next environment release.</p>
-                    <button onclick="mBTME.close('publishPlaceholderModal')" class="mt-4 px-8 py-3 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all">Understood</button>
-                </div>`;
-            mBTME.open('publishPlaceholder', 'Production Cloud', content, 'max-w-sm');
-        });
-    }
-
-    /* --- 3. Persistence & Connectivity Telemetry --- */
-    function updateOnlineStatus() { 
-        const isOnline = navigator.onLine;
-        const btn = document.getElementById('loginBtn'); 
-        if(btn) { 
-            btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isOnline ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : 'border-rose-400 bg-rose-50 text-rose-600'}`; 
-            btn.title = isOnline ? "Studio Online" : "Studio Offline"; 
-            btn.innerHTML = mBTAssets.user;
-        }
-        const aiBtn = document.getElementById('openAiToolsBtn');
-        if(aiBtn) {
-            aiBtn.className = `p-2.5 border rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center flex-shrink-0 ${isOnline ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 shadow-sm' : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75'}`;
-            if(!isOnline) aiBtn.title = "AI Consultant Offline";
-        }
-    }
-
-/* ======== TIER 5: Part 7 ======== */
-
-    /* --- 1. Stage Management Interface (Module orchestration) --- */
-    function showStagesModal() {
-        if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
-        const tl = budget.targetLock;
-        const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
-        const STAGE_LABELS = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
-
-        // --- Logic Resolution: Ensuring all phase keys exist in the environment ---
-        validKeys.forEach(k => { if (!tl.stages[k]) tl.stages[k] = { label: STAGE_LABELS[k], ratio: 20, days: 0, locked: false }; });
-
-        const stageData = {};
-        validKeys.forEach(k => stageData[k] = { items: [], total: 0 });
-
-        Object.entries(budget.sections).forEach(([sectionName, section]) => {
-            section.items.forEach(item => {
-                if (!item.stageData) { 
-                    item.stageData = {};
-                    let target = 'prod';
-                    const lower = item.description.toLowerCase();
-                    // --- Structural Logic: Phase detection via pattern matching ---
-                    if (/post|edit|vfx|sound|color/.test(lower)) target = 'post';
-                    else if (/pre|cast|scout|recc/.test(lower)) target = 'pre';
-                    else if (/dev|write|script|pitch|story/.test(lower)) target = 'dev';
-                    item.stageData[target] = { days: item.quantity, rate: item.rate };
-                }
-                Object.entries(item.stageData).forEach(([k, d]) => {
-                    if (validKeys.includes(k)) {
-                        const cost = (parseFloat(d.days)||0) * (parseFloat(d.rate)||0);
-                        stageData[k].items.push({...item, _sDays:d.days, _sRate:d.rate, _sCost:cost, _sec:sectionName});
-                        stageData[k].total += cost;
-                    }
-                });
-            });
-        });
-
-        // Markup logic for stagesView pulls from RenderEngine.stageCard (Tier 4)
-        const content = ``; 
-        mBTME.open('stagesView', '', content, 'max-w-6xl w-full', { noPadding: true, hideHeader: true, onOpen: () => {
-            updateAllHeaders();
-            if(typeof initializeStageDragAndDrop === 'function') initializeStageDragAndDrop();
-            document.querySelectorAll('.stage-slider').forEach(s => s.addEventListener('input', (e) => {
-                if(typeof balanceStageSliders === 'function') balanceStageSliders(e.target.dataset.stageKey, e.target.value);
-                updateAllHeaders();
-            }));
-        }});
-    }
-
-    /* --- 2. Stage Logic Handlers (Interaction bridge) --- */
-    window.handleStageAddItem = function(stageKey) {
-        const sectionNames = Object.keys(budget.sections);
-        let targetSectionName = null;
-
-        // --- Resolution Path: Mapping stages to their corresponding budget departments ---
-        if (stageKey === 'post') targetSectionName = sectionNames.find(s => /post|edit/.test(s.toLowerCase()));
-        else if (stageKey === 'dev') targetSectionName = sectionNames.find(s => /development|creative/.test(s.toLowerCase()));
-        else if (stageKey === 'pre') targetSectionName = sectionNames.find(s => /pre|staff/.test(s.toLowerCase()));
-        else if (stageKey === 'dist') targetSectionName = sectionNames.find(s => /distribution|market/.test(s.toLowerCase()));
-        
-        if (!targetSectionName) {
-             targetSectionName = sectionNames.find(s => s.toLowerCase().includes('production')) || sectionNames[0];
-        }
-
-        if (!targetSectionName) return alert("Budget structure resolution failure: No sections found.");
-
-        const content = ``; 
-        mBTME.open('stageAdd', `Stage Insertion: ${budget.targetLock.stages[stageKey].label}`, content, 'max-w-sm');
-    };
-
-    window.addStageItemToBudget = function(desc, rate, unit, stageKey, targetSectionName) {
-        const newItem = {
-            id: crypto.randomUUID(),
-            description: desc, quantity: 1, unit: unit, multiplier: 1, rate: rate, actual: 0,
-            rateType: 'negotiable', assignedStage: [stageKey], stageData: {} 
-        };
-        newItem.stageData[stageKey] = { days: 1, rate: rate };
-
-        if(budget.sections[targetSectionName]) {
-            budget.sections[targetSectionName].items.push(newItem);
-            if(typeof pushToHistory === 'function') pushToHistory(`Record Addition: ${desc}`);
-            mBTME.close('stageAddModal');
-            
-            // --- Brain Handshake: Logic Engine synchronization ---
-            if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); 
-            
-            if(document.getElementById('stagesViewModal')) {
-                updateAllHeaders(); 
-                const col = document.querySelector(`.stage-drop-zone[data-stage-key="${stageKey}"]`);
-                if(col && typeof RenderEngine !== 'undefined') {
-                   const vizItem = { ...newItem, _sDays: 1, _sRate: rate, _sCost: rate, _sec: targetSectionName };
-                   const wrapper = document.createElement('div');
-                   wrapper.innerHTML = RenderEngine.stageCard(vizItem, stageKey);
-                   col.appendChild(wrapper.firstElementChild);
-                   col.scrollTop = col.scrollHeight;
-                }
+    /* ========= v9.0 mBTDB: STUDIO BUILDER ENGINE v19.55 ========= */
+    window.mBTDB = {
+        state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1 },
+        icons: {
+            trash: mBTAssets.trash, plus: mBTAssets.plus, user: mBTAssets.user,
+            cloud: mBTAssets.cloud, save: mBTAssets.save, undo: mBTAssets.undo,
+            redo: mBTAssets.redo, copy: mBTAssets.copy, print: mBTAssets.print,
+            close: mBTAssets.close, wand: mBTAssets.wand, grid: mBTAssets.grid, list: mBTAssets.list
+        },
+        templates: {
+            'default': { label: "Blank Document", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }] },
+            'callSheet': {
+                label: "Daily Call Sheet",
+                widgets: [
+                    { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts', label: "Key Contacts" }, 
+                    { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics', label: "Logistics" },
+                    { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule', label: "Schedule" },
+                    { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast', label: "Cast List" },
+                    { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew', label: "Crew List" },
+                    { id: 'notes', x: 0, y: 26, w: 12, h: 4, type: 'richText', label: "General Notes" }
+                ]
             }
-            if(typeof render === 'function') render(); 
-        }
-    };
-
-    /* --- 3. Analytics Hub (Industrial Intelligence) --- */
-    window.openAnalyticsHub = function() {
-        let allItems = []; let total = 0;
-        Object.entries(budget.sections).forEach(([secName, section]) => {
-            section.items.forEach(item => {
-                const cost = item.quantity * item.rate;
-                if (cost > 0) { total += cost; allItems.push({ name: item.description, total: cost }); }
-            });
-        });
-
-        const drivers = allItems.sort((a,b) => b.total - a.total).slice(0, 5);
-        // Analytics visualization markup follows hardening protocol...
-        const content = ``;
-        mBTME.open('analyticsHub', 'Budget Intelligence', content, 'max-w-2xl');
-    };
-
-    /* ========= CallSheetBuilder: Logic Expansion (Solid Block) ========= */
-    if (typeof CallSheetBuilder !== 'undefined') {
-        CallSheetBuilder.defaultState = {
-            meta: { productionTitle: "Untitled Production", productionCompany: "", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00" },
-            contacts: { director: "", producer: "", ad: "" },
-            schedule: [{ time: "08:00", scene: "1", description: "Crew Call", cast: "ALL", ie: "I", loc: "Studio" }],
-            crew: [], cast: [],
-            locations: [{ name: "Location 1", address: "", weather: "", timeOnLocation: "08:00" }],
-            additional: {}
-        };
-
-        CallSheetBuilder.autoFillFromBudget = function(docId) {
+        },
+        open: function(docId) {
+            this.state.currentDocId = docId;
             const doc = budget.documents.find(d => d.id === docId);
-            if (!doc || !doc.content || !doc.content.data) return;
-            
-            doc.content.data.crew = [];
-            Object.entries(budget.sections).forEach(([sec, sObj]) => {
-                sObj.items.forEach(i => {
-                    if (i.crew?.name) {
-                        doc.content.data.crew.push({ department: sec, position: i.description, name: i.crew.name, contact: i.crew.phone || i.crew.email || '-', callTime: "08:00" });
-                    }
-                });
+            if (!doc) return;
+            if (!doc.content) doc.content = { data: {}, widgets: [] };
+            if (!doc.content.widgets || doc.content.widgets.length === 0) {
+                const tKey = this.templates[doc.type] ? doc.type : 'default';
+                doc.content.widgets = JSON.parse(JSON.stringify(this.templates[tKey].widgets));
+                if(!doc.content.data.meta) doc.content.data = this._generateDefaultData();
+            }
+            if(typeof mBTME !== 'undefined') {
+                mBTME.open('documentViewerModal', 'Document Studio', '<div id="mBTDB_Container"></div>', 'w-full h-full max-w-full', { noPadding: true, hideHeader: true });
+                this.renderFrame();
+            }
+        },
+        close: function() { if(typeof mBTME !== 'undefined') mBTME.close('documentViewerModal'); document.body.classList.remove('print-mode'); },
+        toggleEditMode: function() {
+            if (this.state.isEditing && this.state.grid) this._saveLayoutState(); 
+            this.state.isEditing = !this.state.isEditing;
+            const container = document.getElementById('mBTDB_Workspace');
+            const grid = this.state.grid;
+            if (container && grid) {
+                if (this.state.isEditing) { container.classList.add('editing-mode'); grid.setStatic(false); grid.enable(); } 
+                else { container.classList.remove('editing-mode'); grid.setStatic(true); grid.disable(); }
+                this._updateHeaderButtons();
+            }
+        },
+        _saveLayoutState: function() {
+            if (!this.state.grid) return;
+            const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+            this.state.grid.engine.nodes.forEach(node => {
+                const widget = doc.content.widgets.find(w => w.id === node.id);
+                if (widget) { widget.x = node.x; widget.y = node.y; widget.w = node.w; widget.h = node.h; }
             });
-            this.render(docId);
-        };
-    }
+            this._triggerSave();
+        },
+        _getContentForWidget: function(widget, doc) {
+            const data = doc.content.data;
+            if (widget.type === 'contacts') return this._renderContacts(doc.id, data, widget);
+            if (['logistics', 'locations'].includes(widget.type)) return this._renderLogistics(doc.id, data);
+            if (widget.type === 'schedule') return this._renderSchedule(doc.id, data);
+            if (widget.type === 'crew') return this._renderCrew(doc.id, data);
+            if (widget.type === 'cast') return this._renderTalent(doc.id, data);
+            if (widget.type === 'richText') return this._renderRichText(doc.id, widget.id, data);
+            return '';
+        },
+        _renderMetaHeader: function(doc) {
+            const d = doc.content.data;
+            const html = `<div class="flex flex-wrap gap-4 items-end justify-between px-2"><div class="w-full sm:w-auto flex-grow"><input value="${d.meta.productionTitle || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-3xl font-black uppercase w-full outline-none text-slate-900 bg-transparent mb-1 tracking-tighter" placeholder="PRODUCTION TITLE"><div class="flex gap-4"><div class="flex items-center gap-1.5"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</span><input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="mbt-input w-auto font-bold border-none bg-slate-50 px-2 rounded-md"></div><div class="flex items-center gap-1.5"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Call</span><input type="text" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input w-16 bg-yellow-300 font-black border-none text-center rounded-md" placeholder="00:00"></div><div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-0.5 rounded-md"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Day</span><span class="text-xs font-black text-slate-800">${this.calcShootDay(d.meta.shootDate)}</span></div></div></div><div class="w-48 text-right"><input value="${d.meta.productionCompany || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionCompany', this.value)" class="mbt-input text-right font-bold border-none text-slate-500 italic" placeholder="Production Company"></div></div>`;
+            const container = document.getElementById('mBTDB_MetaArea'); if(container) container.innerHTML = html;
+        },
+        renderFrame: function() {
+            const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+            const container = document.getElementById('mBTDB_Container');
+            if(!container) return;
+            const toolbarHTML = `<div id="mBTDB_Header" class="bg-slate-900 text-white p-3 flex justify-between items-center sticky top-0 z-50 shadow-xl border-b border-black print:hidden"><div class="flex items-center gap-4"><h2 class="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2"><span class="text-blue-500">${this.icons.list}</span> Studio: ${RenderEngine.esc(doc.label)}</h2><div class="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700"><button onclick="mBTDB.syncFromBudget()" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 text-slate-300 hover:bg-slate-700 border-r border-slate-700 transition-colors">Sync Budget</button><button onclick="mBTDB.syncFromPrevious()" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 text-slate-300 hover:bg-slate-700 transition-colors">Sync Prev</button></div></div><div class="flex gap-2 items-center" id="mBTDB_Buttons"></div></div>`;
+            const workspaceHTML = `<div id="mBTDB_Workspace" class="bg-slate-100 min-h-screen p-6 overflow-y-auto no-scrollbar ${this.state.isEditing ? 'editing-mode' : ''}"><div id="mBTDB_MetaArea" class="mb-6 bg-white p-6 shadow-2xl rounded-2xl border border-slate-200 animate-in fade-in duration-500"></div><div class="grid-stack no-scrollbar"></div></div>`;
+            container.innerHTML = toolbarHTML + workspaceHTML;
+            this._renderMetaHeader(doc);
+            setTimeout(() => {
+                if(typeof GridStack === 'undefined') return console.error("GridStack resolution failure.");
+                this.state.grid = GridStack.init({ column: 12, cellHeight: 65, minRow: 1, margin: 8, animate: true, float: true, staticGrid: !this.state.isEditing }, container.querySelector('.grid-stack'));
+                this._loadWidgetsToGrid(doc);
+                this._updateHeaderButtons();
+                this.state.grid.on('change', () => this._triggerSave());
+            }, 50);
+        },
+        updateData: function(docId, path, value) { const doc = budget.documents.find(d => d.id === docId); const parts = path.split('.'); let target = doc.content.data; for(let i=0; i<parts.length-1; i++) { if(!target[parts[i]]) target[parts[i]]={}; target = target[parts[i]]; } target[parts[parts.length-1]] = value; this._triggerSave(); },
+        updateRow: function(docId, section, index, key, value) { const doc = budget.documents.find(d => d.id === docId); if(doc.content.data[section][index]) { doc.content.data[section][index][key] = value; this._triggerSave(); } },
+        addRow: function(docId, section, type, presetData) { const doc = budget.documents.find(d => d.id === docId); if(!doc.content.data[section]) doc.content.data[section] = []; let newRow = presetData || { id: Date.now() }; doc.content.data[section].push(newRow); this._triggerSave(); this.renderFrame(); },
+        deleteRow: function(docId, section, index) { const doc = budget.documents.find(d => d.id === docId); doc.content.data[section].splice(index, 1); this._triggerSave(); this.renderFrame(); },
+        calcShootDay: function(dateStr) { if(!budget.startDate) return "Day 1"; const start = new Date(budget.startDate); const current = new Date(dateStr); return `Day ${Math.ceil((current - start) / 86400000) + 1}`; },
+        syncFromBudget: function() { if(!confirm("Synchronization with Budget details?")) return; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const defaults = this._generateDefaultData(); doc.content.data.crew = defaults.crew; doc.content.data.contacts = defaults.contacts; mBTLE.reconcile(); this.renderFrame(); },
+        _triggerSave: function() { if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); },
+        _generateDefaultData: function() { return { meta: { productionTitle: budget.projectName||"", productionCompany: budget.company||"", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00" }, contacts: { director: "", producer: "", ad: "" }, schedule: [], crew: [], cast: [], locations: [{name:"Base Camp", address:"", weather:"", hospital:"", mapLink:""}], additional: {} }; }
+    };
 
     /* ========= mBTTrash: Global Recycle Bin Engine (Solid Block) ========= */
     window.mBTTrash = {
         state: { activeTab: 'documents' },
-        trashIcons: mBTAssets, // Pointer to Tier 1 Registry
-
+        trashIcons: mBTAssets,
         open: function(tab = 'documents') {
             this.state.activeTab = tab;
             const type = this.state.activeTab;
@@ -2454,7 +2267,6 @@
                 </div>`;
             mBTME.open('trash', 'Recycle Bin', content, 'max-w-lg', { noPadding: true, hideHeader: true });
         },
-
         trashDocument: function(docId) {
             const idx = budget.documents.findIndex(d => d.id === docId);
             if (idx > -1) {
@@ -2466,13 +2278,46 @@
         }
     };
 
-    /* --- 4. Final Environment Bridges --- */
-    window.autofillMtemp = function(docId) {
-        const doc = budget.documents.find(d => d.id === docId);
-        if (doc && typeof mBTPublisher !== 'undefined') {
-            mBTPublisher.processAutofill(doc, budget);
-            if (typeof openDocumentViewer === 'function') openDocumentViewer(docId); 
-        }
+    /* ========= CallSheetBuilder: Dedicated Logic Expansion ========= */
+    if (typeof CallSheetBuilder !== 'undefined') {
+        CallSheetBuilder.autoFillFromBudget = function(docId) {
+            const doc = budget.documents.find(d => d.id === docId);
+            if (!doc || !doc.content || !doc.content.data) return;
+            doc.content.data.crew = [];
+            Object.entries(budget.sections).forEach(([sec, sObj]) => {
+                sObj.items.forEach(i => {
+                    if (i.crew?.name) {
+                        doc.content.data.crew.push({ department: sec, position: i.description, name: i.crew.name, contact: i.crew.phone || i.crew.email || '-', callTime: "08:00" });
+                    }
+                });
+            });
+            this.render(docId);
+        };
+    }
+
+    /* --- 7. Stage & Analytics Interface (Orchestration) --- */
+    function showStagesModal() {
+        if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
+        const tl = budget.targetLock;
+        const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+        validKeys.forEach(k => { if (!tl.stages[k]) tl.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false }; });
+        const content = ``;
+        mBTME.open('stagesView', 'Production Ratios', content, 'max-w-6xl w-full', { noPadding: true, hideHeader: true, onOpen: () => {
+            if(typeof initializeStageDragAndDrop === 'function') initializeStageDragAndDrop();
+        }});
+    }
+
+    window.openAnalyticsHub = function() {
+        let allItems = []; let total = 0;
+        Object.entries(budget.sections).forEach(([secName, section]) => {
+            section.items.forEach(item => {
+                const cost = item.quantity * item.rate;
+                if (cost > 0) { total += cost; allItems.push({ name: item.description, total: cost }); }
+            });
+        });
+        const drivers = allItems.sort((a,b) => b.total - a.total).slice(0, 5);
+        const content = `<div class="p-6">Analytics and Cost Driver Logic Resolving...</div>`;
+        mBTME.open('analyticsHub', 'Budget Intelligence', content, 'max-w-2xl');
     };
 
     function initializeStageDragAndDrop() {
@@ -2481,7 +2326,6 @@
             if (container._sortableStage) return;
             container._sortableStage = new Sortable(container, {
                 group: { name: 'stages-shared', pull: 'clone', put: true },
-                animation: 150,
                 onEnd: function (evt) {
                     const newStageKey = evt.to.dataset.stageKey;
                     const itemId = evt.item.dataset.itemId;
@@ -2502,27 +2346,38 @@
         });
     }
 
+    window.autofillMtemp = function(docId) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if (doc && typeof mBTPublisher !== 'undefined') {
+            mBTPublisher.processAutofill(doc, budget);
+            if (typeof openDocumentViewer === 'function') openDocumentViewer(docId); 
+        }
+    };
+
+
+
 
 
 /* ================= v19.54 TIER 6: System Ignition ================= */
 
-    /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
+  /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     // Logic Resolution: Forcing validation of script assets while bypassing browser cache.
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
+            // --- Synchronization Policy: Force validation of script, bypassing browser cache ---
             navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
                 .then(reg => {
                     console.log('SW Synchronization active:', reg.scope);
                     
-                    // --- Update Detection: Monitoring repository for environmental changes ---
+                    // --- Logic Change Detection: Monitoring repository for environmental changes ---
                     reg.onupdatefound = () => {
                         const installingWorker = reg.installing;
                         installingWorker.onstatechange = () => {
                             if (installingWorker.state === 'installed') {
                                 if (navigator.serviceWorker.controller) {
-                                    // --- Conflict Resolution: Manual refresh for new logic synchronization ---
-                                    console.log('New logic detected; prompting for synchronization.');
-                                    if(confirm("New logic synchronization available! Reload environment now?")) {
+                                    // --- Conflict Resolution: Prompt for manual environment refresh ---
+                                    console.log('Logic synchronization detected; prompting for resolution.');
+                                    if(confirm("New production logic available! Synchronize environment now?")) {
                                         window.location.reload();
                                     }
                                 } else {
@@ -2532,12 +2387,12 @@
                         };
                     };
                 })
-                .catch(err => console.error('Service Worker initialization failure:', err));
+                .catch(err => console.log('Service Worker initialization failure:', err));
         });
     }
 
     /* --- 2. GLOBAL EVENT ORCHESTRATION (mBTLE Handshake Hub) --- */
-    // Logic Resolution: Centralized delegation for all interface triggers.
+    // Logic Resolution: Centralized delegation for all interface triggers to prevent listener fragmentation.
     function bindAppEventListeners() {
         const appContainer = document.getElementById('app');
         const footer = document.querySelector('footer');
@@ -2552,7 +2407,7 @@
                 if (typeof handleProjectNameChange === 'function') handleProjectNameChange(e);
             } else if (['contingencyPercentage', 'salesTaxPercentage', 'discountPercentage'].includes(id)) {
                 budget[id] = parseFloat(e.target.value) || 0;
-                // --- Brain Handshake: High-speed math update ---
+                // --- Brain Handshake: High-speed mathematical reconciliation ---
                 if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
             } else if (id === 'projectLoader') {
                 loadBudget(e.target.value);
@@ -2561,13 +2416,17 @@
                 if (typeof handleNewProjectSelection === 'function') handleNewProjectSelection(e);
             } else if (e.target.dataset.field === 'unit') {
                 handleUpdate(e.target.dataset.section, e.target.dataset.id, 'unit', e.target.value, `Unit synchronization`);
+            } else if (id === 'currencySelector') {
+                displayCurrency = e.target.value;
+                localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
+                if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); 
+                if(typeof render === 'function') render();
             }
         });
 
         // --- Master Click Listener: Interface orchestration ---
         appContainer.addEventListener('click', (e) => {
             const target = e.target;
-            const btn = target.closest('button');
             
             if (target.id === 'undoBtn') { if (typeof handleUndo === 'function') handleUndo(); }
             else if (target.id === 'redoBtn') { if (typeof handleRedo === 'function') handleRedo(); }
@@ -2576,6 +2435,8 @@
             else if (target.closest('#deleteProjectBtn')) { if (typeof deleteProject === 'function') deleteProject(currentProjectName); }
             else if (target.closest('#exportPdfBtn')) { if (typeof exportToPdf === 'function') exportToPdf(); }
             else if (target.closest('#exportXlsxBtn')) { if (typeof exportToXlsx === 'function') exportToXlsx(); }
+            else if (target.id === 'exportMooBtn') { if (typeof mBTPublisher !== 'undefined') mBTPublisher.toMoo(); }
+            else if (target.id === 'publishBtn') { if (typeof showPublishModal === 'function') showPublishModal(); }
             else if (target.closest('[data-section-toggle]')) {
                 handleToggleSection(target.closest('[data-section-toggle]').dataset.sectionToggle);
             } else if (target.closest('[data-add-item]')) {
@@ -2586,43 +2447,38 @@
             }
         });
 
-        // --- Footer Navigation: Module activation resolution ---
-        if (footer) {
-            footer.addEventListener('click', (e) => { 
-                const navBtn = e.target.closest('button');
-                if (!navBtn) return;
-                if (navBtn.id === 'docsFooterBtn') { if (typeof showDocumentsModal === 'function') showDocumentsModal(); }
-                else if (navBtn.id === 'stagesFooterBtn') { if (typeof showStagesModal === 'function') showStagesModal(); }
-                else if (navBtn.id === 'publishFooterBtn') document.getElementById('publishBtn')?.click();
-                else if (navBtn.id === 'settingsBtn') { if (typeof showSettingsModal === 'function') showSettingsModal(); }
-                else if (navBtn.id === 'footerCoffeeBtn') {
-                    window.open('https://buymeacoffee.com/jaysonmy', '_blank');
-                }
-            });
-        }
-
         // --- Master Input Listener: Real-time mathematical handshake ---
         appContainer.addEventListener('input', (e) => {
             const input = e.target;
             if (input.dataset.field) {
-                handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, `Dynamic Input Synchronization`);
+                handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, `Live synchronization`);
             } else if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                 budget[input.id] = parseFloat(input.value) || 0;
                 if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
             }
         });
 
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        
-        // --- Persistence Handshake: Secure project binary via Publisher Engine ---
-        document.getElementById('exportMooBtn')?.addEventListener('click', () => {
-            if (typeof mBTPublisher !== 'undefined') mBTPublisher.toMoo();
-        });
+        // --- Footer Navigation: Module activation resolution ---
+        if (footer) {
+            footer.addEventListener('click', (e) => { 
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                if (btn.id === 'docsFooterBtn') { if (typeof showDocumentsModal === 'function') showDocumentsModal(); }
+                else if (btn.id === 'stagesFooterBtn') { if (typeof showStagesModal === 'function') showStagesModal(); }
+                else if (btn.id === 'publishFooterBtn') document.getElementById('publishBtn')?.click();
+                else if (btn.id === 'settingsBtn') { if (typeof showSettingsModal === 'function') showSettingsModal(); }
+                else if (btn.id === 'footerCoffeeBtn') {
+                    window.open('https://buymeacoffee.com/jaysonmy', '_blank');
+                }
+            });
+        }
+
+        window.addEventListener('online', resolveConnectivityStatus);
+        window.addEventListener('offline', resolveConnectivityStatus);
     }
 
     /* --- 3. INFRASTRUCTURE TELEMETRY (Connectivity resolution) --- */
-    function updateOnlineStatus() { 
+    function resolveConnectivityStatus() { 
         const isOnline = navigator.onLine;
         const btn = document.getElementById('loginBtn'); 
         if(btn) { 
@@ -2650,6 +2506,8 @@
         
         // --- State Hydration: Restoring currency and mathematical preferences ---
         displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
+        
+        // --- Brain Handshake: Coordinate initial exchange logic ---
         if (typeof fetchExchangeRates === 'function') fetchExchangeRates();
 
         // --- Persistence Recovery: Locating last active project environment ---
@@ -2665,11 +2523,11 @@
             if (typeof loadBudget === 'function') loadBudget(projectToLoad);
         }
         
-        // --- UI Ignition: Triggering primary render sequence ---
+        // --- UI Ignition: Triggering primary render and connectivity telemetry ---
         if (typeof render === 'function') {
             render();
             bindAppEventListeners();
-            if (typeof updateOnlineStatus === 'function') updateOnlineStatus();
+            resolveConnectivityStatus();
             console.log(`Studio Core v${APP_VERSION} Synchronized.`);
         } else {
             console.error("Critical Resolution Failure: RenderEngine not found.");
@@ -2685,7 +2543,7 @@
         if (typeof init === 'function') init();
     });
 
-/* ==========  END OF mBT  ========= */
+/* ======= END OF mBT ========== */
 </script>
 </body>
 </html>
