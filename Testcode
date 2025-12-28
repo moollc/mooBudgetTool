@@ -285,9 +285,11 @@
     const projectNameSeparatorKey = `${storageKeyPrefix}projectNameSeparator`;
     
     // Core physics and hydration state
+    let budget = null;
+    let currentProjectName = null;
     let historyStack = [];
     let historyIndex = -1;
-    const MAX_HISTORY = 7;
+    const MAX_HISTORY = 15;
 
 /* --- 2. Dynamic Multi-Currency Logic --- */
     let displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
@@ -383,10 +385,10 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             label: 'TV Commercial',
             desc: 'Standard TVC structure. High-end crew, talent fees, and heavy post-production.',
             structure: [
-                { id: 'atl', name: 'Above The Line', items: ['Director', 'Producer', 'Copywriter', 'Casting Director'] },
-                { id: 'prod', name: 'Production', items: ['DOP', 'Camera Op', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist', 'Production Designer', 'Wardrobe Stylist'] },
-                { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Sound Design', 'Music Licensing'] },
-                { id: 'other', name: 'Logistics & Talent', items: ['Principal Cast', 'Location Fees', 'Catering', 'Equipment Rental', 'Insurance'] }
+                { id: 'atl', name: 'Above The Line', items: ['Director', 'Producer', 'Copywriter (Pitch/Treatment)', 'Casting Director'] },
+                { id: 'prod', name: 'Production', items: ['Director of Photography (DP)', 'Camera Operator', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist (Key)', 'Production Designer', 'Wardrobe Stylist'] },
+                { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Sound Designer', 'Music Supervisor'] },
+                { id: 'other', name: 'Logistics & Talent', items: ['Cast - Lead', 'Location Manager', 'Catering (Per Head)', 'Equipment Rental', 'Insurance'] }
             ]
         },
         'Documentary': {
@@ -395,7 +397,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             desc: 'Run-and-gun optimized. Prioritizes travel, field logistics, research, and archival licensing.',
             structure: [
                 { id: 'atl', name: 'Creative & Research', items: ['Director', 'Producer', 'Researcher', 'Subject Consultant'] },
-                { id: 'prod', name: 'Field Production', items: ['Cinematographer', 'Field Sound', 'Fixer/Local Producer', 'Drone Operator'] },
+                { id: 'prod', name: 'Field Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Fixer/Local Producer', 'Drone Operator'] },
                 { id: 'travel', name: 'Travel & Logistics', items: ['Flights', 'Accommodation', 'Per Diems', 'Vehicle Rental', 'Carnets/Visas'] },
                 { id: 'post', name: 'Post & Archive', items: ['Editor', 'Transcription', 'Archival Researcher', 'Archival Licensing', 'Colorist'] }
             ]
@@ -405,7 +407,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             label: 'Live Broadcast',
             desc: 'Multi-cam setup. Focus on bandwidth redundancy, switching hardware, and technical operators.',
             structure: [
-                { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Stream Technician', 'Camera Op (A)', 'Camera Op (B)', 'Audio Engineer', 'Graphics Op'] },
+                { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Stream Technician', 'Camera Operator', 'Camera Operator', 'Sound Mixer', 'Graphics Op'] },
                 { id: 'gear', name: 'Hardware & Rigging', items: ['Switcher/Encoder', 'Cameras (3-Cam Kit)', 'Comms System', 'Bonded Cellular', 'Lighting Package'] },
                 { id: 'conn', name: 'Connectivity', items: ['Dedicated Internet Line', '4G/5G Backup Data', 'IT Support'] },
                 { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] }
@@ -635,8 +637,20 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         async save() {
             if (!budget) return;
             const projectKey = storageKeyPrefix + budget.projectName;
-            await this.storage.save(projectKey, budget);
-            localStorage.setItem(`${storageKeyPrefix}lastLoaded`, budget.projectName);
+            
+            // Fix: Strip Proxy before saving to IndexedDB (Prevent "could not be cloned" error)
+            // We use JSON parse/stringify to create a clean deep copy free of Proxy traps.
+            // This ensures strict serialization for the database while keeping the app reactive.
+            try {
+                const cleanData = JSON.parse(JSON.stringify(budget));
+                await this.storage.save(projectKey, cleanData);
+                localStorage.setItem(`${storageKeyPrefix}lastLoaded`, budget.projectName);
+            } catch (e) {
+                console.error("Save Failed:", e);
+                // Fallback: If JSON fails (e.g. circular refs), try basic object copy
+                const fallbackData = { ...budget };
+                await this.storage.save(projectKey, fallbackData);
+            }
         },
 
         async load(projectName) {
@@ -685,95 +699,145 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         },
         
         newProject: async function(force = false, type = 'Commercial') {
-            if (force && !confirm("Create new budget?")) return;
-            
-            const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            
-            const dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
-            const dateStr = dateFmt === 'MMDDYYYY' ? `${mm}${dd}${yyyy}` : `${yyyy}${mm}${dd}`;
-            
-            const storedSep = localStorage.getItem(projectNameSeparatorKey);
-            const sep = storedSep !== null ? storedSep : ' ';
-            
-            // --- TEMPLATE RESOLUTION ENGINE ---
-            let sections = {};
-            let baseLabel = "Project";
-
-            // 1. Check System Templates (Tier 1)
-            if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
-                const tmpl = BUDGET_TEMPLATES[type];
-                baseLabel = tmpl.label;
+            try {
+                if (force && !confirm("Create new budget?")) return;
                 
-                tmpl.structure.forEach(s => {
-                    sections[s.name] = {
-                        id: s.id,
-                        isOpen: true,
-                        items: s.items.map((desc, idx) => ({
-                            id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
-                            description: desc,
-                            quantity: 1,
-                            unit: 'Day',
-                            rate: 0,
-                            multiplier: 1,
-                            actual: 0,
-                            rateType: 'negotiable',
-                            crew: {}
-                        }))
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                
+                const dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
+                const dateStr = dateFmt === 'MMDDYYYY' ? `${mm}${dd}${yyyy}` : `${yyyy}${mm}${dd}`;
+                
+                const storedSep = localStorage.getItem(projectNameSeparatorKey);
+                const sep = storedSep !== null ? storedSep : ' ';
+                
+                // --- TEMPLATE RESOLUTION ENGINE ---
+                let sections = {};
+                let baseLabel = "Project";
+
+                // 1. Check System Templates (Tier 1)
+                if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
+                    const tmpl = BUDGET_TEMPLATES[type];
+                    baseLabel = tmpl.label;
+                    
+                    // Logic Upgrade: Hydrate rates from Open Gate Database
+                    const rateDb = (typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+
+                    tmpl.structure.forEach(s => {
+                        sections[s.name] = {
+                            id: s.id,
+                            isOpen: true,
+                            items: s.items.map((desc, idx) => {
+                                // Find matching rate in database (Safe Access)
+                                const match = rateDb.find(r => r && r.description && desc && r.description.toLowerCase() === desc.toLowerCase());
+                                return {
+                                    id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
+                                    description: desc,
+                                    quantity: 1,
+                                    unit: match ? match.unit : 'Day',
+                                    rate: match ? match.rate : 0, // Auto-fill rate if found
+                                    multiplier: 1,
+                                    actual: 0,
+                                    rateType: 'negotiable',
+                                    crew: {}
+                                };
+                            })
+                        };
+                    });
+                } 
+                // 2. Check User Templates (Tier 2 Custom)
+                else if (mBT.data.templates.getTemplates()[type]) {
+                    const customTmpl = mBT.data.templates.getTemplates()[type];
+                    baseLabel = type;
+                    
+                    if (customTmpl.structure) {
+                        // Handle Blueprint Structure
+                        customTmpl.structure.forEach(s => {
+                            sections[s.name] = {
+                                id: s.id,
+                                isOpen: true,
+                                items: s.items.map((i, idx) => ({
+                                    id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
+                                    ...i,
+                                    quantity: 1, multiplier: 1, actual: 0, crew: {}
+                                }))
+                            };
+                        });
+                    } else {
+                        // Legacy Flat List Fallback
+                        sections['Production'] = { 
+                            id: 'prod', 
+                            isOpen: true, 
+                            items: customTmpl.items ? customTmpl.items.map((i, idx) => ({
+                                id: `item_${Date.now()}_${idx}`,
+                                ...i,
+                                quantity: 1, multiplier: 1, actual: 0, crew: {}
+                            })) : [] 
+                        };
+                        // Add standard headers
+                        sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
+                        sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
+                    }
+                }
+                // 3. Fallback Default
+                else {
+                    sections = {
+                        'Above The Line': { id: 'atl', isOpen: true, items: [] },
+                        'Production': { id: 'prod', isOpen: true, items: [] },
+                        'Post-Production': { id: 'post', isOpen: true, items: [] },
+                        'Other': { id: 'other', isOpen: true, items: [] }
                     };
-                });
-            } 
-            // 2. Check User Templates (Tier 2 Custom)
-            else if (mBT.data.templates.getTemplates()[type]) {
-                const customTmpl = mBT.data.templates.getTemplates()[type];
-                baseLabel = type;
-                
-                // Custom templates currently only store a flat list of items, defaulting to 'Production' section
-                sections['Production'] = { 
-                    id: 'prod', 
-                    isOpen: true, 
-                    items: customTmpl.items ? customTmpl.items.map((i, idx) => ({
-                        id: `item_${Date.now()}_${idx}`,
-                        ...i,
-                        quantity: 1, multiplier: 1, actual: 0, crew: {}
-                    })) : [] 
-                };
-                // Add standard headers
-                sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
-                sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
-            }
-            // 3. Fallback Default
-            else {
-                sections = {
-                    'Above The Line': { id: 'atl', isOpen: true, items: [] },
-                    'Production': { id: 'prod', isOpen: true, items: [] },
-                    'Post-Production': { id: 'post', isOpen: true, items: [] },
-                    'Other': { id: 'other', isOpen: true, items: [] }
-                };
-            }
+                }
 
-            const newBudget = {
-                projectName: `${baseLabel}${sep}${dateStr}`,
-                company: "Independent",
-                startDate: new Date().toISOString().split('T')[0],
-                sections: sections,
-                grandTotal: 0,
-                subtotal: 0,
-                actualTotal: 0,
-                contingencyPercentage: 10,
-                salesTaxPercentage: 0,
-                discountPercentage: 0,
-                documents: [],
-                attachments: [],
-                aiContext: { chat: [], analysis: "" }
-            };
-            
-            budget = mBT.data.state.wrap(newBudget);
-            currentProjectName = budget.projectName;
-            await this.save();
-            if(typeof render === 'function') render();
+                // --- COLLISION DETECTION (Tier 2 Logic Injection) ---
+                // Fix: Prevent Zombie Logic overwrite by checking existence before saving
+                let proposedName = `${baseLabel}${sep}${dateStr}`;
+                let uniqueName = proposedName;
+                let counter = 1;
+                
+                // Check Async Storage (Primary) and LocalStorage (Legacy) for collision
+                while (
+                    (await this.storage.load(storageKeyPrefix + uniqueName)) || 
+                    localStorage.getItem(storageKeyPrefix + uniqueName)
+                ) {
+                    uniqueName = `${proposedName}_${counter}`;
+                    counter++;
+                }
+
+                const newBudget = {
+                    projectName: uniqueName,
+                    company: "Independent",
+                    startDate: new Date().toISOString().split('T')[0],
+                    sections: sections,
+                    grandTotal: 0,
+                    subtotal: 0,
+                    actualTotal: 0,
+                    contingencyPercentage: 10,
+                    salesTaxPercentage: 0,
+                    discountPercentage: 0,
+                    documents: [],
+                    attachments: [],
+                    aiContext: { chat: [], analysis: "" }
+                };
+                
+                budget = mBT.data.state.wrap(newBudget);
+                currentProjectName = budget.projectName;
+                await this.save();
+                if(typeof render === 'function') render();
+                // Fix: Trigger UI Refresh for Project Selector
+                if(typeof renderProjectManagement === 'function') await renderProjectManagement();
+                
+                // Set the value of the dropdown to the new project
+                const projectSelect = document.getElementById('projectSelect');
+                if (projectSelect) {
+                    projectSelect.value = uniqueName;
+                }
+            } catch (err) {
+                console.error("Critical Failure in New Project Logic:", err);
+                alert("Could not create project. Check console for details: " + err.message);
+            }
         },
         
         duplicate: async function() {
@@ -2421,8 +2485,9 @@ function updateOnlineStatus() {
 // Logic Resolution: Project Template Selector (Visual Bridge)
 window.showNewProjectModal = function() {
     // 1. Build Cards from Tier 1 Registry
+    // Update: Passed 'false' to newProject to skip confirmation dialog
     const templates = Object.entries(BUDGET_TEMPLATES).map(([key, t]) => `
-        <button onclick="mBT.data.newProject(true, '${key}'); mBTME.close('newProjectModal');"
+        <button onclick="mBT.data.newProject(false, '${key}'); mBTME.close('newProjectModal');"
             class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full">
             <div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">
                 ${mBTAssets[t.icon] || mBTAssets.file}
@@ -2433,12 +2498,10 @@ window.showNewProjectModal = function() {
     `).join('');
 
     // 2. Build Modal Layout
+    // Update: Removed the icon circle div above the title
     const content = `
         <div class="p-8 bg-slate-50 min-h-[400px] flex flex-col">
             <div class="text-center mb-8 shrink-0">
-                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white shadow-md text-blue-600 mb-4 border border-blue-50">
-                    ${mBTAssets.plus}
-                </div>
                 <h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Select Blueprint</h2>
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Choose a production structure to begin</p>
             </div>
@@ -2446,7 +2509,7 @@ window.showNewProjectModal = function() {
                 ${templates}
             </div>
             <div class="mt-8 text-center shrink-0 border-t border-slate-200/50 pt-4">
-                <button onclick="mBT.data.newProject(true, 'Blank'); mBTME.close('newProjectModal');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">
+                <button onclick="mBT.data.newProject(false, 'Blank'); mBTME.close('newProjectModal');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">
                     Skip & Create Blank Budget
                 </button>
             </div>
@@ -3031,8 +3094,45 @@ window.mBTDB = {
     // Note: Namespace definition hoisted to Tier 1. 
     // We extend it here for Feature modules.
 
+    /* ========= v19.65 BLUEPRINT ENGINE (mBT.features.blueprints) ========= */
+    mBT.features.blueprints = {
+        saveCurrentAsBlueprint: function() {
+            if (!budget) return;
+            const name = prompt("Name this Blueprint:", budget.projectName + " Template");
+            if (!name) return;
+
+            const structure = [];
+            Object.values(budget.sections).forEach(sec => {
+                structure.push({
+                    id: sec.id,
+                    name: sec.name,
+                    items: sec.items.map(i => ({
+                        description: i.description,
+                        unit: i.unit,
+                        rate: i.rate,
+                        multiplier: i.multiplier,
+                        rateType: i.rateType
+                        // Note: We strip actuals, crew, and transient IDs to create a clean template
+                    }))
+                });
+            });
+
+            mBT.data.templates.saveTemplate(name, { 
+                structure: structure, 
+                label: name, 
+                desc: 'Custom User Blueprint',
+                icon: 'file'
+            });
+            
+            alert(`Blueprint "${name}" saved! It is now available in the New Project menu.`);
+        }
+    };
+    
+    // Core Action Binding for Blueprint
+    mBT.core.action('blueprint-save', () => mBT.features.blueprints.saveCurrentAsBlueprint());
+
     /* ========= v19.55 RECYCLE BIN (mBT.features.trash) ========= */
-    mBT.features.trash = {
+		mBT.features.trash = {
         state: { activeTab: 'documents', selected: new Set() },
         icons: { folder: mBTAssets.folder, file: mBTAssets.file, trash: mBTAssets.trash, undo: mBTAssets.undo, check: mBTAssets.target },
       
@@ -4897,6 +4997,7 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
         const menuItems = [
             { label: 'New Budget', icon: mBTAssets.plus, color: 'text-emerald-600', bg: 'hover:bg-emerald-50', action: 'project-new' },
             { label: 'Duplicate Budget', icon: mBTAssets.copy, color: 'text-blue-600', bg: 'hover:bg-blue-50', action: 'project-duplicate' },
+            { label: 'Save as Blueprint', icon: mBTAssets.save, color: 'text-indigo-600', bg: 'hover:bg-indigo-50', action: 'blueprint-save' },
             { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
             { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
             { label: 'LiveStream Data', icon: mBTAssets.zap, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'project-sync' },
