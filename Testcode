@@ -403,9 +403,36 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
             }
         },
+
+        // --- NEW: Action Registry (The Nervous System) ---
+        actions: {},
+        
+        // Register an action (e.g., core.action('save', () => ...))
+        action(name, fn) { this.actions[name] = fn; },
+
+        // Router: Finds the closest action and executes it
+        route(e) {
+            // 1. Find the trigger
+            const el = e.target.closest('[data-action]');
+            if (!el) return false;
+            
+            // 2. Match the action
+            const actionName = el.dataset.action;
+            const handler = this.actions[actionName];
+            
+            // 3. Execute
+            if (handler) {
+                // Prevent default for clicks to stop form submissions or link jumps, 
+                // but allow 'change' events to propagate if needed.
+                if (e.type === 'click' || e.type === 'submit') e.preventDefault();
+                handler(e, el); 
+                return true; 
+            }
+            return false;
+        },
         
         // System Bootstrap (Migration from Tier 6)
-        init() {
+        async init() {
             console.log("mBTCore: Boot Sequence Initiated.");
 
             // 1. Establish The Reactive Loop
@@ -426,18 +453,43 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             if (typeof fetchExchangeRates === 'function') fetchExchangeRates();
             if (typeof injectFooterIcons === 'function') injectFooterIcons();
             
-            // 5. Persistence Recovery
+            // 5. Persistence Recovery (ASYNC UPGRADE)
             let projectToLoad = localStorage.getItem(`${storageKeyPrefix}lastLoaded`);
-            const projectList = typeof getProjectList === 'function' ? getProjectList() : [];
+            
+            // Logic Resolution: Await the project list from Async Storage
+            let projectList = [];
+            if (typeof getProjectList === 'function') {
+                try {
+                    const result = getProjectList();
+                    // Support both Promise (Tier 2) and Array (Legacy)
+                    projectList = result instanceof Promise ? await result : result;
+                } catch (e) { 
+                    console.warn("Project list unavailable:", e); 
+                    projectList = [];
+                }
+            }
+            
             if (!projectToLoad || !projectList.includes(projectToLoad)) {
-                projectToLoad = projectList[0];
+                projectToLoad = projectList.length > 0 ? projectList[0] : null;
             }
             
             // 6. Structural Resolution
-            if (!projectToLoad) {
-                if (typeof handleNewProject === 'function') handleNewProject(false);
-            } else {
-                if (typeof loadBudget === 'function') loadBudget(projectToLoad);
+            try {
+                if (!projectToLoad) {
+                    if (typeof handleNewProject === 'function') {
+                        const res = handleNewProject(false);
+                        if(res instanceof Promise) await res;
+                    }
+                } else {
+                    if (typeof loadBudget === 'function') {
+                        const res = loadBudget(projectToLoad);
+                        if(res instanceof Promise) await res;
+                    }
+                }
+            } catch (bootErr) {
+                console.error("Boot Critical Failure:", bootErr);
+                // Emergency Recovery
+                if(typeof mBT.data.newProject === 'function') await mBT.data.newProject(true);
             }
             
             // 7. UI Ignition
@@ -448,18 +500,18 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             console.log(`Studio Core v${APP_VERSION} Synchronized via mBTCore.`);
         }
     };
-
     console.log("Script parsing started");
 
 
-/* ========= v19.54 TIER 2: State Proxy & Storage Engine ========= */
+
+/* ========= v19.55 TIER 2: State Proxy & Storage Engine ========= */
 
     /* --- 1. mBT.data: THE MODEL (Unified Data Architecture) --- */
     mBT.data = {
         // --- A. State Governor (Reactivity) ---
         state: {
             _timer: null,      // Fast Timer: Math & UI
-            _saveTimer: null,  // Slow Timer: Storage (Deficiency 2 Fix)
+            _saveTimer: null,  // Slow Timer: Storage
             _isInitialLoad: true,
             _subscribers: [], 
             subscribe: function(callback) { this._subscribers.push(callback); },
@@ -473,25 +525,17 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             },
             requestReconciliation() {
                 // Stream A: Logic & Visuals (Fast Debounce)
-                // Calculates Grand Totals and refreshes UI shortly after input stops.
                 clearTimeout(this._timer);
                 this._timer = setTimeout(() => {
-                    // 1. Calculate Math
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                    
-                    // 2. Emit Event (Decoupled UI Update)
                     mBT.core.events.emit('budget:updated');
-                    
-                    // 3. Notify Subscribers
                     this._subscribers.forEach(cb => { try { cb(budget); } catch(e) {} });
                 }, 50);
 
-                // Stream B: Persistence (Slow Debounce)
-                // Waits for 1 second of idle time before freezing thread to write to disk.
+                // Stream B: Persistence (Slow Debounce - ASYNC)
                 clearTimeout(this._saveTimer);
-                this._saveTimer = setTimeout(() => {
-                    mBT.data.save(); 
-                    
+                this._saveTimer = setTimeout(async () => {
+                    await mBT.data.save(); 
                     const statusMsg = document.getElementById('statusBarMessage');
                     if (statusMsg) {
                         const originalText = statusMsg.textContent;
@@ -508,171 +552,8 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             }
         },
         
-        // --- B. The Library (Formerly mBTOG) ---
-        // Logic Resolution: Static database for Rates, Contacts, and Industry Standards.
-        library: {
-            settings: {
-                optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
-                location: localStorage.getItem('moo_og_loc') || 'Jamaica'
-            },
-            rates: [], contacts: [], templates: [], 
-    
-            init() {
-                this.loadRates();
-                this.loadContacts();
-                this.loadTemplates();
-                console.log(`Open Gate Initialized: ${this.rates.length} rates.`);
-            },
-    
-            loadRates() {
-                const stored = JSON.parse(localStorage.getItem('prodBudget_v5_globalItems') || '[]');
-                this.rates = (stored.length === 0) ? this._getJamaicaDatabase() : stored;
-                if (stored.length === 0) this.saveRates();
-            },
-    
-            loadContacts() { this.contacts = JSON.parse(localStorage.getItem('moo_contacts') || '[]'); },
-    
-            // --- NON-TRUNCATABLE TEMPLATE REGISTRY ---
-            loadTemplates() {
-                this.templates = [
-                    { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: '📝', default: true },
-                    { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: '📖', default: false },
-                    { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: '🔍', default: true },
-                    { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: '🎬', default: true },
-                    { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: '🎨', default: false },
-                    { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: '✅', default: true },
-                    { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: '👤', default: false },
-                    { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: '🎭', default: false },
-                    { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: '📅', default: false },
-                    { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: '🗓️', default: false },
-                    { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: '📍', default: false },
-                    { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: '💰', default: true },
-                    { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: '⚖️', default: false },
-                    { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: '🚀', default: false },
-                    { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: '📢', default: true },
-                    { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: '📊', default: true },
-                    { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: '🎬', default: false },
-                    { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: '💄', default: false },
-                    { id: 'propList', cat: 'Production', label: 'Prop List', icon: '🔫', default: false },
-                    { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: '📞', default: true },
-                    { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: '🚗', default: false },
-                    { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: '🍱', default: false },
-                    { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: '💵', default: false },
-                    { id: 'po', cat: 'Production', label: 'Purchase Order', icon: '🧾', default: false },
-                    { id: 'timecard', cat: 'Production', label: 'Timecards', icon: '⏱️', default: false },
-                    { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: '🤖', default: false },
-                    { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: '🌱', default: false },
-                    { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: '👾', default: false },
-                    { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: '📅', default: true },
-                    { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: '📦', default: false },
-                    { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: '🏆', default: false },
-                    { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: '🤝', default: true },
-                    { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: '🏠', default: true },
-                    { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: '🎥', default: false },
-                    { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: '📄', default: false },
-                    { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: '🛡️', default: false },
-                    { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: '✍️', default: false },
-                    { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: '😷', default: false },
-                    { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: '⭐', default: false }
-                ];
-            },
-    
-            saveRates() { localStorage.setItem('prodBudget_v5_globalItems', JSON.stringify(this.rates)); },
-            ingest(items, type = 'rate') {
-                let added = 0;
-                if (type === 'rate') {
-                    const existing = new Set(this.rates.map(i => i.description.toLowerCase()));
-                    items.forEach(i => {
-                        if (!existing.has(i.description.toLowerCase())) {
-                            this.rates.push({ description: i.description, unit: i.unit || 'Day', rate: parseFloat(i.rate) || 0 });
-                            added++;
-                        }
-                    });
-                    if (added > 0) this.saveRates();
-                } 
-                return added;
-            },
-    
-            // --- NON-TRUNCATABLE JAMAICA 2025 DATABASE ---
-            _getJamaicaDatabase() {
-                return [
-                    { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
-                    { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
-                    { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
-                    { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
-                    { description: 'Researcher', unit: 'Day', rate: 25000 },
-                    { description: 'Concept Artist', unit: 'Day', rate: 40000 },
-                    { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
-                    { description: 'Director', unit: 'Day', rate: 85000 },
-                    { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
-                    { description: 'Producer', unit: 'Day', rate: 75000 },
-                    { description: 'Line Producer', unit: 'Day', rate: 65000 },
-                    { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
-                    { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
-                    { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
-                    { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
-                    { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
-                    { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
-                    { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
-                    { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
-                    { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
-                    { description: 'Key PA', unit: 'Day', rate: 20000 },
-                    { description: 'Set PA', unit: 'Day', rate: 15000 },
-                    { description: 'Office PA', unit: 'Day', rate: 15000 },
-                    { description: 'Truck PA', unit: 'Day', rate: 18000 },
-                    { description: 'Location Manager', unit: 'Day', rate: 50000 },
-                    { description: 'Location Scout', unit: 'Day', rate: 35000 },
-                    { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
-                    { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
-                    { description: 'Security Guard', unit: 'Day', rate: 12000 },
-                    { description: 'Craft Service', unit: 'Day', rate: 25000 },
-                    { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
-                    { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
-                    { description: 'Camera Operator', unit: 'Day', rate: 60000 },
-                    { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
-                    { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
-                    { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
-                    { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
-                    { description: 'Drone Operator', unit: 'Day', rate: 55000 },
-                    { description: 'Camera Utility', unit: 'Day', rate: 25000 },
-                    { description: 'Gaffer', unit: 'Day', rate: 55000 },
-                    { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
-                    { description: 'Electrician', unit: 'Day', rate: 30000 },
-                    { description: 'Key Grip', unit: 'Day', rate: 50000 },
-                    { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
-                    { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
-                    { description: 'Grip', unit: 'Day', rate: 30000 },
-                    { description: 'Generator Operator', unit: 'Day', rate: 35000 },
-                    { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
-                    { description: 'Boom Operator', unit: 'Day', rate: 35000 },
-                    { description: 'Sound Utility', unit: 'Day', rate: 25000 },
-                    { description: 'Production Designer', unit: 'Day', rate: 65000 },
-                    { description: 'Art Director', unit: 'Day', rate: 50000 },
-                    { description: 'Set Decorator', unit: 'Day', rate: 45000 },
-                    { description: 'Set Dresser', unit: 'Day', rate: 30000 },
-                    { description: 'Props Master', unit: 'Day', rate: 45000 },
-                    { description: 'Assistant Props', unit: 'Day', rate: 30000 },
-                    { description: 'Costume Designer', unit: 'Day', rate: 55000 },
-                    { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
-                    { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
-                    { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
-                    { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
-                    { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
-                    { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
-                    { description: 'Editor', unit: 'Day', rate: 50000 },
-                    { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
-                    { description: 'Colorist', unit: 'Hour', rate: 15000 },
-                    { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
-                    { description: 'VFX Artist', unit: 'Day', rate: 55000 },
-                    { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
-                    { description: 'Composer', unit: 'Flat', rate: 200000 },
-                    { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
-                ];
-            }
-        },
-        
         // --- C. Template Manager (Formerly mBTDBM) ---
-        // Logic Resolution: Manages custom user templates.
+        // Logic Resolution: Manages custom user budget templates.
         templates: {
              getTemplates: function() {
                 const defaults = {
@@ -683,8 +564,6 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 return { ...defaults, ...stored };
             },
             saveTemplate: function(name, items) {
-                const current = this.getTemplates();
-                // Remove from defaults if overriding, or just save to custom
                 const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
                 custom[name] = { items: items };
                 localStorage.setItem('mBT_templates', JSON.stringify(custom));
@@ -696,7 +575,6 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 localStorage.setItem('mBT_templates', JSON.stringify(custom));
                 return true;
             },
-            // --- Helper for UI ---
             renderTemplateOptions: function(selected) {
                 return Object.keys(this.getTemplates()).map(k => 
                     `<option value="${k}" ${k === selected ? 'selected' : ''}>${k}</option>`
@@ -704,36 +582,52 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             }
         },
         
-        // ... (rest of mBT.data properties like save/load/storage) ...
-        // ... Re-add remaining mBT.data logic here if needed, or assume existing is below ...
-        
-        // --- STORAGE & PERSISTENCE ---
+        // --- STORAGE & PERSISTENCE (ASYNC UPGRADE) ---
+        // Logic Resolution: Swapped synchronous localStorage for Async localForage to unblock UI thread.
         storage: {
-            save(key, data) { localStorage.setItem(key, JSON.stringify(data)); },
-            load(key) { return JSON.parse(localStorage.getItem(key)); },
-            remove(key) { localStorage.removeItem(key); }
+            async save(key, data) { await localforage.setItem(key, data); },
+            async load(key) { return await localforage.getItem(key); },
+            async remove(key) { await localforage.removeItem(key); },
+            async keys() { return await localforage.keys(); }
         },
 
-        save: function() {
+        async save() {
             if (!budget) return;
             const projectKey = storageKeyPrefix + budget.projectName;
-            localStorage.setItem(projectKey, JSON.stringify(budget));
+            await this.storage.save(projectKey, budget);
             localStorage.setItem(`${storageKeyPrefix}lastLoaded`, budget.projectName);
         },
 
-        load: function(projectName) {
+        async load(projectName) {
             const projectKey = storageKeyPrefix + projectName;
-            const data = localStorage.getItem(projectKey);
+            let data = await this.storage.load(projectKey);
+
+            // Lazy Migration Logic: If not in Forage, check Local and upgrade
+            if (!data) {
+                const raw = localStorage.getItem(projectKey);
+                if (raw) {
+                    try {
+                        data = JSON.parse(raw);
+                        await this.storage.save(projectKey, data); // Upgrade
+                        console.log(`Migrated ${projectName} to Async Storage`);
+                    } catch(e) { console.error("Migration failed", e); }
+                }
+            }
+
             if (data) {
-                budget = mBT.data.state.wrap(JSON.parse(data));
+                budget = mBT.data.state.wrap(data);
                 currentProjectName = budget.projectName;
                 if(typeof render === 'function') render();
                 if(typeof renderProjectManagement === 'function') renderProjectManagement();
             }
         },
 
-        getList: function() {
-            return Object.keys(localStorage)
+        async getList() {
+            const fKeys = await this.storage.keys();
+            const lKeys = Object.keys(localStorage);
+            const combined = new Set([...fKeys, ...lKeys]);
+            
+            return Array.from(combined)
                 .filter(k => k.startsWith(storageKeyPrefix) && 
                     !k.includes('_trash') && 
                     !k.includes('_globalItems') && 
@@ -749,10 +643,9 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 .map(k => k.replace(storageKeyPrefix, ''));
         },
         
-        newProject: function(force = false, type = 'Commercial') {
+        newProject: async function(force = false, type = 'Commercial') {
             if (force && !confirm("Create new budget?")) return;
             
-            // Logic Resolution: Dynamic Naming (Type + Date)
             const now = new Date();
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -761,12 +654,10 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             const dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
             const dateStr = dateFmt === 'MMDDYYYY' ? `${mm}${dd}${yyyy}` : `${yyyy}${mm}${dd}`;
             
-            // Default separator is space if not set
             const storedSep = localStorage.getItem(projectNameSeparatorKey);
             const sep = storedSep !== null ? storedSep : ' ';
             const baseName = type || 'Project';
 
-            // Note: Default sections definition
              const defaultSections = {
                 'Above The Line': { id: 'atl', isOpen: true, items: [] },
                 'Production': { id: 'prod', isOpen: true, items: [] },
@@ -789,11 +680,9 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 aiContext: { chat: [], analysis: "" }
             };
             
-            // Handle Template Injection
             if(type && mBT.data.templates.getTemplates()[type]) {
                 const tmpl = mBT.data.templates.getTemplates()[type];
                 if(tmpl.items) {
-                     // Simple inject into Production for now
                      newBudget.sections['Production'].items = tmpl.items.map((i, idx) => ({
                          id: 'item_'+Date.now()+'_'+idx,
                          ...i,
@@ -804,30 +693,39 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             
             budget = mBT.data.state.wrap(newBudget);
             currentProjectName = budget.projectName;
-            this.save();
+            await this.save();
             if(typeof render === 'function') render();
         },
         
-        duplicate: function() {
+        duplicate: async function() {
             if(!budget) return;
             const copy = JSON.parse(JSON.stringify(budget));
             copy.projectName = copy.projectName + " (Copy)";
             budget = mBT.data.state.wrap(copy);
-            this.save();
+            await this.save();
             if(typeof render === 'function') render();
         },
         
-        deleteProject: function(name) {
+        deleteProject: async function(name) {
              if (confirm(`Move "${name}" to Bin?`)) {
-                const data = localStorage.getItem(storageKeyPrefix + name);
+                // Async Load before trash
+                let data = await this.storage.load(storageKeyPrefix + name);
+                if(!data) {
+                    const raw = localStorage.getItem(storageKeyPrefix + name);
+                    if(raw) data = JSON.parse(raw);
+                }
+
                 if(data) {
                     const trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
-                    trashed.push(JSON.parse(data));
+                    trashed.push(data);
                     localStorage.setItem(trashKey, JSON.stringify(trashed));
                 }
-                localStorage.removeItem(storageKeyPrefix + name);
-                const list = this.getList();
-                if (list.length) this.load(list[0]); else this.newProject();
+                
+                await this.storage.remove(storageKeyPrefix + name);
+                localStorage.removeItem(storageKeyPrefix + name); // Clean legacy
+
+                const list = await this.getList();
+                if (list.length) await this.load(list[0]); else await this.newProject();
                 if(typeof renderProjectManagement === 'function') renderProjectManagement();
             }
         },
@@ -836,15 +734,18 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
              const file = input.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
                     if (!data.projectName) throw new Error("Invalid file structure");
-                    const existing = localStorage.getItem(storageKeyPrefix + data.projectName);
+                    
+                    const projectKey = storageKeyPrefix + data.projectName;
+                    const existing = await this.storage.load(projectKey) || localStorage.getItem(projectKey);
+                    
                     if (existing && !confirm(`Overwrite existing project "${data.projectName}"?`)) { input.value = ''; return; }
                     budget = mBT.data.state.wrap(data);
-                    this.save();
-                    this.load(data.projectName);
+                    await this.save();
+                    await this.load(data.projectName);
                     if(typeof renderProjectManagement === 'function') renderProjectManagement();
                     alert("Project environment restored.");
                 } catch (err) { alert("Import failed: " + err.message); }
@@ -853,12 +754,223 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             reader.readAsText(file);
         },
         
-        pushHistory: function(desc) {
+         pushHistory: function(desc) {
             historyStack = historyStack.slice(0, historyIndex + 1);
             historyStack.push({ description: desc, budget: JSON.parse(JSON.stringify(budget)) });
             if (historyStack.length > MAX_HISTORY) historyStack.shift();
             historyIndex = historyStack.length - 1;
             if(typeof renderStatusBar === 'function') renderStatusBar();
+        }
+    };
+
+    /* ========= v19.55 TIER 2.5: OPEN GATE INFRASTRUCTURE (mBT.opengate) ========= */
+    mBT.opengate = {
+        settings: {
+            optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
+            location: localStorage.getItem('moo_og_loc') || 'Jamaica'
+        },
+        rates: [], 
+        contacts: [], 
+        templates: [], // Document Definitions (Studio Builder)
+
+        init() {
+            this.loadRates();
+            this.loadContacts();
+            this.loadTemplates();
+            console.log(`Open Gate Initialized: ${this.rates.length} rates, ${this.contacts.length} contacts.`);
+        },
+
+        loadRates() {
+            const stored = JSON.parse(localStorage.getItem('prodBudget_v5_globalItems') || '[]');
+            this.rates.length = 0; 
+            if (stored.length === 0) {
+                this.rates.push(...this._getJamaicaDatabase());
+                this.saveRates();
+            } else {
+                this.rates.push(...stored);
+            }
+        },
+
+        loadContacts() { 
+            const c = JSON.parse(localStorage.getItem('moo_contacts') || '[]');
+            this.contacts.length = 0; 
+            this.contacts.push(...c);
+        },
+
+        // --- PERSISTENCE LAYER ---
+        saveRates() { localStorage.setItem('prodBudget_v5_globalItems', JSON.stringify(this.rates)); },
+        saveContacts() { localStorage.setItem('moo_contacts', JSON.stringify(this.contacts)); },
+
+        // --- NON-TRUNCATABLE TEMPLATE REGISTRY (Documents) ---
+        loadTemplates() {
+            const t = [
+                { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: '📝', default: true },
+                { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: '📖', default: false },
+                { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: '🔍', default: true },
+                { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: '🎬', default: true },
+                { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: '🎨', default: false },
+                { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: '✅', default: true },
+                { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: '👤', default: false },
+                { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: '🎭', default: false },
+                { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: '📅', default: false },
+                { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: '🗓️', default: false },
+                { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: '📍', default: false },
+                { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: '💰', default: true },
+                { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: '⚖️', default: false },
+                { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: '🚀', default: false },
+                { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: '📢', default: true },
+                { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: '📊', default: true },
+                { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: '🎬', default: false },
+                { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: '💄', default: false },
+                { id: 'propList', cat: 'Production', label: 'Prop List', icon: '🔫', default: false },
+                { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: '📞', default: true },
+                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: '🚗', default: false },
+                { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: '🍱', default: false },
+                { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: '💵', default: false },
+                { id: 'po', cat: 'Production', label: 'Purchase Order', icon: '🧾', default: false },
+                { id: 'timecard', cat: 'Production', label: 'Timecards', icon: '⏱️', default: false },
+                { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: '🤖', default: false },
+                { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: '🌱', default: false },
+                { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: '👾', default: false },
+                { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: '📅', default: true },
+                { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: '📦', default: false },
+                { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: '🏆', default: false },
+                { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: '🤝', default: true },
+                { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: '🏠', default: true },
+                { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: '🎥', default: false },
+                { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: '📄', default: false },
+                { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: '🛡️', default: false },
+                { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: '✍️', default: false },
+                { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: '😷', default: false },
+                { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: '⭐', default: false }
+            ];
+            this.templates.length = 0; 
+            this.templates.push(...t);
+        },
+
+        // --- INTELLIGENT INGESTION ENGINE ---
+        ingest(items, type = 'rate') {
+            let added = 0;
+            
+            // PATH A: Rate Ingestion
+            if (type === 'rate') {
+                const existing = new Set(this.rates.map(i => i.description.toLowerCase()));
+                items.forEach(i => {
+                    if (!existing.has(i.description.toLowerCase())) {
+                        this.rates.push({ description: i.description, unit: i.unit || 'Day', rate: parseFloat(i.rate) || 0 });
+                        added++;
+                    }
+                });
+                if (added > 0) this.saveRates();
+            } 
+            
+            // PATH B: Contact Ingestion
+            else if (type === 'contact') {
+                const existing = new Set(this.contacts.map(c => `${c.name}|${c.role}`.toLowerCase()));
+                items.forEach(i => {
+                    // Normalize Inputs: Handles variations in CSV headers (case insensitive)
+                    const name = (i.Name || i.name || '').trim();
+                    const role = (i.Role || i.role || 'Crew').trim();
+                    const phone = (i.Phone || i.phone || '').trim();
+                    const email = (i.Email || i.email || '').trim();
+                    const contactStr = phone || email; // Legacy fallback
+
+                    if (!name) return; // Skip empty rows
+
+                    const key = `${name}|${role}`.toLowerCase();
+                    if (!existing.has(key)) {
+                        this.contacts.push({
+                            id: 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                            name: name,
+                            role: role,
+                            phone: phone,
+                            email: email,
+                            contact: contactStr
+                        });
+                        existing.add(key);
+                        added++;
+                    }
+                });
+                if (added > 0) this.saveContacts();
+            }
+            return added;
+        },
+
+        // --- NON-TRUNCATABLE JAMAICA 2025 DATABASE ---
+        _getJamaicaDatabase() {
+            return [
+                { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
+                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
+                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
+                { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
+                { description: 'Researcher', unit: 'Day', rate: 25000 },
+                { description: 'Concept Artist', unit: 'Day', rate: 40000 },
+                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+                { description: 'Director', unit: 'Day', rate: 85000 },
+                { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
+                { description: 'Producer', unit: 'Day', rate: 75000 },
+                { description: 'Line Producer', unit: 'Day', rate: 65000 },
+                { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
+                { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
+                { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
+                { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
+                { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
+                { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
+                { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
+                { description: 'Key PA', unit: 'Day', rate: 20000 },
+                { description: 'Set PA', unit: 'Day', rate: 15000 },
+                { description: 'Office PA', unit: 'Day', rate: 15000 },
+                { description: 'Truck PA', unit: 'Day', rate: 18000 },
+                { description: 'Location Manager', unit: 'Day', rate: 50000 },
+                { description: 'Location Scout', unit: 'Day', rate: 35000 },
+                { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
+                { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
+                { description: 'Security Guard', unit: 'Day', rate: 12000 },
+                { description: 'Craft Service', unit: 'Day', rate: 25000 },
+                { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
+                { description: 'Camera Operator', unit: 'Day', rate: 60000 },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
+                { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
+                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
+                { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
+                { description: 'Drone Operator', unit: 'Day', rate: 55000 },
+                { description: 'Camera Utility', unit: 'Day', rate: 25000 },
+                { description: 'Gaffer', unit: 'Day', rate: 55000 },
+                { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
+                { description: 'Electrician', unit: 'Day', rate: 30000 },
+                { description: 'Key Grip', unit: 'Day', rate: 50000 },
+                { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
+                { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
+                { description: 'Grip', unit: 'Day', rate: 30000 },
+                { description: 'Generator Operator', unit: 'Day', rate: 35000 },
+                { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
+                { description: 'Boom Operator', unit: 'Day', rate: 35000 },
+                { description: 'Sound Utility', unit: 'Day', rate: 25000 },
+                { description: 'Production Designer', unit: 'Day', rate: 65000 },
+                { description: 'Art Director', unit: 'Day', rate: 50000 },
+                { description: 'Set Decorator', unit: 'Day', rate: 45000 },
+                { description: 'Set Dresser', unit: 'Day', rate: 30000 },
+                { description: 'Props Master', unit: 'Day', rate: 45000 },
+                { description: 'Assistant Props', unit: 'Day', rate: 30000 },
+                { description: 'Costume Designer', unit: 'Day', rate: 55000 },
+                { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
+                { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
+                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
+                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
+                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
+                { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
+                { description: 'Editor', unit: 'Day', rate: 50000 },
+                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
+                { description: 'Colorist', unit: 'Hour', rate: 15000 },
+                { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
+                { description: 'VFX Artist', unit: 'Day', rate: 55000 },
+                { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
+                { description: 'Composer', unit: 'Flat', rate: 200000 },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
+            ];
         }
     };
 
@@ -875,12 +987,12 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
     window.getProjectList = mBT.data.getList.bind(mBT.data);
     window.pushToHistory = mBT.data.pushHistory.bind(mBT.data);
     
-    // Initialize the Library immediately
-    mBT.data.library.init();
+    // Initialize Open Gate immediately
+    mBT.opengate.init();
     
     // --- 5. Global Aliases for Migrated Globals ---
-    window.mBTOG = mBT.data.library;
-    window.mBTDBM = mBT.data.templates;
+    window.mBTOG = mBT.opengate; // OPEN GATE Alias
+    window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
 
 /* ================= v19.54 TIER 3: Core Logic Engines v19.55 ================= */
 
@@ -1503,8 +1615,6 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
     }
 
 console.log("TIER 3 complete");
-
-
 
 
 /* ========= v19.54 TIER 4: Atomic Render Pipeline v19.55 ========= */
@@ -2168,7 +2278,6 @@ function updateOnlineStatus() {
 console.log("TIER 4 render defined", typeof render);
 
 
-
 /* ================= TIER 5: MODULE CONTROLLERS & SMART FEATURES ================= */
     /* ========= v19.55 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
     // Previously: mBTME
@@ -2736,10 +2845,7 @@ window.mBTDB = {
     }
 };
 
-/* ======= TIER 5: Part 2: Module Controllers & Intelligence ======== */
-    
     /* ======= TIER 5: Part 2: Module Controllers & Intelligence ======== */
-    
     // --- ROOT NAMESPACE DECLARATION ---
     // Note: Namespace definition hoisted to Tier 1. 
     // We extend it here for Feature modules.
@@ -3343,7 +3449,8 @@ window.mBTDB = {
     // --- Backward Compatibility Alias ---
     // Fix: We use .bind() to ensure 'this' refers to the settings object, not the window
     window.showSettingsModal = mBT.features.settings.open.bind(mBT.features.settings);
-    
+
+// ---- Tier 5 Part 3 ---- //
  /* ========= v19.60 DOCUMENTS HUB (mBT.features.documents) ========= */
     mBT.features.documents = {
         // Logic Resolution: Creates a new document instance from a template definition
@@ -3618,7 +3725,7 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
                 const phone = document.getElementById('crewPhone').value.trim();
                 const email = document.getElementById('crewEmail').value.trim();
 
-                if (itemId && itemId.startsWith('dummy_new_contact')) {
+               if (itemId && itemId.startsWith('dummy_new_contact')) {
                     // Global add from Settings
                     if (!name) return alert("Name is required.");
                     const exists = mBTOG.contacts.some(c => c.name.toLowerCase() === name.toLowerCase());
@@ -3632,7 +3739,7 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
                         email
                     };
                     mBTOG.contacts.push(newContact);
-                    localStorage.setItem('moo_contacts', JSON.stringify(mBTOG.contacts));
+                    mBTOG.saveContacts(); // Encapsulated Save (Tier 2.5)
                     mBTME.close('crewProfileModal');
                     showSettingsModal('database', 'contacts');
                 } else {
@@ -4475,56 +4582,6 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
             document.querySelectorAll('.stage-slider').forEach(bindInput);
             document.querySelectorAll('.stage-number-input').forEach(bindInput);
 
-            window.updateAllHeaders = () => {
-                const metrics = mBTStagesEngine.getMetrics();
-                const burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
-                
-                // Update Overview
-                const ovGrandTotal = document.getElementById('ovGrandTotal');
-                const ovTotalCap = document.getElementById('ovTotalCap');
-                if(ovGrandTotal) ovGrandTotal.textContent = formatAbbreviated(metrics.grandTotal, displayCurrency);
-                if(ovTotalCap) ovTotalCap.textContent = formatAbbreviated(metrics.totalCap, displayCurrency);
-
-                const ring = document.getElementById('burnRateRing');
-                const ringTxt = document.getElementById('burnRateText');
-                if(ring && ringTxt) {
-                    ring.className = `w-40 h-40 rounded-full border-[12px] ${burn.ring} flex items-center justify-center relative mb-6 transition-all duration-500`;
-                    ringTxt.className = `text-4xl font-black ${burn.color} block leading-none`;
-                    ringTxt.textContent = Math.round(burn.pct) + '%';
-                }
-
-                validKeys.forEach(k => {
-                    const cfg = budget.targetLock.stages[k];
-                    const cap = metrics.totalCap * (cfg.ratio / 100);
-                    const total = metrics.stageTotals[k];
-                    
-                    // Sync Sliders/Inputs
-                    const slider = document.querySelector(`.stage-slider[data-stage-key="${k}"]`);
-                    const numInput = document.querySelector(`#header_perc_${k}`);
-                    const dispPerc = document.getElementById(`setup_perc_disp_${k}`);
-                    if(slider && document.activeElement !== slider) slider.value = cfg.ratio;
-                    if(numInput && document.activeElement !== numInput) numInput.value = cfg.ratio.toFixed(1);
-                    if(dispPerc) dispPerc.textContent = cfg.ratio.toFixed(1) + '%';
-
-                    // Update Bars & Text
-                    const bar = document.getElementById(`bar-${k}`);
-                    const setupBar = document.getElementById(`setup_bar_${k}`);
-                    // Visual tweak: Bar turns red if over cap
-                    const barColor = total > cap ? 'bg-red-500' : 'bg-blue-500';
-                    if(bar) {
-                        bar.style.width = Math.min((total/cap)*100, 100) + '%';
-                        bar.className = `${barColor} h-full transition-all duration-500`;
-                    }
-                    if(setupBar) setupBar.style.width = Math.min((total/metrics.totalCap)*100, 100) + '%';
-                    
-                    const totalEl = document.getElementById(`total-${k}`);
-                    const limitEl = document.getElementById(`limit-${k}`);
-                    if(totalEl) totalEl.textContent = formatAbbreviated(total, displayCurrency);
-                    if(limitEl) limitEl.textContent = `Cap: ${formatAbbreviated(cap, displayCurrency)}`;
-                });
-            };
-            window.updateAllHeaders();
-
             // Drag to Scroll Logic
             const slider = document.getElementById('stagesCarousel');
             if(slider) {
@@ -4642,60 +4699,86 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
         }
     };
 
-/* ========= v19.54 CONNECTIVE UI & Interaction Handlers ========= */
-    /* --- 1. UI Module: Project & Status Bar Resolution --- */
-  function renderProjectManagement() {
-    const container = document.getElementById('project-management-container');
-    if (!container) return;
-    const btnBase = "p-2.5 bg-white text-slate-400 hover:text-blue-600 rounded-xl border border-slate-100 shadow-sm transition-all active:scale-90 flex items-center justify-center";
-   
-    // Logic Resolution: Using indigo for Publish to match industry standard 'Finalization'
-    const publishBase = "px-4 py-2 bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl shadow-lg hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2";
-    
-    // Add hidden input for Import functionality
-    const importInput = `<input type="file" id="importMooFile" accept=".moo,.json" class="hidden" onchange="handleImportFile(this)">`;
 
-    container.innerHTML = `
-        <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
-                <span class="px-2 text-[9px] font-black text-slate-400 uppercase tracking-tighter">FX</span>
-                <select id="currencySelector" class="text-[10px] font-black bg-transparent border-none outline-none cursor-pointer pr-2 text-blue-600">
-                    ${FILM_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === displayCurrency ? 'selected' : ''}>${c.label}</option>`).join('')}
-                </select>
-            </div>
-            <div class="flex items-center bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100">
-                <select id="projectLoader" class="text-[10px] font-black uppercase tracking-widest bg-transparent border-none outline-none cursor-pointer px-2">
-                    ${getProjectList().map(p => `<option value="${p}" ${p === currentProjectName ? 'selected' : ''}>${p}</option>`).join('')}
-                </select>
-                <div class="relative group">
-                    <select id="newProjectSelector" class="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-0 py-1.5 rounded-xl shadow-lg cursor-pointer outline-none border-none w-16 text-center appearance-none hover:bg-blue-500 transition-colors">
-                        <option value="" disabled selected>FILE</option>
-                        <option value="Commercial">New Commercial</option>
-                        <option value="Documentary">New Doc</option>
-                        <option value="Duplicate">Duplicate</option>
-                        <option value="Import">Import...</option>
-                        <option value="Restore">Restore...</option>
-                        <option value="LiveStream">Live Stream</option>
+// --- Tier 5 Part 4 --- //
+/* ========= v19.54 CONNECTIVE UI & Interaction Handlers ========= */
+/* --- 1. UI Module: Project & Status Bar Resolution --- */
+    // Logic Resolution: Async Project Management UI to handle Promise-based storage
+    async function renderProjectManagement() {
+        const container = document.getElementById('project-management-container');
+        if (!container) return; 
+
+        // Logic Resolution: Await the async storage list via the new Data Engine
+        // Fallback to empty array if mBT.data is initializing or unavailable
+        const projects = (mBT.data && mBT.data.getList) ? await mBT.data.getList() : [];
+        
+        let html = `
+            <div class="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                <div class="relative">
+                    <select id="projectSelect" data-action="project-switch" class="appearance-none bg-white border border-gray-300 text-gray-700 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block pl-3 pr-8 py-1.5 focus:outline-none transition-shadow">
+        `;
+
+        // Logic Resolution: Handle empty states or fresh boots gracefully
+        if (projects.length === 0 && typeof currentProjectName !== 'undefined' && currentProjectName) {
+             html += `<option value="${currentProjectName}" selected>${currentProjectName}</option>`;
+        }
+
+        projects.forEach(p => {
+            const selected = (typeof currentProjectName !== 'undefined' && p === currentProjectName) ? 'selected' : '';
+            html += `<option value="${p}" ${selected}>${p}</option>`;
+        });
+
+        html += `
                     </select>
-                    <!-- Chevron visual fix since appearance-none removes it -->
-                    <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-200 text-[8px]">▼</div>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+
+                <button data-action="project-new" class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-md text-sm px-3 py-1.5 flex items-center shadow-sm transition-colors">
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    New
+                </button>
+                <div class="h-6 w-px bg-gray-300 mx-1"></div>
+                <button data-action="project-duplicate" class="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors" title="Duplicate Project">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                </button>
+                <button data-action="project-delete" class="text-gray-500 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" title="Delete Project">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+                
+                 <div class="relative ml-1">
+                    <button data-action="project-import-trigger" class="text-gray-500 hover:text-purple-600 hover:bg-purple-50 p-1.5 rounded-md transition-colors" title="Import JSON">
+                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    </button>
+                    <input type="file" id="importFile" class="hidden" accept=".json" data-action="project-import-file">
                 </div>
             </div>
-            <div class="flex items-center gap-1.5">
-                <button id="exportMooBtn" title="Backup Environment" class="${btnBase}">${mBTAssets.cloud}</button>
-                <button id="exportPdfBtn" title="Print PDF" class="${btnBase}">${mBTAssets.print}</button>
-                <button id="exportXlsxBtn" title="Export Excel" class="${btnBase}">${mBTAssets.file}</button>
-               
-                <button id="publishBtn" class="${publishBase}">
-                    ${mBTAssets.zap} PUBLISH
-                </button>
-                <button id="deleteProjectBtn" title="Archive" class="p-2.5 bg-white text-slate-300 hover:text-rose-500 rounded-xl border border-slate-100 shadow-sm transition-all active:scale-90 ml-2">
-                    ${mBTAssets.trash}
-                </button>
-            </div>
-            ${importInput}
-        </div>`;
-}
+        `;
+
+        container.innerHTML = html;
+    }
+
+    // --- B. Global Action Wrappers (Legacy Compatibility for Tier 1.5) ---
+    // Logic Resolution: Connecting HTML event listeners to the new mBT.data Engine
+    
+    window.handleProjectChange = async function(select) {
+        if (select.value) {
+            // Show simple feedback before the async load finishes
+            const originalText = select.options[select.selectedIndex].text;
+            select.options[select.selectedIndex].text = "Loading...";
+            await mBT.data.load(select.value);
+        }
+    };
+
+    window.handleNewProject = async function(force) {
+        await mBT.data.newProject(force);
+    };
+    
+    // Bridging Tier 1.5 Boot calls to Tier 2 Data Engine
+    window.getProjectList = () => mBT.data.getList(); 
+    window.loadBudget = (name) => mBT.data.load(name);
+
     function renderStatusBar() {
         const container = document.getElementById('statusBar');
         if (!container) return;
@@ -4780,6 +4863,55 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
         };
         reader.readAsText(file);
     }
+
+    // --- PHASE 3: Global Bridge for Contact CSV Import ---
+    window.importContactsCSV = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            if (!text) return;
+            
+            // Lightweight Parser (Newline -> Comma)
+            const lines = text.split(/\r\n|\n/);
+            if (lines.length < 2) return alert("Invalid CSV format.");
+            
+            const headers = lines[0].split(',').map(h => h.trim());
+            const contacts = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const values = line.split(',');
+                const obj = {};
+                
+                // Map values to headers
+                headers.forEach((h, idx) => {
+                    let val = values[idx] ? values[idx].trim() : '';
+                    // Basic quote cleaning
+                    if(val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+                    obj[h] = val;
+                });
+                contacts.push(obj);
+            }
+
+            // Handshake with Open Gate (Tier 2.5)
+            const count = mBTOG.ingest(contacts, 'contact');
+            
+            if (count > 0) {
+                alert(`Success: ${count} new contacts imported.`);
+                // Refresh Settings UI (Tier 5)
+                showSettingsModal('database', 'contacts');
+            } else {
+                alert("Import completed. No new contacts added (duplicates skipped).");
+            }
+            input.value = '';
+        };
+        reader.readAsText(file);
+    };
 
     function deleteProject(name) {
         if (confirm(`Move "${name}" to Bin?`)) {
@@ -5029,6 +5161,54 @@ function renderStageItems(stageKey) {
     });
     return html || '<p class="text-[8px] text-center mt-10 font-black text-slate-300 uppercase">Drop Items Here</p>';
 }
+// --- Global Stages Header Update Logic (Available before modal open) ---
+window.updateAllHeaders = () => {
+    const metrics = mBTStagesEngine.getMetrics();
+    const burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
+    
+    // Update Overview
+    const ovGrandTotal = document.getElementById('ovGrandTotal');
+    const ovTotalCap = document.getElementById('ovTotalCap');
+    if(ovGrandTotal) ovGrandTotal.textContent = mBTLE.format.currency(metrics.grandTotal);
+    if(ovTotalCap) ovTotalCap.textContent = mBTLE.format.currency(metrics.totalCap);
+
+    const ring = document.getElementById('burnRateRing');
+    const ringTxt = document.getElementById('burnRateText');
+    if(ring && ringTxt) {
+        ring.className = `w-48 h-48 rounded-full border-[16px] ${burn.ring} flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm`;
+        ringTxt.className = `text-5xl font-black ${burn.color} block leading-none tracking-tighter`;
+        ringTxt.textContent = Math.round(burn.pct) + '%';
+    }
+
+    validKeys.forEach(k => {
+        const cfg = budget.targetLock.stages[k];
+        const cap = metrics.totalCap * (cfg.ratio / 100);
+        const total = metrics.stageTotals[k];
+        
+        // Sync Sliders/Inputs
+        const slider = document.querySelector(`.stage-slider[data-stage-key="${k}"]`);
+        const numInput = document.querySelector(`#header_perc_${k}`);
+        const dispPerc = document.getElementById(`setup_perc_disp_${k}`);
+        if(slider && document.activeElement !== slider) slider.value = cfg.ratio;
+        if(numInput && document.activeElement !== numInput) numInput.value = cfg.ratio.toFixed(1);
+        if(dispPerc) dispPerc.textContent = cfg.ratio.toFixed(1) + '%';
+
+        // Update Bars & Text
+        const bar = document.getElementById(`bar-${k}`);
+        const setupBar = document.getElementById(`setup_bar_${k}`);
+        const barColor = total > cap ? 'bg-red-500' : 'bg-blue-500';
+        if(bar) {
+            bar.style.width = Math.min((total/cap)*100, 100) + '%';
+            bar.className = `${barColor} h-full transition-all duration-500`;
+        }
+        if(setupBar) setupBar.style.width = Math.min((total/metrics.totalCap)*100, 100) + '%';
+        
+        const totalEl = document.getElementById(`total-${k}`);
+        const limitEl = document.getElementById(`limit-${k}`);
+        if(totalEl) totalEl.textContent = mBTLE.format.currency(total);
+        if(limitEl) limitEl.textContent = `Cap: ${mBTLE.format.currency(cap)}`;
+    });
+};
 
 /* --- Feature: Advanced Documents Hub (mBT.features.documents) --- */
 mBT.features.documents = {
@@ -5210,30 +5390,20 @@ window.showCoffeeWidget = function() {
 console.log("TIER 5 complete");
 
 
+/* ================= v19.65 TIER 6: SYSTEM IGNITION & EVENTS ================= */
 
-/* ================= v19.54 TIER 6: System Ignition v19.55 ================= */
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
-    // Logic Resolution: Forcing validation of script assets while bypassing browser cache.
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            // --- Synchronization Policy: Force validation of script, bypassing browser cache ---
             navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
                 .then(reg => {
                     console.log('SW Synchronization active:', reg.scope);
-                   
-                    // --- Logic Change Detection: Monitoring repository for environmental changes ---
                     reg.onupdatefound = () => {
                         const installingWorker = reg.installing;
                         installingWorker.onstatechange = () => {
-                            if (installingWorker.state === 'installed') {
-                                if (navigator.serviceWorker.controller) {
-                                    // --- Conflict Resolution: Prompt for manual environment refresh ---
-                                    console.log('Logic synchronization detected; prompting for resolution.');
-                                    if(confirm("New production logic available! Synchronize environment now?")) {
-                                        window.location.reload();
-                                    }
-                                } else {
-                                    console.log('Content successfully cached for offline endurance.');
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                if(confirm("New production logic available! Synchronize environment now?")) {
+                                    window.location.reload();
                                 }
                             }
                         };
@@ -5242,100 +5412,148 @@ console.log("TIER 5 complete");
                 .catch(err => console.log('Service Worker initialization failure:', err));
         });
     }
-    /* --- 2. GLOBAL EVENT ORCHESTRATION (mBTLE Handshake Hub) --- */
-    // Logic Resolution: Centralized delegation for all interface triggers to prevent listener fragmentation.
+
+/* --- 2. ACTION REGISTRY (The Nervous System Configuration) --- */
+    function registerCoreActions() {
+        // A. Header / Project Actions
+        // Logic Resolution: Event Delegation for Project Management (Tier 5 Handshake)
+        mBT.core.action('project-switch', async (e, el) => {
+            if (e.type !== 'change') return; // Only trigger on change, not click
+            if (el.value) {
+                // Visual feedback
+                const originalText = el.options[el.selectedIndex].text;
+                el.options[el.selectedIndex].text = "Loading...";
+                await mBT.data.load(el.value);
+            }
+        });
+
+        mBT.core.action('project-new', async () => await mBT.data.newProject(true));
+        
+        mBT.core.action('project-duplicate', async () => await mBT.data.duplicate());
+        
+        mBT.core.action('project-delete', async () => {
+             if (currentProjectName) await mBT.data.deleteProject(currentProjectName);
+        });
+
+        mBT.core.action('project-import-trigger', () => {
+            const input = document.getElementById('importFile');
+            if(input) input.click();
+        });
+
+        mBT.core.action('project-import-file', (e, el) => {
+            if(e.type === 'change') mBT.data.importFile(el);
+        });
+
+        // B. Global Utilities
+        mBT.core.action('set-currency', (e, el) => {
+            displayCurrency = el.value;
+            localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
+            if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if(typeof render === 'function') render();
+        });
+
+        mBT.core.action('backup-env', () => { if(typeof mBTPublisher !== 'undefined') mBTPublisher.toMoo(); });
+        mBT.core.action('print-pdf', () => window.print());
+        mBT.core.action('export-xlsx', () => alert('Excel export requires pro license'));
+        mBT.core.action('publish-modal', () => showPublishModal());
+        
+        // C. Footer / Global Modals
+        mBT.core.action('stages-modal', () => showStagesModal());
+        mBT.core.action('docs-modal', () => showDocumentsModal());
+        mBT.core.action('settings-modal', () => showSettingsModal());
+        mBT.core.action('support-modal', () => showCoffeeWidget());
+        
+        // D. History
+        mBT.core.action('undo', () => handleUndo());
+        mBT.core.action('redo', () => handleRedo());
+    }
+
+    /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
     function bindAppEventListeners() {
         const appContainer = document.getElementById('app');
         const footer = document.querySelector('footer');
-        if (!appContainer || appContainer.dataset.listenersBound) return;
-        appContainer.dataset.listenersBound = 'true';
-        // --- Master Change Listener: Environmental synchronization ---
-        appContainer.addEventListener('change', (e) => {
-            const id = e.target.id;
-            if (id === 'projectName') {
-                if (typeof handleProjectNameChange === 'function') handleProjectNameChange(e);
-            } else if (['contingencyPercentage', 'salesTaxPercentage', 'discountPercentage'].includes(id)) {
-                budget[id] = parseFloat(e.target.value) || 0;
-                // --- Brain Handshake: High-speed mathematical reconciliation ---
-                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-            } else if (id === 'projectLoader') {
-                loadBudget(e.target.value);
-                render();
-            } else if (id === 'newProjectSelector') {
-                if (typeof handleNewProjectSelection === 'function') handleNewProjectSelection(e);
-            } else if (e.target.dataset.field === 'unit') {
-                handleUpdate(e.target.dataset.section, e.target.dataset.id, 'unit', e.target.value, `Unit synchronization`);
-            } else if (id === 'currencySelector') {
-                displayCurrency = e.target.value;
-                localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
-                if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                if(typeof render === 'function') render();
-            }
-        });
-        // --- Master Click Listener: Interface orchestration ---
-        appContainer.addEventListener('click', (e) => {
-            const target = e.target;
-           
-            if (target.id === 'undoBtn') { if (typeof handleUndo === 'function') handleUndo(); }
-            else if (target.id === 'redoBtn') { if (typeof handleRedo === 'function') handleRedo(); }
-            else if (target.id === 'loginBtn') { if (typeof handleLogin === 'function') handleLogin(); }
-            else if (target.closest('#openAiToolsBtn')) { if (typeof showAIToolsModal === 'function') showAIToolsModal(); }
-            else if (target.closest('#deleteProjectBtn')) { if (typeof deleteProject === 'function') deleteProject(currentProjectName); }
-            else if (target.closest('#exportPdfBtn')) { if (typeof exportToPdf === 'function') exportToPdf(); }
-            else if (target.closest('#exportXlsxBtn')) { if (typeof exportToXlsx === 'function') exportToXlsx(); }
-            else if (target.id === 'exportMooBtn') { if (typeof mBTPublisher !== 'undefined') mBTPublisher.toMoo(); }
-            else if (target.id === 'publishBtn') { if (typeof showPublishModal === 'function') showPublishModal(); }
-            else if (target.closest('[data-section-toggle]')) {
-                handleToggleSection(target.closest('[data-section-toggle]').dataset.sectionToggle);
-            } else if (target.closest('[data-add-item]')) {
-                showItemSelectorModal(target.closest('[data-add-item]').dataset.addItem);
-            } else if (target.closest('[data-remove-item]')) {
-                const btnData = target.closest('[data-remove-item]').dataset;
-                handleRemoveItem(btnData.section, btnData.removeItem);
-            }
-        });
-        // --- Master Input Listener: Real-time mathematical handshake ---
-        appContainer.addEventListener('input', (e) => {
-            const input = e.target;
-            if (input.dataset.field) {
-                handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, `Live synchronization`);
-            } else if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
-                budget[input.id] = parseFloat(input.value) || 0;
-                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-            }
-        });
-        // --- Footer Navigation: Module activation resolution ---
-       if (footer) {
-            footer.addEventListener('click', (e) => {
-                const btn = e.target.closest('button');
-                if (!btn) return;
-               
-                // 1. Stages
-                if (btn.id === 'stagesFooterBtn') {
-                    if (typeof showStagesModal === 'function') showStagesModal();
+        
+        // Initialize Registry
+        registerCoreActions();
+
+        if (appContainer && !appContainer.dataset.listenersBound) {
+            appContainer.dataset.listenersBound = 'true';
+            
+            // --- Master Router (Delegation) ---
+            const router = (e) => {
+                // 1. Try Action Registry (New System)
+                if (mBT.core.route(e)) return;
+
+                // 2. Fallback: Specific Legacy Handlers
+                const target = e.target;
+                
+                // Add Item Button (Dynamic ID from Tier 4)
+                const addBtn = target.closest('[data-add-item]');
+                if (addBtn) {
+                    showItemSelectorModal(addBtn.dataset.addItem);
+                    return;
                 }
-                // 2. Documents
-                else if (btn.id === 'docsFooterBtn') {
-                    if (typeof showDocumentsModal === 'function') showDocumentsModal();
+                
+                // Section Toggles
+                const toggleBtn = target.closest('[data-section-toggle]');
+                if (toggleBtn) {
+                    handleToggleSection(toggleBtn.dataset.sectionToggle);
+                    return;
                 }
-                // 3. Settings (Center)
-                else if (btn.id === 'mainActionBtn') {
-                    if (typeof showSettingsModal === 'function') showSettingsModal();
+                
+                // Login Button
+                if (target.id === 'loginBtn') handleLogin();
+                
+                // AI Tools Trigger
+                if (target.closest('#openAiToolsBtn')) showAIToolsModal();
+            };
+
+            appContainer.addEventListener('click', router);
+            appContainer.addEventListener('change', router);
+
+            // --- Real-time Input Handling (Performance Critical) ---
+            appContainer.addEventListener('input', (e) => {
+                const input = e.target;
+                
+                // Project Name (Special Case)
+                if (input.id === 'projectName') {
+                    handleProjectNameChange(e);
+                    return;
                 }
-                // 4. Publish (Right)
-                else if (btn.id === 'secondaryActionBtn') {
-                    if (typeof showPublishModal === 'function') showPublishModal();
+
+                // Global Percentages
+                if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
+                    budget[input.id] = parseFloat(input.value) || 0;
+                    if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    return;
                 }
-                // 5. Coffee (Right Edge)
-                else if (btn.id === 'footerCoffeeBtn') {
-                    if (typeof showCoffeeWidget === 'function') showCoffeeWidget();
+
+                // Line Item Fields
+                if (input.dataset.field) {
+                    handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, 'User Input');
                 }
             });
         }
+
+        // --- Footer Routing ---
+        if (footer) {
+            footer.addEventListener('click', (e) => {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                // Manual ID mapping for static footer
+                if (btn.id === 'stagesFooterBtn') mBT.core.actions['stages-modal']();
+                else if (btn.id === 'docsFooterBtn') mBT.core.actions['docs-modal']();
+                else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
+                else if (btn.id === 'secondaryActionBtn') mBT.core.actions['publish-modal']();
+                else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
+            });
+        }
+
         window.addEventListener('online', resolveConnectivityStatus);
         window.addEventListener('offline', resolveConnectivityStatus);
     }
-    /* --- 3. INFRASTRUCTURE TELEMETRY (Connectivity resolution) --- */
+
+    /* --- 4. INFRASTRUCTURE TELEMETRY --- */
     function resolveConnectivityStatus() {
         const isOnline = navigator.onLine;
         const btn = document.getElementById('loginBtn');
@@ -5346,45 +5564,45 @@ console.log("TIER 5 complete");
         }
         const aiBtn = document.getElementById('openAiToolsBtn');
         if(aiBtn) {
-            aiBtn.className = `p-2.5 border rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center flex-shrink-0 ${isOnline ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 shadow-sm' : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75'}`;
+            aiBtn.className = `p-3 text-white rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center ${isOnline ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed'}`;
             if(!isOnline) aiBtn.title = "AI Consultant Offline";
         }
     }
+    
     function handleLogin() {
         if (navigator.onLine && confirm("Establish secure connection to Moo Studio Cloud infrastructure?")) {
             alert("Environment Authenticated.");
         }
     }
-console.log("TIER 6 init starting", typeof render);
-    /* --- 4. GLOBAL BOOT SEQUENCE (Environment resolution) --- */
-    // Logic Resolution: Legacy init() replaced by mBT.core.init()
-    
+
     function injectFooterIcons() {
         const mapping = {
-            'icon-stages': mBTAssets.grid, // Grid Icon
-            'icon-docs': mBTAssets.file, // File Icon
-            'icon-main-action': mBTAssets.gear, // Gear
-'icon-secondary-action': mBTAssets.paperPlane, // Publish
-            'icon-coffee': mBTAssets.coffee // Coffee Cup
+            'icon-stages': mBTAssets.grid,
+            'icon-docs': mBTAssets.file,
+            'icon-main-action': mBTAssets.gear,
+            'icon-secondary-action': mBTAssets.paperPlane,
+            'icon-coffee': mBTAssets.coffee
         };
         Object.entries(mapping).forEach(([id, svg]) => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = svg;
         });
     }
-    /* --- 5. GLOBAL BRIDGE HOOKS & LIFECYCLE TRIGGER --- */
+
+    /* --- 5. GLOBAL BOOT TRIGGER --- */
+    // Logic Resolution: Global Bridge Hooks for external calls
     window.showBinModal = () => { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('documents'); };
-    // Updated: Ensure handleDocTrash uses the namespaced trash feature if available
     window.handleDocTrash = (id) => { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.trashDocument(id); };
     
-    // --- Master Lifecycle Trigger: DOM Synchronization ---
+    // System Start
     document.addEventListener('DOMContentLoaded', () => {
         if (mBT.core && typeof mBT.core.init === 'function') {
             mBT.core.init();
         } else if (typeof init === 'function') {
-            init(); // Fallback
+            init(); // Fallback for safety
         }
     });
+
 /* ======= END OF mBT ========== */
 </script>
 </body>
