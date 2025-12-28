@@ -1918,6 +1918,15 @@ console.log("TIER 3 complete");
     // Updates values IN PLACE without destroying DOM nodes.
     mBT.ui.paint = function() {
         if (!budget) return;
+
+        // Fix: Surgical update of Project Name Header
+        // We ensure the visual header matches the internal data state immediately.
+        // The check for activeElement prevents cursor jumping while the user is typing.
+        const projNameInput = document.getElementById('projectName');
+        if (projNameInput && document.activeElement !== projNameInput) {
+            projNameInput.value = budget.projectName;
+        }
+
         const fmt = mBTLE.format.currency;
         const isMobile = window.innerWidth < 768;
         
@@ -3417,9 +3426,18 @@ window.mBTDB = {
                     </div>`;
             }
             if (subTab === 'lineItems') {
+                const isSharing = mBTOG.settings.optInSharing;
                 return `
                     <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
-                        <div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 z-10">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 z-10 space-y-3">
+                            <div class="flex gap-2">
+                                <button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm flex items-center justify-center gap-2">
+                                    ${mBTAssets.plus} Add Line Item
+                                </button>
+                                <button onclick="mBT.features.settings.toggleOpenGateSharing()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}">
+                                    ${mBTAssets.cloud} ${isSharing ? 'Sharing On' : 'Share Data'}
+                                </button>
+                            </div>
                             <div class="relative">
                                 <input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES..." class="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                 <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
@@ -3724,6 +3742,59 @@ window.mBTDB = {
                 localStorage.setItem('moo_contacts', JSON.stringify(mBTOG.contacts));
                 this.open('database', 'contacts'); // Refresh
             }
+        },
+
+        // --- 6. Database Tools (Tier 5 Additions) ---
+        openAddRateModal: function() {
+            const content = `
+                <div class="space-y-4 p-2">
+                    <div>
+                        <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
+                        <input type="text" id="newRateDesc" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-tighter outline-none focus:ring-2 focus:ring-blue-100" placeholder="ITEM NAME">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Rate</label>
+                            <input type="number" id="newRateVal" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Unit</label>
+                            <select id="newRateUnit" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none cursor-pointer">
+                                <option value="Day">Day</option>
+                                <option value="Flat">Flat</option>
+                                <option value="Week">Week</option>
+                                <option value="Hour">Hour</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="mBT.features.settings.addRate()" class="w-full py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95 mt-4">Add to Database</button>
+                </div>`;
+            mBTME.open('addRate', 'New Global Rate', content, 'max-w-sm');
+        },
+
+        addRate: function() {
+            const desc = document.getElementById('newRateDesc').value.trim();
+            const rate = parseFloat(document.getElementById('newRateVal').value) || 0;
+            const unit = document.getElementById('newRateUnit').value;
+
+            if (!desc) return alert("Description required");
+
+            mBTOG.rates.push({ description: desc, rate: rate, unit: unit });
+            mBTOG.saveRates(); // Calls Tier 2.5 persistence
+            
+            mBTME.close('addRateModal');
+            this.open('database', 'lineItems'); // Refresh list
+        },
+
+        toggleOpenGateSharing: function() {
+            mBTOG.settings.optInSharing = !mBTOG.settings.optInSharing;
+            localStorage.setItem('moo_og_share', JSON.stringify(mBTOG.settings.optInSharing));
+            
+            // Visual feedback
+            if (mBTOG.settings.optInSharing) {
+                alert("Open Gate Sharing Enabled. Anonymous rate data will be synchronized.");
+            }
+            this.open('database', 'lineItems'); // Refresh UI toggle state
         }
     };
 
@@ -4991,7 +5062,11 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
 
         // Logic Resolution: Await the async storage list via the new Data Engine
         // Fallback to empty array if mBT.data is initializing or unavailable
-        const projects = (mBT.data && mBT.data.getList) ? await mBT.data.getList() : [];
+        let projects = (mBT.data && mBT.data.getList) ? await mBT.data.getList() : [];
+        
+        // Tier 5 Fix: Sort projects descending (Newest first)
+        // This ensures recent projects (named with dates) appear at the top.
+        projects.sort().reverse();
         
         // Logic Resolution: Define Menu Structure with 'Budget First' philosophy
         const menuItems = [
