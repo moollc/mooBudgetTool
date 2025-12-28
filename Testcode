@@ -351,6 +351,10 @@ appLogo: `<svg viewBox="0 0 502.17 507.14" fill="none"><circle cx="251.1" cy="25
     grid: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>`,
     save: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
     print: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`,
+    
+    // --- New Template Icons ---
+    film: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>`,
+    camera: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
 
     // --- Footer New Assets ---
 gear: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`,
@@ -370,6 +374,43 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         'Music Video': { 'dev': 10, 'pre': 20, 'prod': 15, 'post': 40, 'dist': 15 },
         'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
         'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
+    };
+
+/* --- 6. Budget Templates (Industry Standard Structures) --- */
+    const BUDGET_TEMPLATES = {
+        'Commercial': {
+            icon: 'film',
+            label: 'TV Commercial',
+            desc: 'Standard TVC structure. High-end crew, talent fees, and heavy post-production.',
+            structure: [
+                { id: 'atl', name: 'Above The Line', items: ['Director', 'Producer', 'Copywriter', 'Casting Director'] },
+                { id: 'prod', name: 'Production', items: ['DOP', 'Camera Op', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist', 'Production Designer', 'Wardrobe Stylist'] },
+                { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Sound Design', 'Music Licensing'] },
+                { id: 'other', name: 'Logistics & Talent', items: ['Principal Cast', 'Location Fees', 'Catering', 'Equipment Rental', 'Insurance'] }
+            ]
+        },
+        'Documentary': {
+            icon: 'camera',
+            label: 'Documentary',
+            desc: 'Run-and-gun optimized. Prioritizes travel, field logistics, research, and archival licensing.',
+            structure: [
+                { id: 'atl', name: 'Creative & Research', items: ['Director', 'Producer', 'Researcher', 'Subject Consultant'] },
+                { id: 'prod', name: 'Field Production', items: ['Cinematographer', 'Field Sound', 'Fixer/Local Producer', 'Drone Operator'] },
+                { id: 'travel', name: 'Travel & Logistics', items: ['Flights', 'Accommodation', 'Per Diems', 'Vehicle Rental', 'Carnets/Visas'] },
+                { id: 'post', name: 'Post & Archive', items: ['Editor', 'Transcription', 'Archival Researcher', 'Archival Licensing', 'Colorist'] }
+            ]
+        },
+        'Live Stream': {
+            icon: 'zap',
+            label: 'Live Broadcast',
+            desc: 'Multi-cam setup. Focus on bandwidth redundancy, switching hardware, and technical operators.',
+            structure: [
+                { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Stream Technician', 'Camera Op (A)', 'Camera Op (B)', 'Audio Engineer', 'Graphics Op'] },
+                { id: 'gear', name: 'Hardware & Rigging', items: ['Switcher/Encoder', 'Cameras (3-Cam Kit)', 'Comms System', 'Bonded Cellular', 'Lighting Package'] },
+                { id: 'conn', name: 'Connectivity', items: ['Dedicated Internet Line', '4G/5G Backup Data', 'IT Support'] },
+                { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] }
+            ]
+        }
     };
     
     // --- MASTER NAMESPACE (Tier 1 Hoist) ---
@@ -656,19 +697,68 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             
             const storedSep = localStorage.getItem(projectNameSeparatorKey);
             const sep = storedSep !== null ? storedSep : ' ';
-            const baseName = type || 'Project';
+            
+            // --- TEMPLATE RESOLUTION ENGINE ---
+            let sections = {};
+            let baseLabel = "Project";
 
-             const defaultSections = {
-                'Above The Line': { id: 'atl', isOpen: true, items: [] },
-                'Production': { id: 'prod', isOpen: true, items: [] },
-                'Post-Production': { id: 'post', isOpen: true, items: [] },
-                'Other': { id: 'other', isOpen: true, items: [] }
-            };
+            // 1. Check System Templates (Tier 1)
+            if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
+                const tmpl = BUDGET_TEMPLATES[type];
+                baseLabel = tmpl.label;
+                
+                tmpl.structure.forEach(s => {
+                    sections[s.name] = {
+                        id: s.id,
+                        isOpen: true,
+                        items: s.items.map((desc, idx) => ({
+                            id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
+                            description: desc,
+                            quantity: 1,
+                            unit: 'Day',
+                            rate: 0,
+                            multiplier: 1,
+                            actual: 0,
+                            rateType: 'negotiable',
+                            crew: {}
+                        }))
+                    };
+                });
+            } 
+            // 2. Check User Templates (Tier 2 Custom)
+            else if (mBT.data.templates.getTemplates()[type]) {
+                const customTmpl = mBT.data.templates.getTemplates()[type];
+                baseLabel = type;
+                
+                // Custom templates currently only store a flat list of items, defaulting to 'Production' section
+                sections['Production'] = { 
+                    id: 'prod', 
+                    isOpen: true, 
+                    items: customTmpl.items ? customTmpl.items.map((i, idx) => ({
+                        id: `item_${Date.now()}_${idx}`,
+                        ...i,
+                        quantity: 1, multiplier: 1, actual: 0, crew: {}
+                    })) : [] 
+                };
+                // Add standard headers
+                sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
+                sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
+            }
+            // 3. Fallback Default
+            else {
+                sections = {
+                    'Above The Line': { id: 'atl', isOpen: true, items: [] },
+                    'Production': { id: 'prod', isOpen: true, items: [] },
+                    'Post-Production': { id: 'post', isOpen: true, items: [] },
+                    'Other': { id: 'other', isOpen: true, items: [] }
+                };
+            }
+
             const newBudget = {
-                projectName: `${baseName}${sep}${dateStr}`,
+                projectName: `${baseLabel}${sep}${dateStr}`,
                 company: "Independent",
                 startDate: new Date().toISOString().split('T')[0],
-                sections: defaultSections,
+                sections: sections,
                 grandTotal: 0,
                 subtotal: 0,
                 actualTotal: 0,
@@ -679,17 +769,6 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 attachments: [],
                 aiContext: { chat: [], analysis: "" }
             };
-            
-            if(type && mBT.data.templates.getTemplates()[type]) {
-                const tmpl = mBT.data.templates.getTemplates()[type];
-                if(tmpl.items) {
-                     newBudget.sections['Production'].items = tmpl.items.map((i, idx) => ({
-                         id: 'item_'+Date.now()+'_'+idx,
-                         ...i,
-                         quantity: 1, multiplier: 1, actual: 0, crew: {}
-                     }));
-                }
-            }
             
             budget = mBT.data.state.wrap(newBudget);
             currentProjectName = budget.projectName;
@@ -1837,6 +1916,53 @@ console.log("TIER 3 complete");
         });
     };
 
+    // --- NEW: Surgical DOM Operations ("The Surgeon") ---
+    // Logic Resolution: Direct DOM manipulation for Add/Remove to avoid full re-renders
+    mBT.ui.ops = {
+        add: function(sectionName, item) {
+            // 1. Generate HTML string using the Render Engine
+            // Note: We use the global alias RenderEngine if available, or fall back to local
+            const renderer = window.RenderEngine || mBT.ui.render;
+            const html = renderer.lineItem(item, sectionName);
+            
+            // 2. Locate the specific section body
+            // We use the same selector strategy as the full render
+            const safeName = sectionName.replace(/"/g, '\\"');
+            const tbody = document.querySelector(`tbody[data-section-body="${safeName}"]`);
+            
+            if (tbody) {
+                // 3. Inject HTML at the end of the list
+                tbody.insertAdjacentHTML('beforeend', html);
+                
+                // 4. UX Polish: Auto-scroll and flash the new row
+                const newRow = tbody.lastElementChild;
+                if (newRow) {
+                    newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    newRow.classList.add('bg-blue-50');
+                    setTimeout(() => newRow.classList.remove('bg-blue-50'), 500);
+                    
+                    // 5. Re-bind Drag & Drop (Logic Resolution)
+                    if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                }
+            }
+        },
+        
+        remove: function(sectionName, itemId) {
+            // 1. Locate the specific row by ID
+            const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+            
+            if (row) {
+                // 2. UX Polish: Fade out before removal
+                row.style.transition = 'all 0.2s ease';
+                row.style.opacity = '0';
+                row.style.transform = 'translateX(-10px)';
+                
+                // 3. Remove from DOM after animation
+                setTimeout(() => row.remove(), 200);
+            }
+        }
+    };
+
     // --- Global Alias for Backward Compatibility (The Bridge) ---
     // Logic Resolution: Calls to global 'render()' are now proxied to the UI namespace.
     window.render = mBT.ui.refresh.bind(mBT.ui);
@@ -1866,9 +1992,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                 return `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
                     ${items.map(t => {
                         const isActive = t.id === activeId;
-                        // Active: White background, Blue text, Blue bottom border
                         const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
-                        // Inactive: Gray text, slight hover effect
                         const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
                         return `<button onclick="${onClick}('${t.id}')" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
                             ${t.label} ${t.count !== undefined ? `<span class="opacity-50 ml-1">(${t.count})</span>` : ''}
@@ -1964,17 +2088,17 @@ function getAbbreviatedName(name, maxLen = 25) {
 
         // --- Layout Shell: Section container generation ---
         // Logic Resolution: Constructs the collapsible department headers and their item containers.
+        // Updated to use delegation: data-action="section-toggle"
         section({ name, total = '', isOpen = true, content = '' }) {
             const safeName = this.esc(name);
             return `
                 <div class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="sticky-section-header relative min-h-[48px] bg-slate-50 border-b border-slate-100 select-none group z-30">
-                        <div class="px-4 py-3 flex justify-between items-center cursor-pointer" data-section-toggle="${safeName}">
-                            <div class="flex items-center gap-3">
-                                <!-- Icon removed for cleaner UI -->
+                        <div class="px-4 py-3 flex justify-between items-center cursor-pointer" data-action="section-toggle" data-id="${safeName}">
+                            <div class="flex items-center gap-3 pointer-events-none">
                                 <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">${safeName}</h2>
                             </div>
-                            <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono flex-shrink-0">${total}</span>
+                            <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono flex-shrink-0 pointer-events-none">${total}</span>
                         </div>
                         
                         <!-- Integrated Column Headers (Desktop Only) -->
@@ -1999,6 +2123,7 @@ function getAbbreviatedName(name, maxLen = 25) {
 
         // --- Data Row Blueprint: Itemized line generation ---
         // Logic Resolution: Mobile-optimized widths, font-scaling, and "touch-friendly" inputs.
+        // Updated to use delegation: data-action attributes for buttons.
         lineItem(item, sectionName) {
             const safeId = this.esc(item.id); 
             const safeSection = this.esc(sectionName);
@@ -2016,8 +2141,8 @@ function getAbbreviatedName(name, maxLen = 25) {
                 <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}">
                     <td class="p-2 text-center relative w-[40px] md:w-12 overflow-visible">
                         <div class="crew-wrapper inline-block">
-                            <button onclick="toggleCrewPopup(this, event)" class="crew-avatar w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
-                                <span class="text-[8px] md:text-[10px] font-black">${initials}</span>
+                            <button data-action="crew-toggle" class="crew-avatar w-7 h-7 md:w-8 md:h-8 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
+                                <span class="text-[8px] md:text-[10px] font-black pointer-events-none">${initials}</span>
                             </button>
 
                             <div class="crew-popup">
@@ -2029,10 +2154,10 @@ function getAbbreviatedName(name, maxLen = 25) {
                                     ${crew.email && crew.email.includes('@') ? `
                                         <a href="mailto:${crew.email}" class="contact-action-btn action-email" title="Email">${mBTAssets.mail}</a>
                                     ` : ''}
-                                    <button onclick="openCrewProfile(this, event, '${safeId}', '${safeSection}')" class="contact-action-btn action-profile" title="Profile">${mBTAssets.user}</button>
+                                    <button data-action="crew-profile" data-id="${safeId}" data-section="${safeSection}" class="contact-action-btn action-profile" title="Profile">${mBTAssets.user}</button>
                                 ` : `
-                                    <button onclick="openCrewProfile(this, event, '${safeId}', '${safeSection}')" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">
-                                        <span>Assign</span> ${mBTAssets.plus}
+                                    <button data-action="crew-profile" data-id="${safeId}" data-section="${safeSection}" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">
+                                        <span class="pointer-events-none">Assign</span> ${mBTAssets.plus}
                                     </button>
                                 `}
                             </div>
@@ -2060,8 +2185,8 @@ function getAbbreviatedName(name, maxLen = 25) {
                     
                     <td class="p-1 md:p-2 w-[50px] md:w-32">
                         <div class="flex items-center gap-1 justify-end md:justify-start">
-                            <button onclick="toggleRateType('${safeId}', '${safeSection}')" class="hidden md:flex w-6 h-6 rounded-lg transition-all flex-shrink-0 items-center justify-center ${isLocked ? 'text-rose-500 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}">
-                                <span class="scale-75">${isLocked ? mBTAssets.lock : mBTAssets.zap}</span>
+                            <button data-action="row-lock" data-id="${safeId}" data-section="${safeSection}" class="hidden md:flex w-6 h-6 rounded-lg transition-all flex-shrink-0 items-center justify-center ${isLocked ? 'text-rose-500 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}">
+                                <span class="scale-75 pointer-events-none">${isLocked ? mBTAssets.lock : mBTAssets.zap}</span>
                             </button>
                             <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="rate" value="${toDisp(item.rate).toFixed(2)}" 
                                    class="w-full bg-transparent border-none font-mono font-bold text-[10px] md:text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0">
@@ -2082,7 +2207,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                     </td>
                     
                     <td class="p-1 md:p-2 text-center w-[30px] md:w-10">
-                        <button onclick="handleRemoveItem('${safeSection}', '${safeId}')" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100">
+                        <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100">
                             ${mBTAssets.trash}
                         </button>
                     </td>
@@ -2091,6 +2216,7 @@ function getAbbreviatedName(name, maxLen = 25) {
 
         // --- Stage Visualization: Production phase card generation ---
         // Logic Resolution: Renders specialized cards for the Production Stages view with burn-rate telemetry.
+        // Updated: Removed inline listeners in favor of delegation.
         stageCard(item, stageKey) {
             const cost = (item._sDays || 0) * (item._sRate || 0);
             return `
@@ -2104,19 +2230,19 @@ function getAbbreviatedName(name, maxLen = 25) {
                             <p class="text-[8px] text-slate-400 font-bold uppercase tracking-widest">${this.esc(item._sec)}</p>
                         </div>
                         <span id="cost-${item.id}-${stageKey}" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">${formatAbbreviated(cost, displayCurrency)}</span>
-                        <button onclick="removeStageItem('${item.id}', '${item._sec}', '${stageKey}')" class="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all bg-white rounded-full p-1 shadow-sm border border-slate-100 z-10">
+                        <button data-action="stage-remove" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" class="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all bg-white rounded-full p-1 shadow-sm border border-slate-100 z-10">
                             ${mBTAssets.trash}
                         </button>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="flex-1">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Days</label>
-                            <input type="number" value="${item._sDays}" onchange="updateStageItem('${item.id}', '${item._sec}', '${stageKey}', 'days', this.value)" 
+                            <input type="number" value="${item._sDays}" data-action="stage-update" data-field="days" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" 
                                    class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-bold text-blue-600 no-spinner">
                         </div>
                         <div class="flex-[2]">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Rate</label>
-                            <input type="number" value="${item._sRate}" onchange="updateStageItem('${item.id}', '${item._sec}', '${stageKey}', 'rate', this.value)" 
+                            <input type="number" value="${item._sRate}" data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" 
                                    class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-mono font-bold text-slate-600 no-spinner">
                         </div>
                     </div>
@@ -2142,8 +2268,8 @@ function getAbbreviatedName(name, maxLen = 25) {
                     </table>
                 </div>
                 <div class="bg-white border-t border-slate-100">
-                    <button data-add-item="${name}" class="w-full py-3 flex items-center justify-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
-                        <span class="scale-75">${mBTAssets.plus}</span> Add Line Item
+                    <button data-action="section-add" data-id="${name}" class="w-full py-3 flex items-center justify-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
+                        <span class="scale-75 pointer-events-none">${mBTAssets.plus}</span> Add Line Item
                     </button>
                 </div>`;
 
@@ -2172,8 +2298,16 @@ function handleRemoveItem(sectionName, itemId) {
     const sec = budget.sections[sectionName];
     if(sec) {
         sec.items = sec.items.filter(i => i.id !== itemId);
-        mBTLE.reconcile();
-        render();
+        
+        // Tier 4 Surgeon: Remove DOM node instantly
+        if (mBT.ui && mBT.ui.ops) {
+            mBT.ui.ops.remove(sectionName, itemId);
+            mBTLE.reconcile(); // Update Math
+            mBT.ui.paint();    // Update Totals
+        } else {
+            mBTLE.reconcile();
+            render(); // Fallback
+        }
     }
 }
 
@@ -2196,8 +2330,16 @@ function showItemSelectorModal(sectionName) {
         };
         section.items.push(newItem);
         mBTME.close('itemSelectorModal');
-        mBTLE.reconcile();
-        render();
+        
+        // Tier 4 Surgeon: Inject DOM node instantly
+        if (mBT.ui && mBT.ui.ops) {
+            mBT.ui.ops.add(sectionName, newItem);
+            mBTLE.reconcile(); // Update Math
+            mBT.ui.paint();    // Update Totals
+        } else {
+            mBTLE.reconcile();
+            render(); // Fallback
+        }
     };
 
     const rates = mBTOG.rates || [];
@@ -2275,6 +2417,45 @@ function initializeStageDragAndDrop() {
 function updateOnlineStatus() {
     if(typeof resolveConnectivityStatus === 'function') resolveConnectivityStatus();
 }
+
+// Logic Resolution: Project Template Selector (Visual Bridge)
+window.showNewProjectModal = function() {
+    // 1. Build Cards from Tier 1 Registry
+    const templates = Object.entries(BUDGET_TEMPLATES).map(([key, t]) => `
+        <button onclick="mBT.data.newProject(true, '${key}'); mBTME.close('newProjectModal');"
+            class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full">
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">
+                ${mBTAssets[t.icon] || mBTAssets.file}
+            </div>
+            <h3 class="text-xs font-black uppercase tracking-widest text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">${t.label}</h3>
+            <p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80">${t.desc}</p>
+        </button>
+    `).join('');
+
+    // 2. Build Modal Layout
+    const content = `
+        <div class="p-8 bg-slate-50 min-h-[400px] flex flex-col">
+            <div class="text-center mb-8 shrink-0">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white shadow-md text-blue-600 mb-4 border border-blue-50">
+                    ${mBTAssets.plus}
+                </div>
+                <h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Select Blueprint</h2>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Choose a production structure to begin</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 grow">
+                ${templates}
+            </div>
+            <div class="mt-8 text-center shrink-0 border-t border-slate-200/50 pt-4">
+                <button onclick="mBT.data.newProject(true, 'Blank'); mBTME.close('newProjectModal');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">
+                    Skip & Create Blank Budget
+                </button>
+            </div>
+        </div>`;
+
+    // 3. Launch via Tier 5 Modal Engine
+    mBTME.open('newProject', '', content, 'max-w-4xl', { hideHeader: true, noPadding: true });
+};
+
 console.log("TIER 4 render defined", typeof render);
 
 
@@ -4712,10 +4893,22 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
         // Fallback to empty array if mBT.data is initializing or unavailable
         const projects = (mBT.data && mBT.data.getList) ? await mBT.data.getList() : [];
         
+        // Logic Resolution: Define Menu Structure with 'Budget First' philosophy
+        const menuItems = [
+            { label: 'New Budget', icon: mBTAssets.plus, color: 'text-emerald-600', bg: 'hover:bg-emerald-50', action: 'project-new' },
+            { label: 'Duplicate Budget', icon: mBTAssets.copy, color: 'text-blue-600', bg: 'hover:bg-blue-50', action: 'project-duplicate' },
+            { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
+            { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
+            { label: 'LiveStream Data', icon: mBTAssets.zap, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'project-sync' },
+            { divider: true },
+            { label: 'Delete Budget', icon: mBTAssets.trash, color: 'text-rose-600', bg: 'hover:bg-rose-50', action: 'project-delete' }
+        ];
+
         let html = `
-            <div class="flex items-center space-x-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                <div class="relative">
-                    <select id="projectSelect" data-action="project-switch" class="appearance-none bg-white border border-gray-300 text-gray-700 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block pl-3 pr-8 py-1.5 focus:outline-none transition-shadow">
+            <div class="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm relative z-50">
+                <!-- Project Select -->
+                <div class="relative group">
+                    <select id="projectSelect" data-action="project-switch" class="appearance-none bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-700 rounded-xl pl-3 pr-8 py-2.5 outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer min-w-[140px] transition-all hover:bg-slate-100">
         `;
 
         // Logic Resolution: Handle empty states or fresh boots gracefully
@@ -4730,35 +4923,37 @@ window.openCrewProfile = function(el, event, itemId, sectionName) {
 
         html += `
                     </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400 group-hover:text-slate-600">
+                        <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                     </div>
                 </div>
 
-                <button data-action="project-new" class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-md text-sm px-3 py-1.5 flex items-center shadow-sm transition-colors">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                    New
-                </button>
-                <div class="h-6 w-px bg-gray-300 mx-1"></div>
-                <button data-action="project-duplicate" class="text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors" title="Duplicate Project">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                </button>
-                <button data-action="project-delete" class="text-gray-500 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors" title="Delete Project">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                </button>
-                
-                 <div class="relative ml-1">
-                    <button data-action="project-import-trigger" class="text-gray-500 hover:text-purple-600 hover:bg-purple-50 p-1.5 rounded-md transition-colors" title="Import JSON">
-                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                <!-- File Menu (Consolidated) -->
+                <div class="relative">
+                    <button onclick="const m=document.getElementById('fileMenuDropdown'); m.classList.toggle('hidden');" class="flex items-center gap-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 px-4 py-2.5 rounded-xl transition-all active:scale-95 group">
+                        <span class="text-[10px] font-black uppercase tracking-widest">File</span>
+                        <svg class="w-3 h-3 transition-transform group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <input type="file" id="importFile" class="hidden" accept=".json" data-action="project-import-file">
+                    
+                    <!-- Dropdown -->
+                    <div id="fileMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200" onmouseleave="this.classList.add('hidden')">
+                        ${menuItems.map(item => item.divider ? 
+                            `<div class="h-px bg-slate-100 my-1"></div>` : 
+                            `<button data-action="${item.action}" onclick="document.getElementById('fileMenuDropdown').classList.add('hidden')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 ${item.color} ${item.bg} transition-colors group">
+                                <span class="opacity-70 group-hover:opacity-100 scale-90">${item.icon}</span>
+                                <span class="text-[9px] font-black uppercase tracking-widest">${item.label}</span>
+                            </button>`
+                        ).join('')}
+                    </div>
                 </div>
+                
+                <!-- Hidden Import Input -->
+                <input type="file" id="importFile" class="hidden" accept=".json" data-action="project-import-file">
             </div>
         `;
 
         container.innerHTML = html;
     }
-
     // --- B. Global Action Wrappers (Legacy Compatibility for Tier 1.5) ---
     // Logic Resolution: Connecting HTML event listeners to the new mBT.data Engine
     
@@ -5416,33 +5611,25 @@ console.log("TIER 5 complete");
 /* --- 2. ACTION REGISTRY (The Nervous System Configuration) --- */
     function registerCoreActions() {
         // A. Header / Project Actions
-        // Logic Resolution: Event Delegation for Project Management (Tier 5 Handshake)
         mBT.core.action('project-switch', async (e, el) => {
-            if (e.type !== 'change') return; // Only trigger on change, not click
+            if (e.type !== 'change') return;
             if (el.value) {
-                // Visual feedback
                 const originalText = el.options[el.selectedIndex].text;
                 el.options[el.selectedIndex].text = "Loading...";
                 await mBT.data.load(el.value);
             }
         });
 
-        mBT.core.action('project-new', async () => await mBT.data.newProject(true));
-        
+        mBT.core.action('project-new', () => showNewProjectModal());
         mBT.core.action('project-duplicate', async () => await mBT.data.duplicate());
+        mBT.core.action('project-delete', async () => { if (currentProjectName) await mBT.data.deleteProject(currentProjectName); });
         
-        mBT.core.action('project-delete', async () => {
-             if (currentProjectName) await mBT.data.deleteProject(currentProjectName);
-        });
+        // New File Menu Actions
+        mBT.core.action('project-recycle', () => { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
+        mBT.core.action('project-sync', () => { fetchExchangeRates(); alert("Live Stream: Currency & Data Synchronized."); });
 
-        mBT.core.action('project-import-trigger', () => {
-            const input = document.getElementById('importFile');
-            if(input) input.click();
-        });
-
-        mBT.core.action('project-import-file', (e, el) => {
-            if(e.type === 'change') mBT.data.importFile(el);
-        });
+        mBT.core.action('project-import-trigger', () => { const input = document.getElementById('importFile'); if(input) input.click(); });
+        mBT.core.action('project-import-file', (e, el) => { if(e.type === 'change') mBT.data.importFile(el); });
 
         // B. Global Utilities
         mBT.core.action('set-currency', (e, el) => {
@@ -5463,7 +5650,32 @@ console.log("TIER 5 complete");
         mBT.core.action('settings-modal', () => showSettingsModal());
         mBT.core.action('support-modal', () => showCoffeeWidget());
         
-        // D. History
+        // D. Budget Interaction (The Synapse)
+        mBT.core.action('section-toggle', (e, el) => handleToggleSection(el.dataset.id));
+        mBT.core.action('section-add', (e, el) => showItemSelectorModal(el.dataset.id));
+        mBT.core.action('row-delete', (e, el) => handleRemoveItem(el.dataset.section, el.dataset.id));
+        
+        mBT.core.action('row-lock', (e, el) => {
+            const item = budget.sections[el.dataset.section]?.items.find(i => i.id === el.dataset.id);
+            if(item) {
+                item.rateType = item.rateType === 'fixed' ? 'negotiable' : 'fixed';
+                saveBudget();
+                render(); // Full render needed to swap icon state
+            }
+        });
+
+        // E. Personnel Actions
+        mBT.core.action('crew-toggle', (e, el) => toggleCrewPopup(el, e));
+        mBT.core.action('crew-profile', (e, el) => openCrewProfile(el, e, el.dataset.id, el.dataset.section));
+
+        // F. Stage Actions
+        mBT.core.action('stage-remove', (e, el) => removeStageItem(el.dataset.id, el.dataset.section, el.dataset.stage));
+        mBT.core.action('stage-update', (e, el) => {
+             // Only process if value changed to avoid jitter, handled by 'change' event in router
+             updateStageItem(el.dataset.id, el.dataset.section, el.dataset.stage, el.dataset.field, el.value);
+        });
+
+        // G. History
         mBT.core.action('undo', () => handleUndo());
         mBT.core.action('redo', () => handleRedo());
     }
@@ -5484,22 +5696,8 @@ console.log("TIER 5 complete");
                 // 1. Try Action Registry (New System)
                 if (mBT.core.route(e)) return;
 
-                // 2. Fallback: Specific Legacy Handlers
+                // 2. Fallback: Specific Legacy / ID Handlers
                 const target = e.target;
-                
-                // Add Item Button (Dynamic ID from Tier 4)
-                const addBtn = target.closest('[data-add-item]');
-                if (addBtn) {
-                    showItemSelectorModal(addBtn.dataset.addItem);
-                    return;
-                }
-                
-                // Section Toggles
-                const toggleBtn = target.closest('[data-section-toggle]');
-                if (toggleBtn) {
-                    handleToggleSection(toggleBtn.dataset.sectionToggle);
-                    return;
-                }
                 
                 // Login Button
                 if (target.id === 'loginBtn') handleLogin();
@@ -5512,6 +5710,7 @@ console.log("TIER 5 complete");
             appContainer.addEventListener('change', router);
 
             // --- Real-time Input Handling (Performance Critical) ---
+            // Separated from Action Router for speed on keypress/input
             appContainer.addEventListener('input', (e) => {
                 const input = e.target;
                 
@@ -5528,8 +5727,8 @@ console.log("TIER 5 complete");
                     return;
                 }
 
-                // Line Item Fields
-                if (input.dataset.field) {
+                // Line Item Fields (If no specific action is assigned)
+                if (input.dataset.field && !input.dataset.action) {
                     handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, 'User Input');
                 }
             });
