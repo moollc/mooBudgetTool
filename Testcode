@@ -4532,14 +4532,15 @@ window.mBTDB = {
 };
 function renderStageItems(stageKey) {
     let html = '';
-    Object.values(budget.sections).forEach(sec => {
+    // Use Object.entries to capture the Section Name (Key) ensuring data-section attribute is valid
+    Object.entries(budget.sections).forEach(([secName, sec]) => {
         sec.items.forEach(item => {
             if (item.stageData && item.stageData[stageKey]) {
                 html += RenderEngine.stageCard({
                     ...item,
                     _sDays: item.stageData[stageKey].days,
                     _sRate: item.stageData[stageKey].rate,
-                    _sec: sec.name
+                    _sec: secName
                 }, stageKey);
             }
         });
