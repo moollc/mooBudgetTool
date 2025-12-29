@@ -313,11 +313,13 @@
     const mBTAssets = {
 appLogo: `<svg viewBox="0 0 502.17 507.14" fill="none"><circle cx="251.1" cy="253.6" r="251" fill="#fdba35"/><ellipse cx="251.08" cy="254.6" rx="219.09" ry="222.65" fill="#e68b2e"/><rect x="203.17" y="63.34" width="39.87" height="58.38" rx="12" ry="12" fill="#fdba35"/><rect x="287.89" y="63.34" width="39.87" height="58.38" rx="12" ry="12" fill="#fdba35"/><path fill="#ffffff" d="M435.26 218.85c-9.37 8.14-49.07 32.97-49.8 15.81 11.55-127.5-229.22-149.43-231.01-24.74 6.07 54.05 43.35 54.26 87.82 52.06 146.67-19.16 207.1 157.09 46.91 189.89-58.04 11.48-128.93-19.18-142.75-80.18 46.88 38.84 113.67 68.1 171.96 37.26 26.86-13.77 47.21-49.89 26.52-76.85-38.48-58.02-113.62-26.74-169.36-43.4-33.76-8.68-39.32-44.89-49.26-40.21-40.71 11.77-74.81-18.1-93.73-51.57-11.64-17.99 23.01-37.67 23.01-37.67 78.34-46.2 83.04-2.52 100.98-30.11 13.01-12.52 28.91-19.88 45.88-25.26 14.39-.81-2.14-26.45 12.52-30.74 8.55-3.29 22.55-1.35 21.53 10.41v7.96q0 5.96 6.03 5.19c15.31-1.13 30.59-.73 45.84 1.04 4.51 1.52 6.39.14 5.88-4.8.18-6.63-2.41-16.54 5.48-19.48 39.51-10.45 11.06 33.02 28.69 33.36 24.13 8.69 46.04 20.74 62.06 41.52 1.37 1.77 2.67 1.3 4.34.83 21.56-6.19 44.45 3.51 61.99 15.88 16.53 11.27-10.05 43.62-21.53 53.81Zm-303.07-60.53c-15.13-3.64-31.31 1.65-45.48 7.89-10.48 5.14-25.95 13.17-31.69 19.68-7.43 4.29 10.4 20.59 13.85 25.15 12.7 13.47 31.71 23.14 50.39 17.73 2.48-.4 3.49-1.51 3.13-3.82-2.68-22.93-.15-45.14 9.8-66.63m311.98 17.39c-2.49-5.29-32.19-13.69-45.6-11.24 3.21 8.51 7.77 19.74 8.85 29.37 2.12 18.88 1.07 24.71.92 25.13 14.31-5.74 40.59-33.14 35.83-43.26m-244.14 12.41c-8.45-1.05-18.22 1.95-18.24 12 .78 10.17-4.5 33.22 12 33.15 8.45 1.05 18.22-1.95 18.24-12-.78-10.17 4.5-33.22-12-33.14Zm-6.08 168.77c-1.38-2.31-16.01-18.07-16.01-18.07-3.59-3.64-6.21-13.1-14.02-8.77-3.6 2.84-5.79 3.83-.54 12.88 7.81 11.59 24.83 28.14 30.57 13.96m-87.43-126.66c.73.03 1.47.03 2.21.02-.74.01-1.48 0-2.21-.02m-37.65-19.19c.27.27.53.54.8.81-.27-.27-.53-.54-.8-.81m258.53-22.92c-8.45-1.05-18.22 1.95-18.24 12 .78 10.17-4.5 33.22 12 33.15 8.45 1.05 18.22-1.95 18.24-12-.78-10.17 4.5-33.22-12-33.14Z"/></svg>`,
 
-       // --- Core UI & Actions ---
+       // ---     // --- Core UI & Actions ---
     plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+    sync: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>`,
+    refresh: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>`,
     search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
-    close: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+	close: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
     drag: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>`,
     
     // --- Status & Access ---
@@ -1301,6 +1303,36 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 if (pct > 100) return { color: 'text-red-600', bg: 'bg-red-500', ring: 'border-red-200', pct };
                 if (pct > 85) return { color: 'text-yellow-600', bg: 'bg-blue-500', ring: 'border-yellow-200', pct }; 
                 return { color: 'text-green-600', bg: 'bg-green-500', ring: 'border-green-200', pct };
+            },
+
+            // --- TIER 3 UPGRADE: Timeline Validation Logic ---
+            validateTimeline: function(stageKey) {
+                let maxItemDays = 0;
+                
+                // 1. Scan the physics model for the longest item in this stage
+                if (budget && budget.sections) {
+                    Object.values(budget.sections).forEach(sec => {
+                        sec.items.forEach(item => {
+                            if (item.stageData && item.stageData[stageKey]) {
+                                const d = parseFloat(item.stageData[stageKey].days) || 0;
+                                if (d > maxItemDays) maxItemDays = d;
+                            }
+                        });
+                    });
+                }
+
+                // 2. Compare against the "Governor" (User Input)
+                const userDays = (budget.targetLock && budget.targetLock.stages[stageKey]) 
+                    ? (parseFloat(budget.targetLock.stages[stageKey].days) || 0) 
+                    : 0;
+
+                // 3. Return Truth
+                return {
+                    isValid: userDays >= maxItemDays, // Safe if User Input >= Max Item
+                    maxNeeded: maxItemDays,
+                    current: userDays,
+                    delta: userDays - maxItemDays     // Negative value indicates "Time Bankruptcy"
+                };
             }
         }
     };
@@ -2311,18 +2343,23 @@ function getAbbreviatedName(name, maxLen = 25) {
 
         // --- Stage Visualization: Production phase card generation ---
         // Logic Resolution: Renders specialized cards for the Production Stages view with burn-rate telemetry.
-        // Updated: Removed inline listeners in favor of delegation.
         stageCard(item, stageKey) {
             const cost = (item._sDays || 0) * (item._sRate || 0);
+            
+            // TIER 4 VISUALS: Smart Days Conflict Detection
+            const limit = (budget.targetLock && budget.targetLock.stages[stageKey]) ? (parseFloat(budget.targetLock.stages[stageKey].days)||0) : 0;
+            const days = parseFloat(item._sDays)||0;
+            const isConflict = limit > 0 && days > limit;
+            
             return `
-                <div class="stage-card-item p-3 bg-white border border-slate-100 rounded-xl shadow-sm space-y-2 group relative cursor-grab active:cursor-grabbing" 
+                <div class="stage-card-item p-3 ${isConflict ? 'bg-amber-50 border-amber-200 shadow-amber-100' : 'bg-white border-slate-100'} border rounded-xl shadow-sm space-y-2 group relative cursor-grab active:cursor-grabbing transition-colors duration-300" 
                      draggable="true" 
                      ondragstart="handleStageDragStart(event, '${item.id}', '${stageKey}')"
                      data-item-id="${item.id}" data-stage-key="${stageKey}">
                     <div class="flex justify-between items-start">
                         <div class="min-w-0 pr-2">
-                            <p class="text-[10px] font-black text-slate-800 uppercase truncate">${this.esc(item.description)}</p>
-                            <p class="text-[8px] text-slate-400 font-bold uppercase tracking-widest">${this.esc(item._sec)}</p>
+                            <p class="text-[10px] font-black ${isConflict ? 'text-amber-800' : 'text-slate-800'} uppercase truncate">${this.esc(item.description)}</p>
+                            <p class="text-[8px] ${isConflict ? 'text-amber-600' : 'text-slate-400'} font-bold uppercase tracking-widest">${this.esc(item._sec)}</p>
                         </div>
                         <span id="cost-${item.id}-${stageKey}" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">${formatAbbreviated(cost, displayCurrency)}</span>
                         <button data-action="stage-remove" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" class="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all bg-white rounded-full p-1 shadow-sm border border-slate-100 z-10">
@@ -2331,9 +2368,9 @@ function getAbbreviatedName(name, maxLen = 25) {
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="flex-1">
-                            <label class="block text-[7px] font-black text-slate-400 uppercase">Days</label>
+                            <label class="block text-[7px] font-black text-slate-400 uppercase">Days ${isConflict ? '(!)' : ''}</label>
                             <input type="number" value="${item._sDays}" data-action="stage-update" data-field="days" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" 
-                                   class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-bold text-blue-600 no-spinner">
+                                   class="w-full ${isConflict ? 'bg-white text-amber-600 font-black' : 'bg-slate-50 text-blue-600 font-bold'} border-none rounded p-1 text-[10px] no-spinner transition-colors">
                         </div>
                         <div class="flex-[2]">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Rate</label>
@@ -4290,6 +4327,28 @@ window.mBTDB = {
         window.showStagesModal();
     };
 
+    // --- TIER 5 UPGRADE: Smart Sync Controller ---
+    window.syncStageDays = function(stageKey) {
+        // 1. Ask Tier 3 for the Truth
+        const validation = mBT.logic.stages.validateTimeline(stageKey);
+        
+        if (validation.maxNeeded > 0) {
+            // 2. Update the Governor (User Input) to match Reality
+            if (!budget.targetLock.stages[stageKey]) return;
+            
+            budget.targetLock.stages[stageKey].days = validation.maxNeeded;
+            
+            // 3. Persist & Refresh
+            saveBudget();
+            mBTLE.reconcile(); // Recalc burn rates
+            
+            // 4. Update UI (Removes Red Warning)
+            if(document.getElementById('stagesViewModal')) window.showStagesModal();
+        } else {
+            alert("No scheduled items found in this stage to sync with.");
+        }
+    };
+
     window.toggleStageLock = function(stageKey) {
         if (budget.targetLock.stages[stageKey]) {
             budget.targetLock.stages[stageKey].locked = !budget.targetLock.stages[stageKey].locked;
@@ -4307,7 +4366,7 @@ window.mBTDB = {
 
     // 1. Setup Card (Configuration & Sliders)
     const setupCard = `
-        <div id="card-setup" class="stage-card min-w-[320px] w-[320px] flex-shrink-0 bg-slate-900 text-white flex flex-col snap-center border-r border-slate-800 h-full rounded-l-[24px]">
+        <div id="card-setup" class="stage-card min-w-[320px] w-[320px] flex-shrink-0 bg-slate-900 text-white flex flex-col snap-center border-r border-slate-800 h-full">
             <div class="p-4 border-b border-slate-700 flex justify-between items-center">
                 <h3 class="font-black text-xs uppercase tracking-widest text-slate-400">Configuration</h3>
                 <div class="relative group">
@@ -4384,38 +4443,65 @@ window.mBTDB = {
             </div>
         </div>`;
 
-    // 3. Main Modal Structure (Injecting Cards)
-    const content = `
+     // 3. Main Modal Structure (Injecting Cards)
+    // NOTE: Redesigned Navigation to be "Tab-Like" with Glow
+    const modalWrapper = `
         <div class="flex flex-col h-[85vh] w-full max-w-[95vw] bg-white rounded-[32px] shadow-2xl overflow-hidden font-sans">
-            <!-- Navigation Header -->
-            <div class="flex items-center gap-2 px-4 bg-white border-b border-slate-100 h-14 flex-shrink-0 overflow-x-auto no-scrollbar shadow-sm z-30">
-                <button onclick="document.getElementById('card-setup').scrollIntoView({behavior:'smooth',inline:'center'})" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 whitespace-nowrap transition-all shadow-md">Setup</button>
-                <button onclick="document.getElementById('card-overview').scrollIntoView({behavior:'smooth',inline:'center'})" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 hover:border-blue-200 whitespace-nowrap transition-all">Overview</button>
-                <div class="w-px h-6 bg-slate-200 mx-2"></div>
-                ${validKeys.map(k => `<button onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth',inline:'center'})" class="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap">${tl.stages[k].label}</button>`).join('')}
+            <!-- New Compact Tab Navigation (Fit to Width) -->
+            <div class="flex items-center w-full bg-white border-b border-slate-100 h-10 flex-shrink-0 shadow-[0_4px_12px_rgba(0,0,0,0.02)] z-30 sticky top-0 divide-x divide-slate-50">
+                <button id="nav-tab-setup" onclick="document.getElementById('card-setup').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                        class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                    Setup
+                </button>
+                <button id="nav-tab-overview" onclick="document.getElementById('card-overview').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                        class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                    View
+                </button>
+                ${validKeys.map(k => `
+                    <button id="nav-tab-${k}" onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                            class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                        ${tl.stages[k].label}
+                    </button>
+                `).join('')}
             </div>
             
-            <!-- Horizontal Scroll Area with Injected Cards -->
+            <!-- Content Carousel -->
             <div id="stagesCarousel" class="flex-grow flex overflow-x-auto snap-x snap-mandatory no-scrollbar cursor-grab active:cursor-grabbing select-none bg-slate-100">
                 ${setupCard}
                 ${overviewCard}
                 ${validKeys.map(k => {
                     const config = tl.stages[k];
+                    
+                    // TIER 4 VISUALS: Smart Days Validation
+                    const val = mBT.logic.stages.validateTimeline(k);
+                    const syncBtn = (val.maxNeeded > val.current) 
+                        ? `<button onclick="syncStageDays('${k}')" class="absolute -right-3 -top-3 bg-amber-500 text-white w-6 h-6 rounded-full shadow-lg hover:bg-amber-600 transition-all z-50 flex items-center justify-center animate-bounce" title="Sync to ${val.maxNeeded} days needed">${mBTAssets.sync}</button>` 
+                        : '';
+
+                    const fullTitles = { 'dev': 'Development', 'pre': 'Pre-Production', 'prod': 'Production', 'post': 'Post-Production', 'dist': 'Distribution' };
+                    const displayTitle = fullTitles[k] || config.label;
+
                     return `
                     <div id="card-${k}" class="stage-card min-w-[340px] w-[340px] flex-shrink-0 flex flex-col h-full bg-white border-r border-slate-200 snap-center relative group">
+                        <!-- ... Card Content ... -->
                         <div class="p-4 bg-white border-b border-slate-50 flex-shrink-0 sticky top-0 z-20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
-                            <div class="flex justify-between items-center mb-4">
-                                <div class="flex items-center gap-3">
-                                    <button onclick="budget.targetLock.stages['${k}'].locked = !budget.targetLock.stages['${k}'].locked; saveBudget(); showStagesModal();" class="text-slate-300 hover:text-blue-500 transition-colors p-1 hover:bg-slate-50 rounded-lg">${config.locked ? mBTAssets.lock : mBTAssets.unlock}</button>
-                                    <span class="font-black text-xs text-slate-800 uppercase tracking-widest">${config.label}</span>
-                                </div>
-                                <div class="flex items-center gap-2">
+                            <div class="relative flex items-center justify-between mb-4 h-8">
+                                <button onclick="budget.targetLock.stages['${k}'].locked = !budget.targetLock.stages['${k}'].locked; saveBudget(); showStagesModal();" class="relative z-10 text-slate-300 hover:text-blue-500 transition-colors p-1 hover:bg-slate-50 rounded-lg">
+                                    ${config.locked ? mBTAssets.lock : mBTAssets.unlock}
+                                </button>
+                                
+                                <span class="absolute inset-0 flex items-center justify-center font-black text-xs text-slate-800 uppercase tracking-widest pointer-events-none">
+                                    ${displayTitle}
+                                </span>
+                                
+                                <div class="relative z-10 flex items-center gap-2">
                                     <div class="relative w-14 group/input">
                                         <input type="number" id="header_perc_${k}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-slate-50 rounded-lg px-2 py-1 outline-none no-spinner text-slate-600 focus:text-blue-600 focus:bg-blue-50 focus:ring-2 focus:ring-blue-100 transition-all" data-stage-key="${k}" ${config.locked ? 'disabled' : ''}>
                                         <span class="absolute right-7 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 group-hover/input:text-blue-400 pointer-events-none">%</span>
                                     </div>
                                     <div class="relative w-12 group/days">
-                                        <input type="number" value="${config.days}" onchange="budget.targetLock.stages['${k}'].days=parseFloat(this.value); saveBudget(); handleStageBulkAction('syncDays');" class="w-full text-center text-[10px] font-bold bg-slate-50 rounded-lg px-1 py-1 outline-none no-spinner text-blue-600 focus:ring-2 focus:ring-blue-100" placeholder="0">
+                                        ${syncBtn}
+                                        <input type="number" value="${config.days}" onchange="updateStageDuration('${k}', this.value)" class="w-full text-center text-[10px] font-bold ${val.maxNeeded > val.current ? 'bg-amber-50 text-amber-600 ring-2 ring-amber-100' : 'bg-slate-50 text-blue-600'} rounded-lg px-1 py-1 outline-none no-spinner focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0">
                                         <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[6px] text-slate-300 font-black uppercase pointer-events-none">Day</span>
                                     </div>
                                 </div>
@@ -4432,8 +4518,46 @@ window.mBTDB = {
             </div>
         </div>`;
 
-    mBTME.open('stagesView', '', content, 'max-w-none w-fit bg-transparent shadow-none', { hideHeader: true, noPadding: true, onOpen: () => {
-        if (typeof initializeStageDragAndDrop === 'function') initializeStageDragAndDrop();
+    mBTME.open('stagesView', '', modalWrapper, 'max-w-none w-fit !bg-transparent !shadow-none !border-0', { hideHeader: true, noPadding: true, onOpen: () => {
+	if (typeof initializeStageDragAndDrop === 'function') initializeStageDragAndDrop();
+        
+        // --- NEW: Tab Scroll Spy (Intersection Observer) ---
+        // This watches the carousel and lights up the matching tab with a glow
+        const carousel = document.getElementById('stagesCarousel');
+        const cards = document.querySelectorAll('.stage-card');
+        const tabs = document.querySelectorAll('.stage-nav-tab');
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // 1. Identify active ID
+                    const cardId = entry.target.id;
+                    const tabId = cardId.replace('card-', 'nav-tab-');
+                    const activeTab = document.getElementById(tabId);
+                    
+                    if (activeTab) {
+                        // 2. Reset all tabs
+                        tabs.forEach(t => {
+                            t.classList.remove('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
+                            t.classList.add('text-slate-400', 'border-transparent');
+                            t.style.textShadow = 'none'; // Remove glow
+                        });
+
+                        // 3. Activate current tab
+                        activeTab.classList.remove('text-slate-400', 'border-transparent');
+                        activeTab.classList.add('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
+                        
+                        // 4. Apply the requested GLOW
+                        activeTab.style.textShadow = '0 0 12px rgba(37,99,235,0.4)';
+                        
+                        // 5. Ensure tab is visible on mobile nav
+                        activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }
+                }
+            });
+        }, { root: carousel, threshold: 0.6 }); // 60% visibility required to trigger snap active state
+
+        cards.forEach(card => observer.observe(card));
         
         // Interaction Bindings for Real-time Slider Sync
         const bindInput = (el) => {
