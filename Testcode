@@ -3506,6 +3506,102 @@ window.mBTDB = {
     // Global Alias Overrides (Replacing the old AI menu with the new Dashboard)
     window.openAnalyticsHub = () => mBT.features.cortex.ui.openHub();
 
+    /* ========= v19.75 STAGE INTELLIGENCE (mBT.features.stages) ========= */
+    mBT.features.stages = {
+        definitions: {
+            'dev': ['writer', 'script', 'research', 'option', 'rights', 'legal', 'development', 'story', 'attorney', 'concept'],
+            'pre': ['scout', 'casting', 'rehearsal', 'director', 'producer', 'coordinator', 'location', 'travel', 'prep', 'storyboard'],
+            'prod': ['camera', 'sound mixer', 'boom', 'lighting', 'grip', 'gaffer', 'electric', 'art', 'wardrobe', 'costume', 'makeup', 'hair', 'unit', 'pa', 'production assistant', 'catering', 'craft', 'medic', 'security', 'transport', 'dop', 'cinematographer', 'operator', 'dit', 'utility'],
+            'post': ['editor', 'color', 'vfx', 'sound design', 'sound edit', 'mix', 'music', 'score', 'post', 'titles', 'graphic', 'visual effects', 'composer'],
+            'dist': ['marketing', 'sales', 'festival', 'publicity', 'premiere', 'distribution', 'deliverables', 'trailer']
+        },
+        logic: {
+            // Strategy A: Find items existing in budget but not linked to stage
+            findMatchesInBudget: function(stageKey) {
+                const keywords = mBT.features.stages.definitions[stageKey] || [];
+                const matches = [];
+                if (!budget || !budget.sections) return [];
+                
+                Object.entries(budget.sections).forEach(([secName, sec]) => {
+                    sec.items.forEach(item => {
+                        // Skip if already in this stage
+                        if (item.stageData && item.stageData[stageKey]) return;
+                        
+                        const text = (item.description + ' ' + secName).toLowerCase();
+                        if (keywords.some(w => text.includes(w))) {
+                            matches.push(item);
+                        }
+                    });
+                });
+                return matches;
+            },
+            // Strategy B: Find items in DB that are missing from budget entirely
+            findMissingEssentials: function(stageKey) {
+                const keywords = mBT.features.stages.definitions[stageKey] || [];
+                const db = mBTOG.rates || [];
+                const existingDesc = new Set();
+                
+                if (budget && budget.sections) {
+                    Object.values(budget.sections).forEach(s => s.items.forEach(i => existingDesc.add(i.description.toLowerCase())));
+                }
+                
+                return db.filter(dbItem => {
+                    const text = dbItem.description.toLowerCase();
+                    const isRelevant = keywords.some(w => text.includes(w));
+                    const exists = existingDesc.has(text);
+                    return isRelevant && !exists;
+                });
+            }
+        },
+        ui: {
+            openAutoFillMenu: function(stageKey) {
+                const matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
+                const missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
+                const stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
+
+                const content = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                    <!-- Option A: Link Existing -->
+                    <div class="bg-blue-50 border border-blue-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-blue-200 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-8 h-8 rounded-lg bg-blue-200 text-blue-700 flex items-center justify-center shadow-sm">${mBTAssets.clip}</div>
+                                <h4 class="font-black text-[10px] uppercase tracking-widest text-blue-800">Link Existing</h4>
+                            </div>
+                            <p class="text-[10px] text-blue-600/80 leading-relaxed mb-4">
+                                Scan your current budget line items. We found <strong>${matches.length}</strong> items that match this stage's criteria but haven't been assigned yet.
+                            </p>
+                        </div>
+                        <button onclick="window.handleStageAutoFill('${stageKey}', 'link'); mBTME.close('autoFillModal');" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ${matches.length === 0 ? 'disabled style="opacity:0.5"' : ''}>
+                            Sync ${matches.length} Items
+                        </button>
+                    </div>
+
+                    <!-- Option B: Generate Missing -->
+                    <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-emerald-200 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-700 flex items-center justify-center shadow-sm">${mBTAssets.wand}</div>
+                                <h4 class="font-black text-[10px] uppercase tracking-widest text-emerald-800">Generate Missing</h4>
+                            </div>
+                            <p class="text-[10px] text-emerald-600/80 leading-relaxed mb-4">
+                                Database check complete. We found <strong>${missing.length}</strong> standard industry roles/items for this stage that are completely missing from your budget.
+                            </p>
+                        </div>
+                        <button onclick="window.handleStageAutoFill('${stageKey}', 'generate'); mBTME.close('autoFillModal');" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ${missing.length === 0 ? 'disabled style="opacity:0.5"' : ''}>
+                            ${mBTAssets.plus} Add ${missing.length} Items
+                        </button>
+                    </div>
+                </div>
+                <div class="px-4 pb-4 text-center">
+                    <p class="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Changes are saved automatically upon execution</p>
+                </div>`;
+                
+                mBTME.open('autoFill', `Smart Fill: ${stageLabel}`, content, 'max-w-xl');
+            }
+        }
+    };
+
     /* ========= v19.55 RECYCLE BIN (mBT.features.trash) ========= */
 		mBT.features.trash = {
         state: { activeTab: 'documents', selected: new Set() },
@@ -4712,6 +4808,84 @@ window.mBTDB = {
         alert(`Smart Scan Complete: ${total} items assigned to stages.`);
     };
 
+    // --- NEW: Smart Auto-Fill Logic (Tier 5 Bridge) ---
+    window.handleStageAutoFill = function(stageKey, mode = 'link') {
+        const stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
+        let count = 0;
+
+        if (mode === 'link') {
+            const matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
+            if (matches.length === 0) return alert("No matching items found to link.");
+            
+            matches.forEach(item => {
+                if (!item.stageData) item.stageData = {};
+                item.stageData[stageKey] = { days: 1, rate: item.rate };
+                count++;
+            });
+        } 
+        else if (mode === 'generate') {
+            const missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
+            if (missing.length === 0) return alert("No missing essentials found.");
+            
+            // Determine target section
+            const sectionNames = Object.keys(budget.sections);
+            let targetSec = sectionNames.find(s => s.toLowerCase().includes('production')) || sectionNames[0];
+            if (stageKey === 'post') targetSec = sectionNames.find(s => /post|edit/.test(s.toLowerCase())) || targetSec;
+            else if (stageKey === 'dev') targetSec = sectionNames.find(s => /dev|creative/.test(s.toLowerCase())) || targetSec;
+
+            if (!budget.sections[targetSec]) return alert("Target section not found.");
+
+            missing.forEach(dbItem => {
+                const newItem = {
+                    id: 'item_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+                    description: dbItem.description,
+                    quantity: 1,
+                    unit: dbItem.unit,
+                    rate: dbItem.rate,
+                    multiplier: 1,
+                    actual: 0,
+                    rateType: 'negotiable',
+                    stageData: {}
+                };
+                newItem.stageData[stageKey] = { days: 1, rate: dbItem.rate };
+                budget.sections[targetSec].items.push(newItem);
+                count++;
+            });
+        }
+
+        if (count > 0) {
+            saveBudget();
+            mBTLE.reconcile();
+            if(document.getElementById('stagesViewModal')) window.showStagesModal();
+            // Optional: Toast or Alert
+            // alert(`${count} items processed for ${stageLabel}.`);
+        }
+    };
+
+    window.handleStageBulkAutoFill = function() {
+        if(!confirm("Smart Scan: Auto-populate ALL stages with existing budget items?")) return;
+        let total = 0;
+        const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+        
+        validKeys.forEach(k => {
+            const matches = mBT.features.stages.logic.findMatchesInBudget(k);
+            matches.forEach(item => {
+                if (!item.stageData) item.stageData = {};
+                item.stageData[k] = { days: 1, rate: item.rate };
+                total++;
+            });
+        });
+
+        if (total > 0) {
+            saveBudget();
+            mBTLE.reconcile();
+            window.showStagesModal();
+            alert(`Smart Scan Complete: Linked ${total} items.`);
+        } else {
+            alert("No new matches found.");
+        }
+    };
+
     window.toggleStageLock = function(stageKey) {
         if (budget.targetLock.stages[stageKey]) {
             budget.targetLock.stages[stageKey].locked = !budget.targetLock.stages[stageKey].locked;
@@ -4856,7 +5030,7 @@ window.mBTDB = {
                                     <button onclick="budget.targetLock.stages['${k}'].locked = !budget.targetLock.stages['${k}'].locked; saveBudget(); showStagesModal();" class="relative z-10 text-slate-300 hover:text-blue-500 transition-colors p-1 hover:bg-slate-50 rounded-lg">
                                         ${config.locked ? mBTAssets.lock : mBTAssets.unlock}
                                     </button>
-                                    <button onclick="handleStageAutoFill('${k}')" class="relative z-10 text-slate-300 hover:text-purple-500 transition-colors p-1 hover:bg-purple-50 rounded-lg" title="Auto-Fill Matching Items">
+                                    <button onclick="mBT.features.stages.ui.openAutoFillMenu('${k}')" class="relative z-10 text-slate-300 hover:text-purple-500 transition-colors p-1 hover:bg-purple-50 rounded-lg" title="Auto-Fill Matching Items">
                                         ${mBTAssets.wand}
                                     </button>
                                 </div>
