@@ -2825,6 +2825,7 @@ console.log("TIER 4 render defined", typeof render);
                 setTimeout(() => { modal.remove(); if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); }, 300);
             }
         },
+
         // --- System: Non-blocking Confirmation Modal ---
         confirm: function(title, message, onConfirm) {
             const content = `
@@ -2854,7 +2855,7 @@ console.log("TIER 4 render defined", typeof render);
             }, 50);
         },
 
-        // --- System: Non-blocking Alert Modal (Added Step 1) ---
+        // --- System: Non-blocking Alert Modal ---
         alert: function(title, message, onOk) {
             const content = `
                 <div class="p-8 text-center flex flex-col items-center justify-center">
@@ -2877,7 +2878,7 @@ console.log("TIER 4 render defined", typeof render);
             }, 50);
         },
 
-        // --- System: Non-blocking Prompt Modal (Added Step 1) ---
+        // --- System: Non-blocking Prompt Modal ---
         prompt: function(title, message, defaultValue, onOk) {
             const content = `
                 <div class="p-8 text-center flex flex-col items-center justify-center">
@@ -2901,10 +2902,8 @@ console.log("TIER 4 render defined", typeof render);
                         if(e.key === 'Enter') document.getElementById('mbtPromptOk').click();
                     });
                 }
-                
                 const cancelBtn = document.getElementById('mbtPromptCancel');
                 const okBtn = document.getElementById('mbtPromptOk');
-                
                 if(cancelBtn) cancelBtn.onclick = () => this.close('promptModal');
                 if(okBtn) okBtn.onclick = () => {
                     const val = document.getElementById('mbtPromptInput').value;
@@ -2914,7 +2913,7 @@ console.log("TIER 4 render defined", typeof render);
             }, 50);
         },
 
-        // --- System: Status Loader (Added Step 1) ---
+        // --- System: Status Loader ---
         showLoader: function(message) {
             const content = `
                 <div class="p-6 flex flex-col items-center justify-center">
@@ -2927,7 +2926,7 @@ console.log("TIER 4 render defined", typeof render);
             this.close('loaderModal');
         },
 
-        // --- Search Integration: Filtering logic for modal lists ---
+         // --- Search Integration: Filtering logic for modal lists ---
         attachSearch: function(inputId, listContainerId, dataItems, renderRowFn) {
             const input = document.getElementById(inputId);
             const list = document.getElementById(listContainerId);
