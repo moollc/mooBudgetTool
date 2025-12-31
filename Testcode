@@ -236,6 +236,21 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 	<script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message="" data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "rxjs": "https://esm.sh/rxjs@^7.8.2?conditions=es2015",
+    "rxjs/operators": "https://esm.sh/rxjs@^7.8.2/operators?conditions=es2015",
+    "rxjs/ajax": "https://esm.sh/rxjs@^7.8.2/ajax?conditions=es2015",
+    "rxjs/webSocket": "https://esm.sh/rxjs@^7.8.2/webSocket?conditions=es2015",
+    "rxjs/testing": "https://esm.sh/rxjs@^7.8.2/testing?conditions=es2015",
+    "rxjs/fetch": "https://esm.sh/rxjs@^7.8.2/fetch?conditions=es2015",
+    "@angular/compiler": "https://esm.sh/@angular/compiler@^21.0.6?external=rxjs",
+    "@angular/platform-browser": "https://esm.sh/@angular/platform-browser@^21.0.6?external=rxjs",
+    "@angular/core": "https://esm.sh/@angular/core@^21.0.6?external=rxjs"
+  }
+}
+</script>
 </head>
 
 <body class="bg-gray-100 pb-24">
@@ -353,6 +368,7 @@ appLogo: `<svg viewBox="0 0 502.17 507.14" fill="none"><circle cx="251.1" cy="25
     list: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
     grid: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>`,
     save: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
+    minusCircle: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
     print: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`,
     
     // --- New Template Icons ---
@@ -851,7 +867,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         },
         
         deleteProject: async function(name) {
-             if (confirm(`Move "${name}" to Bin?`)) {
+             mBTME.confirm("Delete Project", `Are you sure you want to move "${name}" to the Recycle Bin?`, async () => {
                 // Async Load before trash
                 let data = await this.storage.load(storageKeyPrefix + name);
                 if(!data) {
@@ -871,7 +887,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 const list = await this.getList();
                 if (list.length) await this.load(list[0]); else await this.newProject();
                 if(typeof renderProjectManagement === 'function') renderProjectManagement();
-            }
+            });
         },
         
         importFile: function(input) {
@@ -1332,6 +1348,41 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                     current: userDays,
                     delta: userDays - maxItemDays     // Negative value indicates "Time Bankruptcy"
                 };
+            },
+
+            // --- TIER 3 UPGRADE: Temporal Projection Engine (Phase 1) ---
+            calculateTimeline: function() {
+                const timeline = {};
+                // Default to today if start date is missing
+                let cursor = new Date(budget.startDate || new Date());
+                // Handle Timezone offset for pure dates (prevent "yesterday" bugs)
+                cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
+
+                const stages = ['dev', 'pre', 'prod', 'post', 'dist'];
+                
+                stages.forEach(k => {
+                    const days = (budget.targetLock && budget.targetLock.stages[k]) 
+                        ? (parseFloat(budget.targetLock.stages[k].days) || 0) 
+                        : 0;
+                    
+                    const start = new Date(cursor);
+                    // Add days (milliseconds)
+                    const end = new Date(start.getTime() + (days * 24 * 60 * 60 * 1000));
+                    
+                    // Format: "Jan 1 - Jan 15"
+                    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    timeline[k] = {
+                        start: start,
+                        end: end,
+                        // If 0 days, show TBD, otherwise show range (subtract 1 day from end for inclusive range visual if preferred, but standard project mgmt usually entails start -> duration)
+                        label: days > 0 ? `${fmt(start)} - ${fmt(end)}` : 'SCHEDULE TBD'
+                    };
+                    
+                    // Move cursor to end of this stage for next stage start
+                    cursor = end;
+                });
+                return timeline;
             }
         }
     };
@@ -2350,33 +2401,48 @@ function getAbbreviatedName(name, maxLen = 25) {
             const days = parseFloat(item._sDays)||0;
             const isConflict = limit > 0 && days > limit;
             
+            // Note: onmousedown/ontouchstart removed. Sortable 'filter' now handles interaction locking.
+            // Layout Update: Increased contrast (border-slate-300, shadow-md) and spacing (space-y-3).
+            // Added 'pr-12' padding to container to accommodate the larger side button.
             return `
-                <div class="stage-card-item p-3 ${isConflict ? 'bg-amber-50 border-amber-200 shadow-amber-100' : 'bg-white border-slate-100'} border rounded-xl shadow-sm space-y-2 group relative cursor-grab active:cursor-grabbing transition-colors duration-300" 
-                     draggable="true" 
-                     ondragstart="handleStageDragStart(event, '${item.id}', '${stageKey}')"
+                <div class="stage-card-item p-3 pr-12 ${isConflict ? 'bg-amber-50 border-amber-200 shadow-amber-100' : 'bg-white border-slate-300'} border rounded-xl shadow-md space-y-3 group relative cursor-grab active:cursor-grabbing transition-colors duration-300 stage-draggable" 
                      data-item-id="${item.id}" data-stage-key="${stageKey}">
+                    
                     <div class="flex justify-between items-start">
                         <div class="min-w-0 pr-2">
                             <p class="text-[10px] font-black ${isConflict ? 'text-amber-800' : 'text-slate-800'} uppercase truncate">${this.esc(item.description)}</p>
                             <p class="text-[8px] ${isConflict ? 'text-amber-600' : 'text-slate-400'} font-bold uppercase tracking-widest">${this.esc(item._sec)}</p>
                         </div>
                         <span id="cost-${item.id}-${stageKey}" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">${formatAbbreviated(cost, displayCurrency)}</span>
-                        <button data-action="stage-remove" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" class="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all bg-white rounded-full p-1 shadow-sm border border-slate-100 z-10">
-                            ${mBTAssets.trash}
-                        </button>
                     </div>
+                    
                     <div class="flex items-center gap-2">
-                        <div class="flex-1">
+                        <!-- Layout Update: Compact widths (w-12, w-20) for mobile fit -->
+                        <div class="w-12">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Days ${isConflict ? '(!)' : ''}</label>
-                            <input type="number" value="${item._sDays}" data-action="stage-update" data-field="days" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" 
+                            <input type="number" value="${item._sDays}" 
+                                   data-action="stage-update" data-field="days" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}" 
                                    class="w-full ${isConflict ? 'bg-white text-amber-600 font-black' : 'bg-slate-50 text-blue-600 font-bold'} border-none rounded p-1 text-[10px] no-spinner transition-colors">
                         </div>
-                        <div class="flex-[2]">
+                        <div class="w-20">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Rate</label>
-                            <input type="number" value="${item._sRate}" data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${item._sec}" data-stage="${stageKey}" 
+                            <input type="number" value="${item._sRate}" 
+                                   data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}" 
                                    class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-mono font-bold text-slate-600 no-spinner">
                         </div>
                     </div>
+
+                    <!-- Smart Remove: Centered Right, Larger Touch Target -->
+                    <button 
+                        class="stage-remove-btn absolute top-1/2 -translate-y-1/2 right-2 bg-white text-slate-300 hover:text-red-500 rounded-full w-8 h-8 flex items-center justify-center shadow-md border border-slate-200 z-30 transition-all hover:scale-110 hover:shadow-lg hover:border-red-100"
+                        onpointerdown="event.stopPropagation()"
+                        onclick="mBT.features.stages.logic.removeItem(this)"
+                        data-id="${item.id}"
+                        data-section="${this.esc(item._sec)}"
+                        data-stage="${stageKey}"
+                        title="Remove from Stage">
+                        ${mBTAssets.minusCircle}
+                    </button>
                 </div>`;
         }
     };
@@ -2390,16 +2456,19 @@ function getAbbreviatedName(name, maxLen = 25) {
         return Object.entries(budget.sections).map(([name, section]) => {
             // Logic Resolution: Responsive Table Headers
             // Note: Header moved to RenderEngine.section to prevent visual blocking. Table is now body-only.
+            // Fix: Escape quotes in section name to prevent HTML attribute injection
+            const safeSectionName = name.replace(/"/g, '&quot;');
+            
             const bodyContent = `
                 <div class="table-container overflow-x-auto no-scrollbar">
                     <table class="w-full border-collapse min-w-full table-fixed md:table-auto">
-                        <tbody data-section-body="${name}">
+                        <tbody data-section-body="${safeSectionName}">
                             ${section.items.map(item => RenderEngine.lineItem(item, name)).join('')}
                         </tbody>
                     </table>
                 </div>
                 <div class="bg-white border-t border-slate-100">
-                    <button data-action="section-add" data-id="${name}" class="w-full py-3 flex items-center justify-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
+                    <button data-action="section-add" data-id="${safeSectionName}" class="w-full py-3 flex items-center justify-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
                         <span class="scale-75 pointer-events-none">${mBTAssets.plus}</span> Add Line Item
                     </button>
                 </div>`;
@@ -2425,21 +2494,23 @@ function handleToggleSection(sectionName) {
 
 // Logic Resolution: Removes items from the budget object.
 function handleRemoveItem(sectionName, itemId) {
-    if(!confirm("Remove this line item permanently?")) return;
-    const sec = budget.sections[sectionName];
-    if(sec) {
-        sec.items = sec.items.filter(i => i.id !== itemId);
-        
-        // Tier 4 Surgeon: Remove DOM node instantly
-        if (mBT.ui && mBT.ui.ops) {
-            mBT.ui.ops.remove(sectionName, itemId);
-            mBTLE.reconcile(); // Update Math
-            mBT.ui.paint();    // Update Totals
-        } else {
-            mBTLE.reconcile();
-            render(); // Fallback
+    mBTME.confirm("Delete Line Item", "Remove this item from the budget permanently?", () => {
+        const sec = budget.sections[sectionName];
+        if(sec) {
+            // Fix: Use string comparison to avoid type mismatches (Ghost Cost bug)
+            sec.items = sec.items.filter(i => String(i.id) !== String(itemId));
+            
+            // Tier 4 Surgeon: Remove DOM node instantly
+            if (mBT.ui && mBT.ui.ops) {
+                mBT.ui.ops.remove(sectionName, itemId);
+                mBTLE.reconcile(); // Update Math
+                mBT.ui.paint();    // Update Totals
+            } else {
+                mBTLE.reconcile();
+                render(); // Fallback
+            }
         }
-    }
+    });
 }
 
 // Logic Resolution: Modal for adding new line items from Open Gate.
@@ -2529,7 +2600,27 @@ function initializeDragAndDrop() {
         if(typeof Sortable !== 'undefined') {
             new Sortable(el, { 
                 handle: '.drag-handle', 
-                animation: 150
+                animation: 150,
+                // Fix: Filter inputs so typing doesn't trigger drag or get blocked
+                filter: 'input, button, select, textarea, .no-drag',
+                preventOnFilter: false,
+                // TIER 2 FIX: Persist order changes to Data Model
+                onEnd: function (evt) {
+                    const itemEl = evt.item;
+                    const secKey = itemEl.dataset.section; // Auto-decodes HTML entities
+                    const oldIdx = evt.oldIndex;
+                    const newIdx = evt.newIndex;
+
+                    if (secKey && budget.sections[secKey] && oldIdx !== newIdx) {
+                        const items = budget.sections[secKey].items;
+                        // Array Move: Splice out, then Splice in
+                        const [movedItem] = items.splice(oldIdx, 1);
+                        items.splice(newIdx, 0, movedItem);
+                        
+                        // Persist immediately (No render needed as DOM is already moved)
+                        saveBudget();
+                    }
+                }
             });
         }
     });
@@ -2537,12 +2628,94 @@ function initializeDragAndDrop() {
 
 // Logic Resolution: Stage Drag and Drop initialization.
 function initializeStageDragAndDrop() {
-    const draggables = document.querySelectorAll('.stage-draggable');
-    draggables.forEach(d => {
-        d.addEventListener('dragstart', () => d.classList.add('dragging'));
-        d.addEventListener('dragend', () => d.classList.remove('dragging'));
+    // TIER 5 UPGRADE: Integrated Sortable.js for Stages
+    const containers = document.querySelectorAll('.stage-drop-zone');
+    
+    containers.forEach(container => {
+        if(typeof Sortable === 'undefined') return;
+        
+        new Sortable(container, {
+            group: {
+                name: 'stages',
+                pull: 'clone', // Clone items instead of moving
+                put: true
+            },
+            animation: 150,
+            sort: true, // ENABLED: Allow reordering within the stage
+            delay: 100, // Touch device debounce
+            delayOnTouchOnly: true,
+            ghostClass: 'opacity-50',
+            filter: 'input, button, select, .no-drag, .stage-remove-btn',
+            preventOnFilter: false, // Fix: Allow clicks to bubble up to Router
+            
+            // Event: Item reordered within the same list
+            onUpdate: function(evt) {
+                window.updateStageOrder(container.dataset.stageKey, container);
+            },
+
+            // Event: Item dropped from another list
+            onAdd: function (evt) {
+                const itemEl = evt.item;
+                const targetStage = container.dataset.stageKey;
+                const sourceStage = itemEl.dataset.stageKey;
+                const itemId = itemEl.dataset.itemId;
+                
+                if (!itemId || !targetStage) {
+                    showStagesModal(); // Revert
+                    return; 
+                }
+
+                // Update State Logic
+                let item = null;
+                Object.values(budget.sections).forEach(sec => { 
+                    if(!item) item = sec.items.find(i => i.id === itemId); 
+                });
+
+                if (item) {
+                    if (!item.stageData) item.stageData = {};
+                    
+                    // If not already in stage, add it (prevent overwriting if dragging for reorder, though onAdd implies cross-list)
+                    if (!item.stageData[targetStage] || sourceStage !== targetStage) {
+                        // Clone data if coming from another stage, else default
+                        let newData = { days: 1, rate: item.rate || 0 };
+                        if (sourceStage && item.stageData[sourceStage]) {
+                            newData = { ...item.stageData[sourceStage] };
+                        }
+                        item.stageData[targetStage] = newData;
+                    }
+                    
+                    // Update Order based on drop position
+                    window.updateStageOrder(targetStage, container);
+
+                    // Full Redraw to ensure DOM ID/Input consistency
+                    if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    showStagesModal();
+                } else {
+                     showStagesModal(); // Revert if item not found
+                }
+            }
+        });
     });
 }
+
+// Logic Resolution: Helper to persist visual order to data model
+window.updateStageOrder = function(stageKey, container) {
+    const children = Array.from(container.children);
+    children.forEach((el, index) => {
+        const itemId = el.dataset.itemId;
+        if(!itemId) return;
+        
+        let item = null;
+        Object.values(budget.sections).forEach(sec => { 
+            if(!item) item = sec.items.find(i => i.id === itemId); 
+        });
+        
+        if (item && item.stageData && item.stageData[stageKey]) {
+            item.stageData[stageKey].order = index;
+        }
+    });
+    saveBudget();
+};
 
 // Logic Resolution: Updates UI based on connectivity.
 function updateOnlineStatus() {
@@ -2595,7 +2768,10 @@ console.log("TIER 4 render defined", typeof render);
     mBT.ui.modal = {
         containerId: 'global-modal-container',
         // --- Registry Resolution: Pointing to Tier 1 Asset Registry ---
-        icons: { close: mBTAssets.close },
+        icons: { 
+            close: mBTAssets.close,
+            alert: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+        },
       
         // --- Portal Generation: Dynamic injection of overlay layers ---
         open: function(id, title, contentHtml, maxWidth = 'max-w-2xl', options = {}) {
@@ -2649,6 +2825,108 @@ console.log("TIER 4 render defined", typeof render);
                 setTimeout(() => { modal.remove(); if(typeof mBTLE !== 'undefined') mBTLE.reconcile(); }, 300);
             }
         },
+        // --- System: Non-blocking Confirmation Modal ---
+        confirm: function(title, message, onConfirm) {
+            const content = `
+                <div class="p-8 text-center flex flex-col items-center justify-center">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4 animate-bounce shadow-sm">
+                        ${this.icons.alert}
+                    </div>
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
+                    <p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">${message}</p>
+                    <div class="flex gap-3 w-full max-w-xs">
+                        <button id="mbtConfirmCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>
+                        <button id="mbtConfirmYes" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">Confirm</button>
+                    </div>
+                </div>`;
+            
+            this.open('confirmation', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+            
+            // Bind listeners after render
+            setTimeout(() => {
+                const cancelBtn = document.getElementById('mbtConfirmCancel');
+                const yesBtn = document.getElementById('mbtConfirmYes');
+                if(cancelBtn) cancelBtn.onclick = () => this.close('confirmationModal');
+                if(yesBtn) yesBtn.onclick = () => {
+                    this.close('confirmationModal');
+                    if(onConfirm && typeof onConfirm === 'function') onConfirm();
+                };
+            }, 50);
+        },
+
+        // --- System: Non-blocking Alert Modal (Added Step 1) ---
+        alert: function(title, message, onOk) {
+            const content = `
+                <div class="p-8 text-center flex flex-col items-center justify-center">
+                    <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-4 shadow-sm">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </div>
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
+                    <p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">${message}</p>
+                    <button id="mbtAlertOk" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>
+                </div>`;
+            
+            this.open('alert', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+            
+            setTimeout(() => {
+                const okBtn = document.getElementById('mbtAlertOk');
+                if(okBtn) okBtn.onclick = () => {
+                    this.close('alertModal');
+                    if(onOk && typeof onOk === 'function') onOk();
+                };
+            }, 50);
+        },
+
+        // --- System: Non-blocking Prompt Modal (Added Step 1) ---
+        prompt: function(title, message, defaultValue, onOk) {
+            const content = `
+                <div class="p-8 text-center flex flex-col items-center justify-center">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
+                    <p class="text-xs text-slate-500 font-bold mb-4 max-w-xs leading-relaxed">${message}</p>
+                    <input type="text" id="mbtPromptInput" value="${defaultValue || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-6" autofocus>
+                    <div class="flex gap-3 w-full max-w-xs">
+                        <button id="mbtPromptCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>
+                        <button id="mbtPromptOk" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>
+                    </div>
+                </div>`;
+            
+            this.open('prompt', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+            
+            setTimeout(() => {
+                const input = document.getElementById('mbtPromptInput');
+                if(input) {
+                    input.focus();
+                    input.select();
+                    input.addEventListener('keydown', (e) => {
+                        if(e.key === 'Enter') document.getElementById('mbtPromptOk').click();
+                    });
+                }
+                
+                const cancelBtn = document.getElementById('mbtPromptCancel');
+                const okBtn = document.getElementById('mbtPromptOk');
+                
+                if(cancelBtn) cancelBtn.onclick = () => this.close('promptModal');
+                if(okBtn) okBtn.onclick = () => {
+                    const val = document.getElementById('mbtPromptInput').value;
+                    this.close('promptModal');
+                    if(onOk && typeof onOk === 'function') onOk(val);
+                };
+            }, 50);
+        },
+
+        // --- System: Status Loader (Added Step 1) ---
+        showLoader: function(message) {
+            const content = `
+                <div class="p-6 flex flex-col items-center justify-center">
+                    <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 animate-pulse">${message}</p>
+                </div>`;
+            this.open('loader', '', content, 'max-w-xs', { hideHeader: true, noPadding: true });
+        },
+        hideLoader: function() {
+            this.close('loaderModal');
+        },
+
         // --- Search Integration: Filtering logic for modal lists ---
         attachSearch: function(inputId, listContainerId, dataItems, renderRowFn) {
             const input = document.getElementById(inputId);
@@ -3551,6 +3829,36 @@ window.mBTDB = {
                     const exists = existingDesc.has(text);
                     return isRelevant && !exists;
                 });
+            },
+            // Logic Resolution: Smart removal logic linked to UI button
+            removeItem: function(btn) {
+                const itemId = btn.dataset.id;
+                const sectionName = btn.dataset.section;
+                const stageKey = btn.dataset.stage;
+
+                let item = null;
+                // Try fast lookup
+                if (sectionName && budget.sections[sectionName]) {
+                    item = budget.sections[sectionName].items.find(i => String(i.id) === String(itemId));
+                }
+                // Fallback scan
+                if (!item) {
+                    Object.values(budget.sections).forEach(sec => {
+                        if(!item) item = sec.items.find(i => String(i.id) === String(itemId));
+                    });
+                }
+
+                if (item) {
+                    // Enhanced Confirmation with item name
+                    mBTME.confirm("Remove from Stage", `Remove "${item.description}" from this stage? The main budget item will remain.`, () => {
+                        if (item.stageData && item.stageData[stageKey]) {
+                            delete item.stageData[stageKey];
+                            saveBudget();
+                            if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                            if(window.showStagesModal) window.showStagesModal();
+                        }
+                    });
+                }
             }
         },
         ui: {
@@ -3742,11 +4050,12 @@ window.mBTDB = {
             
             // Empty Bin Logic
             if (action === 'empty') {
-                if(!confirm(`WARNING: This will permanently DELETE ALL items in the ${isDoc?'Documents':'Projects'} bin.\n\nThis cannot be undone.\n\nProceed?`)) return;
-                if(isDoc) budget.documentTrash = [];
-                else localStorage.setItem(trashKey, '[]');
-                saveBudget();
-                this.open(this.state.activeTab);
+                mBTME.confirm("Empty Bin", `Permanently delete ALL items in the ${isDoc?'Documents':'Projects'} bin? This cannot be undone.`, () => {
+                    if(isDoc) budget.documentTrash = [];
+                    else localStorage.setItem(trashKey, '[]');
+                    saveBudget();
+                    this.open(this.state.activeTab);
+                });
                 return;
             }
 
@@ -3754,65 +4063,66 @@ window.mBTDB = {
 
             // Delete / Restore Logic
             if (action === 'delete') {
-                if(!confirm(`WARNING: ${count} item(s) will be DELETED FOREVER.\n\nThis action cannot be undone.\n\nConfirm deletion?`)) return;
-                if(isDoc) {
-                    budget.documentTrash = budget.documentTrash.filter(d => !this.state.selected.has(d.id));
-                    saveBudget();
-                } else {
-                    const list = JSON.parse(localStorage.getItem(trashKey)||'[]');
-                    const filtered = list.filter(p => !this.state.selected.has(p.projectName));
-                    localStorage.setItem(trashKey, JSON.stringify(filtered));
-                }
+                mBTME.confirm("Delete Forever", `Permanently delete ${count} selected item(s)? This cannot be undone.`, () => {
+                    if(isDoc) {
+                        budget.documentTrash = budget.documentTrash.filter(d => !this.state.selected.has(d.id));
+                        saveBudget();
+                    } else {
+                        const list = JSON.parse(localStorage.getItem(trashKey)||'[]');
+                        const filtered = list.filter(p => !this.state.selected.has(p.projectName));
+                        localStorage.setItem(trashKey, JSON.stringify(filtered));
+                    }
+                    this.state.selected.clear();
+                    this.open(this.state.activeTab);
+                });
             } else if (action === 'restore') {
-                if(!confirm(`Restore ${count} items?`)) return;
-                if(isDoc) {
-                    const toRestore = budget.documentTrash.filter(d => this.state.selected.has(d.id));
-                    budget.documentTrash = budget.documentTrash.filter(d => !this.state.selected.has(d.id));
-                    if(!budget.documents) budget.documents = [];
-                    budget.documents.push(...toRestore);
-                    saveBudget();
-                    render(); // Refresh main view to show restored docs
-                } else {
-                    const list = JSON.parse(localStorage.getItem(trashKey)||'[]');
-                    const keptTrash = [];
-                    list.forEach(p => {
-                        if(this.state.selected.has(p.projectName)) {
-                            const key = storageKeyPrefix + p.projectName;
-                            // Check collision
-                            if(localStorage.getItem(key)) {
-                                if(confirm(`Project "${p.projectName}" already exists. Overwrite?`)) {
+                mBTME.confirm("Restore Items", `Restore ${count} selected item(s)?`, () => {
+                    if(isDoc) {
+                        const toRestore = budget.documentTrash.filter(d => this.state.selected.has(d.id));
+                        budget.documentTrash = budget.documentTrash.filter(d => !this.state.selected.has(d.id));
+                        if(!budget.documents) budget.documents = [];
+                        budget.documents.push(...toRestore);
+                        saveBudget();
+                        render(); // Refresh main view to show restored docs
+                    } else {
+                        const list = JSON.parse(localStorage.getItem(trashKey)||'[]');
+                        const keptTrash = [];
+                        list.forEach(p => {
+                            if(this.state.selected.has(p.projectName)) {
+                                const key = storageKeyPrefix + p.projectName;
+                                // Check collision
+                                if(localStorage.getItem(key)) {
+                                    // Note: Simplified logic here for restoration collision to avoid nested confirms
                                     localStorage.setItem(key, JSON.stringify(p));
                                 } else {
-                                    keptTrash.push(p); // Keep in trash if user cancels overwrite
+                                    localStorage.setItem(key, JSON.stringify(p));
                                 }
                             } else {
-                                localStorage.setItem(key, JSON.stringify(p));
+                                keptTrash.push(p);
                             }
-                        } else {
-                            keptTrash.push(p);
-                        }
-                    });
-                    localStorage.setItem(trashKey, JSON.stringify(keptTrash));
-                    if(typeof renderProjectManagement === 'function') renderProjectManagement(); // Refresh project dropdown
-                }
+                        });
+                        localStorage.setItem(trashKey, JSON.stringify(keptTrash));
+                        if(typeof renderProjectManagement === 'function') renderProjectManagement(); // Refresh project dropdown
+                    }
+                    this.state.selected.clear();
+                    this.open(this.state.activeTab);
+                });
             }
-            
-            this.state.selected.clear();
-            this.open(this.state.activeTab);
         },
 
         // --- External Hooks ---
         trashDocument: function(docId) {
-            if(!confirm("Move document to Recycle Bin?")) return;
-            const idx = budget.documents.findIndex(d => d.id === docId);
-            if (idx > -1) {
-                const doc = budget.documents.splice(idx, 1)[0];
-                if (!budget.documentTrash) budget.documentTrash = [];
-                budget.documentTrash.push(doc);
-                saveBudget();
-                render(); // Update Vault UI if open
-                if (document.getElementById('documentsModal')) showDocumentsModal();
-            }
+            mBTME.confirm("Archive Document", "Move this document to the Recycle Bin?", () => {
+                const idx = budget.documents.findIndex(d => d.id === docId);
+                if (idx > -1) {
+                    const doc = budget.documents.splice(idx, 1)[0];
+                    if (!budget.documentTrash) budget.documentTrash = [];
+                    budget.documentTrash.push(doc);
+                    saveBudget();
+                    render(); // Update Vault UI if open
+                    if (document.getElementById('documentsModal')) showDocumentsModal();
+                }
+            });
         }
     };
     
@@ -4197,13 +4507,14 @@ window.mBTDB = {
             // ... Logic moved here if invoked directly, but mostly handled by openCrewProfile form commit ...
         },
         deleteContact: function(id) {
-            if(!confirm("Remove global contact?")) return;
-            const idx = mBTOG.contacts.findIndex(c => c.id === id);
-            if(idx > -1) {
-                mBTOG.contacts.splice(idx, 1);
-                localStorage.setItem('moo_contacts', JSON.stringify(mBTOG.contacts));
-                this.open('database', 'contacts'); // Refresh
-            }
+            mBTME.confirm("Delete Contact", "Remove this global contact?", () => {
+                const idx = mBTOG.contacts.findIndex(c => c.id === id);
+                if(idx > -1) {
+                    mBTOG.contacts.splice(idx, 1);
+                    localStorage.setItem('moo_contacts', JSON.stringify(mBTOG.contacts));
+                    this.open('database', 'contacts'); // Refresh
+                }
+            });
         },
 
         // --- 6. Database Tools (Tier 5 Additions) ---
@@ -4676,17 +4987,6 @@ window.mBTDB = {
         }
     };
 
-    window.removeStageItem = function(itemId, sectionName, stageKey) {
-        if(!confirm("Remove from stage?")) return;
-        const item = budget.sections[sectionName]?.items.find(i => i.id === itemId);
-        if (item && item.stageData) {
-            delete item.stageData[stageKey];
-            saveBudget();
-            showStagesModal(); // Refresh modal
-            mBTLE.reconcile(); // Refresh background stats
-        }
-    };
-
     window.updateStageItem = function(itemId, sectionName, stageKey, field, value, isRealTime = false) {
         const item = budget.sections[sectionName]?.items.find(i => i.id === itemId);
         if (item && item.stageData && item.stageData[stageKey]) {
@@ -4730,6 +5030,26 @@ window.mBTDB = {
         window.showStagesModal();
     };
 
+    // --- TIER 5 UPGRADE: Manual Duration Handler (Phase 2 Fix) ---
+    window.updateStageDuration = function(stageKey, value) {
+        if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
+        
+        // 1. Update Data Model
+        const days = parseFloat(value) || 0;
+        if (budget.targetLock.stages[stageKey]) {
+            budget.targetLock.stages[stageKey].days = days;
+            
+            // 2. Persist
+            saveBudget();
+            
+            // 3. Trigger Temporal Engine (Updates Dates instantly)
+            if(typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+            
+            // 4. Update Logic Engine (Burn Rates)
+            if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
+        }
+    };
+
     // --- TIER 5 UPGRADE: Smart Sync Controller ---
     window.syncStageDays = function(stageKey) {
         // 1. Ask Tier 3 for the Truth
@@ -4750,62 +5070,6 @@ window.mBTDB = {
         } else {
             alert("No scheduled items found in this stage to sync with.");
         }
-    };
-
-    // --- NEW: Smart Auto-Fill Logic (The Matchmaker) ---
-    window.handleStageAutoFill = function(stageKey, silent = false) {
-        if(!silent && !confirm(`Auto-populate ${stageKey.toUpperCase()} with matching items from the main budget?`)) return;
-
-        const keywords = {
-            'dev': ['writer', 'script', 'research', 'option', 'rights', 'legal', 'development', 'story', 'attorney', 'concept'],
-            'pre': ['scout', 'casting', 'rehearsal', 'director', 'producer', 'coordinator', 'location', 'travel', 'prep', 'storyboard'],
-            'prod': ['camera', 'sound mixer', 'boom', 'lighting', 'grip', 'gaffer', 'electric', 'art', 'wardrobe', 'costume', 'makeup', 'hair', 'unit', 'pa', 'production assistant', 'catering', 'craft', 'medic', 'security', 'transport', 'dop', 'cinematographer', 'operator', 'dit', 'utility'],
-            'post': ['editor', 'color', 'vfx', 'sound design', 'sound edit', 'mix', 'music', 'score', 'post', 'titles', 'graphic', 'visual effects', 'composer'],
-            'dist': ['marketing', 'sales', 'festival', 'publicity', 'premiere', 'distribution', 'deliverables', 'trailer']
-        };
-
-        const targetWords = keywords[stageKey] || [];
-        let addedCount = 0;
-
-        Object.entries(budget.sections).forEach(([secName, sec]) => {
-            sec.items.forEach(item => {
-                // Skip if already in this stage
-                if(item.stageData && item.stageData[stageKey]) return;
-
-                const text = (item.description + ' ' + secName).toLowerCase();
-                const matches = targetWords.some(w => text.includes(w));
-
-                if(matches) {
-                    if(!item.stageData) item.stageData = {};
-                    // Default to 1 unit for presence (User can adjust days later)
-                    item.stageData[stageKey] = { days: 1, rate: item.rate };
-                    addedCount++;
-                }
-            });
-        });
-
-        if(addedCount > 0) {
-            mBTLE.reconcile();
-            saveBudget();
-            if(!silent) {
-                window.showStagesModal();
-                // Simple toast could go here, but alert is fine for now
-                // alert(`Added ${addedCount} items to ${stageKey.toUpperCase()}.`);
-            }
-        } else if (!silent) {
-            alert("No new matching items found in budget.");
-        }
-        return addedCount;
-    };
-
-    window.handleStageBulkAutoFill = function() {
-        if(!confirm("Smart Scan: Auto-populate ALL stages based on item roles?")) return;
-        let total = 0;
-        ['dev', 'pre', 'prod', 'post', 'dist'].forEach(k => {
-             total += window.handleStageAutoFill(k, true);
-        });
-        window.showStagesModal();
-        alert(`Smart Scan Complete: ${total} items assigned to stages.`);
     };
 
     // --- NEW: Smart Auto-Fill Logic (Tier 5 Bridge) ---
@@ -4923,6 +5187,14 @@ window.mBTDB = {
                 </div>
             </div>
             <div class="p-5 space-y-6 overflow-y-auto no-scrollbar">
+                <!-- TIER 5 UPGRADE: Phase 2 - Temporal Control Center -->
+                <div>
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Project Start Date</label>
+                    <input type="date" value="${budget.startDate || new Date().toISOString().split('T')[0]}" 
+                           onchange="budget.startDate=this.value; saveBudget(); window.updateAllHeaders();" 
+                           class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer uppercase tracking-widest shadow-inner">
+                </div>
+
                 <div>
                     <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Cap Limit</label>
                     <div class="flex items-center gap-2 border-b border-slate-600 pb-1">
@@ -5031,35 +5303,39 @@ window.mBTDB = {
                                         ${config.locked ? mBTAssets.lock : mBTAssets.unlock}
                                     </button>
                                     <button onclick="mBT.features.stages.ui.openAutoFillMenu('${k}')" class="relative z-10 text-slate-300 hover:text-purple-500 transition-colors p-1 hover:bg-purple-50 rounded-lg" title="Auto-Fill Matching Items">
-                                        ${mBTAssets.wand}
-                                    </button>
-                                </div>
-                                
-                                <span class="absolute inset-0 flex items-center justify-center font-black text-xs text-slate-800 uppercase tracking-widest pointer-events-none">
+                                    ${mBTAssets.wand}
+                                </button>
+                            </div>
+                            
+                            <!-- Updated Header: Title + Temporal Projection -->
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <span class="font-black text-xs text-slate-800 uppercase tracking-widest leading-none">
                                     ${displayTitle}
                                 </span>
-                                
-                                <div class="relative z-10 flex items-center gap-2">
-                                    <div class="relative w-14 group/input">
-                                        <input type="number" id="header_perc_${k}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-slate-50 rounded-lg px-2 py-1 outline-none no-spinner text-slate-600 focus:text-blue-600 focus:bg-blue-50 focus:ring-2 focus:ring-blue-100 transition-all" data-stage-key="${k}" ${config.locked ? 'disabled' : ''}>
-                                        <span class="absolute right-7 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 group-hover/input:text-blue-400 pointer-events-none">%</span>
-                                    </div>
-                                    <div class="relative w-12 group/days">
-                                        ${syncBtn}
-                                        <input type="number" value="${config.days}" onchange="updateStageDuration('${k}', this.value)" class="w-full text-center text-[10px] font-bold ${val.maxNeeded > val.current ? 'bg-amber-50 text-amber-600 ring-2 ring-amber-100' : 'bg-slate-50 text-blue-600'} rounded-lg px-1 py-1 outline-none no-spinner focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0">
-                                        <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[6px] text-slate-300 font-black uppercase pointer-events-none">Day</span>
-                                    </div>
+                                <span id="date-range-${k}" class="text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight">--</span>
+                            </div>
+                            
+                            <div class="relative z-10 flex items-center gap-2">
+                                <div class="relative w-14 group/input">
+                                    <input type="number" id="header_perc_${k}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-slate-50 rounded-lg px-2 py-1 outline-none no-spinner text-slate-600 focus:text-blue-600 focus:bg-blue-50 focus:ring-2 focus:ring-blue-100 transition-all" data-stage-key="${k}" ${config.locked ? 'disabled' : ''}>
+                                    <span class="absolute right-7 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 group-hover/input:text-blue-400 pointer-events-none">%</span>
+                                </div>
+                                <div class="relative w-12 group/days">
+                                    ${syncBtn}
+                                    <input type="number" value="${config.days}" onchange="updateStageDuration('${k}', this.value)" class="w-full text-center text-[10px] font-bold ${val.maxNeeded > val.current ? 'bg-amber-50 text-amber-600 ring-2 ring-amber-100' : 'bg-slate-50 text-blue-600'} rounded-lg px-1 py-1 outline-none no-spinner focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0">
+                                    <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[6px] text-slate-300 font-black uppercase pointer-events-none">Day</span>
                                 </div>
                             </div>
-                            <div class="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden"><div id="bar-${k}" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div></div>
-                            <div class="flex justify-between text-[9px] font-mono font-bold text-slate-400 mb-4"><span id="total-${k}" class="text-slate-600">$0</span><span id="limit-${k}">Cap: $0</span></div>
-                            <button onclick="handleStageAddItem('${k}')" class="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">${mBTAssets.plus} Add Item</button>
                         </div>
-                        <div class="stage-drop-zone flex-grow overflow-y-auto p-3 space-y-3 bg-slate-50/50 no-scrollbar pb-10" data-stage-key="${k}">
-                            ${renderStageItems(k)}
-                        </div>
-                    </div>`;
-                }).join('')}
+                        <div class="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden"><div id="bar-${k}" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div></div>
+                        <div class="flex justify-between text-[9px] font-mono font-bold text-slate-400 mb-4"><span id="total-${k}" class="text-slate-600">$0</span><span id="limit-${k}">Cap: $0</span></div>
+                        <button onclick="handleStageAddItem('${k}')" class="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">${mBTAssets.plus} Add Item</button>
+                    </div>
+                    <div class="stage-drop-zone flex-grow overflow-y-auto p-3 space-y-3 bg-slate-50/50 no-scrollbar pb-10" data-stage-key="${k}">
+                        ${renderStageItems(k)}
+                    </div>
+                </div>`;
+            }).join('')}
             </div>
         </div>`;
 
@@ -5122,63 +5398,6 @@ window.mBTDB = {
             });
         });
 
-            // Logic Engine: Header/UI Refresh (Tier 5)
-            window.updateAllHeaders = () => {
-                // 1. Recalculate Logic Metrics (Tier 3 Handshake)
-                const metrics = mBT.logic.stages.getMetrics();
-                const burn = mBT.logic.stages.getBurnStatus(metrics.grandTotal, metrics.totalCap);
-
-                // 2. Update Overview Card (Visuals)
-                const ovGrandTotal = document.getElementById('ovGrandTotal');
-                const ovTotalCap = document.getElementById('ovTotalCap');
-                
-                if(ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(metrics.grandTotal);
-                if(ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(metrics.totalCap);
-
-                // Update Burn Ring
-                const ring = document.getElementById('burnRateRing');
-                const ringTxt = document.getElementById('burnRateText');
-                if(ring && ringTxt) {
-                    ring.className = `w-48 h-48 rounded-full border-[16px] ${burn.ring} flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm`;
-                    ringTxt.className = `text-5xl font-black ${burn.color} block leading-none tracking-tighter`;
-                    ringTxt.innerText = Math.round(burn.pct) + '%';
-                }
-
-                // 3. Update Setup Sliders (Visual Synchronization)
-                const stages = budget.targetLock.stages;
-                const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
-                
-                validKeys.forEach(k => {
-                    const cfg = stages[k];
-                    if (!cfg) return;
-
-                    // A. Update Text Display (Target Ratio)
-                    const disp = document.getElementById(`setup_perc_disp_${k}`);
-                    if (disp) disp.innerText = cfg.ratio.toFixed(1) + '%';
-                    
-                    // B. Update Bar Width (ACTUAL UTILIZATION)
-                    const stageCost = (metrics.stageTotals && metrics.stageTotals[k]) ? metrics.stageTotals[k] : 0;
-                    const stageCap = metrics.totalCap * (cfg.ratio / 100);
-                    const utilPct = stageCap > 0 ? (stageCost / stageCap) * 100 : 0;
-                    
-                    const bar = document.getElementById(`setup_bar_${k}`);
-                    if (bar) {
-                        bar.style.width = Math.min(utilPct, 100).toFixed(2) + '%';
-                        bar.className = `absolute h-full rounded-full opacity-80 pointer-events-none transition-all duration-300 ${stageCost > stageCap ? 'bg-red-500' : 'bg-blue-600'}`;
-                    }
-                    
-                    // C. Update Knob Position (TARGET STRATEGY)
-                    const knob = document.getElementById(`setup_knob_${k}`);
-                    if (knob) knob.style.left = cfg.ratio + '%';
-                    
-                    // D. Update Card Stats
-                    const totalEl = document.getElementById(`total-${k}`);
-                    const limitEl = document.getElementById(`limit-${k}`);
-                    if(totalEl) totalEl.innerText = mBTLE.format.currency(stageCost);
-                    if(limitEl) limitEl.innerText = `Cap: ${mBTLE.format.currency(stageCap)}`;
-                });
-            };
-
         window.updateAllHeaders();
  
         // Drag to Scroll Logic
@@ -5200,80 +5419,105 @@ window.mBTDB = {
     }});
 };
 function renderStageItems(stageKey) {
-    let html = '';
-    // Use Object.entries to capture the Section Name (Key) ensuring data-section attribute is valid
+    let stageItems = [];
+    
+    // 1. Collect all items for this stage
     Object.entries(budget.sections).forEach(([secName, sec]) => {
         sec.items.forEach(item => {
             if (item.stageData && item.stageData[stageKey]) {
-                html += RenderEngine.stageCard({
-                    ...item,
-                    _sDays: item.stageData[stageKey].days,
-                    _sRate: item.stageData[stageKey].rate,
-                    _sec: secName
-                }, stageKey);
+                stageItems.push({
+                    item: item,
+                    secName: secName,
+                    // Default to large number if no order exists so they go to end
+                    order: (item.stageData[stageKey].order !== undefined) ? item.stageData[stageKey].order : 99999
+                });
             }
         });
     });
-    return html || '<p class="text-[8px] text-center mt-10 font-black text-slate-300 uppercase">Drop Items Here</p>';
+
+    // 2. Sort based on 'order' property
+    stageItems.sort((a, b) => a.order - b.order);
+
+    if (stageItems.length === 0) return '<p class="text-[8px] text-center mt-10 font-black text-slate-300 uppercase">Drop Items Here</p>';
+
+    // 3. Render
+    return stageItems.map(entry => {
+        return RenderEngine.stageCard({
+            ...entry.item,
+            _sDays: entry.item.stageData[stageKey].days,
+            _sRate: entry.item.stageData[stageKey].rate,
+            _sec: entry.secName
+        }, stageKey);
+    }).join('');
 }
 // --- Global Stages Header Update Logic (Available before modal open) ---
 window.updateAllHeaders = () => {
+    // Safety check
+    if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
+
     const metrics = mBTStagesEngine.getMetrics();
     const burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
     
     // Update Overview
-               // 2. Update Overview Card (Visuals)
-                const ovGrandTotal = document.getElementById('ovGrandTotal');
-                const ovTotalCap = document.getElementById('ovTotalCap');
-                
-                if(ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(metrics.grandTotal);
-                if(ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(metrics.totalCap);
-
-                // Update Burn Ring
-                const ring = document.getElementById('burnRateRing');
-                const ringTxt = document.getElementById('burnRateText');
-                if(ring && ringTxt) {
-                    ring.className = `w-48 h-48 rounded-full border-[16px] ${burn.ring} flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm`;
-                    ringTxt.className = `text-5xl font-black ${burn.color} block leading-none tracking-tighter`;
-                    ringTxt.innerText = Math.round(burn.pct) + '%';
-                }
-
-                // 3. Update Setup Sliders (Visual Synchronization)
-                const validKeys = Object.keys(mBT.config.stages).filter(k => !mBT.config.stages[k].hidden);
-                validKeys.forEach(k => {
-                    const cfg = mBT.config.stages[k];
-                    
-                    // A. Update Text Display (Target Ratio)
-                    const disp = document.getElementById(`setup_perc_disp_${k}`);
-                    if (disp) disp.innerText = cfg.ratio.toFixed(1) + '%';
-                    
-                    // B. Update Bar Width (ACTUAL UTILIZATION)
-                    const stageCost = (metrics.stageTotals && metrics.stageTotals[k]) ? metrics.stageTotals[k] : 0;
-                    // Calculate utilization relative to the STAGE CAP, not total cap, for the bar
-                    const stageCap = metrics.totalCap * (cfg.ratio / 100);
-                    const utilPct = stageCap > 0 ? (stageCost / stageCap) * 100 : 0;
-                    
-                    const bar = document.getElementById(`setup_bar_${k}`);
-                    // Visual logic: Blue if under cap, Red if over cap
-                    if (bar) {
-                        bar.style.width = Math.min(utilPct, 100).toFixed(2) + '%';
-                        bar.className = `absolute h-full rounded-full opacity-80 pointer-events-none transition-all duration-300 ${stageCost > stageCap ? 'bg-red-500' : 'bg-blue-600'}`;
-                    }
-                    
-                    // C. Update Knob Position (TARGET STRATEGY)
-                    const knob = document.getElementById(`setup_knob_${k}`);
-                    if (knob) knob.style.left = cfg.ratio + '%';
-                    
-                    // D. Update Card Stats
-                    const totalEl = document.getElementById(`total-${k}`);
-                    const limitEl = document.getElementById(`limit-${k}`);
-                    if(totalEl) totalEl.innerText = mBTLE.format.currency(stageCost);
-                    if(limitEl) limitEl.innerText = `Cap: ${mBTLE.format.currency(stageCap)}`;
-                });
-            };
-
+    // 2. Update Overview Card (Visuals)
+    const ovGrandTotal = document.getElementById('ovGrandTotal');
+    const ovTotalCap = document.getElementById('ovTotalCap');
     
-    window.updateAllHeaders = () => {}; // Fallback if modal closed
+    if(ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(metrics.grandTotal);
+    if(ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(metrics.totalCap);
+
+    // Update Burn Ring
+    const ring = document.getElementById('burnRateRing');
+    const ringTxt = document.getElementById('burnRateText');
+    if(ring && ringTxt) {
+        ring.className = `w-48 h-48 rounded-full border-[16px] ${burn.ring} flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm`;
+        ringTxt.className = `text-5xl font-black ${burn.color} block leading-none tracking-tighter`;
+        ringTxt.innerText = Math.round(burn.pct) + '%';
+    }
+
+    // NEW: Update Temporal Projections (Phase 1)
+    const timeline = mBTStagesEngine.calculateTimeline();
+    Object.keys(timeline).forEach(k => {
+        const el = document.getElementById(`date-range-${k}`);
+        if(el) el.innerText = timeline[k].label;
+    });
+
+    // 3. Update Setup Sliders (Visual Synchronization)
+    const stages = budget.targetLock.stages;
+    const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+    
+    validKeys.forEach(k => {
+        const cfg = stages[k];
+        if (!cfg) return;
+        
+        // A. Update Text Display (Target Ratio)
+        const disp = document.getElementById(`setup_perc_disp_${k}`);
+        if (disp) disp.innerText = cfg.ratio.toFixed(1) + '%';
+        
+        // B. Update Bar Width (ACTUAL UTILIZATION)
+        const stageCost = (metrics.stageTotals && metrics.stageTotals[k]) ? metrics.stageTotals[k] : 0;
+        // Calculate utilization relative to the STAGE CAP, not total cap, for the bar
+        const stageCap = metrics.totalCap * (cfg.ratio / 100);
+        const utilPct = stageCap > 0 ? (stageCost / stageCap) * 100 : 0;
+        
+        const bar = document.getElementById(`setup_bar_${k}`);
+        // Visual logic: Blue if under cap, Red if over cap
+        if (bar) {
+            bar.style.width = Math.min(utilPct, 100).toFixed(2) + '%';
+            bar.className = `absolute h-full rounded-full opacity-80 pointer-events-none transition-all duration-300 ${stageCost > stageCap ? 'bg-red-500' : 'bg-blue-600'}`;
+        }
+        
+        // C. Update Knob Position (TARGET STRATEGY)
+        const knob = document.getElementById(`setup_knob_${k}`);
+        if (knob) knob.style.left = cfg.ratio + '%';
+        
+        // D. Update Card Stats
+        const totalEl = document.getElementById(`total-${k}`);
+        const limitEl = document.getElementById(`limit-${k}`);
+        if(totalEl) totalEl.innerText = mBTLE.format.currency(stageCost);
+        if(limitEl) limitEl.innerText = `Cap: ${mBTLE.format.currency(stageCap)}`;
+    });
+};
 
 /* ========= v19.54 CONNECTIVE UI & Interaction Handlers ========= */
 
@@ -5486,7 +5730,6 @@ window.updateAllHeaders = () => {
         mBT.core.action('crew-profile', (e, el) => openCrewProfile(el, e, el.dataset.id, el.dataset.section));
 
         // F. Stage Actions
-        mBT.core.action('stage-remove', (e, el) => removeStageItem(el.dataset.id, el.dataset.section, el.dataset.stage));
         mBT.core.action('stage-update', (e, el) => {
              // Only process if value changed to avoid jitter, handled by 'change' event in router
              updateStageItem(el.dataset.id, el.dataset.section, el.dataset.stage, el.dataset.field, el.value);
