@@ -716,144 +716,146 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         },
         
         newProject: async function(force = false, type = 'Commercial') {
-            try {
-                if (force && !confirm("Create new budget?")) return;
-                
-                const now = new Date();
-                const yyyy = now.getFullYear();
-                const mm = String(now.getMonth() + 1).padStart(2, '0');
-                const dd = String(now.getDate()).padStart(2, '0');
-                
-                const dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
-                const dateStr = dateFmt === 'MMDDYYYY' ? `${mm}${dd}${yyyy}` : `${yyyy}${mm}${dd}`;
-                
-                const storedSep = localStorage.getItem(projectNameSeparatorKey);
-                const sep = storedSep !== null ? storedSep : ' ';
-                
-                // --- TEMPLATE RESOLUTION ENGINE ---
-                let sections = {};
-                let baseLabel = "Project";
-
-                // 1. Check System Templates (Tier 1)
-                if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
-                    const tmpl = BUDGET_TEMPLATES[type];
-                    baseLabel = tmpl.label;
+            const executeCreate = async () => {
+                try {
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const mm = String(now.getMonth() + 1).padStart(2, '0');
+                    const dd = String(now.getDate()).padStart(2, '0');
                     
-                    // Logic Upgrade: Hydrate rates from Open Gate Database
-                    const rateDb = (typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
-
-                    tmpl.structure.forEach(s => {
-                        sections[s.name] = {
-                            id: s.id,
-                            isOpen: true,
-                            items: s.items.map((desc, idx) => {
-                                // Find matching rate in database (Safe Access)
-                                const match = rateDb.find(r => r && r.description && desc && r.description.toLowerCase() === desc.toLowerCase());
-                                return {
-                                    id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
-                                    description: desc,
-                                    quantity: 1,
-                                    unit: match ? match.unit : 'Day',
-                                    rate: match ? match.rate : 0, // Auto-fill rate if found
-                                    multiplier: 1,
-                                    actual: 0,
-                                    rateType: 'negotiable',
-                                    crew: {}
-                                };
-                            })
-                        };
-                    });
-                } 
-                // 2. Check User Templates (Tier 2 Custom)
-                else if (mBT.data.templates.getTemplates()[type]) {
-                    const customTmpl = mBT.data.templates.getTemplates()[type];
-                    baseLabel = type;
+                    const dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
+                    const dateStr = dateFmt === 'MMDDYYYY' ? `${mm}${dd}${yyyy}` : `${yyyy}${mm}${dd}`;
                     
-                    if (customTmpl.structure) {
-                        // Handle Blueprint Structure
-                        customTmpl.structure.forEach(s => {
+                    const storedSep = localStorage.getItem(projectNameSeparatorKey);
+                    const sep = storedSep !== null ? storedSep : ' ';
+                    
+                    // --- TEMPLATE RESOLUTION ENGINE ---
+                    let sections = {};
+                    let baseLabel = "Project";
+
+                    // 1. Check System Templates (Tier 1)
+                    if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
+                        const tmpl = BUDGET_TEMPLATES[type];
+                        baseLabel = tmpl.label;
+                        
+                        // Logic Upgrade: Hydrate rates from Open Gate Database
+                        const rateDb = (typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+
+                        tmpl.structure.forEach(s => {
                             sections[s.name] = {
                                 id: s.id,
                                 isOpen: true,
-                                items: s.items.map((i, idx) => ({
-                                    id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
-                                    ...i,
-                                    quantity: 1, multiplier: 1, actual: 0, crew: {}
-                                }))
+                                items: s.items.map((desc, idx) => {
+                                    // Find matching rate in database (Safe Access)
+                                    const match = rateDb.find(r => r && r.description && desc && r.description.toLowerCase() === desc.toLowerCase());
+                                    return {
+                                        id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
+                                        description: desc,
+                                        quantity: 1,
+                                        unit: match ? match.unit : 'Day',
+                                        rate: match ? match.rate : 0, // Auto-fill rate if found
+                                        multiplier: 1,
+                                        actual: 0,
+                                        rateType: 'negotiable',
+                                        crew: {}
+                                    };
+                                })
                             };
                         });
-                    } else {
-                        // Legacy Flat List Fallback
-                        sections['Production'] = { 
-                            id: 'prod', 
-                            isOpen: true, 
-                            items: customTmpl.items ? customTmpl.items.map((i, idx) => ({
-                                id: `item_${Date.now()}_${idx}`,
-                                ...i,
-                                quantity: 1, multiplier: 1, actual: 0, crew: {}
-                            })) : [] 
-                        };
-                        // Add standard headers
-                        sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
-                        sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
+                    } 
+                    // 2. Check User Templates (Tier 2 Custom)
+                    else if (mBT.data.templates.getTemplates()[type]) {
+                        const customTmpl = mBT.data.templates.getTemplates()[type];
+                        baseLabel = type;
+                        
+                        if (customTmpl.structure) {
+                            // Handle Blueprint Structure
+                            customTmpl.structure.forEach(s => {
+                                sections[s.name] = {
+                                    id: s.id,
+                                    isOpen: true,
+                                    items: s.items.map((i, idx) => ({
+                                        id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
+                                        ...i,
+                                        quantity: 1, multiplier: 1, actual: 0, crew: {}
+                                    }))
+                                };
+                            });
+                        } else {
+                            // Legacy Flat List Fallback
+                            sections['Production'] = { 
+                                id: 'prod', 
+                                isOpen: true, 
+                                items: customTmpl.items ? customTmpl.items.map((i, idx) => ({
+                                    id: `item_${Date.now()}_${idx}`,
+                                    ...i,
+                                    quantity: 1, multiplier: 1, actual: 0, crew: {}
+                                })) : [] 
+                            };
+                            // Add standard headers
+                            sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
+                            sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
+                        }
                     }
-                }
-                // 3. Fallback Default
-                else {
-                    sections = {
-                        'Above The Line': { id: 'atl', isOpen: true, items: [] },
-                        'Production': { id: 'prod', isOpen: true, items: [] },
-                        'Post-Production': { id: 'post', isOpen: true, items: [] },
-                        'Other': { id: 'other', isOpen: true, items: [] }
+                    // 3. Fallback Default
+                    else {
+                        sections = {
+                            'Above The Line': { id: 'atl', isOpen: true, items: [] },
+                            'Production': { id: 'prod', isOpen: true, items: [] },
+                            'Post-Production': { id: 'post', isOpen: true, items: [] },
+                            'Other': { id: 'other', isOpen: true, items: [] }
+                        };
+                    }
+
+                    // --- COLLISION DETECTION (Tier 2 Logic Injection) ---
+                    let proposedName = `${baseLabel}${sep}${dateStr}`;
+                    let uniqueName = proposedName;
+                    let counter = 1;
+                    
+                    while (
+                        (await this.storage.load(storageKeyPrefix + uniqueName)) || 
+                        localStorage.getItem(storageKeyPrefix + uniqueName)
+                    ) {
+                        uniqueName = `${proposedName}_${counter}`;
+                        counter++;
+                    }
+
+                    const newBudget = {
+                        projectName: uniqueName,
+                        company: "Independent",
+                        startDate: new Date().toISOString().split('T')[0],
+                        sections: sections,
+                        grandTotal: 0,
+                        subtotal: 0,
+                        actualTotal: 0,
+                        contingencyPercentage: 10,
+                        salesTaxPercentage: 0,
+                        discountPercentage: 0,
+                        documents: [],
+                        attachments: [],
+                        aiContext: { chat: [], analysis: "" }
                     };
+                    
+                    budget = mBT.data.state.wrap(newBudget);
+                    currentProjectName = budget.projectName;
+                    await this.save();
+                    if(typeof render === 'function') render();
+                    if(typeof renderProjectManagement === 'function') await renderProjectManagement();
+                    
+                    const projectSelect = document.getElementById('projectSelect');
+                    if (projectSelect) {
+                        projectSelect.value = uniqueName;
+                    }
+                } catch (err) {
+                    console.error("Critical Failure in New Project Logic:", err);
+                    mBTME.alert("Error", "Could not create project. Check console.");
                 }
+            };
 
-                // --- COLLISION DETECTION (Tier 2 Logic Injection) ---
-                // Fix: Prevent Zombie Logic overwrite by checking existence before saving
-                let proposedName = `${baseLabel}${sep}${dateStr}`;
-                let uniqueName = proposedName;
-                let counter = 1;
-                
-                // Check Async Storage (Primary) and LocalStorage (Legacy) for collision
-                while (
-                    (await this.storage.load(storageKeyPrefix + uniqueName)) || 
-                    localStorage.getItem(storageKeyPrefix + uniqueName)
-                ) {
-                    uniqueName = `${proposedName}_${counter}`;
-                    counter++;
-                }
-
-                const newBudget = {
-                    projectName: uniqueName,
-                    company: "Independent",
-                    startDate: new Date().toISOString().split('T')[0],
-                    sections: sections,
-                    grandTotal: 0,
-                    subtotal: 0,
-                    actualTotal: 0,
-                    contingencyPercentage: 10,
-                    salesTaxPercentage: 0,
-                    discountPercentage: 0,
-                    documents: [],
-                    attachments: [],
-                    aiContext: { chat: [], analysis: "" }
-                };
-                
-                budget = mBT.data.state.wrap(newBudget);
-                currentProjectName = budget.projectName;
-                await this.save();
-                if(typeof render === 'function') render();
-                // Fix: Trigger UI Refresh for Project Selector
-                if(typeof renderProjectManagement === 'function') await renderProjectManagement();
-                
-                // Set the value of the dropdown to the new project
-                const projectSelect = document.getElementById('projectSelect');
-                if (projectSelect) {
-                    projectSelect.value = uniqueName;
-                }
-            } catch (err) {
-                console.error("Critical Failure in New Project Logic:", err);
-                alert("Could not create project. Check console for details: " + err.message);
+            if (force) {
+                mBTME.confirm("Create Project", "Start a new budget? Unsaved changes will be lost.", executeCreate);
+            } else {
+                executeCreate();
             }
         },
         
@@ -902,13 +904,20 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                     const projectKey = storageKeyPrefix + data.projectName;
                     const existing = await this.storage.load(projectKey) || localStorage.getItem(projectKey);
                     
-                    if (existing && !confirm(`Overwrite existing project "${data.projectName}"?`)) { input.value = ''; return; }
-                    budget = mBT.data.state.wrap(data);
-                    await this.save();
-                    await this.load(data.projectName);
-                    if(typeof renderProjectManagement === 'function') renderProjectManagement();
-                    alert("Project environment restored.");
-                } catch (err) { alert("Import failed: " + err.message); }
+                    const executeImport = async () => {
+                        budget = mBT.data.state.wrap(data);
+                        await this.save();
+                        await this.load(data.projectName);
+                        if(typeof renderProjectManagement === 'function') renderProjectManagement();
+                        mBTME.alert("Import Successful", "Project environment restored.");
+                    };
+
+                    if (existing) {
+                        mBTME.confirm("Overwrite Project", `Overwrite existing project "${data.projectName}"?`, executeImport);
+                    } else {
+                        executeImport();
+                    }
+                } catch (err) { mBTME.alert("Import Failed", err.message); }
                 input.value = '';
             };
             reader.readAsText(file);
@@ -1511,10 +1520,10 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
     function getProjectDateFormat() { return localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD'; }
     function getProjectNameSeparator() { return localStorage.getItem(projectNameSeparatorKey) || ' '; }
     function hardResetApp() { 
-        if(confirm("Factory Reset: This will clear all local data and reload. Continue?")) {
+        mBTME.confirm("Factory Reset", "This will clear all local data and reload. Continue?", () => {
             localStorage.clear(); 
             window.location.reload(); 
-        }
+        });
     }
 
     /* --- 4. Neural Link Bridge (AI API Utilities) --- */
@@ -3411,10 +3420,28 @@ window.mBTDB = {
     },
     _autoResizeWidget: function(widgetId) { const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`); if(!el) return; const body = el.querySelector('.widget-body'); if(!body) return; const currentHeight = body.style.height; body.style.height = 'auto'; const contentHeight = body.scrollHeight + 45; body.style.height = currentHeight; let newH = Math.ceil(contentHeight / 60); if(newH < 3) newH = 3; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === widgetId); if(w && w.h !== newH) { w.h = newH; this.state.grid.update(el, { h: newH }); this._triggerSave(); } },
     formatTime: function(el) { let val = el.value.replace(/[^0-9]/g, ''); if(val.length === 4) { el.value = val.substring(0,2) + ':' + val.substring(2,4); el.dispatchEvent(new Event('change')); } },
-    saveTemplate: function() { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const name = prompt("Template Name:", doc.label + " Preset"); if(!name) return; const tmpl = { id: 'tmpl_' + Date.now(), label: name, widgets: JSON.parse(JSON.stringify(doc.content.widgets)) }; if(!budget.templates) budget.templates = []; budget.templates.push(tmpl); alert(`Template "${name}" saved.`); },
+    saveTemplate: function() { 
+        const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
+        mBTME.prompt("Save Template", "Template Name:", doc.label + " Preset", (name) => {
+            if(!name) return; 
+            const tmpl = { id: 'tmpl_' + Date.now(), label: name, widgets: JSON.parse(JSON.stringify(doc.content.widgets)) }; 
+            if(!budget.templates) budget.templates = []; 
+            budget.templates.push(tmpl); 
+            mBTME.alert("Success", `Template "${name}" saved.`);
+        });
+    },
     calcShootDay: function(dateStr) { if(!budget.startDate) return "Day 1"; const start = new Date(budget.startDate); const current = new Date(dateStr); if(isNaN(start) || isNaN(current)) return "Day 1"; const diffDays = Math.ceil((current - start) / (1000 * 60 * 60 * 24)) + 1; return `Day ${diffDays}`; },
-    syncFromBudget: function() { if(!confirm("Synchronization with Budget details?")) return; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const defaults = this._generateDefaultData(); doc.content.data.crew = defaults.crew; doc.content.data.contacts = defaults.contacts; mBTLE.reconcile(); this.renderFrame(); },
-    syncFromPrevious: function() { alert("Environmental cache resolution pending..."); },
+    syncFromBudget: function() { 
+        mBTME.confirm("Sync Data", "Overwrite document data with Budget details?", () => {
+            const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
+            const defaults = this._generateDefaultData(); 
+            doc.content.data.crew = defaults.crew; 
+            doc.content.data.contacts = defaults.contacts; 
+            mBTLE.reconcile(); 
+            this.renderFrame(); 
+        });
+    },
+    syncFromPrevious: function() { mBTME.alert("Pending", "Environmental cache resolution pending..."); },
     snapshotDoc: function() { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const newDoc = JSON.parse(JSON.stringify(doc)); newDoc.id = 'doc_' + Date.now(); newDoc.label = doc.label + " (Copy)"; budget.documents.push(newDoc); mBTDB.open(newDoc.id); },
     pullFromOpenGate: function(docId, path, roleQuery) { if (typeof mBTOG === 'undefined') return alert("Database Resolution Failure."); const matches = mBTOG.contacts.filter(c => c.role?.toLowerCase().includes(roleQuery.toLowerCase())); if (matches.length === 0) return alert(`No ${roleQuery} found.`); const apply = (c) => { const parts = path.split('.'); if(parts.length === 3 && (parts[0] === 'crew' || parts[0] === 'cast')) { this.updateRow(docId, parts[0], parseInt(parts[1]), parts[2], c.name); if(c.contact) this.updateRow(docId, parts[0], parseInt(parts[1]), 'contact', c.contact); } else { this.updateData(docId, path, `${c.name} ${c.contact ? '('+c.contact+')' : ''}`); } this.renderFrame(); }; if (matches.length === 1) apply(matches[0]); else { const choice = prompt(matches.map((c,i)=>`${i+1}. ${c.name}`).join('\n')); const idx = parseInt(choice)-1; if(matches[idx]) apply(matches[idx]); } },
     printToPDF: function(mode) { if (typeof mBTPublisher === 'undefined') return alert("Publisher Resolution Failure."); const original = document.getElementById('mBTDB_Workspace'); const clone = original.cloneNode(true); clone.id = "mBTDB_Print_Container"; clone.classList.remove('editing-mode'); clone.classList.add('print-container', mode === 'standard' ? 'print-standard' : 'print-graphic'); const originalInputs = original.querySelectorAll('input, textarea'); const cloneInputs = clone.querySelectorAll('input, textarea'); originalInputs.forEach((input, i) => { if(cloneInputs[i]) cloneInputs[i].value = input.value; }); document.body.appendChild(clone); mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`); setTimeout(() => { document.body.removeChild(clone); }, 2000); },
@@ -5835,8 +5862,10 @@ window.updateAllHeaders = () => {
     }
     
     function handleLogin() {
-        if (navigator.onLine && confirm("Establish secure connection to Moo Studio Cloud infrastructure?")) {
-            alert("Environment Authenticated.");
+        if (navigator.onLine) {
+            mBTME.confirm("Login", "Establish secure connection to Moo Studio Cloud infrastructure?", () => {
+                mBTME.alert("Connected", "Environment Authenticated.");
+            });
         }
     }
 
