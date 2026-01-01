@@ -380,6 +380,7 @@ gear: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="curre
 coffee: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
 paperPlane: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
 image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>`,
 };
 
 /* --- 4. Master Link Map (Backwards Compatibility) --- */
@@ -394,6 +395,17 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
         'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
     };
+
+/* --- 5.1. Payment Methods (Foundations Phase 3) --- */
+    const PAYMENT_SERVICES = [
+        { id: 'cash', label: 'Cash / Petty Cash', icon: '💵' },
+        { id: 'transfer', label: 'Bank Transfer (JMD)', icon: '🏦' },
+        { id: 'wire', label: 'Intl Wire (USD)', icon: '🌐' },
+        { id: 'cheque', label: 'Cheque', icon: '✒️' },
+        { id: 'paypal', label: 'PayPal', icon: '🅿️' },
+        { id: 'wise', label: 'Wise', icon: '💸' },
+        { id: 'payoneer', label: 'Payoneer', icon: '💳' }
+    ];
 
 /* --- 6. Budget Templates (Industry Standard Structures) --- */
     const BUDGET_TEMPLATES = {
@@ -572,17 +584,68 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         state: {
             _timer: null,      // Fast Timer: Math & UI
             _saveTimer: null,  // Slow Timer: Storage
+            _logBuffer: {},    // Tier 2: Audit Debounce Map
             _isInitialLoad: true,
             _subscribers: [], 
+            
             subscribe: function(callback) { this._subscribers.push(callback); },
+            
+            // Tier 2: Audit Recording Engine
+            audit: function(action, targetName, meta = {}) {
+                if(this._isInitialLoad || !budget || !budget.activityLog) return;
+                
+                const entry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    ts: new Date().toISOString(),
+                    user: "Local User", 
+                    action: action, 
+                    target: targetName,
+                    section: meta.section || 'General',
+                    diff: meta.diff || null,
+                    itemId: meta.itemId || null // Logic Resolution: Persist ID for Revert capability
+                };
+
+                // Cap log size to prevent storage bloat
+                if(budget.activityLog.length >= 200) budget.activityLog.shift();
+                budget.activityLog.push(entry);
+            },
+
             handler: {
                 set(target, prop, value) {
                     if (target[prop] === value) return true; 
+                    
+                    // Tier 2 Audit Logic: Trap Changes
+                    // Filter out internal state, existing log updates, and pure UI toggles
+                    const pKey = prop.toString();
+                    const isInternal = pKey.startsWith('_') || pKey === 'activityLog' || pKey === 'isOpen';
+                    
+                    if (!mBT.data.state._isInitialLoad && !isInternal) {
+                        const itemId = target.id || (target.projectName ? 'Project' : 'Root');
+                        const label = target.description || target.name || target.projectName || pKey;
+                        const debounceId = `${itemId}_${pKey}`;
+                        
+                        const diff = { field: pKey, oldValue: target[prop], newValue: value };
+
+                        // Strategy: Debounce Strings (typing), Immediate Numbers/Bools
+                        if (typeof value === 'string') {
+                            clearTimeout(mBT.data.state._logBuffer[debounceId]);
+                            mBT.data.state._logBuffer[debounceId] = setTimeout(() => {
+                                // Logic Resolution: Pass itemId to audit for linkage
+                                mBT.data.state.audit('UPDATE', label, { diff: diff, itemId: itemId });
+                                delete mBT.data.state._logBuffer[debounceId];
+                            }, 800);
+                        } else {
+                            // Immediate Log for critical math/logic changes
+                            mBT.data.state.audit('UPDATE', label, { diff: diff, itemId: itemId });
+                        }
+                    }
+
                     target[prop] = value;
                     if (!mBT.data.state._isInitialLoad) mBT.data.state.requestReconciliation();
                     return true;
                 }
             },
+            
             requestReconciliation() {
                 // Stream A: Logic & Visuals (Fast Debounce)
                 clearTimeout(this._timer);
@@ -611,8 +674,82 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 return proxied;
             }
         },
+
+        // --- NEW: History Namespace (Tier 2 Architecture Alignment) ---
+        history: {
+            // 1. Granular Revert (Activity Log Logic)
+            revert: function(logId) {
+                const entry = budget.activityLog.find(e => e.id === logId);
+                if (!entry || !entry.diff || !entry.itemId) return mBTME.alert("Error", "Cannot revert this change (Missing Data).");
+
+                const { itemId, diff } = entry;
+                
+                // Locate the item in the live budget
+                let targetItem = null;
+                if (itemId === 'Project') targetItem = budget;
+                else if (itemId === 'Root') targetItem = budget;
+                else {
+                    Object.values(budget.sections).forEach(sec => {
+                        if (!targetItem) targetItem = sec.items.find(i => i.id === itemId);
+                    });
+                }
+
+                if (targetItem) {
+                    mBTME.confirm("Revert Change", `Revert "${entry.target}" to previous value?`, () => {
+                        // Apply the old value
+                        targetItem[diff.field] = diff.oldValue;
+                        
+                        // Force update
+                        mBTLE.reconcile();
+                        if (typeof mBT.ui.paint === 'function') mBT.ui.paint();
+                        
+                        // Log the Reversion
+                        mBT.data.state.audit('REVERT', entry.target, { 
+                            diff: { field: diff.field, oldValue: diff.newValue, newValue: diff.oldValue },
+                            itemId: itemId 
+                        });
+                        
+                        mBTME.alert("Success", "Value restored.");
+                        // Refresh history UI if open
+                        if(document.getElementById('activityLogModal')) mBT.features.history.open();
+                    });
+                } else {
+                    mBTME.alert("Error", "Original item no longer exists.");
+                }
+            },
+
+            // 2. Global Snapshot Logic (Moved from Global Scope)
+            undoSnapshot: function() {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    const snapshot = historyStack[historyIndex];
+                    budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
+                    
+                    // Logic Resolution: Log restoration event to explain state jump in Activity Log
+                    if(mBT.data.state && mBT.data.state.audit) {
+                        mBT.data.state.audit('RESTORE', `Undo: ${snapshot.description || 'System State'}`, { section: 'System' });
+                    }
+
+                    if(typeof render === 'function') render();
+                }
+            },
+            redoSnapshot: function() {
+                if (historyIndex < historyStack.length - 1) {
+                    historyIndex++;
+                    const snapshot = historyStack[historyIndex];
+                    budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
+                    
+                    // Logic Resolution: Log restoration event
+                    if(mBT.data.state && mBT.data.state.audit) {
+                        mBT.data.state.audit('RESTORE', `Redo: ${snapshot.description || 'System State'}`, { section: 'System' });
+                    }
+                    
+                    if(typeof render === 'function') render();
+                }
+            }
+        },
         
-        // --- C. Template Manager (Formerly mBTDBM) ---
+          // --- C. Template Manager (Formerly mBTDBM) ---
         // Logic Resolution: Manages custom user budget templates.
         templates: {
              getTemplates: function() {
@@ -629,7 +766,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 localStorage.setItem('mBT_templates', JSON.stringify(custom));
             },
             deleteTemplate: function(name) {
-                if(['Commercial', 'Music Video'].includes(name)) return alert('Cannot delete default templates.');
+                if(['Commercial', 'Music Video'].includes(name)) return mBTME.alert("System Error", "Cannot delete default templates.");
                 const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
                 delete custom[name];
                 localStorage.setItem('mBT_templates', JSON.stringify(custom));
@@ -833,7 +970,8 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                         discountPercentage: 0,
                         documents: [],
                         attachments: [],
-                        aiContext: { chat: [], analysis: "" }
+                        aiContext: { chat: [], analysis: "" },
+                        activityLog: [] // Tier 2 Audit Init
                     };
                     
                     budget = mBT.data.state.wrap(newBudget);
@@ -923,13 +1061,39 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             reader.readAsText(file);
         },
         
-         pushHistory: function(desc) {
-            historyStack = historyStack.slice(0, historyIndex + 1);
-            historyStack.push({ description: desc, budget: JSON.parse(JSON.stringify(budget)) });
-            if (historyStack.length > MAX_HISTORY) historyStack.shift();
-            historyIndex = historyStack.length - 1;
-            if(typeof renderStatusBar === 'function') renderStatusBar();
-        }
+        recorder: {
+            snapshot: function(actionDescription) {
+                if (!budget) return;
+                // Logic Resolution: Prune "Future" history if we are in the middle of a stack
+                if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
+                
+                try {
+                    // Logic Resolution: Deep Clean Copy (Strip Proxy & Circular Refs)
+                    const cleanState = JSON.parse(JSON.stringify(budget));
+                    
+                    historyStack.push({ 
+                        id: `snap_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                        description: actionDescription, 
+                        timestamp: new Date().toISOString(),
+                        budget: cleanState // Maintain '.budget' key for legacy compatibility
+                    });
+                    
+                    // Logic Resolution: Enforce Memory Constraints
+                    if (historyStack.length > MAX_HISTORY) historyStack.shift();
+                    
+                    historyIndex = historyStack.length - 1;
+                    
+                    // Logic Resolution: Update UI Indicators (Passive)
+                    if(typeof renderStatusBar === 'function') renderStatusBar();
+                    
+                } catch (e) {
+                    console.error("Snapshot Failed:", e);
+                }
+            }
+        },
+        
+        // Alias for backward compatibility (mapped to recorder)
+        pushHistory: function(desc) { this.recorder.snapshot(desc); }
     };
 
     /* ========= v19.55 TIER 2.5: OPEN GATE INFRASTRUCTURE (mBT.opengate) ========= */
@@ -1329,15 +1493,17 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 return { color: 'text-green-600', bg: 'bg-green-500', ring: 'border-green-200', pct };
             },
 
-            // --- TIER 3 UPGRADE: Timeline Validation Logic ---
+            // --- TIER 3 UPGRADE: Timeline Validation Logic (Restored) ---
             validateTimeline: function(stageKey) {
                 let maxItemDays = 0;
+                let hasItems = false;
                 
                 // 1. Scan the physics model for the longest item in this stage
                 if (budget && budget.sections) {
                     Object.values(budget.sections).forEach(sec => {
                         sec.items.forEach(item => {
                             if (item.stageData && item.stageData[stageKey]) {
+                                hasItems = true;
                                 const d = parseFloat(item.stageData[stageKey].days) || 0;
                                 if (d > maxItemDays) maxItemDays = d;
                             }
@@ -1355,11 +1521,12 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                     isValid: userDays >= maxItemDays, // Safe if User Input >= Max Item
                     maxNeeded: maxItemDays,
                     current: userDays,
-                    delta: userDays - maxItemDays     // Negative value indicates "Time Bankruptcy"
+                    delta: userDays - maxItemDays,     // Negative value indicates shortage
+                    isBankrupt: hasItems && userDays === 0 // Logic Resolution: Items exist but no time allocated
                 };
             },
 
-            // --- TIER 3 UPGRADE: Temporal Projection Engine (Phase 1) ---
+            // --- TIER 3 UPGRADE: Temporal Projection Engine (Phase 1 + 3.3 Overrun Logic) ---
             calculateTimeline: function() {
                 const timeline = {};
                 // Default to today if start date is missing
@@ -1384,14 +1551,88 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                     timeline[k] = {
                         start: start,
                         end: end,
-                        // If 0 days, show TBD, otherwise show range (subtract 1 day from end for inclusive range visual if preferred, but standard project mgmt usually entails start -> duration)
+                        // If 0 days, show TBD, otherwise show range
                         label: days > 0 ? `${fmt(start)} - ${fmt(end)}` : 'SCHEDULE TBD'
                     };
                     
                     // Move cursor to end of this stage for next stage start
                     cursor = end;
                 });
+
+                // --- Phase 3.3: Overrun Calculation ---
+                if (budget.deliveryDate) {
+                    const target = new Date(budget.deliveryDate);
+                    // Normalize target timezone to match cursor
+                    const targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+                    
+                    // Diff in days (Target Date - Projected End Date)
+                    const diffTime = targetAdj - cursor; 
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    let status = 'On Track';
+                    let statusColor = 'text-emerald-500';
+                    let ringColor = 'border-slate-100'; // Default Gray Ring
+                    
+                    if (diffDays < 0) {
+                        status = 'OVERDUE';
+                        statusColor = 'text-rose-600';
+                        ringColor = 'border-rose-500'; // Red Ring Trigger
+                    } else if (diffDays < 7) {
+                        status = 'Tight';
+                        statusColor = 'text-amber-500';
+                        ringColor = 'border-amber-400'; // Amber Ring Trigger
+                    }
+
+                    // Attach analysis to the timeline object for UI consumption
+                    timeline._analysis = {
+                        projectedEnd: cursor,
+                        targetDate: targetAdj,
+                        variance: diffDays,
+                        status: status,
+                        color: statusColor,
+                        ring: ringColor
+                    };
+                }
+
                 return timeline;
+            },
+
+            // --- TIER 5 UPGRADE: Phase 3.4 Risk Analyst (The Brain) ---
+            analyzeRisk: function(metrics, timeline) {
+                // 1. Daily Burn Rate (Cash per Day)
+                // Use totalDays calculated in metrics (sum of all stage durations)
+                const dailyBurn = metrics.totalDays > 0 ? (metrics.grandTotal / metrics.totalDays) : 0;
+                
+                // 2. Variance (Days Late) from Timeline
+                // timeline._analysis might be undefined if no deadline set
+                const variance = (timeline && timeline._analysis) ? timeline._analysis.variance : 0;
+                
+                // If early or on time (variance >= 0), no financial risk from time
+                if (variance >= 0) return null;
+
+                // 3. Cost of Delay (Daily Burn * Days Late)
+                const daysLate = Math.abs(variance);
+                const delayCost = dailyBurn * daysLate;
+                
+                // 4. Projected Total (Current Estimated + Cost of Delay)
+                const projectedTotal = metrics.grandTotal + delayCost;
+                
+                // 5. The "Crash" Check
+                // Do we have enough Cap Room to absorb this delay?
+                const cap = metrics.totalCap || 0;
+                const isCritical = cap > 0 && projectedTotal > cap;
+
+                return {
+                    status: isCritical ? 'CRITICAL' : 'WARNING',
+                    daysLate: daysLate,
+                    dailyBurn: dailyBurn,
+                    cost: delayCost,
+                    projectedTotal: projectedTotal,
+                    message: isCritical ? "INSOLVENCY RISK" : "DELAY COST",
+                    subMessage: isCritical 
+                        ? `Projected ${mBT.logic.math.format.currency(projectedTotal)} exceeds Cap` 
+                        : `Est. Penalty: ${mBT.logic.math.format.currency(delayCost)}`
+                };
             }
         }
     };
@@ -1633,7 +1874,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
             const provider = this.getSelectedProvider();
             const apiKey = this.getStoredApiKey(provider);
             
-            if(!apiKey) return alert("Assistant Offline: Please configure API Key in settings.");
+            if(!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings.");
             
             // Logic Resolution: Enhanced Context Gathering (Broad Access)
             // Includes budget numbers, active documents, attached files, and crew status.
@@ -1677,7 +1918,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
 
         // --- Context Management Utilities ---
         clearContext: function() {
-            if(confirm("Clear AI memory and chat history? This cannot be undone.")) {
+            mBTME.confirm("Clear Memory", "Clear AI memory and chat history? This cannot be undone.", () => {
                 budget.aiContext = { chat: [], analysis: "" };
                 saveBudget();
                 // Refresh the chat view if open
@@ -1685,11 +1926,11 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
                 if(history) history.innerHTML = '<div class="text-center text-slate-400 text-xs mt-10">Memory Cleared. Start fresh.</div>';
                 const count = document.getElementById('aiMsgCount');
                 if(count) count.textContent = "Context: 0 msgs";
-            }
+            });
         },
 
         exportChat: function() {
-            if(!budget.aiContext?.chat?.length) return alert("No chat history to export.");
+            if(!budget.aiContext?.chat?.length) return mBTME.alert("Export Error", "No chat history to export.");
             const text = budget.aiContext.chat.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n-------------------\n\n');
             const blob = new Blob([text], { type: 'text/plain' });
             if(typeof mBTPublisher !== 'undefined' && mBTPublisher.io) {
@@ -1860,7 +2101,7 @@ image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="curr
         const oldKey = storageKeyPrefix + budget.projectName;
         const newKey = storageKeyPrefix + newName;
         if(localStorage.getItem(newKey)) {
-            alert("Project name already exists.");
+            mBTME.alert("Naming Error", "Project name already exists.");
             e.target.value = budget.projectName;
             return;
         }
@@ -2245,6 +2486,108 @@ function getAbbreviatedName(name, maxLen = 25) {
             }
         },
 
+        // --- Payment Interface (Foundations Phase 3) ---
+        paymentModal: function(contactId, contactName, balance, currency = 'JMD') {
+            const services = (typeof PAYMENT_SERVICES !== 'undefined' ? PAYMENT_SERVICES : []);
+            
+            return `
+                <div class="p-6 bg-slate-50 h-full flex flex-col">
+                    <!-- Header / Balance -->
+                    <div class="text-center mb-8">
+                        <div class="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-3 shadow-sm border border-emerald-200">
+                            ${mBTAssets.wallet}
+                        </div>
+                        <h3 class="text-lg font-black text-slate-800 uppercase tracking-tighter">${this.esc(contactName)}</h3>
+                        <div class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm mt-2">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Est. Balance</span>
+                            <span class="text-sm font-mono font-bold ${balance > 0 ? 'text-slate-700' : 'text-emerald-600'}">${balance > 0 ? '' : ''}${mBTLE.format.currency(Math.abs(balance), currency)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Form -->
+                    <div class="space-y-4 flex-grow">
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Payment Amount</label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                                <input type="number" id="payAmount" class="w-full p-4 pl-8 bg-white border-none rounded-2xl text-2xl font-black text-slate-800 outline-none focus:ring-4 focus:ring-emerald-100 transition-all placeholder-slate-200" placeholder="0.00" autofocus>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Method</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <select id="payService" class="col-span-2 w-full p-3 bg-white border-none rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-50 cursor-pointer">
+                                    ${services.map(s => `<option value="${s.id}">${s.icon} ${s.label}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div>
+                             <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date</label>
+                             <input type="date" id="payDate" value="${new Date().toISOString().split('T')[0]}" class="w-full p-3 bg-white border-none rounded-xl text-xs font-bold text-slate-600 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="mt-6 pt-6 border-t border-slate-200/50">
+                        <button onclick="mBT.features.finance.processPayment('${contactId}')" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2">
+                            <span>Process Payment</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        },
+
+        // --- Payment History Ledger (Phase 7) ---
+        paymentHistory: function(contact) {
+            const payments = contact.payments || [];
+            const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+            const sorted = [...payments].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            if (sorted.length === 0) {
+                return this.ui.emptyState({ 
+                    icon: mBTAssets.money, 
+                    message: 'No Transaction History', 
+                    subtext: 'Payments logged will appear here' 
+                });
+            }
+
+            const list = sorted.map(p => {
+                const serviceDef = (typeof PAYMENT_SERVICES !== 'undefined') ? PAYMENT_SERVICES.find(s => s.id === p.service) : null;
+                const icon = serviceDef ? serviceDef.icon : '💵';
+                const label = serviceDef ? serviceDef.label : (p.service || 'Payment');
+                
+                return `<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-sm border border-emerald-100">${icon}</div>
+                        <div>
+                            <div class="text-[10px] font-black uppercase text-slate-700">${this.esc(label)}</div>
+                            <div class="text-[9px] text-slate-400 font-bold">${this.esc(p.date)} • ${this.esc(p.projectId || 'Unknown Project')}</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] font-black text-slate-800 font-mono">${mBTLE.format.currency(p.amount, p.currency)}</div>
+                        <div class="text-[8px] text-emerald-500 font-bold uppercase tracking-widest">Paid</div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            return `<div class="flex flex-col h-full bg-slate-50">
+                <div class="p-4 bg-white border-b border-slate-100 shrink-0">
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h4 class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Paid</h4>
+                            <div class="text-xl font-black text-slate-800 tracking-tighter">${mBTLE.format.currency(totalPaid)}</div>
+                        </div>
+                        <div class="text-[9px] font-bold text-slate-400">${sorted.length} Transactions</div>
+                    </div>
+                </div>
+                <div class="flex-grow overflow-y-auto no-scrollbar p-3 space-y-2">${list}</div>
+            </div>`;
+        },
+
         /* --- v19.55 LAYOUT ENGINES: High-level Container Abstractions --- */
         layouts: {
             // Logic Resolution: Standardized "Studio Panel" (Header + Search + Scroll List + optional Footer)
@@ -2469,8 +2812,22 @@ function getAbbreviatedName(name, maxLen = 25) {
             const safeSectionName = name.replace(/"/g, '&quot;');
             
             const bodyContent = `
-                <div class="table-container overflow-x-auto no-scrollbar">
-                    <table class="w-full border-collapse min-w-full table-fixed md:table-auto">
+                <div class="table-container overflow-x-auto no-scrollbar relative">
+                    <table class="w-full border-collapse min-w-[800px] table-fixed md:table-auto">
+                        <thead class="bg-slate-50 text-[10px] font-black uppercase tracking-tighter text-slate-400 border-b border-slate-100">
+                            <tr>
+                                <th class="p-2 w-12 text-center">Crew</th>
+                                <th class="p-2 w-8 text-center"></th>
+                                <th class="p-2 text-left sticky left-0 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Description</th>
+                                <th class="p-2 w-16 text-center">Qty</th>
+                                <th class="p-2 w-20 text-center">Unit</th>
+                                <th class="p-2 w-32 text-right md:text-left">Rate</th>
+                                <th class="p-2 w-28 text-right md:text-left">Est</th>
+                                <th class="p-2 w-28 text-right md:text-left">Act</th>
+                                <th class="p-2 w-28 text-right">Var</th>
+                                <th class="p-2 w-10"></th>
+                            </tr>
+                        </thead>
                         <tbody data-section-body="${safeSectionName}">
                             ${section.items.map(item => RenderEngine.lineItem(item, name)).join('')}
                         </tbody>
@@ -2492,12 +2849,24 @@ function getAbbreviatedName(name, maxLen = 25) {
     }
 
 // Logic Resolution: Toggles visibility of section items.
-function handleToggleSection(sectionName) {
+function handleToggleSection(sectionName, triggerEl) {
     const sec = budget.sections[sectionName];
     if (sec) {
         sec.isOpen = !sec.isOpen;
         saveBudget();
-        render();
+        
+        // Tier 4 Surgical Update: Direct DOM toggle
+        if (triggerEl) {
+            const container = triggerEl.closest('.mb-4');
+            const content = container ? container.querySelector('.section-content') : null;
+
+            if (content) {
+                if (sec.isOpen) content.classList.remove('hidden');
+                else content.classList.add('hidden');
+            }
+        } else {
+            render();
+        }
     }
 }
 
@@ -2506,6 +2875,9 @@ function handleRemoveItem(sectionName, itemId) {
     mBTME.confirm("Delete Line Item", "Remove this item from the budget permanently?", () => {
         const sec = budget.sections[sectionName];
         if(sec) {
+            // SNAPSHOT TRIGGER: Capture state before deletion
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Deleted Line Item");
+
             // Fix: Use string comparison to avoid type mismatches (Ghost Cost bug)
             sec.items = sec.items.filter(i => String(i.id) !== String(itemId));
             
@@ -2528,6 +2900,10 @@ function showItemSelectorModal(sectionName) {
     window._commitAddItem = (desc, rate, unit) => {
         const section = budget.sections[sectionName];
         if (!section) return;
+
+        // SNAPSHOT TRIGGER: Capture state before addition
+        if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added Line Item");
+
         const newItem = {
             id: 'item_' + Date.now(),
             description: desc || 'New Item',
@@ -2606,6 +2982,9 @@ function initializeInteractiveInputs() {}
 // Logic Resolution: Drag and drop initialization.
 function initializeDragAndDrop() {
     document.querySelectorAll('tbody').forEach(el => {
+        // Fix: Idempotency Check to prevent multiple instances causing "locked" rows
+        if (el.classList.contains('sortable-initialized')) return;
+
         if(typeof Sortable !== 'undefined') {
             new Sortable(el, { 
                 handle: '.drag-handle', 
@@ -2622,6 +3001,16 @@ function initializeDragAndDrop() {
 
                     if (secKey && budget.sections[secKey] && oldIdx !== newIdx) {
                         const items = budget.sections[secKey].items;
+                        
+                        // SNAPSHOT TRIGGER: Capture state before reorder
+                        if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Reordered Items");
+
+                        // Tier 2 Audit Hook: Log Reorder
+                        if (mBT.data && mBT.data.state && mBT.data.state.audit) {
+                            const movedItem = items[oldIdx];
+                            mBT.data.state.audit('REORDER', movedItem.description, { section: secKey });
+                        }
+
                         // Array Move: Splice out, then Splice in
                         const [movedItem] = items.splice(oldIdx, 1);
                         items.splice(newIdx, 0, movedItem);
@@ -2631,6 +3020,7 @@ function initializeDragAndDrop() {
                     }
                 }
             });
+            el.classList.add('sortable-initialized');
         }
     });
 }
@@ -2641,6 +3031,9 @@ function initializeStageDragAndDrop() {
     const containers = document.querySelectorAll('.stage-drop-zone');
     
     containers.forEach(container => {
+        // Fix: Idempotency Check to prevent multiple instances
+        if (container.classList.contains('sortable-initialized')) return;
+
         if(typeof Sortable === 'undefined') return;
         
         new Sortable(container, {
@@ -2704,6 +3097,7 @@ function initializeStageDragAndDrop() {
                 }
             }
         });
+        container.classList.add('sortable-initialized');
     });
 }
 
@@ -3010,7 +3404,7 @@ console.log("TIER 4 render defined", typeof render);
             // PDF Export (Studio Documents)
             pdf: function(elementId, filename) {
                 const element = document.getElementById(elementId);
-                if (!element) return alert("Source element not found");
+                if (!element) return mBTME.alert("Export Error", "Source element not found");
                 
                 // Visual Polish: Flatten inputs for print
                 const originalBg = element.style.background;
@@ -3242,19 +3636,20 @@ window.mBTDB = {
         if(window.openDocumentShareSelector) openDocumentShareSelector(doc.id);
     },
     autoFillWidget: function(type, docId) {
-        if(!confirm(`Auto-fill ${type}? Current items will be preserved.`)) return;
-        if(type === 'contacts') {
-            const roles = ['director', 'producer', '1st ad'];
-            roles.forEach(r => {
-                const c = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(r));
-                if(c) this.updateData(docId, `contacts.${r === '1st ad' ? 'ad' : r}`, `${c.name} ${c.contact||''}`);
-            });
-        } else if(type === 'crew') {
-            Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
-                if(i.crew && i.crew.name) this.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone });
-            }));
-        }
-        this.renderFrame();
+        mBTME.confirm("Auto-Fill", `Auto-fill ${type}? Current items will be preserved.`, () => {
+            if(type === 'contacts') {
+                const roles = ['director', 'producer', '1st ad'];
+                roles.forEach(r => {
+                    const c = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(r));
+                    if(c) this.updateData(docId, `contacts.${r === '1st ad' ? 'ad' : r}`, `${c.name} ${c.contact||''}`);
+                });
+            } else if(type === 'crew') {
+                Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                    if(i.crew && i.crew.name) this.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone });
+                }));
+            }
+            this.renderFrame();
+        });
     },
     autoFillWeather: async function(docId, index, name) {
         const btn = document.getElementById(`w-btn-${index}`);
@@ -3272,7 +3667,7 @@ window.mBTDB = {
             const str = `${summary} | Max: ${today.temperature_2m_max[0]}°C / Min: ${today.temperature_2m_min[0]}°C\nSunrise: ${today.sunrise[0].split('T')[1]} / Sunset: ${today.sunset[0].split('T')[1]}`;
             this.updateRow(docId, 'locations', index, 'weather', str);
             this.renderFrame();
-        } catch(e) { alert("Weather Synchronization Failure"); if(btn) btn.innerHTML = this.icons.cloud; }
+        } catch(e) { mBTME.alert("Sync Error", "Weather Synchronization Failure"); if(btn) btn.innerHTML = this.icons.cloud; }
     },
     // --- 4. Render Engine Handshake ---
     renderFrame: function() {
@@ -3364,32 +3759,37 @@ window.mBTDB = {
             </div>`;
         }
     },
-    // Logic Resolution: Automatic image resizing to protect LocalStorage limits
+    // Logic Resolution: Silent High-Fidelity Image Processing (2K Max)
     _handleImageUpload: function(input, docId, widgetId) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
         
-        // Size Limit Check (2MB raw)
-        if (file.size > 2 * 1024 * 1024) {
-            if(!confirm("Large image detected. It will be compressed to save space. Continue?")) return;
-        }
-
         const reader = new FileReader();
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                // Constraint: Max width 800px for storage efficiency
-                const MAX_WIDTH = 800;
-                const scaleSize = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scaleSize;
+                // Constraint: Max width 2048px (2K) for retina quality but safe storage
+                const MAX_WIDTH = 2048;
+                
+                // Only scale down if larger than max width to preserve fidelity
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > MAX_WIDTH) {
+                    const scaleSize = MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                    height = img.height * scaleSize;
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
                 
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, width, height);
                 
-                // Compress to JPEG 0.7 quality
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                // Compress to JPEG 0.8 quality (High Fidelity)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                 this.updateData(docId, `additional.${widgetId}`, dataUrl);
                 this.renderFrame();
             };
@@ -3405,7 +3805,15 @@ window.mBTDB = {
     updateRow: function(docId, section, index, key, value) { const doc = budget.documents.find(d => d.id === docId); if(doc.content.data[section][index]) { doc.content.data[section][index][key] = value; this._triggerSave(); const type = (section === 'locations') ? 'logistics' : section; const widget = doc.content.widgets.find(w => w.type === type); if(widget) this._autoResizeWidget(widget.id); } },
     addRow: function(docId, section, type, presetData) { const doc = budget.documents.find(d => d.id === docId); if(!doc.content.data[section]) doc.content.data[section] = []; let newRow = presetData || { id: Date.now() }; if(!presetData) { if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" }; else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"", contact:"" }; else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" }; else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"", timeOnLocation:"" }; } doc.content.data[section].push(newRow); this._triggerSave(); this.renderFrame(); const widget = doc.content.widgets.find(w => w.type === (section === 'locations' ? 'logistics' : section)); if(widget) this._autoResizeWidget(widget.id); },
     deleteRow: function(docId, section, index, widgetType) { const doc = budget.documents.find(d => d.id === docId); doc.content.data[section].splice(index, 1); this._triggerSave(); this.renderFrame(); const widget = doc.content.widgets.find(w => w.type === (widgetType || section)); if(widget) this._autoResizeWidget(widget.id); },
-    deleteWidget: function(id) { if(!confirm("Delete widget?")) return; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`); if(el) this.state.grid.removeWidget(el); doc.content.widgets = doc.content.widgets.filter(w => w.id !== id); this._triggerSave(); },
+    deleteWidget: function(id) { 
+        mBTME.confirm("Delete Widget", "Remove this block from layout?", () => {
+            const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
+            const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`); 
+            if(el) this.state.grid.removeWidget(el); 
+            doc.content.widgets = doc.content.widgets.filter(w => w.id !== id); 
+            this._triggerSave(); 
+        });
+    },
     addWidget: function() {
         const select = document.getElementById('mBTDB_WidgetSelect');
         if(!select) return;
@@ -3443,8 +3851,58 @@ window.mBTDB = {
     },
     syncFromPrevious: function() { mBTME.alert("Pending", "Environmental cache resolution pending..."); },
     snapshotDoc: function() { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const newDoc = JSON.parse(JSON.stringify(doc)); newDoc.id = 'doc_' + Date.now(); newDoc.label = doc.label + " (Copy)"; budget.documents.push(newDoc); mBTDB.open(newDoc.id); },
-    pullFromOpenGate: function(docId, path, roleQuery) { if (typeof mBTOG === 'undefined') return alert("Database Resolution Failure."); const matches = mBTOG.contacts.filter(c => c.role?.toLowerCase().includes(roleQuery.toLowerCase())); if (matches.length === 0) return alert(`No ${roleQuery} found.`); const apply = (c) => { const parts = path.split('.'); if(parts.length === 3 && (parts[0] === 'crew' || parts[0] === 'cast')) { this.updateRow(docId, parts[0], parseInt(parts[1]), parts[2], c.name); if(c.contact) this.updateRow(docId, parts[0], parseInt(parts[1]), 'contact', c.contact); } else { this.updateData(docId, path, `${c.name} ${c.contact ? '('+c.contact+')' : ''}`); } this.renderFrame(); }; if (matches.length === 1) apply(matches[0]); else { const choice = prompt(matches.map((c,i)=>`${i+1}. ${c.name}`).join('\n')); const idx = parseInt(choice)-1; if(matches[idx]) apply(matches[idx]); } },
-    printToPDF: function(mode) { if (typeof mBTPublisher === 'undefined') return alert("Publisher Resolution Failure."); const original = document.getElementById('mBTDB_Workspace'); const clone = original.cloneNode(true); clone.id = "mBTDB_Print_Container"; clone.classList.remove('editing-mode'); clone.classList.add('print-container', mode === 'standard' ? 'print-standard' : 'print-graphic'); const originalInputs = original.querySelectorAll('input, textarea'); const cloneInputs = clone.querySelectorAll('input, textarea'); originalInputs.forEach((input, i) => { if(cloneInputs[i]) cloneInputs[i].value = input.value; }); document.body.appendChild(clone); mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`); setTimeout(() => { document.body.removeChild(clone); }, 2000); },
+    pullFromOpenGate: function(docId, path, roleQuery) { 
+        if (typeof mBTOG === 'undefined') return mBTME.alert("System Error", "Database Resolution Failure."); 
+        
+        const matches = mBTOG.contacts.filter(c => c.role?.toLowerCase().includes(roleQuery.toLowerCase())); 
+        if (matches.length === 0) return mBTME.alert("Not Found", `No ${roleQuery} found.`); 
+        
+        const apply = (c) => { 
+            const parts = path.split('.'); 
+            if(parts.length === 3 && (parts[0] === 'crew' || parts[0] === 'cast')) { 
+                this.updateRow(docId, parts[0], parseInt(parts[1]), parts[2], c.name); 
+                if(c.contact) this.updateRow(docId, parts[0], parseInt(parts[1]), 'contact', c.contact); 
+            } else { 
+                this.updateData(docId, path, `${c.name} ${c.contact ? '('+c.contact+')' : ''}`); 
+            } 
+            this.renderFrame(); 
+        }; 
+        
+        if (matches.length === 1) {
+            apply(matches[0]); 
+        } else { 
+            // Modern UI Replacement: Custom Modal with Buttons
+            const listHtml = matches.map((c, i) => 
+                `<button onclick="mBTDB._resolveOGSelection(${i})" class="w-full text-left p-3 bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-xl transition-all group mb-2">
+                    <div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">${c.name}</div>
+                    <div class="text-[9px] text-slate-400 font-mono">${c.contact || 'No Contact'}</div>
+                </button>`
+            ).join('');
+            
+            // Temporary resolver stored on the object to handle the async click
+            this._resolveOGSelection = (idx) => {
+                mBTME.close('ogSelectModal');
+                if (matches[idx]) apply(matches[idx]);
+                delete this._resolveOGSelection;
+            };
+            
+            mBTME.open('ogSelect', `Select ${roleQuery}`, `<div class="p-4 max-h-[400px] overflow-y-auto no-scrollbar">${listHtml}</div>`, 'max-w-sm');
+        } 
+    },
+    printToPDF: function(mode) { 
+        if (typeof mBTPublisher === 'undefined') return mBTME.alert("Error", "Publisher Resolution Failure."); 
+        const original = document.getElementById('mBTDB_Workspace'); 
+        const clone = original.cloneNode(true); 
+        clone.id = "mBTDB_Print_Container"; 
+        clone.classList.remove('editing-mode'); 
+        clone.classList.add('print-container', mode === 'standard' ? 'print-standard' : 'print-graphic'); 
+        const originalInputs = original.querySelectorAll('input, textarea'); 
+        const cloneInputs = clone.querySelectorAll('input, textarea'); 
+        originalInputs.forEach((input, i) => { if(cloneInputs[i]) cloneInputs[i].value = input.value; }); 
+        document.body.appendChild(clone); 
+        mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`); 
+        setTimeout(() => { document.body.removeChild(clone); }, 2000); 
+    },
     // --- 6. Switchboard Integration ---
     _updateHeaderButtons: function() {
         const btnContainer = document.getElementById('mBTDB_Buttons'); if(!btnContainer) return; const isEd = this.state.isEditing;
@@ -3469,38 +3927,135 @@ window.mBTDB = {
     mBT.features.blueprints = {
         saveCurrentAsBlueprint: function() {
             if (!budget) return;
-            const name = prompt("Name this Blueprint:", budget.projectName + " Template");
-            if (!name) return;
+            mBTME.prompt("Save Blueprint", "Name this template:", budget.projectName + " Template", (name) => {
+                if (!name) return;
 
-            const structure = [];
-            Object.values(budget.sections).forEach(sec => {
-                structure.push({
-                    id: sec.id,
-                    name: sec.name,
-                    items: sec.items.map(i => ({
-                        description: i.description,
-                        unit: i.unit,
-                        rate: i.rate,
-                        multiplier: i.multiplier,
-                        rateType: i.rateType
-                        // Note: We strip actuals, crew, and transient IDs to create a clean template
-                    }))
+                const structure = [];
+                Object.values(budget.sections).forEach(sec => {
+                    structure.push({
+                        id: sec.id,
+                        name: sec.name,
+                        items: sec.items.map(i => ({
+                            description: i.description,
+                            unit: i.unit,
+                            rate: i.rate,
+                            multiplier: i.multiplier,
+                            rateType: i.rateType
+                            // Note: We strip actuals, crew, and transient IDs to create a clean template
+                        }))
+                    });
                 });
-            });
 
-            mBT.data.templates.saveTemplate(name, { 
-                structure: structure, 
-                label: name, 
-                desc: 'Custom User Blueprint',
-                icon: 'file'
+                mBT.data.templates.saveTemplate(name, { 
+                    structure: structure, 
+                    label: name, 
+                    desc: 'Custom User Blueprint',
+                    icon: 'file'
+                });
+                
+                mBTME.alert("Success", `Blueprint "${name}" saved! It is now available in the New Project menu.`);
             });
-            
-            alert(`Blueprint "${name}" saved! It is now available in the New Project menu.`);
         }
     };
     
     // Core Action Binding for Blueprint
     mBT.core.action('blueprint-save', () => mBT.features.blueprints.saveCurrentAsBlueprint());
+
+    /* ========= v19.65 ACTIVITY HISTORY (mBT.features.history) ========= */
+    mBT.features.history = {
+        open: function() {
+            // Get logs, newest first
+            const logs = (budget.activityLog || []).slice().reverse();
+            
+            const renderDiff = (diff) => {
+                if(!diff || (diff.oldValue === undefined && diff.newValue === undefined)) return '';
+                // Logic Resolution: Render visual diff for transparency
+                return `<div class="mt-1 text-[9px] font-mono text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100 flex items-center gap-2">
+                    <span class="line-through text-red-400 opacity-70">${mBT.ui.render.esc(diff.oldValue)}</span>
+                    <span class="text-slate-300">→</span>
+                    <span class="text-emerald-600 font-bold">${mBT.ui.render.esc(diff.newValue)}</span>
+                </div>`;
+            };
+
+            const listHtml = logs.length ? logs.map(l => {
+                let iconColor = 'bg-blue-500';
+                if(l.action === 'DELETE') iconColor = 'bg-rose-500';
+                if(l.action === 'ADD') iconColor = 'bg-emerald-500';
+                if(l.action === 'REORDER') iconColor = 'bg-amber-500';
+                if(l.action === 'REVERT') iconColor = 'bg-purple-500';
+
+                // Tier 5 Logic: Inject Revert Button for Reversible Actions
+                let revertBtn = '';
+                if (l.diff && l.action === 'UPDATE' && l.itemId) {
+                    revertBtn = `<button onclick="mBT.data.history.revert('${l.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-2 px-2 py-1 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded text-[8px] font-black uppercase tracking-widest" title="Revert value">Revert</button>`;
+                }
+                
+                return `
+                <div class="p-3 bg-white border-b border-slate-50 hover:bg-slate-50 transition-colors flex gap-3 group">
+                    <div class="flex-shrink-0 mt-1.5">
+                        <div class="w-1.5 h-1.5 rounded-full ${iconColor} shadow-sm"></div>
+                    </div>
+                    <div class="flex-grow min-w-0">
+                        <div class="flex justify-between items-start">
+                            <span class="text-[10px] font-black uppercase text-slate-700 tracking-widest truncate pr-2">${l.action}: ${mBT.ui.render.esc(l.target)}</span>
+                            <span class="text-[8px] font-mono text-slate-400 shrink-0">${new Date(l.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">${l.section}</div>
+                            ${revertBtn}
+                        </div>
+                        ${renderDiff(l.diff)}
+                    </div>
+                </div>`;
+            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.list, message: 'No Activity Recorded' });
+
+            const content = `
+                <div class="flex flex-col h-[500px] bg-slate-50">
+                    <div class="p-4 bg-white border-b border-slate-100 shrink-0 flex justify-between items-center shadow-sm z-10">
+                        <div>
+                            <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Project Audit Log</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mt-0.5">${logs.length} Events</p>
+                        </div>
+                        <button onclick="mBT.features.history.export()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-[9px] font-black uppercase tracking-widest">
+                            ${mBTAssets.save} Export CSV
+                        </button>
+                    </div>
+                    <div class="flex-grow overflow-y-auto no-scrollbar">
+                        ${listHtml}
+                    </div>
+                </div>`;
+            
+            mBTME.open('activityLog', 'History', content, 'max-w-md', { hideHeader: true, noPadding: true });
+        },
+
+        export: function() {
+            if(!budget.activityLog?.length) return mBTME.alert("Empty", "No history to export.");
+            
+            // Logic Resolution: ISO Standard CSV Generation
+            const headers = ["Timestamp", "User", "Action", "Target", "Section", "Old Value", "New Value"];
+            const rows = budget.activityLog.map(e => {
+                const escapeCsv = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+                return [
+                    e.ts,
+                    e.user,
+                    e.action,
+                    e.target,
+                    e.section,
+                    e.diff?.oldValue,
+                    e.diff?.newValue
+                ].map(escapeCsv).join(",");
+            });
+            
+            const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `${budget.projectName}_AuditLog_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
 
     /* ========= v19.70 ANALYTICS CORTEX (mBT.features.cortex) ========= */
     mBT.features.cortex = {
@@ -4190,6 +4745,7 @@ window.mBTDB = {
                     icon: c.name ? c.name.charAt(0).toUpperCase() : '?',
                     title: c.name,
                     subtitle: `${c.role || 'No Role'}${c.assigned ? ' (Assigned)' : ''}`,
+                    onClick: `openCrewProfile(this, event, '${c.id}', null)`,
                     actions: c.assigned ? [] : [{
                         icon: mBTAssets.trash,
                         title: 'Delete',
@@ -4418,7 +4974,7 @@ window.mBTDB = {
                                     </div>
                                     <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
                                 </div>
-                                <button id="saveApiKeyBtn" onclick="const p=document.getElementById('aiProviderSelect').value; const k=document.getElementById('apiKeyInput').value; const s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); alert('Assistant Settings Synchronized');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
+                                <button id="saveApiKeyBtn" onclick="const p=document.getElementById('aiProviderSelect').value; const k=document.getElementById('apiKeyInput').value; const s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
                             </div>
                         </div>
                     </div>`;
@@ -4576,7 +5132,7 @@ window.mBTDB = {
             const rate = parseFloat(document.getElementById('newRateVal').value) || 0;
             const unit = document.getElementById('newRateUnit').value;
 
-            if (!desc) return alert("Description required");
+            if (!desc) return mBTME.alert("Error", "Description required");
 
             mBTOG.rates.push({ description: desc, rate: rate, unit: unit });
             mBTOG.saveRates(); // Calls Tier 2.5 persistence
@@ -4591,23 +5147,142 @@ window.mBTDB = {
             
             // Visual feedback
             if (mBTOG.settings.optInSharing) {
-                alert("Open Gate Sharing Enabled. Anonymous rate data will be synchronized.");
+                mBTME.alert("Sharing Active", "Open Gate Sharing Enabled. Anonymous rate data will be synchronized.");
             }
             this.open('database', 'lineItems'); // Refresh UI toggle state
         }
+    };
+
+    /* ========= v19.65 FINANCE ENGINE (mBT.features.finance) ========= */
+    mBT.features.finance = {
+        openModal: function(itemId) {
+            // 1. Locate Context
+            let item = null;
+            let sectionName = null;
+            
+            // Scan budget to find the specific line item
+            Object.entries(budget.sections).forEach(([secName, sec]) => {
+                const found = sec.items.find(i => i.id === itemId);
+                if (found) { item = found; sectionName = secName; }
+            });
+
+            if (!item) return mBTME.alert("Error", "Line item not found.");
+
+            // 2. Calculate Balance
+            const est = parseFloat(item.total) || 0;
+            const act = parseFloat(item.actual) || 0;
+            const balance = est - act;
+            const contactName = item.crew?.name || item.description;
+
+            // 3. Render
+            // Uses Tier 4 Render Engine template we added in Phase 3
+            const content = mBT.ui.render.paymentModal(itemId, contactName, balance, displayCurrency);
+            mBTME.open('payment', 'Issue Payment', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+            
+            // 4. Focus Input
+            setTimeout(() => {
+                const input = document.getElementById('payAmount');
+                if(input) input.focus();
+            }, 50);
+        },
+
+        processPayment: function(itemId) {
+            // 1. Capture Inputs
+            const amountEl = document.getElementById('payAmount');
+            const serviceEl = document.getElementById('payService');
+            const dateEl = document.getElementById('payDate');
+            
+            const amount = parseFloat(amountEl.value);
+            const serviceId = serviceEl.value;
+            const date = dateEl.value;
+
+            if (!amount || amount <= 0) return mBTME.alert("Error", "Valid amount required.");
+
+            // 2. Update Budget (Local)
+            let item = null;
+            Object.values(budget.sections).forEach(sec => {
+                if(!item) item = sec.items.find(i => i.id === itemId);
+            });
+
+            if (item) {
+                const currentActual = parseFloat(item.actual) || 0;
+                item.actual = currentActual + amount;
+                
+                // 3. Update Global History (Persistence)
+                // We link via Name/Role because IDs might be transient across projects, 
+                // but if we have a linked global ID, we use that.
+                if (item.crew && item.crew.name) {
+                    const globalContact = mBTOG.contacts.find(c => 
+                        c.name.toLowerCase() === item.crew.name.toLowerCase()
+                    );
+                    
+                    if (globalContact) {
+                        if (!globalContact.payments) globalContact.payments = [];
+                        globalContact.payments.push({
+                            projectId: budget.projectName,
+                            date: date,
+                            amount: amount,
+                            currency: displayCurrency,
+                            service: serviceId,
+                            description: item.description
+                        });
+                        mBTOG.saveContacts(); // Persist to Global DB
+                    }
+                }
+
+                // 4. Save & Feedback
+                mBTLE.reconcile(); // Recalculate Totals
+                saveBudget();      // Persist Project
+                mBT.ui.paint();    // Update UI Row
+                
+                mBTME.close('paymentModal');
+                mBTME.alert("Success", `Payment of ${mBTLE.format.currency(amount)} logged.`);
+            } else {
+                mBTME.alert("Error", "Item reference lost.");
+            }
+        }
+    };
+
+   /* --- v19.55 PUBLISH BRIDGE --- */
+    window.showPublishModal = function() {
+        const content = `
+        <div class="grid grid-cols-1 gap-4 p-6">
+            <button onclick="mBTME.close('publishModal'); window.print();" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.print}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Print Budget</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Generate PDF via Browser</p>
+                </div>
+            </button>
+            <button onclick="mBTME.close('publishModal'); mBTPublisher.toMoo();" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.save}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Backup Project</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Export .MOO Data File</p>
+                </div>
+            </button>
+            <button onclick="mBTME.alert('Coming Soon', 'Excel export is in development.');" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl opacity-60 hover:opacity-100 hover:border-indigo-500 transition-all group text-left">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.grid}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Excel Export</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Coming in v19.6</p>
+                </div>
+            </button>
+        </div>`;
+        mBTME.open('publish', 'Publish & Export', content, 'max-w-sm');
     };
 
     // --- Backward Compatibility Alias ---
     // Fix: We use .bind() to ensure 'this' refers to the settings object, not the window
     window.showSettingsModal = mBT.features.settings.open.bind(mBT.features.settings);
 
-// ---- Tier 5 Part 3 ---- //
+ // ---- Tier 5 Part 3 ---- //
  /* ========= v19.60 DOCUMENTS HUB (mBT.features.documents) ========= */
     mBT.features.documents = {
         // Logic Resolution: Creates a new document instance from a template definition
         createFromTemplate: function(templateId) {
             const tmpl = mBTOG.templates.find(t => t.id === templateId);
-            if (!tmpl) return alert("Template definition not found.");
+            if (!tmpl) return mBTME.alert("Error", "Template definition not found.");
 
             const newDoc = {
                 id: 'doc_' + Date.now(),
@@ -4779,66 +5454,115 @@ window.mBTDB = {
         wrapper.classList.toggle('mobile-active');
     };
 
+    // Helper for Contact Card Tabs (Phase 8.1 - Tier 6)
+    window.toggleCrewProfileTab = function(tabId) {
+        // Toggle Buttons
+        document.querySelectorAll('.crew-tab-btn').forEach(btn => {
+            const isActive = btn.dataset.tab === tabId;
+            btn.className = `crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`;
+        });
+        
+        // Toggle Views
+        const profile = document.getElementById('tab-profile');
+        const history = document.getElementById('tab-history');
+        
+        if (tabId === 'profile') {
+            if(profile) profile.classList.remove('hidden');
+            if(history) history.classList.add('hidden');
+        } else {
+            if(profile) profile.classList.add('hidden');
+            if(history) history.classList.remove('hidden');
+        }
+    };
+
     window.openCrewProfile = function(el, event, itemId, sectionName) {
         if(event) event.stopPropagation();
         
-        // Handle "Global Add" dummy item logic
+        // --- LOGIC UPDATE: Phase 2 Context Detection ---
         let item = null;
+        let isGlobalEdit = false;
+
+        // 1. Try finding in Budget (Context: Line Item Click)
         if (itemId && sectionName && budget.sections && budget.sections[sectionName]) {
             item = budget.sections[sectionName].items.find(i => i.id === itemId);
         }
+
+        // 2. Try finding in Global DB (Context: Database Manager Click)
+        if (!item && !sectionName && itemId && !itemId.startsWith('dummy_')) {
+            const globalC = mBTOG.contacts.find(c => c.id === itemId);
+            if (globalC) {
+                item = { 
+                    id: globalC.id, 
+                    crew: { name: globalC.name, phone: globalC.phone, email: globalC.email }, 
+                    description: globalC.role || 'Global Contact',
+                    payments: globalC.payments || []
+                };
+                isGlobalEdit = true;
+            }
+        }
+
+        // 3. Fallback to Empty State (Context: Add New)
         if (!item) item = { id: itemId || 'temp', crew: { name: '', phone: '', email: '' }, description: 'New Contact' };
         
         const crew = item.crew || { name: '', phone: '', email: '' };
-        const cleanPhone = crew.phone ? crew.phone.replace(/\D/g, '') : '';
-        const hasPhone = cleanPhone.length > 6;
-        const hasEmail = crew.email && crew.email.includes('@');
-        const waLink = `https://wa.me/${(cleanPhone.length === 10 && (cleanPhone.startsWith('876') || cleanPhone.startsWith('658'))) ? '1'+cleanPhone : cleanPhone}`;
+        
+        // --- Render Components ---
+        // 1. Ledger (History Tab)
+        let ledgerHtml = '';
+        if (typeof mBT.ui.render.paymentHistory === 'function') {
+             // Resolve global payments if local item lacks them but has a name match
+             let contextForHistory = item;
+             if (!item.payments && item.crew && item.crew.name) {
+                 const globalC = mBTOG.contacts.find(c => c.name.toLowerCase() === item.crew.name.toLowerCase());
+                 if (globalC) contextForHistory = globalC;
+             }
+             ledgerHtml = mBT.ui.render.paymentHistory(contextForHistory);
+        }
 
-        const actionsBar = `
-            <div class="flex justify-center gap-3 mb-6 mt-2">
-                ${hasPhone ? `
-                    <a href="tel:${cleanPhone}" class="flex flex-col items-center gap-1 group">
-                        <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 border border-green-200 flex items-center justify-center shadow-sm group-hover:bg-green-600 group-hover:text-white transition-colors">${mBTAssets.phone}</div>
-                        <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Call</span>
-                    </a>
-                    <a href="${waLink}" target="_blank" class="flex flex-col items-center gap-1 group">
-                        <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shadow-sm group-hover:bg-emerald-600 group-hover:text-white transition-colors">${mBTAssets.wa}</div>
-                        <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">WA</span>
-                    </a>` : ''}
-                ${hasEmail ? `
-                    <a href="mailto:${crew.email}" class="flex flex-col items-center gap-1 group">
-                        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">${mBTAssets.mail}</div>
-                        <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Email</span>
-                    </a>` : ''}
+        // 2. Profile Form (Profile Tab)
+        const profileHtml = `
+            <div class="space-y-4 pt-2">
+                <div class="flex justify-end">
+                     <button type="button" id="importContactBtn" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">${mBTAssets.plus} Import Contact</button>
+                </div>
+                <div class="space-y-3">
+                    <input type="text" id="crewName" value="${mBT.ui.render.esc(crew.name || '')}" placeholder="FULL NAME" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="tel" id="crewPhone" value="${mBT.ui.render.esc(crew.phone || '')}" placeholder="PHONE" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                        <input type="email" id="crewEmail" value="${mBT.ui.render.esc(crew.email || '')}" placeholder="EMAIL" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Unassign</button>` : '<div></div>'}
+                    <button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>
+                </div>
             </div>`;
 
         const content = `
-            <form id="crewProfileForm" class="space-y-6">
-                <div class="text-center relative">
-                    <div class="w-24 h-24 mx-auto rounded-[32px] bg-slate-900 flex items-center justify-center text-white font-black text-4xl shadow-2xl border-4 border-white rotate-3">
-                        ${crew.name ? RenderEngine.esc(crew.name.substring(0,1).toUpperCase()) : '?'}
+            <form id="crewProfileForm" class="flex flex-col h-[500px]">
+                <!-- Header -->
+                <div class="text-center relative shrink-0 mb-4">
+                    <div class="w-20 h-20 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-white">
+                        ${crew.name ? mBT.ui.render.esc(crew.name.substring(0,1).toUpperCase()) : '?'}
                     </div>
-                    <h3 class="text-xl font-black text-slate-900 mt-4 uppercase tracking-tighter">${RenderEngine.esc(crew.name || 'Unknown')}</h3>
-                    <p class="text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 inline-block px-3 py-1 rounded-full mt-1">${RenderEngine.esc(item.description || 'New Contact')}</p>
+                    <h3 class="text-lg font-black text-slate-900 mt-2 uppercase tracking-tighter">${mBT.ui.render.esc(crew.name || 'Unknown')}</h3>
+                    <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">${mBT.ui.render.esc(item.description || 'New Contact')}</p>
                 </div>
-                ${actionsBar}
-                <div class="bg-slate-50 p-5 rounded-3xl border border-slate-100 space-y-4">
-                    <div class="flex justify-between items-center mb-2">
-                        <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profile</h4>
-                        <button type="button" id="importContactBtn" class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-2">${mBTAssets.plus} Import</button>
-                    </div>
-                    <div class="space-y-3">
-                        <input type="text" id="crewName" value="${RenderEngine.esc(crew.name || '')}" placeholder="FULL NAME" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">
-                        <div class="grid grid-cols-2 gap-3">
-                            <input type="tel" id="crewPhone" value="${RenderEngine.esc(crew.phone || '')}" placeholder="PHONE" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
-                            <input type="email" id="crewEmail" value="${RenderEngine.esc(crew.email || '')}" placeholder="EMAIL" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
-                        </div>
-                    </div>
+
+                <!-- Tabs -->
+                <div class="flex bg-slate-100 p-1 rounded-xl shrink-0 mb-4">
+                    <button type="button" data-tab="profile" onclick="toggleCrewProfileTab('profile')" class="crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all bg-white text-blue-600 shadow-sm">Profile</button>
+                    <button type="button" data-tab="history" onclick="toggleCrewProfileTab('history')" class="crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Ledger</button>
                 </div>
-                <div class="pt-4 flex justify-between items-center gap-4">
-                    <button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Remove</button>
-                    <button type="submit" class="flex-grow py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save</button>
+
+                <!-- Content Area -->
+                <div class="flex-grow overflow-hidden relative bg-slate-50 rounded-2xl border border-slate-100">
+                    <div id="tab-profile" class="absolute inset-0 p-5 overflow-y-auto no-scrollbar">
+                        ${profileHtml}
+                    </div>
+                    <div id="tab-history" class="absolute inset-0 overflow-y-auto no-scrollbar hidden">
+                        ${ledgerHtml}
+                    </div>
                 </div>
             </form>`;
 
@@ -4855,19 +5579,29 @@ window.mBTDB = {
                     const email = document.getElementById('crewEmail').value.trim();
 
                     if (itemId && itemId.startsWith('dummy_new_contact')) {
-                        // Global add
-                        if (!name) return alert("Name is required.");
+                        if (!name) return mBTME.alert("Required", "Name is required.");
                         mBTOG.contacts.push({ id: 'c_' + Date.now(), name, role: 'Crew', phone, email });
                         mBTOG.saveContacts(); 
                         mBTME.close('crewProfileModal');
                         if(typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
-                    } else if (item) {
-                        // Assignment
+                    } 
+                    else if (isGlobalEdit) {
+                        const gIdx = mBTOG.contacts.findIndex(c => c.id === itemId);
+                        if(gIdx > -1) {
+                            mBTOG.contacts[gIdx].name = name;
+                            mBTOG.contacts[gIdx].phone = phone;
+                            mBTOG.contacts[gIdx].email = email;
+                            mBTOG.saveContacts();
+                            mBTME.close('crewProfileModal');
+                            if(typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
+                        }
+                    } 
+                    else if (item) {
                         item.crew = { name, phone, email };
                         mBTME.close('crewProfileModal');
                         if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
                         if(typeof render === 'function') render();
-                        if(document.getElementById('stagesViewModal')) window.showStagesModal(); // Refresh stages if open
+                        if(document.getElementById('stagesViewModal')) window.showStagesModal();
                     }
                 });
             }
@@ -4885,22 +5619,23 @@ window.mBTDB = {
                                 if(c.email?.[0]) document.getElementById('crewEmail').value = c.email[0];
                             }
                         } catch (ex) { console.log('Contact Import cancelled'); }
-                    } else { alert("Not supported on this browser."); }
+                    } else { mBTME.alert("Not Supported", "Contact import not available in this browser."); }
                 });
             }
         }, 50);
     };
 
     window.clearCrewAssignment = function(itemId, sectionName) {
-        if(confirm('Remove assignment?')) {
+        mBTME.confirm("Remove Assignment", "Remove this crew assignment?", () => {
             const item = budget.sections[sectionName].items.find(i => i.id === itemId);
             if(item) {
                 delete item.crew;
                 mBTME.close('crewProfileModal');
                 if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
                 if(typeof render === 'function') render();
+                if(document.getElementById('stagesViewModal')) window.showStagesModal();
             }
-        }
+        });
     };
 
     /* --- 2. Stage & Analytics Interface (Orchestration) --- */
@@ -5035,6 +5770,8 @@ window.mBTDB = {
                 if(window._stageSaveTimer) clearTimeout(window._stageSaveTimer);
                 window._stageSaveTimer = setTimeout(saveBudget, 1000);
             } else {
+                // Fix: Clear any pending debounce to prevent double-save on blur
+                if(window._stageSaveTimer) clearTimeout(window._stageSaveTimer);
                 saveBudget();
             }
         }
@@ -5044,16 +5781,18 @@ window.mBTDB = {
         const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
         if (action === 'lockAll' || action === 'unlockAll') {
             validKeys.forEach(k => budget.targetLock.stages[k].locked = (action === 'lockAll'));
+            saveBudget();
+            window.showStagesModal();
         } else if (action === 'syncDays') {
-            if(confirm("Overwrite individual item days with Stage settings?")) {
+            mBTME.confirm("Sync Duration", "Overwrite individual item days with Stage settings?", () => {
                 validKeys.forEach(k => {
                     const d = budget.targetLock.stages[k].days;
                     if(d > 0) Object.values(budget.sections).forEach(s => s.items.forEach(i => { if(i.stageData?.[k]) i.stageData[k].days = d; }));
                 });
-            }
+                saveBudget();
+                window.showStagesModal();
+            });
         }
-        saveBudget();
-        window.showStagesModal();
     };
 
     // --- TIER 5 UPGRADE: Manual Duration Handler (Phase 2 Fix) ---
@@ -5094,7 +5833,7 @@ window.mBTDB = {
             // 4. Update UI (Removes Red Warning)
             if(document.getElementById('stagesViewModal')) window.showStagesModal();
         } else {
-            alert("No scheduled items found in this stage to sync with.");
+            mBTME.alert("Sync Info", "No scheduled items found in this stage to sync with.");
         }
     };
 
@@ -5105,7 +5844,7 @@ window.mBTDB = {
 
         if (mode === 'link') {
             const matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
-            if (matches.length === 0) return alert("No matching items found to link.");
+            if (matches.length === 0) return mBTME.alert("No Matches", "No matching items found to link.");
             
             matches.forEach(item => {
                 if (!item.stageData) item.stageData = {};
@@ -5115,7 +5854,7 @@ window.mBTDB = {
         } 
         else if (mode === 'generate') {
             const missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
-            if (missing.length === 0) return alert("No missing essentials found.");
+            if (missing.length === 0) return mBTME.alert("Complete", "No missing essentials found.");
             
             // Determine target section
             const sectionNames = Object.keys(budget.sections);
@@ -5123,7 +5862,7 @@ window.mBTDB = {
             if (stageKey === 'post') targetSec = sectionNames.find(s => /post|edit/.test(s.toLowerCase())) || targetSec;
             else if (stageKey === 'dev') targetSec = sectionNames.find(s => /dev|creative/.test(s.toLowerCase())) || targetSec;
 
-            if (!budget.sections[targetSec]) return alert("Target section not found.");
+            if (!budget.sections[targetSec]) return mBTME.alert("Error", "Target section not found.");
 
             missing.forEach(dbItem => {
                 const newItem = {
@@ -5147,33 +5886,33 @@ window.mBTDB = {
             saveBudget();
             mBTLE.reconcile();
             if(document.getElementById('stagesViewModal')) window.showStagesModal();
-            // Optional: Toast or Alert
-            // alert(`${count} items processed for ${stageLabel}.`);
+            mBTME.alert("Auto-Fill Complete", `${count} items processed for ${stageLabel}.`);
         }
     };
 
     window.handleStageBulkAutoFill = function() {
-        if(!confirm("Smart Scan: Auto-populate ALL stages with existing budget items?")) return;
-        let total = 0;
-        const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
-        
-        validKeys.forEach(k => {
-            const matches = mBT.features.stages.logic.findMatchesInBudget(k);
-            matches.forEach(item => {
-                if (!item.stageData) item.stageData = {};
-                item.stageData[k] = { days: 1, rate: item.rate };
-                total++;
+        mBTME.confirm("Smart Scan", "Auto-populate ALL stages with existing budget items?", () => {
+            let total = 0;
+            const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+            
+            validKeys.forEach(k => {
+                const matches = mBT.features.stages.logic.findMatchesInBudget(k);
+                matches.forEach(item => {
+                    if (!item.stageData) item.stageData = {};
+                    item.stageData[k] = { days: 1, rate: item.rate };
+                    total++;
+                });
             });
-        });
 
-        if (total > 0) {
-            saveBudget();
-            mBTLE.reconcile();
-            window.showStagesModal();
-            alert(`Smart Scan Complete: Linked ${total} items.`);
-        } else {
-            alert("No new matches found.");
-        }
+            if (total > 0) {
+                saveBudget();
+                mBTLE.reconcile();
+                window.showStagesModal();
+                mBTME.alert("Scan Complete", `Smart Scan Linked ${total} items.`);
+            } else {
+                mBTME.alert("Scan Complete", "No new matches found.");
+            }
+        });
     };
 
     window.toggleStageLock = function(stageKey) {
@@ -5218,6 +5957,14 @@ window.mBTDB = {
                     <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Project Start Date</label>
                     <input type="date" value="${budget.startDate || new Date().toISOString().split('T')[0]}" 
                            onchange="budget.startDate=this.value; saveBudget(); window.updateAllHeaders();" 
+                           class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer uppercase tracking-widest shadow-inner">
+                </div>
+
+                <!-- TIER 5 UPGRADE: Phase 3.2 - Deadline Manager -->
+                <div>
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Target Delivery Date</label>
+                    <input type="date" value="${budget.deliveryDate || ''}" 
+                           onchange="budget.deliveryDate=this.value; saveBudget(); window.updateAllHeaders();" 
                            class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer uppercase tracking-widest shadow-inner">
                 </div>
 
@@ -5482,10 +6229,41 @@ window.updateAllHeaders = () => {
     if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
 
     const metrics = mBTStagesEngine.getMetrics();
-    const burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
+    let burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
     
-    // Update Overview
-    // 2. Update Overview Card (Visuals)
+    // --- Phase 3.4: The Messenger (Intelligent Risk Visuals) ---
+    // We fetch the deep risk analysis calculated by the Logic Engine
+    const timeline = mBTStagesEngine.calculateTimeline();
+    const risk = mBTStagesEngine.analyzeRisk(metrics, timeline);
+
+    // Logic Resolution: Risk Override
+    // If a risk is detected (Critical or Warning), it overrides the standard financial display
+    if (risk) {
+        if (risk.status === 'CRITICAL') {
+            burn.color = 'text-rose-600';
+            burn.ring = 'border-rose-500';
+            burn.message = "CRITICAL"; 
+            burn.subMessage = risk.subMessage; // "Projected $X exceeds Cap"
+        } else if (risk.status === 'WARNING') {
+            burn.ring = 'border-amber-400';
+            if (burn.color !== 'text-red-600') burn.color = 'text-amber-500';
+            burn.message = "DELAY";
+            burn.subMessage = risk.subMessage; // "Est. Penalty: $X"
+        }
+        
+        // Visual Feedback on Delivery Input (if visible in Setup Card)
+        const deliveryInput = document.querySelector('input[onchange*="budget.deliveryDate"]');
+        if (deliveryInput) {
+            // Apply visual border state based on health
+            deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
+            
+            if(risk.status === 'CRITICAL') deliveryInput.classList.add('border-rose-500');
+            else if(risk.status === 'WARNING') deliveryInput.classList.add('border-amber-500');
+            else deliveryInput.classList.add('border-emerald-500');
+        }
+    }
+    
+    // Update Overview Card (Visuals)
     const ovGrandTotal = document.getElementById('ovGrandTotal');
     const ovTotalCap = document.getElementById('ovTotalCap');
     
@@ -5495,17 +6273,46 @@ window.updateAllHeaders = () => {
     // Update Burn Ring
     const ring = document.getElementById('burnRateRing');
     const ringTxt = document.getElementById('burnRateText');
+    const ringLabel = ringTxt ? ringTxt.nextElementSibling : null; // "Burn Rate" text
+
     if(ring && ringTxt) {
         ring.className = `w-48 h-48 rounded-full border-[16px] ${burn.ring} flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm`;
         ringTxt.className = `text-5xl font-black ${burn.color} block leading-none tracking-tighter`;
-        ringTxt.innerText = Math.round(burn.pct) + '%';
+        
+        if (burn.message) {
+            // Time Alert Mode
+            ringTxt.innerText = burn.message;
+            ringTxt.style.fontSize = "2.5rem"; // Adjust for text fit
+            if(ringLabel) {
+                ringLabel.innerText = burn.subMessage || "SCHEDULE CRITICAL";
+                ringLabel.className = "text-[9px] font-black uppercase tracking-widest text-rose-500 mt-2 block animate-pulse";
+            }
+        } else {
+            // Standard Financial Mode
+            ringTxt.innerText = Math.round(burn.pct) + '%';
+            ringTxt.style.fontSize = ""; 
+            if(ringLabel) {
+                ringLabel.innerText = "Burn Rate";
+                ringLabel.className = "text-[9px] font-black uppercase tracking-widest text-slate-400 mt-2 block";
+            }
+        }
     }
 
-    // NEW: Update Temporal Projections (Phase 1)
-    const timeline = mBTStagesEngine.calculateTimeline();
+    // Update Temporal Projections (Phase 1 + 3.1 Bankruptcy)
     Object.keys(timeline).forEach(k => {
+        if (k === '_analysis') return; // Skip metadata
         const el = document.getElementById(`date-range-${k}`);
-        if(el) el.innerText = timeline[k].label;
+        const validation = mBTStagesEngine.validateTimeline(k);
+        
+        if(el) {
+            if (validation.isBankrupt) {
+                el.innerText = "TIME BANKRUPTCY";
+                el.className = "text-[9px] font-black text-red-600 animate-pulse bg-red-50 px-2 rounded mt-0.5 tracking-tight";
+            } else {
+                el.innerText = timeline[k].label;
+                el.className = "text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight";
+            }
+        }
     });
 
     // 3. Update Setup Sliders (Visual Synchronization)
@@ -5522,12 +6329,10 @@ window.updateAllHeaders = () => {
         
         // B. Update Bar Width (ACTUAL UTILIZATION)
         const stageCost = (metrics.stageTotals && metrics.stageTotals[k]) ? metrics.stageTotals[k] : 0;
-        // Calculate utilization relative to the STAGE CAP, not total cap, for the bar
         const stageCap = metrics.totalCap * (cfg.ratio / 100);
         const utilPct = stageCap > 0 ? (stageCost / stageCap) * 100 : 0;
         
         const bar = document.getElementById(`setup_bar_${k}`);
-        // Visual logic: Blue if under cap, Red if over cap
         if (bar) {
             bar.style.width = Math.min(utilPct, 100).toFixed(2) + '%';
             bar.className = `absolute h-full rounded-full opacity-80 pointer-events-none transition-all duration-300 ${stageCost > stageCap ? 'bg-red-500' : 'bg-blue-600'}`;
@@ -5600,12 +6405,48 @@ window.updateAllHeaders = () => {
     function renderStatusBar() {
         const container = document.getElementById('statusBar');
         if (!container) return;
-        const lastAction = historyStack[historyIndex]?.description || "ENVIRONMENT READY";
+        
+        // Logic Resolution: Interactive Status Bar (Tier 4)
+        // Entry point for Audit Log (Tier 5). Pulsating dot indicates active recording.
+        // Updated to remove legacy Undo/Redo and focus on Activity History.
+        
+        const isRecording = budget.activityLog && budget.activityLog.length > 0;
+        
+        // Tier 4 Logic: Prioritize Modern Audit Log > Legacy History Stack > Default
+        let lastAction = "Ready to Go!";
+        if (isRecording) {
+            const lastEntry = budget.activityLog[budget.activityLog.length - 1];
+            // Format: "ADD: Director" or "UPDATE: Production Fee"
+            // Use Escaping to prevent XSS from user input
+            const safeAction = mBT.ui.render.esc(lastEntry.action);
+            const safeTarget = mBT.ui.render.esc(lastEntry.target);
+            lastAction = `${safeAction}: ${safeTarget}`;
+        } else if (typeof historyStack !== 'undefined' && historyStack.length > 0) {
+            lastAction = historyStack[historyIndex]?.description || "Ready to Go!";
+        }
+        
         container.innerHTML = `
-            <span id="statusBarMessage" class="truncate pr-4">${lastAction}</span>
-            <div class="flex gap-2 flex-shrink-0 border-l border-white/20 pl-4">
-                <button id="undoBtn" class="hover:text-blue-400 transition-colors" ${historyIndex <= 0 ? 'disabled style="opacity:0.3"' : ''}>UNDO</button>
-                <button id="redoBtn" class="hover:text-blue-400 transition-colors" ${historyIndex >= historyStack.length - 1 ? 'disabled style="opacity:0.3"' : ''}>REDO</button>
+            <div class="flex items-center justify-between w-full h-full px-2">
+                <!-- Left: Status & Rec -->
+                <div class="flex items-center gap-3 overflow-hidden mr-4">
+                     <div class="flex items-center gap-2 shrink-0">
+                         <span class="relative flex h-2 w-2">
+                            ${isRecording ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>' : ''}
+                            <span class="relative inline-flex rounded-full h-2 w-2 ${isRecording ? 'bg-red-500' : 'bg-slate-600'}"></span>
+                         </span>
+                         <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">REC</span>
+                    </div>
+                    <div class="w-px h-3 bg-slate-800"></div>
+                    <span class="truncate font-mono text-slate-400 text-[10px] uppercase tracking-widest">${lastAction}</span>
+                </div>
+                
+                <!-- Right: Activity History Button -->
+                <button onclick="mBT.features.history.open()" class="flex items-center gap-2 hover:text-blue-400 transition-colors group cursor-pointer shrink-0" title="View Activity Log & Undo Changes">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors hidden sm:block">Activity History</span>
+                    <div class="w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-slate-900 transition-all shadow-sm border border-slate-700">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+                    </div>
+                </button>
             </div>`;
     }
 
@@ -5635,7 +6476,7 @@ window.updateAllHeaders = () => {
                 const data = JSON.parse(e.target.result);
                 if (!data.projectName) throw new Error("Invalid file structure");
                 mBT.data.importFile(input); // Delegate to new system
-            } catch (err) { alert("Import failed: " + err.message); }
+            } catch (err) { mBTME.alert("Import Failed", err.message); }
             input.value = '';
         };
         reader.readAsText(file);
@@ -5649,7 +6490,7 @@ window.updateAllHeaders = () => {
             const text = e.target.result;
             if (!text) return;
             const lines = text.split(/\r\n|\n/);
-            if (lines.length < 2) return alert("Invalid CSV format.");
+            if (lines.length < 2) return mBTME.alert("Error", "Invalid CSV format.");
             const headers = lines[0].split(',').map(h => h.trim());
             const contacts = [];
             for (let i = 1; i < lines.length; i++) {
@@ -5665,8 +6506,13 @@ window.updateAllHeaders = () => {
                 contacts.push(obj);
             }
             const count = mBTOG.ingest(contacts, 'contact');
-            if (count > 0) { alert(`Success: ${count} new contacts imported.`); showSettingsModal('database', 'contacts'); } 
-            else { alert("Import completed. No new contacts added."); }
+            if (count > 0) { 
+                mBTME.alert("Success", `${count} new contacts imported.`, () => {
+                    if(typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
+                });
+            } else { 
+                mBTME.alert("Info", "Import completed. No new contacts added."); 
+            }
             input.value = '';
         };
         reader.readAsText(file);
@@ -5684,9 +6530,9 @@ window.updateAllHeaders = () => {
                         const installingWorker = reg.installing;
                         installingWorker.onstatechange = () => {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                if(confirm("New production logic available! Synchronize environment now?")) {
+                                mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", () => {
                                     window.location.reload();
-                                }
+                                });
                             }
                         };
                     };
@@ -5713,7 +6559,7 @@ window.updateAllHeaders = () => {
         
         // New File Menu Actions
         mBT.core.action('project-recycle', () => { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
-        mBT.core.action('project-sync', () => { fetchExchangeRates(); alert("Live Stream: Currency & Data Synchronized."); });
+        mBT.core.action('project-sync', () => { fetchExchangeRates(); mBTME.alert("Coming Soon", "Cloud Sync infrastructure is currently in development. Local exchange rates have been refreshed."); });
 
         mBT.core.action('project-import-trigger', () => { const input = document.getElementById('importFile'); if(input) input.click(); });
         mBT.core.action('project-import-file', (e, el) => { if(e.type === 'change') mBT.data.importFile(el); });
@@ -5728,7 +6574,7 @@ window.updateAllHeaders = () => {
 
         mBT.core.action('backup-env', () => { if(typeof mBTPublisher !== 'undefined') mBTPublisher.toMoo(); });
         mBT.core.action('print-pdf', () => window.print());
-        mBT.core.action('export-xlsx', () => alert('Excel export requires pro license'));
+        mBT.core.action('export-xlsx', () => mBTME.alert("Coming Soon", "Excel export is currently being built. All features will be free to use."));
         mBT.core.action('publish-modal', () => showPublishModal());
         
         // C. Footer / Global Modals
@@ -5738,10 +6584,10 @@ window.updateAllHeaders = () => {
         mBT.core.action('support-modal', () => showCoffeeWidget());
         
         // D. Budget Interaction (The Synapse)
-        mBT.core.action('section-toggle', (e, el) => handleToggleSection(el.dataset.id));
+        mBT.core.action('section-toggle', (e, el) => handleToggleSection(el.dataset.id, el));
         mBT.core.action('section-add', (e, el) => showItemSelectorModal(el.dataset.id));
         mBT.core.action('row-delete', (e, el) => handleRemoveItem(el.dataset.section, el.dataset.id));
-        
+
         mBT.core.action('row-lock', (e, el) => {
             const item = budget.sections[el.dataset.section]?.items.find(i => i.id === el.dataset.id);
             if(item) {
@@ -5757,13 +6603,19 @@ window.updateAllHeaders = () => {
 
         // F. Stage Actions
         mBT.core.action('stage-update', (e, el) => {
-             // Only process if value changed to avoid jitter, handled by 'change' event in router
              updateStageItem(el.dataset.id, el.dataset.section, el.dataset.stage, el.dataset.field, el.value);
         });
 
-        // G. History
-        mBT.core.action('undo', () => handleUndo());
-        mBT.core.action('redo', () => handleRedo());
+        // G. History (Tier 4/5/6 Alignment)
+        // Logic Resolution: Prioritize Tier 2 Namespace if available
+        mBT.core.action('undo', () => { 
+            if(mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
+            else if(typeof handleUndo === 'function') handleUndo(); 
+        });
+        mBT.core.action('redo', () => { 
+            if(mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
+            else if(typeof handleRedo === 'function') handleRedo(); 
+        });
     }
 
     /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
@@ -5773,66 +6625,57 @@ window.updateAllHeaders = () => {
         // Initialize Registry
         registerCoreActions();
 
-        // Architecture Fix: Listeners moved to Body to capture Modal events (siblings to #app)
         if (!document.body.dataset.listenersBound) {
             document.body.dataset.listenersBound = 'true';
             
             // --- Master Router (Delegation) ---
             const router = (e) => {
-                // 1. Try Action Registry (New System)
                 if (mBT.core.route(e)) return;
-
-                // 2. Fallback: Specific Legacy / ID Handlers
                 const target = e.target;
-                
-                // Login Button
                 if (target.id === 'loginBtn') handleLogin();
-                
-                // AI Tools Trigger
                 if (target.closest('#openAiToolsBtn')) showAIToolsModal();
             };
 
             document.body.addEventListener('click', router);
             document.body.addEventListener('change', router);
 
-            // --- Real-time Input Handling (Performance Critical) ---
-            // Separated from Action Router for speed on keypress/input
+            // --- Keyboard Shortcuts (Tier 6 Wiring) ---
+            document.body.addEventListener('keydown', (e) => {
+                // Undo: Ctrl+Z
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                    e.preventDefault();
+                    if(mBT.core.actions['undo']) mBT.core.actions['undo']();
+                }
+                // Redo: Ctrl+Y
+                if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                    e.preventDefault();
+                    if(mBT.core.actions['redo']) mBT.core.actions['redo']();
+                }
+            });
+
+            // --- Real-time Input Handling ---
             document.body.addEventListener('input', (e) => {
                 const input = e.target;
-                
-                // Project Name (Special Case)
-                if (input.id === 'projectName') {
-                    handleProjectNameChange(e);
-                    return;
-                }
-
-                // Global Percentages
+                if (input.id === 'projectName') { handleProjectNameChange(e); return; }
                 if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                     budget[input.id] = parseFloat(input.value) || 0;
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
                     return;
                 }
-
-                // Tier 5 & 6 Bridge: Real-time handling
                 if (input.dataset.field) {
-                    // A. Stage Card Updates (Real-time Math + Debounced Save)
                     if (input.dataset.action === 'stage-update') {
                          if(typeof updateStageItem === 'function') updateStageItem(input.dataset.id, input.dataset.section, input.dataset.stage, input.dataset.field, input.value, true);
-                    }
-                    // B. Standard Rows (Visual Paint only, Save handled by Tier 2 Proxy)
-                    else if (!input.dataset.action) {
+                    } else if (!input.dataset.action) {
                         handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, 'User Input');
                     }
                 }
             });
         }
 
-        // --- Footer Routing ---
         if (footer) {
             footer.addEventListener('click', (e) => {
                 const btn = e.target.closest('button');
                 if (!btn) return;
-                // Manual ID mapping for static footer
                 if (btn.id === 'stagesFooterBtn') mBT.core.actions['stages-modal']();
                 else if (btn.id === 'docsFooterBtn') mBT.core.actions['docs-modal']();
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
