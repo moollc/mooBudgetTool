@@ -75,7 +75,11 @@
 /* --- 10. Document Studio Canvas --- */
         .grid-stack { background-color: #f3f4f6; min-height: 80vh; padding: 10px !important; }
         .grid-stack-item-content { background-color: white; border-radius: 0.75rem; border: 1px solid #e5e7eb; overflow: hidden !important; display: flex; flex-direction: column; cursor: grab; }
-   
+        
+        /* Stabilization: Hide tools/handles when not editing */
+        #mBTDB_Workspace:not(.editing-mode) .ui-resizable-handle,
+        #mBTDB_Workspace:not(.editing-mode) .widget-tools { display: none !important; }
+     
 /* --- 11. Form Utilities (Spinner Removal) --- */
         .no-spinner::-webkit-inner-spin-button, 
         .no-spinner::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -2162,19 +2166,18 @@ console.log("TIER 3 complete");
 
     /* --- 3. UI Namespace Consolidation --- */
     // Logic Resolution: Moving all UI logic under one roof.
-    
+
     // 2. The Main Render Loop (The Gatekeeper)
     mBT.ui.refresh = function() {
         const app = document.getElementById('app');
         if (!budget || !app) return;
 
         // Deficiency Fix: Theme Toggle Latency
-        // We apply the container classes and styles here, on every cycle.
-        // This ensures checking the "Classic Theme" box updates the UI immediately without a reload.
+        // Updated: Standardized on Slate-200 (#e2e8f0) for improved production environment contrast.
         const isClassic = budget.settings?.classicTheme || false;
         app.className = `max-w-7xl mx-auto px-4 py-8 ${isClassic ? 'classic-theme' : ''}`;
         if(isClassic) document.body.style.backgroundColor = "#e5e5e5";
-        else document.body.style.backgroundColor = "#f3f4f6";
+        else document.body.style.backgroundColor = "#e2e8f0";
         
         // A. Smart Detection: Does the shell exist?
         const shellExists = document.getElementById('projectName') && document.getElementById('budget-sections');
@@ -2632,58 +2635,120 @@ function getAbbreviatedName(name, maxLen = 25) {
 
         /* --- v19.55 LAYOUT ENGINES: High-level Container Abstractions --- */
         layouts: {
-            // Logic Resolution: Standardized "Studio Panel" (Header + Search + Scroll List + optional Footer)
-            studioPanel: function({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
-                const actionBtns = actions.map(a => 
-                    `<button onclick="${a.onClick}" class="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-${a.color || 'blue'}-500 transition-all" title="${a.title||''}">${a.icon}</button>`
-                ).join('');
+            // Logic Resolution: Modular Studio Layout with Dedicated Title Bar and Expanded Control Header
+            studioPanel: function({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
+                // Logic Resolution: Strip structural prefixes for the clean centered title
+                const cleanTitle = title.replace(/^(Studio|Budget|Document):\s*/i, '');
+                
+                // Isolate System Close (isolated on right) from other actions
+                const closeAction = actions.find(a => a.title === 'Close');
 
-                return `<div class="flex flex-col max-h-[90vh]">
-                    <div class="p-6 bg-white border-b border-slate-100 flex-shrink-0 z-10">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="font-black text-slate-900 text-xs uppercase tracking-widest">${mBT.ui.render.esc(title)}</h3>
-                            <div class="flex gap-2">${actionBtns}</div>
+                const renderBtn = (a) => `
+                    <button onclick="${a.onClick}" class="p-2.5 bg-slate-800/80 rounded-xl text-slate-300 hover:text-white hover:bg-${a.color || 'blue'}-600/50 transition-all shadow-sm border border-slate-700/50" title="${a.title||''}">
+                        ${a.icon}
+                    </button>`;
+
+                return `
+                <div class="flex flex-col max-h-[90vh] bg-slate-200">
+                    <!-- Sub-Header: Document Identity Bar -->
+                    <div class="bg-slate-900 text-center py-2 border-b border-slate-800 flex-shrink-0 z-30">
+                        <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-4">${mBT.ui.render.esc(cleanTitle)}</h3>
+                    </div>
+
+                    <!-- Main Studio Header (2-Column Control Grid) -->
+                    <header class="bg-slate-900 p-3 flex-shrink-0 z-20 shadow-lg grid grid-cols-[1fr_auto] items-center gap-4">
+                        <!-- Left: Integrated Toolbar & Operations (Occupies remaining space) -->
+                        <div id="${toolbarId}" class="flex items-center gap-2 overflow-hidden min-w-0"></div>
+
+                        <!-- Right: System Control (Isolated Close) -->
+                        <div class="flex justify-end shrink-0">
+                            ${closeAction ? renderBtn(closeAction) : ''}
                         </div>
+                    </header>
+
+                    <!-- Search & Secondary Nav -->
+                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 shadow-sm">
                         <div class="relative">
                             <input type="text" id="${searchId}" placeholder="${searchPlaceholder || 'SEARCH...'}" class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
                             <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
                         </div>
                     </div>
-                    <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-50/50 ${containerClasses}">
+
+                    <!-- Main Content Workspace (Slate-200 background for Widget separation) -->
+                    <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-200 ${containerClasses}">
                         ${contentHtml}
                     </div>
+
+                    <!-- Footer -->
                     ${footerHtml ? `<div class="p-6 bg-white border-t border-slate-100 flex-shrink-0 z-10">${footerHtml}</div>` : ''}
                 </div>`;
             }
         },
+        layouts: {
+            // Logic Resolution: Modular Studio Layout with Integrated Header and Enhanced Visual Separation
+            studioPanel: function({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
+                // Logic Resolution: Strip structural prefixes for the clean centered title
+                const cleanTitle = title.replace(/^(Studio|Budget|Document):\s*/i, '');
+                
+                // Isolate System Close (isolated on right) from other actions
+                const closeAction = actions.find(a => a.title === 'Close');
 
+                const renderBtn = (a) => `
+                    <button onclick="${a.onClick}" class="p-2.5 bg-slate-800/80 rounded-xl text-slate-300 hover:text-white hover:bg-${a.color || 'blue'}-600/50 transition-all shadow-sm border border-slate-700/50" title="${a.title||''}">
+                        ${a.icon}
+                    </button>`;
+
+                return `
+                <div class="flex flex-col max-h-[90vh] bg-slate-200">
+                    <!-- Main Studio Header (3-Column Integrated Grid) -->
+                    <header class="bg-slate-900 p-3 flex-shrink-0 z-30 shadow-lg grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-slate-800">
+                        <!-- Left: Integrated Toolbar -->
+                        <div id="${toolbarId}" class="flex items-center gap-2 overflow-hidden min-w-0"></div>
+
+                        <!-- Center: Document Identity (Integrated to unblock vertical space) -->
+                        <div class="text-center overflow-hidden">
+                            <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-2">${mBT.ui.render.esc(cleanTitle)}</h3>
+                        </div>
+
+                        <!-- Right: System Control -->
+                        <div class="flex justify-end shrink-0">
+                            ${closeAction ? renderBtn(closeAction) : ''}
+                        </div>
+                    </header>
+
+                    <!-- Search & Secondary Nav -->
+                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 shadow-sm">
+                        <div class="relative">
+                            <input type="text" id="${searchId}" placeholder="${searchPlaceholder || 'SEARCH...'}" class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                        </div>
+                    </div>
+
+                    <!-- Main Content Workspace (Slate-100 background for Widget separation) -->
+                    <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-100 ${containerClasses}">
+                        ${contentHtml}
+                    </div>
+
+                    <!-- Footer -->
+                    ${footerHtml ? `<div class="p-6 bg-white border-t border-slate-100 flex-shrink-0 z-10">${footerHtml}</div>` : ''}
+                </div>`;
+            }
+        },
+        
         // --- Layout Shell: Section container generation ---
         // Logic Resolution: Constructs the collapsible department headers and their item containers.
-        // Updated to use delegation: data-action="section-toggle"
+        // Updated: Removed redundant integrated headers that caused visual double-up on desktop.
         section({ name, total = '', isOpen = true, content = '' }) {
             const safeName = this.esc(name);
+            const rawId = name.replace(/"/g, '&quot;'); // Attribute-safe raw key for dataset lookups
             return `
-                <div class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100">
                     <div class="sticky-section-header relative min-h-[48px] bg-slate-50 border-b border-slate-100 select-none group z-30">
-                        <div class="px-4 py-3 flex justify-between items-center cursor-pointer" data-action="section-toggle" data-id="${safeName}">
+                        <div class="px-4 py-3 flex justify-between items-center cursor-pointer z-40 active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="${rawId}">
                             <div class="flex items-center gap-3 pointer-events-none">
                                 <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">${safeName}</h2>
                             </div>
                             <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono flex-shrink-0 pointer-events-none">${total}</span>
-                        </div>
-                        
-                        <!-- Integrated Column Headers (Desktop Only) -->
-                        <div class="${isOpen ? 'hidden md:flex' : 'hidden'} px-2 pb-2 text-[10px] font-black uppercase tracking-tighter text-slate-400 w-full">
-                            <div class="w-12 text-center">Crew</div>
-                            <div class="w-8"></div>
-                            <div class="flex-grow pl-2">Description</div>
-                            <div class="w-16 text-center">Qty</div>
-                            <div class="w-20 text-center">Unit</div>
-                            <div class="w-32 text-right md:text-left">Rate</div>
-                            <div class="w-28 text-right md:text-left">Est</div>
-                            <div class="w-28 text-right md:text-left">Act</div>
-                            <div class="w-28 text-right">Var</div>
-                            <div class="w-10"></div>
                         </div>
                     </div>
                     <div class="section-content ${isOpen ? '' : 'hidden'} animate-in fade-in slide-in-from-top-1 duration-200">
@@ -2905,6 +2970,8 @@ function handleToggleSection(sectionName, triggerEl) {
         saveBudget();
         
         // Tier 4 Surgical Update: Direct DOM toggle
+        // Logic Resolution: Ensures triggerEl.closest('.mb-4') finds the card wrapper
+        // and container.querySelector('.section-content') targets the collapsible area.
         if (triggerEl) {
             const container = triggerEl.closest('.mb-4');
             const content = container ? container.querySelector('.section-content') : null;
@@ -3673,6 +3740,7 @@ window.mBTDB = {
         },
         
         // --- PRE-PRODUCTION ---
+
         'breakdown': {
             label: "Script Breakdown",
             widgets: [
@@ -3680,6 +3748,18 @@ window.mBTDB = {
                 { id: 'cast', x: 0, y: 2, w: 6, h: 8, type: 'cast', label: "Characters" },
                 { id: 'logistics', x: 6, y: 2, w: 6, h: 8, type: 'logistics', label: "Locations" },
                 { id: 'notes', x: 0, y: 10, w: 12, h: 6, type: 'richText', label: "Scene Notes & Requirements" }
+            ]
+        },
+        'storyboard': {
+            label: "Storyboard",
+            widgets: [
+                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                { id: 'frame1', x: 0, y: 2, w: 4, h: 6, type: 'image', label: "Frame 1" },
+                { id: 'desc1', x: 0, y: 8, w: 4, h: 3, type: 'richText', label: "Action 1" },
+                { id: 'frame2', x: 4, y: 2, w: 4, h: 6, type: 'image', label: "Frame 2" },
+                { id: 'desc2', x: 4, y: 8, w: 4, h: 3, type: 'richText', label: "Action 2" },
+                { id: 'frame3', x: 8, y: 2, w: 4, h: 6, type: 'image', label: "Frame 3" },
+                { id: 'desc3', x: 8, y: 8, w: 4, h: 3, type: 'richText', label: "Action 3" }
             ]
         },
         'shotlist': {
@@ -3690,7 +3770,16 @@ window.mBTDB = {
                 { id: 'logistics', x: 0, y: 14, w: 12, h: 4, type: 'logistics', label: "Locations" }
             ]
         },
+        'preCheck': {
+            label: "Pre-Prod Checklist",
+            widgets: [
+                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                { id: 'logistics', x: 0, y: 2, w: 6, h: 10, type: 'richText', label: "Logistics Checklist" },
+                { id: 'creative', x: 6, y: 2, w: 6, h: 10, type: 'richText', label: "Creative Checklist" }
+            ]
+        },
         'casting': {
+
             label: "Casting Sheet",
             widgets: [
                 { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
@@ -3726,15 +3815,44 @@ window.mBTDB = {
                 { id: 'crew', x: 0, y: 6, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew" }
             ]
         },
+        
+        // --- CREATIVE & FINANCIAL ---
+        'pitchDeck': {
+            label: "Pitch Deck",
+            widgets: [
+                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                { id: 'cover', x: 0, y: 2, w: 6, h: 8, type: 'image', label: "Key Art" },
+                { id: 'synopsis', x: 6, y: 2, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis" },
+                { id: 'mood1', x: 0, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 1" },
+                { id: 'mood2', x: 4, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 2" },
+                { id: 'mood3', x: 8, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 3" },
+                { id: 'team', x: 0, y: 14, w: 12, h: 6, type: 'contacts', label: "Key Creative Team" }
+            ]
+        },
+        'budgetRep': {
+            label: "Budget Report",
+            widgets: [
+                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                { id: 'summary', x: 0, y: 2, w: 12, h: 4, type: 'richText', label: "Executive Summary" },
+                { id: 'breakdown', x: 0, y: 6, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown" }
+            ]
+        },
+        'talentAgr': {
+            label: "Talent Agreement",
+            widgets: [
+                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                { id: 'terms', x: 0, y: 2, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions" }
+            ]
+        },
 
         // --- WRITING / LEGAL / GENERIC ---
         'script': { label: "Script", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Screenplay" }] },
         'treatment': { label: "Treatment", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Story Treatment" }] },
-        'pitchDeck': { label: "Pitch Deck", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Pitch Content" }] },
         'dealMemo': { label: "Deal Memo", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'terms', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Terms of Agreement" }] },
         'insurance': { label: "Insurance", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Coverage Details" }] },
         'permit': { label: "Permit", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Permit Details" }] }
     },
+
     // --- 2. Portal Orchestration ---
     open: function(docId) {
         this.state.currentDocId = docId;
@@ -3765,6 +3883,7 @@ window.mBTDB = {
         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
         if (typeof render === 'function') render();
     },
+
     toggleEditMode: function() {
         if (this.state.isEditing && this.state.grid) this._saveLayoutState();
         this.state.isEditing = !this.state.isEditing;
@@ -3774,11 +3893,9 @@ window.mBTDB = {
             if (this.state.isEditing) {
                 container.classList.add('editing-mode');
                 grid.setStatic(false);
-                grid.enable();
             } else {
                 container.classList.remove('editing-mode');
                 grid.setStatic(true);
-                grid.disable();
             }
             this._updateHeaderButtons();
         }
@@ -3792,22 +3909,70 @@ window.mBTDB = {
         });
         this._triggerSave();
     },
+
     // --- 3. Publishing & Intelligence Hub ---
+    openPreviewSelector: function() {
+        const content = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-slate-50">
+                <button onclick="mBTME.close('previewSelectorModal'); mBTDB.previewDoc('standard')" class="flex flex-col items-center gap-4 p-6 bg-white border border-slate-200 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all group text-center w-full">
+                    <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                        ${mBTAssets.file}
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Industry Standard</h4>
+                        <p class="text-[9px] text-slate-400 font-bold mt-1">Clean White • High Contrast</p>
+                    </div>
+                </button>
+
+                <button onclick="mBTME.close('previewSelectorModal'); mBTDB.previewDoc('graphic')" class="flex flex-col items-center gap-4 p-6 bg-white border border-slate-200 rounded-3xl hover:border-purple-500 hover:shadow-xl transition-all group text-center w-full">
+                    <div class="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                        ${mBTAssets.image}
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Graphic Layout</h4>
+                        <p class="text-[9px] text-slate-400 font-bold mt-1">Workspace Grey • Original UI</p>
+                    </div>
+                </button>
+            </div>`;
+        
+        mBTME.open('previewSelector', 'Capture Mode', content, 'max-w-lg', { noPadding: true });
+    },
+
     previewDoc: function(mode) {
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
         if (!doc || typeof mBTPublisher === 'undefined') return;
-        if(mBTME.showLoader) mBTME.showLoader("Generating Professional Preview...");
+        
+        const workspace = document.getElementById('mBTDB_Workspace');
+        if(!workspace) return;
+
+        // Logic Resolution: For 'standard' mode, we temporarily strip the workspace grey 
+        // to ensure a high-contrast white paper export.
+        if (mode === 'standard') {
+            workspace.classList.remove('bg-slate-200');
+            workspace.classList.add('bg-white');
+        }
+
+        if(mBTME.showLoader) mBTME.showLoader(`Rendering ${mode === 'standard' ? 'Industry' : 'Graphic'} Preview...`);
+        
         mBTPublisher.generateFastPreview(mode, doc.content.data, (jpegURL) => {
+            // Restore visual separation state
+            if (mode === 'standard') {
+                workspace.classList.remove('bg-white');
+                workspace.classList.add('bg-slate-200');
+            }
+
             if(mBTME.hideLoader) mBTME.hideLoader();
-            mBTME.open('previewModal', `Industry View: ${mode.toUpperCase()}`,
+            mBTME.open('previewModal', `Snapshot: ${mode.toUpperCase()}`,
                 `<div class="flex flex-col items-center bg-slate-900 h-full p-8 overflow-auto no-scrollbar"><img src="${jpegURL}" id="finalPreviewImage" class="shadow-2xl border border-black max-w-full h-auto mb-24 bg-white rounded-sm"><div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-4 z-[10001]"><button onclick="mBTPublisher.downloadJPEG('${jpegURL}', '${doc.label}')" class="flex items-center gap-3 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95">Download JPEG</button><button onclick="mBTDB.sendToDistribution('${jpegURL}')" class="flex items-center gap-3 bg-emerald-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95">Send to Crew</button><button onclick="mBTME.close('previewModal')" class="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-slate-100 transition-all">Close</button></div></div>`, 'w-full h-full');
         });
     },
+
     sendToDistribution: function(jpegURL) {
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
         this.close();
         if(window.openDocumentShareSelector) openDocumentShareSelector(doc.id);
     },
+
     autoFillWidget: function(type, docId) {
         mBTME.confirm("Auto-Fill", `Auto-fill ${type}? Current items will be preserved.`, () => {
             if(type === 'contacts') {
@@ -3842,23 +4007,51 @@ window.mBTDB = {
             this.renderFrame();
         } catch(e) { mBTME.alert("Sync Error", "Weather Synchronization Failure"); if(btn) btn.innerHTML = this.icons.cloud; }
     },
+
     // --- 4. Render Engine Handshake ---
     renderFrame: function() {
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
         const container = document.getElementById('mBTDB_Container');
         if(!container) return;
-        const toolbarHTML = `<div id="mBTDB_Header" class="bg-slate-900 text-white p-3 flex justify-between items-center sticky top-0 z-50 shadow-xl border-b border-black print:hidden"><div class="flex items-center gap-4"><h2 class="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2"><span class="text-blue-500">${this.icons.list}</span> Studio: ${RenderEngine.esc(doc.label)}</h2><div class="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700"><button onclick="mBTDB.syncFromBudget()" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 text-slate-300 hover:bg-slate-700 border-r border-slate-700 transition-colors">Sync Budget</button><button onclick="mBTDB.syncFromPrevious()" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 text-slate-300 hover:bg-slate-700 transition-colors">Sync Prev</button></div></div><div class="flex gap-2 items-center" id="mBTDB_Buttons"></div></div>`;
-        const workspaceHTML = `<div id="mBTDB_Workspace" class="bg-slate-100 min-h-screen p-6 overflow-y-auto no-scrollbar ${this.state.isEditing ? 'editing-mode' : ''}"><div id="mBTDB_MetaArea" class="mb-6 bg-white p-6 shadow-2xl rounded-2xl border border-slate-200 animate-in fade-in duration-500"></div><div class="grid-stack no-scrollbar"></div></div>`;
-        container.innerHTML = toolbarHTML + workspaceHTML;
+
+        // Standardized Studio Actions
+        const actions = [
+            { icon: mBTAssets.sync, title: "Sync Budget", onClick: "mBTDB.syncFromBudget()", color: "emerald" },
+            { icon: mBTAssets.refresh, title: "Sync Previous", onClick: "mBTDB.syncFromPrevious()", color: "blue" },
+            { icon: mBTAssets.image, title: "Preview", onClick: "mBTDB.previewDoc('standard')", color: "purple" },
+            { icon: mBTAssets.close, title: "Close", onClick: "mBTDB.close()", color: "rose" }
+        ];
+
+        const contentHtml = `
+            <div id="mBTDB_MetaArea" class="mb-6 bg-white p-6 shadow-sm rounded-2xl border border-slate-200 animate-in fade-in duration-500"></div>
+            <div class="grid-stack no-scrollbar"></div>
+        `;
+
+        container.innerHTML = RenderEngine.layouts.studioPanel({
+            title: `Studio: ${doc.label}`,
+            searchId: 'mBTDB_Search',
+            searchPlaceholder: 'SEARCH DOCUMENT...',
+            contentId: 'mBTDB_Workspace',
+            contentHtml: contentHtml,
+            actions: actions,
+            toolbarId: 'mBTDB_Buttons',
+            containerClasses: `p-6 ${this.state.isEditing ? 'editing-mode' : ''}`
+        });
+
         this._renderMetaHeader(doc);
         setTimeout(() => {
             if(typeof GridStack === 'undefined') return console.error("GridStack resolution failure.");
-            this.state.grid = GridStack.init({ column: 12, cellHeight: 65, minRow: 1, margin: 8, animate: true, float: true, staticGrid: !this.state.isEditing }, container.querySelector('.grid-stack'));
+            const wrapper = document.getElementById('mBTDB_Workspace');
+            // Re-apply editing class if state persisted
+            if(this.state.isEditing) wrapper.classList.add('editing-mode');
+            
+            this.state.grid = GridStack.init({ column: 12, cellHeight: 65, minRow: 1, margin: 8, animate: true, float: true, staticGrid: !this.state.isEditing }, wrapper.querySelector('.grid-stack'));
             this._loadWidgetsToGrid(doc);
             this._updateHeaderButtons();
             this.state.grid.on('change', () => this._triggerSave());
         }, 50);
     },
+
     _loadWidgetsToGrid: function(doc) {
         const grid = this.state.grid; grid.removeAll(); grid.batchUpdate();
         doc.content.widgets.forEach(w => { if(w.type === 'header') return; grid.addWidget({ x: w.x, y: w.y, w: w.w, h: w.h, content: this._generateWidgetHTML(w, doc), id: w.id }); });
@@ -3868,7 +4061,7 @@ window.mBTDB = {
         const cleanTitle = widget.label || (widget.type.charAt(0).toUpperCase() + widget.type.slice(1));
         let tools = ''; if(widget.type === 'contacts') tools += `<button onclick="mBTDB.toggleVertical('${widget.id}')" class="p-1.5 hover:bg-slate-100 rounded-md transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
         if(widget.type !== 'image') tools += `<button onclick="mBTDB.autoFillWidget('${widget.type}', '${doc.id}')" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-all">${this.icons.wand}</button>`;
-        return `<div class="grid-stack-item-content group"><div class="widget-header flex justify-between items-center p-2 bg-white border-b border-slate-50"><input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-500 w-32 outline-none focus:text-blue-600 transition-colors"><div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">${tools}<button onclick="mBTDB.deleteWidget('${widget.id}')" class="p-1.5 hover:text-red-600 transition-colors">${this.icons.trash}</button></div></div><div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div></div>`;
+        return `<div class="grid-stack-item-content group"><div class="widget-header flex justify-between items-center p-2 bg-white border-b border-slate-50"><input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-500 w-32 outline-none focus:text-blue-600 transition-colors"><div class="widget-tools flex items-center gap-0.5">${tools}<button onclick="mBTDB.deleteWidget('${widget.id}')" class="p-1.5 hover:text-red-600 transition-colors">${this.icons.trash}</button></div></div><div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div></div>`;
     },
     _getContentForWidget: function(widget, doc) {
         const data = this.resolveLinkedData(doc); // LIVE SYNC (Phase 9)
@@ -4123,13 +4316,67 @@ window.mBTDB = {
         mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`); 
         setTimeout(() => { document.body.removeChild(clone); }, 2000); 
     },
+
     // --- 6. Switchboard Integration ---
     _updateHeaderButtons: function() {
-        const btnContainer = document.getElementById('mBTDB_Buttons'); if(!btnContainer) return; const isEd = this.state.isEditing;
-        const previewMenu = `<div class="relative inline-block"><button onclick="this.nextElementSibling.classList.toggle('hidden');" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 flex items-center gap-2 transition-all outline-none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>Preview</button><div class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-[9999] overflow-hidden"><button onclick="mBTDB.previewDoc('standard'); this.parentElement.classList.add('hidden')" class="flex items-center gap-3 w-full text-left px-4 py-3 text-[10px] text-slate-600 hover:bg-blue-50 hover:text-blue-700 font-black uppercase tracking-widest border-b border-slate-50 transition-colors">Standard Layout</button><button onclick="mBTDB.previewDoc('graphic'); this.parentElement.classList.add('hidden')" class="flex items-center gap-3 w-full text-left px-4 py-3 text-[10px] text-slate-600 hover:bg-blue-50 hover:text-blue-700 font-black uppercase tracking-widest transition-colors">Graphic View</button></div></div>`;
-        btnContainer.innerHTML = `<div class="flex gap-1 mr-4 border-r border-slate-700 pr-4"><button onclick="mBTDB.undo()" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors" title="Undo">${this.icons.undo}</button><button onclick="mBTDB.redo()" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors" title="Redo">${this.icons.redo}</button><button onclick="mBTDB.snapshotDoc()" class="p-2 hover:bg-blue-900/50 rounded-lg text-blue-400 transition-colors" title="Clone">${this.icons.copy}</button><button onclick="mBTDB.saveTemplate()" class="p-2 hover:bg-emerald-900/50 rounded-lg text-emerald-400 transition-colors" title="Save Template">${this.icons.save}</button></div>${isEd ? `<div class="flex items-center bg-slate-800 rounded-lg px-2 mr-2"><select id="mBTDB_WidgetSelect" class="bg-transparent text-[9px] font-black uppercase tracking-widest text-white h-8 outline-none cursor-pointer"><option value="richText">Note Block</option><option value="image">Image Container</option><option value="schedule">Schedule</option><option value="cast">Cast List</option><option value="crew">Crew List</option><option value="logistics">Logistics</option><option value="contacts">Contacts</option></select><button onclick="mBTDB.addWidget()" class="text-emerald-400 p-2 hover:scale-110 transition-transform">${this.icons.plus}</button></div>` : ''}<button onclick="mBTDB.toggleEditMode()" class="px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg transition-all ${isEd ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'}">${isEd ? 'Save Layout' : 'Modify Layout'}</button>${previewMenu}<button onclick="mBTDB.close()" class="bg-red-900/80 text-red-200 p-2 rounded-lg hover:bg-red-600 hover:text-white transition-all ml-2">${this.icons.close}</button>`;
+        const btnContainer = document.getElementById('mBTDB_Buttons'); 
+        if(!btnContainer) return; 
+        const isEd = this.state.isEditing;
+
+        const pencilIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+        const checkIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+        // Widget Selector (Edit Mode Only)
+        const widgetSelector = isEd ? `
+            <div class="flex items-center bg-white rounded-lg px-2 py-1 mr-3 shadow-sm animate-in fade-in zoom-in duration-200 border border-slate-700/30">
+                <select id="mBTDB_WidgetSelect" class="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-900 h-6 outline-none cursor-pointer border-none mr-2 w-24">
+                    <option value="richText">Note Block</option>
+                    <option value="image">Image Block</option>
+                    <option value="schedule">Schedule</option>
+                    <option value="cast">Cast List</option>
+                    <option value="crew">Crew List</option>
+                    <option value="logistics">Logistics</option>
+                    <option value="contacts">Contacts</option>
+                </select>
+                <button onclick="mBTDB.addWidget()" class="text-blue-600 hover:text-blue-800 transition-colors p-1 hover:bg-blue-50 rounded" title="Add Widget">
+                    ${this.icons.plus}
+                </button>
+            </div>` : '';
+
+        // Main Toolbar with Functional Grouping
+        btnContainer.innerHTML = `
+            <div class="flex items-center gap-1">
+                ${widgetSelector}
+                
+                <!-- History Controls -->
+                <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                    <button onclick="mBTDB.undo()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Undo">${this.icons.undo}</button>
+                    <button onclick="mBTDB.redo()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Redo">${this.icons.redo}</button>
+                </div>
+
+                <!-- Integration Hub: Sync & Preview -->
+                <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                    <button onclick="mBTDB.syncFromBudget()" class="p-2 text-emerald-500 hover:text-emerald-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Budget">${mBTAssets.sync}</button>
+                    <button onclick="mBTDB.syncFromPrevious()" class="p-2 text-blue-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Previous">${mBTAssets.refresh}</button>
+                    <button onclick="mBTDB.openPreviewSelector()" class="p-2 text-purple-500 hover:text-purple-400 transition-colors rounded-lg hover:bg-slate-800" title="Document Preview">${mBTAssets.image}</button>
+                </div>
+
+                <!-- Snapshot Tools -->
+                <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                    <button onclick="mBTDB.snapshotDoc()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Duplicate Document">${this.icons.copy}</button>
+                    <button onclick="mBTDB.saveTemplate()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Save Blueprint">${this.icons.save}</button>
+                </div>
+
+                <!-- Layout Toggle -->
+                <button onclick="mBTDB.toggleEditMode()" class="p-2 rounded-lg transition-all ${isEd ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}" title="${isEd ? 'Finish Editing' : 'Edit Layout'}">
+                    ${isEd ? checkIcon : pencilIcon}
+                </button>
+            </div>
+        `;
     },
+
     _triggerSave: function() {
+
         if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
         if(typeof saveBudget === 'function') saveBudget();
     },
@@ -5650,7 +5897,8 @@ window.mBTDB = {
  // ---- Tier 5 Part 3 ---- //
 
 
- /* ========= v19.60 DOCUMENTS HUB (mBT.features.documents) ========= */
+
+/* ========= v19.60 DOCUMENTS HUB (mBT.features.documents) ========= */
     mBT.features.documents = {
         // Logic Resolution: Creates a new document instance from a template definition
         createFromTemplate: function(templateId) {
@@ -5684,11 +5932,10 @@ window.mBTDB = {
         openVault: function(activeTab = 'All') {
             const docs = budget.documents || [];
             
-            // Helper: Resolve Category
-            const getCat = (type) => {
-                const t = mBTOG.templates.find(x => x.id === type);
-                return t ? t.cat : 'Other'; 
-            };
+            // Helper: Resolve Template Metadata
+            const getTmpl = (type) => mBTOG.templates.find(x => x.id === type) || { cat: 'Other', icon: 'file' };
+            const getCat = (type) => getTmpl(type).cat;
+            const getIcon = (type) => mBTAssets[getTmpl(type).icon] || mBTAssets.file;
 
             // Filter Logic
             const filteredDocs = activeTab === 'All' 
@@ -5696,7 +5943,6 @@ window.mBTDB = {
                 : docs.filter(d => getCat(d.type) === activeTab);
 
             // Logic Resolution: View Layout Strategy linked to Settings
-            // Block 5: Compact Mode Integration
             const isCompact = budget.settings?.compactMode || false;
             
             // 2. Define Layout Classes (Grid vs List)
@@ -5709,12 +5955,13 @@ window.mBTDB = {
 
             // Logic Resolution: Dynamic Item Renderer (Grid Card vs List Row)
             const renderDocItem = (doc) => {
+                const iconSvg = getIcon(doc.type);
                 if (isCompact) {
                     // Grid Card (Vertical Layout)
                     return `
-                    <div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" onclick="mBTDB.open('${doc.id}')">
+                    <div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" onclick="mBT.features.documents.showOptions('${doc.id}')">
                          <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors shrink-0">
-                            ${mBTAssets.file}
+                            ${iconSvg}
                          </div>
                          <div class="w-full overflow-hidden">
                             <div class="text-[10px] font-black uppercase text-slate-700 truncate w-full" title="${RenderEngine.esc(doc.label)}">${RenderEngine.esc(doc.label || 'Untitled')}</div>
@@ -5729,10 +5976,10 @@ window.mBTDB = {
                     // List Row (Horizontal Layout)
                     return RenderEngine.ui.card({
                         id: doc.id,
-                        icon: mBTAssets.file,
+                        icon: iconSvg,
                         title: doc.label || 'Untitled Document',
                         subtitle: doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document',
-                        onClick: `mBTDB.open('${doc.id}')`,
+                        onClick: `mBT.features.documents.showOptions('${doc.id}')`,
                         actions: [
                             { icon: mBTAssets.copy, title: 'Duplicate', color: 'blue', onClick: `mBTDB.snapshotDoc('${doc.id}')` },
                             { icon: mBTAssets.trash, title: 'Archive', color: 'rose', onClick: `window.handleDocTrash('${doc.id}')` }
@@ -5775,7 +6022,6 @@ window.mBTDB = {
                     list.innerHTML = docsHtml;
                 }
                 
-                // Re-render search input to strip old listeners
                 const searchContainer = document.getElementById('docSearchContainer');
                 if (searchContainer) {
                     searchContainer.innerHTML = `<input type="text" id="docSearch" placeholder="SEARCH ${activeTab.toUpperCase()}..." class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all"><div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>`;
@@ -5831,14 +6077,16 @@ window.mBTDB = {
         // Logic Resolution: Opens the Template Selector (Blueprints)
         openTemplateSelector: function() {
             const templates = mBTOG.templates || [];
-            const templateHtml = templates.map(tmpl => RenderEngine.ui.card({
+            const renderTmplItem = (tmpl) => RenderEngine.ui.card({
                 id: tmpl.id,
-                icon: tmpl.icon || '📄',
+                icon: mBTAssets[tmpl.icon] || mBTAssets.file,
                 title: tmpl.label,
                 subtitle: tmpl.cat || 'General',
                 onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')`,
                 actions: [{ icon: mBTAssets.plus, title: 'Create', color: 'blue', onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')` }]
-            })).join('');
+            });
+
+            const templateHtml = templates.map(renderTmplItem).join('');
 
             const content = RenderEngine.layouts.studioPanel({
                 title: 'Select Template',
@@ -5851,14 +6099,79 @@ window.mBTDB = {
                 
             mBTME.open('newDocSelector', 'Studio Blueprints', content, 'max-w-md', { noPadding: true, hideHeader: true });
             
-            mBTME.attachSearch('tmplSearch', 'templateListBody', templates, (tmpl) => RenderEngine.ui.card({
-                id: tmpl.id,
-                icon: tmpl.icon || '📄',
-                title: tmpl.label,
-                subtitle: tmpl.cat || 'General',
-                onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')`,
-                actions: [{ icon: mBTAssets.plus, title: 'Create', color: 'blue', onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')` }]
-            }));
+            mBTME.attachSearch('tmplSearch', 'templateListBody', templates, renderTmplItem);
+        },
+
+
+        // Logic Resolution: Opens the Action Menu for choosing editor or storage
+        showOptions: function(docId) {
+            const doc = budget.documents.find(d => d.id === docId);
+            if (!doc) return;
+
+            const content = `
+                <div class="grid grid-cols-1 gap-4 p-6 bg-slate-50">
+                    <button onclick="mBTME.close('docOptionsModal'); mBTDB.open('${docId}');" 
+                        class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left w-full">
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                            ${mBTAssets.wand}
+                        </div>
+                        <div>
+                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Open Studio</h4>
+                            <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive Editor</p>
+                        </div>
+                    </button>
+
+                    <div class="relative">
+                        <button onclick="document.getElementById('docUpload_${docId}').click()" 
+                            class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left w-full">
+                            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                ${mBTAssets.cloud}
+                            </div>
+                            <div>
+                                <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Upload Existing</h4>
+                                <p class="text-[10px] text-slate-400 font-bold mt-1">Store PDF or Image</p>
+                            </div>
+                        </button>
+                        <input type="file" id="docUpload_${docId}" class="hidden" accept="image/*,.pdf" onchange="mBT.features.documents.handleFileUpload('${docId}', this)">
+                    </div>
+                </div>`;
+
+            mBTME.open('docOptions', 'Document Actions', content, 'max-w-sm', { noPadding: true });
+        },
+
+        // Logic Resolution: Handles file attachments with proper format support
+        handleFileUpload: function(docId, input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const doc = budget.documents.find(d => d.id === docId);
+                if (doc) {
+                    if (!doc.attachments) doc.attachments = [];
+                    doc.attachments.push({
+                        name: file.name,
+                        type: file.type || 'application/octet-stream',
+                        data: e.target.result,
+                        ts: new Date().toISOString()
+                    });
+                    saveBudget();
+                    mBTME.alert("Success", "File attached to document.");
+                    this.showOptions(docId); // Refresh menu
+                }
+            };
+            reader.readAsDataURL(file);
+        },
+
+        removeAttachment: function(docId, index) {
+            mBTME.confirm("Remove Attachment", "Delete this file attachment?", () => {
+                const doc = budget.documents.find(d => d.id === docId);
+                if (doc && doc.attachments) {
+                    doc.attachments.splice(index, 1);
+                    saveBudget();
+                    this.showOptions(docId);
+                }
+            });
         }
     };
 
