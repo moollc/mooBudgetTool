@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#2563eb">
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
@@ -18,7 +18,7 @@
         
 /* --- Core Layout & Scrollbar --- */
         /* Logic Resolution: Increased bottom padding to prevent content overlap with footer */
-        body { font-family: 'Inter', sans-serif; padding-bottom: 128px; background-color: #f3f4f6; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        body { font-family: 'Inter', sans-serif; padding-bottom: 128px; background-color: #f3f4f6; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -239,22 +239,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 	<script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message="" data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"></script>
-<script type="importmap">
-{
-  "imports": {
-    "rxjs": "https://esm.sh/rxjs@^7.8.2?conditions=es2015",
-    "rxjs/operators": "https://esm.sh/rxjs@^7.8.2/operators?conditions=es2015",
-    "rxjs/ajax": "https://esm.sh/rxjs@^7.8.2/ajax?conditions=es2015",
-    "rxjs/webSocket": "https://esm.sh/rxjs@^7.8.2/webSocket?conditions=es2015",
-    "rxjs/testing": "https://esm.sh/rxjs@^7.8.2/testing?conditions=es2015",
-    "rxjs/fetch": "https://esm.sh/rxjs@^7.8.2/fetch?conditions=es2015",
-    "@angular/compiler": "https://esm.sh/@angular/compiler@^21.0.6?external=rxjs",
-    "@angular/platform-browser": "https://esm.sh/@angular/platform-browser@^21.0.6?external=rxjs",
-    "@angular/core": "https://esm.sh/@angular/core@^21.0.6?external=rxjs"
-  }
-}
-</script>
 </head>
 
 <body class="bg-gray-100 pb-24">
@@ -264,26 +250,26 @@
     <footer class="fixed bottom-0 left-0 right-0 z-[100] p-4 pointer-events-none">
         <div class="max-w-xl mx-auto bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-[32px] shadow-2xl p-2 px-6 flex justify-between items-center pointer-events-auto">
             
-            <button id="stagesFooterBtn" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
+            <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
                 <div class="text-slate-400 group-hover:text-emerald-400" id="icon-stages"></div>
                 <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400">Stages</span>
             </button>
 
-            <button id="docsFooterBtn" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
+            <button id="docsFooterBtn" aria-label="Document Vault" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
                 <div class="text-slate-400 group-hover:text-blue-400" id="icon-docs"></div>
                 <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Documents</span>
             </button>
 
-            <button id="mainActionBtn" class="w-14 h-14 bg-blue-600 rounded-[22px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
+            <button id="mainActionBtn" aria-label="Main Menu" class="w-14 h-14 bg-blue-600 rounded-[22px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
                 <div id="icon-main-action"></div>
             </button>
 
-            <button id="secondaryActionBtn" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
+            <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
                 <div class="text-slate-400 group-hover:text-indigo-400" id="icon-secondary-action"></div>
                 <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400">Publish</span>
             </button>
 
-            <button id="footerCoffeeBtn" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
+            <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
                 <div class="text-slate-400 group-hover:text-amber-400" id="icon-coffee"></div>
                 <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400">Support</span>
             </button>
@@ -302,6 +288,7 @@
     const templatesKey = `${storageKeyPrefix}templates`;
     const projectDateFormatKey = `${storageKeyPrefix}projectDateFormat`;
     const projectNameSeparatorKey = `${storageKeyPrefix}projectNameSeparator`;
+    const projectStorageProtocolKey = `${storageKeyPrefix}projectStorageProtocol`;
     
     // Core physics and hydration state
     let budget = null;
@@ -329,7 +316,7 @@
     ];
 
 /* --- 3. Master Asset Registry (Consolidated SVG Library) --- */
-    const mBTAssets = {
+const mBTAssets = {
 appLogo: `<svg viewBox="0 0 502.17 507.14" fill="none"><circle cx="251.1" cy="253.6" r="251" fill="#fdba35"/><ellipse cx="251.08" cy="254.6" rx="219.09" ry="222.65" fill="#e68b2e"/><rect x="203.17" y="63.34" width="39.87" height="58.38" rx="12" ry="12" fill="#fdba35"/><rect x="287.89" y="63.34" width="39.87" height="58.38" rx="12" ry="12" fill="#fdba35"/><path fill="#ffffff" d="M435.26 218.85c-9.37 8.14-49.07 32.97-49.8 15.81 11.55-127.5-229.22-149.43-231.01-24.74 6.07 54.05 43.35 54.26 87.82 52.06 146.67-19.16 207.1 157.09 46.91 189.89-58.04 11.48-128.93-19.18-142.75-80.18 46.88 38.84 113.67 68.1 171.96 37.26 26.86-13.77 47.21-49.89 26.52-76.85-38.48-58.02-113.62-26.74-169.36-43.4-33.76-8.68-39.32-44.89-49.26-40.21-40.71 11.77-74.81-18.1-93.73-51.57-11.64-17.99 23.01-37.67 23.01-37.67 78.34-46.2 83.04-2.52 100.98-30.11 13.01-12.52 28.91-19.88 45.88-25.26 14.39-.81-2.14-26.45 12.52-30.74 8.55-3.29 22.55-1.35 21.53 10.41v7.96q0 5.96 6.03 5.19c15.31-1.13 30.59-.73 45.84 1.04 4.51 1.52 6.39.14 5.88-4.8.18-6.63-2.41-16.54 5.48-19.48 39.51-10.45 11.06 33.02 28.69 33.36 24.13 8.69 46.04 20.74 62.06 41.52 1.37 1.77 2.67 1.3 4.34.83 21.56-6.19 44.45 3.51 61.99 15.88 16.53 11.27-10.05 43.62-21.53 53.81Zm-303.07-60.53c-15.13-3.64-31.31 1.65-45.48 7.89-10.48 5.14-25.95 13.17-31.69 19.68-7.43 4.29 10.4 20.59 13.85 25.15 12.7 13.47 31.71 23.14 50.39 17.73 2.48-.4 3.49-1.51 3.13-3.82-2.68-22.93-.15-45.14 9.8-66.63m311.98 17.39c-2.49-5.29-32.19-13.69-45.6-11.24 3.21 8.51 7.77 19.74 8.85 29.37 2.12 18.88 1.07 24.71.92 25.13 14.31-5.74 40.59-33.14 35.83-43.26m-244.14 12.41c-8.45-1.05-18.22 1.95-18.24 12 .78 10.17-4.5 33.22 12 33.15 8.45 1.05 18.22-1.95 18.24-12-.78-10.17 4.5-33.22-12-33.14Zm-6.08 168.77c-1.38-2.31-16.01-18.07-16.01-18.07-3.59-3.64-6.21-13.1-14.02-8.77-3.6 2.84-5.79 3.83-.54 12.88 7.81 11.59 24.83 28.14 30.57 13.96m-87.43-126.66c.73.03 1.47.03 2.21.02-.74.01-1.48 0-2.21-.02m-37.65-19.19c.27.27.53.54.8.81-.27-.27-.53-.54-.8-.81m258.53-22.92c-8.45-1.05-18.22 1.95-18.24 12 .78 10.17-4.5 33.22 12 33.15 8.45 1.05 18.22-1.95 18.24-12-.78-10.17 4.5-33.22-12-33.14Z"/></svg>`,
 
        // ---     // --- Core UI & Actions ---
@@ -385,6 +372,36 @@ coffee: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="cur
 paperPlane: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
 image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
 wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>`,
+
+// --- 1. Document & Studio Navigation ---
+    eye: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
+    share: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`,
+    check: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+    filter: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>`,
+
+    // --- 2. Analytics Cortex (Tier 5 Intelligence) ---
+    barChart: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>`,
+    heatmap: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>`,
+    history: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+    alert: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+
+    // --- 3. Finance & Payment (Foundations Phase 3) ---
+    bank: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M10 10v6M14 10v6"/></svg>`,
+    globe: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`,
+    creditCard: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>`,
+    receipt: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"></path><line x1="16" y1="6" x2="8" y2="6"></line><line x1="16" y1="10" x2="8" y2="10"></line><line x1="12" y1="14" x2="8" y2="14"></line></svg>`,
+
+    // --- 4. Production Logistics & Metadata ---
+    mapPin: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`,
+    calendar: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+    sun: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
+    hazard: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+
+    // --- 5. UI Structure & Navigation ---
+    chevronDown: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
+    chevronRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+    maximize: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>`,
+    minimize: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>`,
 };
 
 /* --- 4. Master Link Map (Backwards Compatibility) --- */
@@ -402,13 +419,13 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
 
 /* --- 5.1. Payment Methods (Foundations Phase 3) --- */
     const PAYMENT_SERVICES = [
-        { id: 'cash', label: 'Cash / Petty Cash', icon: '💵' },
-        { id: 'transfer', label: 'Bank Transfer (JMD)', icon: '🏦' },
-        { id: 'wire', label: 'Intl Wire (USD)', icon: '🌐' },
-        { id: 'cheque', label: 'Cheque', icon: '✒️' },
-        { id: 'paypal', label: 'PayPal', icon: '🅿️' },
-        { id: 'wise', label: 'Wise', icon: '💸' },
-        { id: 'payoneer', label: 'Payoneer', icon: '💳' }
+        { id: 'cash', label: 'Cash / Petty Cash', icon: mBTAssets.money },
+        { id: 'transfer', label: 'Bank Transfer (JMD)', icon: mBTAssets.bank },
+        { id: 'wire', label: 'Intl Wire (USD)', icon: mBTAssets.globe },
+        { id: 'cheque', label: 'Cheque', icon: mBTAssets.receipt },
+        { id: 'paypal', label: 'PayPal', icon: mBTAssets.creditCard },
+        { id: 'wise', label: 'Wise', icon: mBTAssets.wallet },
+        { id: 'payoneer', label: 'Payoneer', icon: mBTAssets.creditCard }
     ];
 
 /* --- 6. Budget Templates (Industry Standard Structures) --- */
@@ -764,9 +781,32 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 const stored = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
                 return { ...defaults, ...stored };
             },
+            saveFromProject: function(projectData) {
+                const structure = [];
+                const sections = projectData.sections || {};
+                
+                Object.entries(sections).forEach(([key, sec]) => {
+                    const items = (sec.items || []).map(i => {
+                        const item = JSON.parse(JSON.stringify(i));
+                        item.actual = 0;
+                        item.crew = { name: '', phone: '', email: '' };
+                        if (['Day', 'Week'].includes(item.unit)) item.quantity = 1;
+                        if (item.stageData) Object.keys(item.stageData).forEach(k => item.stageData[k].days = 1);
+                        return item;
+                    });
+                    structure.push({ id: sec.id, name: key, items: items });
+                });
+
+                const name = projectData.projectName + " (Blueprint)";
+                this.saveTemplate(name, { 
+                    structure: structure, 
+                    label: name, 
+                    desc: 'Sanitized Project Clone', 
+                    icon: 'file' 
+                });
+            },
             saveTemplate: function(name, items) {
-                const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
-                custom[name] = { items: items };
+                const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');                custom[name] = { items: items };
                 localStorage.setItem('mBT_templates', JSON.stringify(custom));
             },
             deleteTemplate: function(name) {
@@ -789,10 +829,23 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             async save(key, data) { await localforage.setItem(key, data); },
             async load(key) { return await localforage.getItem(key); },
             async remove(key) { await localforage.removeItem(key); },
-            async keys() { return await localforage.keys(); }
+            async keys() { return await localforage.keys(); },
+
+            // Task 1: Binary Storage Extension (Blobs)
+            async saveBlob(key, blob) { 
+                try { await localforage.setItem(key, blob); return true; } 
+                catch(e) { console.error("Blob Storage Error:", e); return false; }
+            },
+            async loadBlob(key) {
+                try { 
+                    const blob = await localforage.getItem(key); 
+                    return blob instanceof Blob ? URL.createObjectURL(blob) : null; 
+                } catch(e) { console.error("Blob Retrieval Error:", e); return null; }
+            }
         },
 
         async save() {
+
             if (!budget) return;
             const projectKey = storageKeyPrefix + budget.projectName;
             
@@ -975,7 +1028,9 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                         documents: [],
                         attachments: [],
                         aiContext: { chat: [], analysis: "" },
-                        activityLog: [] // Tier 2 Audit Init
+                        activityLog: [], // Tier 2 Audit Init
+                        mediaRoot: null,
+                        storageProtocol: 'internal'
                     };
                     
                     budget = mBT.data.state.wrap(newBudget);
@@ -1035,33 +1090,142 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         },
         
         importFile: function(input) {
-             const file = input.files[0];
+            const file = input.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async (e) => {
+
+            // Shared Finalizer Logic
+            const finalizeImport = async (data, assetReport = null) => {
                 try {
-                    const data = JSON.parse(e.target.result);
                     if (!data.projectName) throw new Error("Invalid file structure");
-                    
                     const projectKey = storageKeyPrefix + data.projectName;
                     const existing = await this.storage.load(projectKey) || localStorage.getItem(projectKey);
                     
-                    const executeImport = async () => {
+                    const execute = async () => {
                         budget = mBT.data.state.wrap(data);
                         await this.save();
                         await this.load(data.projectName);
                         if(typeof renderProjectManagement === 'function') renderProjectManagement();
-                        mBTME.alert("Import Successful", "Project environment restored.");
+                        
+                        let msg = "Project restored successfully.";
+                        if (assetReport) {
+                            msg += `\nAssets: ${assetReport.restored}/${assetReport.total} rehydrated.`;
+                            if (assetReport.missing > 0) mBTME.alert("Integrity Warning", msg + `\n${assetReport.missing} files were missing from the bundle.`);
+                            else mBTME.alert("Import Complete", msg);
+                        } else {
+                            mBTME.alert("Import Successful", msg);
+                        }
                     };
 
-                    if (existing) {
-                        mBTME.confirm("Overwrite Project", `Overwrite existing project "${data.projectName}"?`, executeImport);
-                    } else {
-                        executeImport();
-                    }
+                    if (existing) mBTME.confirm("Overwrite", `Overwrite existing project "${data.projectName}"?`, execute);
+                    else execute();
                 } catch (err) { mBTME.alert("Import Failed", err.message); }
                 input.value = '';
             };
+
+            // Tier 2: Intent Gatekeeper
+            const askUserIntent = (data, assetReport = null) => {
+                input.value = ''; // Reset immediately so change event fires again if canceled
+                
+                const content = `
+                <div class="grid grid-cols-1 gap-4 p-6">
+                    <button id="btnImportProject" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
+                        <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Resume Project</h4>
+                            <p class="text-[10px] text-slate-400 font-bold mt-1">Load into Active Workspace</p>
+                        </div>
+                    </button>
+
+                    <button id="btnImportBlueprint" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Save as Blueprint</h4>
+                            <p class="text-[10px] text-slate-400 font-bold mt-1">Add to Template Library</p>
+                        </div>
+                    </button>
+                </div>`;
+
+                mBTME.open('importIntent', 'Import Strategy', content, 'max-w-sm');
+
+                setTimeout(() => {
+                    const btnProj = document.getElementById('btnImportProject');
+                    const btnBlue = document.getElementById('btnImportBlueprint');
+                    
+                    if(btnProj) btnProj.onclick = () => { 
+                        mBTME.close('importIntentModal'); 
+                        finalizeImport(data, assetReport); 
+                    };
+                    
+                    if(btnBlue) btnBlue.onclick = () => { 
+                        mBTME.close('importIntentModal'); 
+                        mBT.data.templates.saveFromProject(data); 
+                        mBTME.alert("Success", "Blueprint saved to library.");
+                    };
+                }, 50);
+            };
+
+            // PATH A: Bundle Import (.zip)
+            if (file.name.endsWith('.zip')) {
+                if (typeof JSZip === 'undefined') return mBTME.alert("Error", "Bundler module (JSZip) missing.");
+                
+                mBTME.showLoader("Unpacking Chef's Crate...");
+                
+                JSZip.loadAsync(file).then(async (zip) => {
+                    // 1. Extract Core Data
+                    const mooFile = Object.values(zip.files).find(f => f.name.endsWith('.moo') && !f.name.startsWith('__MACOSX'));
+                    if (!mooFile) throw new Error("Invalid Bundle: No .moo manifest found.");
+                    
+                    const jsonStr = await mooFile.async("string");
+                    const data = JSON.parse(jsonStr);
+                    
+                    // 2. Integrity & Rehydration Loop
+                    let stats = { total: 0, restored: 0, missing: 0 };
+                    
+                    if (data.documents) {
+                        for (const doc of data.documents) {
+                            if (!doc.attachments) continue;
+                            for (let i = 0; i < doc.attachments.length; i++) {
+                                const att = doc.attachments[i];
+                                if (att.location === 'internal' && att.key) {
+                                    stats.total++;
+                                    const safeName = (att.name || 'file').replace(/[^a-z0-9.]/gi, '_');
+                                    const zipPath = `assets/${doc.id}_${i}_${safeName}`;
+                                    const assetFile = zip.file(zipPath);
+                                    
+                                    if (assetFile) {
+                                        try {
+                                            const blob = await assetFile.async("blob");
+                                            await mBT.data.storage.saveBlob(att.key, blob);
+                                            stats.restored++;
+                                        } catch (e) {
+                                            console.error("Asset Write Fail:", att.name, e);
+                                            stats.missing++;
+                                        }
+                                    } else {
+                                        stats.missing++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    mBTME.hideLoader();
+                    askUserIntent(data, stats);
+                    
+                }).catch(e => {
+                    mBTME.hideLoader();
+                    mBTME.alert("Bundle Error", "Corrupted Archive: " + e.message);
+                });
+                return;
+            }
+
+            // PATH B: Legacy Text Import (.json)
+            const reader = new FileReader();
+            reader.onload = (e) => askUserIntent(JSON.parse(e.target.result));
             reader.readAsText(file);
         },
         
@@ -1141,45 +1305,45 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         // --- NON-TRUNCATABLE TEMPLATE REGISTRY (Documents) ---
         loadTemplates() {
             const t = [
-                { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: '📝', default: true },
-                { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: '📖', default: false },
-                { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: '🔍', default: true },
-                { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: '🎬', default: true },
-                { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: '🎨', default: false },
-                { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: '✅', default: true },
-                { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: '👤', default: false },
-                { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: '🎭', default: false },
-                { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: '📅', default: false },
-                { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: '🗓️', default: false },
-                { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: '📍', default: false },
-                { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: '💰', default: true },
-                { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: '⚖️', default: false },
-                { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: '🚀', default: false },
-                { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: '📢', default: true },
-                { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: '📊', default: true },
-                { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: '🎬', default: false },
-                { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: '💄', default: false },
-                { id: 'propList', cat: 'Production', label: 'Prop List', icon: '🔫', default: false },
-                { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: '📞', default: true },
-                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: '🚗', default: false },
-                { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: '🍱', default: false },
-                { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: '💵', default: false },
-                { id: 'po', cat: 'Production', label: 'Purchase Order', icon: '🧾', default: false },
-                { id: 'timecard', cat: 'Production', label: 'Timecards', icon: '⏱️', default: false },
-                { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: '🤖', default: false },
-                { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: '🌱', default: false },
-                { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: '👾', default: false },
-                { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: '📅', default: true },
-                { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: '📦', default: false },
-                { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: '🏆', default: false },
-                { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: '🤝', default: true },
-                { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: '🏠', default: true },
-                { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: '🎥', default: false },
-                { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: '📄', default: false },
-                { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: '🛡️', default: false },
-                { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: '✍️', default: false },
-                { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: '😷', default: false },
-                { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: '⭐', default: false }
+                { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true },
+                { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false },
+                { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true },
+                { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true },
+                { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false },
+                { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true },
+                { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
+                { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false },
+                { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: 'calendar', default: false },
+                { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: 'calendar', default: false },
+                { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false },
+                { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: 'money', default: true },
+                { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: 'alert', default: false },
+                { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false },
+                { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true },
+                { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true },
+                { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: 'film', default: false },
+                { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: 'user', default: false },
+                { id: 'propList', cat: 'Production', label: 'Prop List', icon: 'hazard', default: false },
+                { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true },
+                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
+                { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: 'coffee', default: false },
+                { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: 'money', default: false },
+                { id: 'po', cat: 'Production', label: 'Purchase Order', icon: 'receipt', default: false },
+                { id: 'timecard', cat: 'Production', label: 'Timecards', icon: 'history', default: false },
+                { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: 'sparkle', default: false },
+                { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: 'sparkle', default: false },
+                { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: 'hazard', default: false },
+                { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: 'calendar', default: true },
+                { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: 'folder', default: false },
+                { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: 'sparkle', default: false },
+                { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true },
+                { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: 'mapPin', default: true },
+                { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: 'camera', default: false },
+                { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false },
+                { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false },
+                { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false },
+                { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: 'hazard', default: false },
+                { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: 'sparkle', default: false }
             ];
             this.templates.length = 0; 
             this.templates.push(...t);
@@ -2526,7 +2690,46 @@ function getAbbreviatedName(name, maxLen = 25) {
                 return `<div class="h-64 flex flex-col items-center justify-center text-slate-300 select-none">
                     <div class="text-4xl mb-4 opacity-30">${icon || ''}</div>
                     <p class="font-black uppercase text-[10px] tracking-widest opacity-60">${message || 'No Items Found'}</p>
+
                     ${subtext ? `<p class="text-[9px] font-bold mt-1 opacity-40">${subtext}</p>` : ''}
+                </div>`;
+            },
+
+            // 5. Media Asset Card (Universal Bundle Blueprint)
+            mediaCard: function({ id, title, type, src, size, location, onClick, actions = [] }) {
+                const isInternal = location === 'internal';
+                const statusColor = isInternal ? 'bg-emerald-500' : 'bg-amber-500';
+                const statusLabel = isInternal ? 'Secure' : 'Linked';
+                
+                const actionHtml = actions.map(a => 
+                    `<button onclick="${a.onClick}" class="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-${a.color || 'blue'}-600 transition-colors shadow-sm backdrop-blur-sm" title="${a.title || ''}">${a.icon}</button>`
+                ).join('');
+
+                return `<div class="group relative aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all select-none">
+                    <!-- Preview Canvas -->
+                    <div class="absolute inset-0 flex items-center justify-center bg-slate-50 cursor-pointer" onclick="${onClick}">
+                        ${src ? `<img src="${src}" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity">` 
+                              : `<div class="text-4xl text-slate-300 opacity-50">${mBTAssets.file}</div>`}
+                    </div>
+                    
+                    <!-- HUD Overlay -->
+                    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/90 via-slate-900/50 to-transparent p-4 pt-12 text-white pointer-events-none">
+                        <div class="flex justify-between items-end">
+                            <div class="min-w-0 pr-2">
+                                <h4 class="font-black text-[10px] uppercase tracking-widest truncate text-white shadow-black drop-shadow-md">${mBT.ui.render.esc(title)}</h4>
+                                <p class="text-[8px] font-bold text-slate-300 mt-0.5 uppercase tracking-wide">${type} • ${size}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0 bg-black/30 px-2 py-1 rounded-full backdrop-blur-md border border-white/10">
+                                <span class="w-1.5 h-1.5 rounded-full ${statusColor} shadow-[0_0_6px_currentColor]"></span>
+                                <span class="text-[7px] font-black uppercase tracking-widest opacity-80">${statusLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Floating Actions (Hover) -->
+                    <div class="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0 duration-200 z-10">
+                        ${actionHtml}
+                    </div>
                 </div>`;
             }
         },
@@ -2598,12 +2801,11 @@ function getAbbreviatedName(name, maxLen = 25) {
                     subtext: 'Payments logged will appear here' 
                 });
             }
-
             const list = sorted.map(p => {
                 const serviceDef = (typeof PAYMENT_SERVICES !== 'undefined') ? PAYMENT_SERVICES.find(s => s.id === p.service) : null;
-                const icon = serviceDef ? serviceDef.icon : '💵';
+                const icon = serviceDef ? serviceDef.icon : mBTAssets.money;
                 const label = serviceDef ? serviceDef.label : (p.service || 'Payment');
-                
+
                 return `<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
                     <div class="flex items-center gap-3">
                         <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-sm border border-emerald-100">${icon}</div>
@@ -2676,56 +2878,6 @@ function getAbbreviatedName(name, maxLen = 25) {
 
                     <!-- Main Content Workspace (Slate-200 background for Widget separation) -->
                     <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-200 ${containerClasses}">
-                        ${contentHtml}
-                    </div>
-
-                    <!-- Footer -->
-                    ${footerHtml ? `<div class="p-6 bg-white border-t border-slate-100 flex-shrink-0 z-10">${footerHtml}</div>` : ''}
-                </div>`;
-            }
-        },
-        layouts: {
-            // Logic Resolution: Modular Studio Layout with Integrated Header and Enhanced Visual Separation
-            studioPanel: function({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
-                // Logic Resolution: Strip structural prefixes for the clean centered title
-                const cleanTitle = title.replace(/^(Studio|Budget|Document):\s*/i, '');
-                
-                // Isolate System Close (isolated on right) from other actions
-                const closeAction = actions.find(a => a.title === 'Close');
-
-                const renderBtn = (a) => `
-                    <button onclick="${a.onClick}" class="p-2.5 bg-slate-800/80 rounded-xl text-slate-300 hover:text-white hover:bg-${a.color || 'blue'}-600/50 transition-all shadow-sm border border-slate-700/50" title="${a.title||''}">
-                        ${a.icon}
-                    </button>`;
-
-                return `
-                <div class="flex flex-col max-h-[90vh] bg-slate-200">
-                    <!-- Main Studio Header (3-Column Integrated Grid) -->
-                    <header class="bg-slate-900 p-3 flex-shrink-0 z-30 shadow-lg grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-slate-800">
-                        <!-- Left: Integrated Toolbar -->
-                        <div id="${toolbarId}" class="flex items-center gap-2 overflow-hidden min-w-0"></div>
-
-                        <!-- Center: Document Identity (Integrated to unblock vertical space) -->
-                        <div class="text-center overflow-hidden">
-                            <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-2">${mBT.ui.render.esc(cleanTitle)}</h3>
-                        </div>
-
-                        <!-- Right: System Control -->
-                        <div class="flex justify-end shrink-0">
-                            ${closeAction ? renderBtn(closeAction) : ''}
-                        </div>
-                    </header>
-
-                    <!-- Search & Secondary Nav -->
-                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 shadow-sm">
-                        <div class="relative">
-                            <input type="text" id="${searchId}" placeholder="${searchPlaceholder || 'SEARCH...'}" class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
-                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
-                        </div>
-                    </div>
-
-                    <!-- Main Content Workspace (Slate-100 background for Widget separation) -->
-                    <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-100 ${containerClasses}">
                         ${contentHtml}
                     </div>
 
@@ -3243,39 +3395,78 @@ function updateOnlineStatus() {
 
 // Logic Resolution: Project Template Selector (Visual Bridge)
 window.showNewProjectModal = function() {
-    // 1. Build Cards from Tier 1 Registry
-    // Update: Passed 'false' to newProject to skip confirmation dialog
-    const templates = Object.entries(BUDGET_TEMPLATES).map(([key, t]) => `
+    // 1. Build Cards from Tier 1 Registry (Industry Standards)
+    const standardsHtml = Object.entries(BUDGET_TEMPLATES).map(([key, t]) => `
         <button onclick="mBT.data.newProject(false, '${key}'); mBTME.close('newProjectModal');"
-            class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full">
+            class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full h-full">
             <div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">
                 ${mBTAssets[t.icon] || mBTAssets.file}
             </div>
             <h3 class="text-xs font-black uppercase tracking-widest text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">${t.label}</h3>
-            <p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80">${t.desc}</p>
+            <p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80 line-clamp-2">${t.desc}</p>
         </button>
     `).join('');
 
-    // 2. Build Modal Layout
-    // Update: Removed the icon circle div above the title
+    // 2. Build Cards from User Templates (Custom Blueprints)
+    const allTmpl = mBT.data.templates.getTemplates();
+    const systemKeys = Object.keys(BUDGET_TEMPLATES);
+    
+    const customHtml = Object.entries(allTmpl)
+        .filter(([key]) => !systemKeys.includes(key))
+        .map(([key, t]) => {
+            const label = t.label || key;
+            const icon = (t.icon && mBTAssets[t.icon]) ? mBTAssets[t.icon] : mBTAssets.file;
+            const desc = t.desc || (t.items ? `${t.items.length} Items` : 'Custom Blueprint');
+            
+            return `
+            <button onclick="mBT.data.newProject(false, '${key}'); mBTME.close('newProjectModal');"
+                class="group flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-white hover:shadow-md transition-all text-left w-full h-full">
+                <div class="flex items-center justify-between w-full mb-2">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-700 truncate w-full pr-2 group-hover:text-indigo-600">${label}</div>
+                    <div class="text-slate-300 group-hover:text-indigo-500 scale-75 flex-shrink-0">${icon}</div>
+                </div>
+                <div class="text-[8px] text-slate-400 font-bold truncate">${desc}</div>
+            </button>`;
+        }).join('');
+
+    // 3. Build Modal Layout
     const content = `
-        <div class="p-8 bg-slate-50 min-h-[400px] flex flex-col">
+        <div class="p-8 bg-slate-50 min-h-[500px] flex flex-col">
             <div class="text-center mb-8 shrink-0">
-                <h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Select Blueprint</h2>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Choose a production structure to begin</p>
+                <h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Start Production</h2>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Select a blueprint to initialize budget</p>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 grow">
-                ${templates}
+            
+            <div class="flex-grow overflow-y-auto no-scrollbar pr-2">
+                <!-- Industry Standards -->
+                <div class="mb-3 flex items-center gap-3">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>
+                    <div class="h-px bg-slate-200 flex-grow"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    ${standardsHtml}
+                </div>
+
+                <!-- Custom Blueprints (Conditional) -->
+                ${customHtml ? `
+                <div class="mb-3 flex items-center gap-3">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>
+                    <div class="h-px bg-slate-200 flex-grow"></div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    ${customHtml}
+                </div>` : ''}
             </div>
-            <div class="mt-8 text-center shrink-0 border-t border-slate-200/50 pt-4">
+
+            <div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4">
                 <button onclick="mBT.data.newProject(false, 'Blank'); mBTME.close('newProjectModal');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">
                     Skip & Create Blank Budget
                 </button>
             </div>
         </div>`;
 
-    // 3. Launch via Tier 5 Modal Engine
-    mBTME.open('newProject', '', content, 'max-w-4xl', { hideHeader: true, noPadding: true });
+    // 4. Launch via Tier 5 Modal Engine
+    mBTME.open('newProject', '', content, 'max-w-5xl', { hideHeader: true, noPadding: true });
 };
 
 console.log("TIER 4 render defined", typeof render);
@@ -3512,6 +3703,63 @@ console.log("TIER 4 render defined", typeof render);
             saveTemplate: function(templateData) {
                 const blob = new Blob([JSON.stringify(templateData, null, 2)], { type: 'application/json' });
                 this.forceDownload(blob, `${(templateData.label || 'template').toLowerCase().replace(/\s+/g, '_')}.mtemp`);
+            },
+
+            saveBundle: async function(budgetData) {
+                if (typeof JSZip === 'undefined') return mBTME.alert("Error", "Bundler module (JSZip) missing.");
+                
+                const zip = new JSZip();
+                const cleanName = (budgetData.projectName || 'project').toLowerCase().replace(/\s+/g, '_');
+                
+                // 1. Add Core Data
+                zip.file(`${cleanName}.moo`, JSON.stringify(budgetData, null, 2));
+                
+            // 2. Add Manifest
+            const readme = `Project: ${budgetData.projectName}\nExported: ${new Date().toLocaleString()}\n\nContains master budget data (.moo) and embedded assets.`;
+            zip.file("README.txt", readme);
+
+            // --- Asset Injection Loop ---
+            const assetsFolder = zip.folder("assets");
+            const cleanBase64 = (dataurl) => dataurl.split(',')[1];
+
+            if (budgetData.documents) {
+                for (const doc of budgetData.documents) {
+                    if (doc.attachments) {
+                        for (let i = 0; i < doc.attachments.length; i++) {
+                            const file = doc.attachments[i];
+                            // Sanitize filename to ensure ZIP compatibility
+                            const safeName = (file.name || 'file').replace(/[^a-z0-9.]/gi, '_');
+                            const fileName = `${doc.id}_${i}_${safeName}`;
+                            
+                            try {
+                                if (file.location === 'internal' && file.key) {
+                                    // Resolve Internal Blob from IndexedDB
+                                    const blobUrl = await mBT.data.storage.loadBlob(file.key);
+                                    if (blobUrl) {
+                                        const response = await fetch(blobUrl);
+                                        const blob = await response.blob();
+                                        assetsFolder.file(fileName, blob);
+                                    }
+                                } else if (file.data) {
+                                    // Handle Legacy Base64
+                                    assetsFolder.file(fileName, cleanBase64(file.data), { base64: true });
+                                }
+                            } catch (err) {
+                                console.warn(`Failed to bundle asset: ${file.name}`, err);
+                            }
+                        }
+                    }
+                }
+            }
+
+                // 3. Generate & Download
+                try {
+                    const content = await zip.generateAsync({ type: "blob" });
+                    this.forceDownload(content, `${cleanName}_bundle.zip`);
+                } catch(e) {
+                    console.error("Bundle Error:", e);
+                    mBTME.alert("Export Error", "Failed to generate bundle.");
+                }
             }
         },
 
@@ -5422,7 +5670,7 @@ window.mBTDB = {
                 const templates = Array.isArray(mBTOG.templates) ? mBTOG.templates : [];
                 const listContent = templates.length > 0 ? templates.map(t => RenderEngine.ui.listRow({
                     id: t.id,
-                    icon: t.icon || '📄',
+                    icon: mBTAssets[t.icon] || mBTAssets.file,
                     title: t.label,
                     subtitle: t.cat || 'General',
                     actions: [{
@@ -5871,8 +6119,17 @@ window.mBTDB = {
                     <p class="text-[10px] text-slate-400 font-bold mt-1">Export .MOO Data File</p>
                 </div>
             </button>
+            
+            <button onclick="mBTME.close('publishModal'); mBTPublisher.io.saveBundle(budget);" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.folder}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Export Budget</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Master Container (.moo)</p>
+                </div>
+            </button>
+            
             <!-- New Digital Export Button -->
-            <button onclick="mBTME.close('publishModal'); if(mBTDB.state.currentDocId){ mBTPublisher.format.htmlStandalone('mBTDB_Workspace', budget.documents.find(d=>d.id===mBTDB.state.currentDocId).label); } else { mBTME.alert('Studio Required', 'Open a document in the Studio to export as Webpage.'); }" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-500 hover:shadow-lg transition-all group text-left">
+           <button onclick="mBTME.close('publishModal'); if(mBTDB.state.currentDocId){ mBTPublisher.format.htmlStandalone('mBTDB_Workspace', budget.documents.find(d=>d.id===mBTDB.state.currentDocId).label); } else { mBTME.alert('Studio Required', 'Open a document in the Studio to export as Webpage.'); }" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.phone}</div>
                 <div>
                     <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Digital Export</h4>
@@ -5924,11 +6181,11 @@ window.mBTDB = {
             // Refresh Vault list if open
             if(document.getElementById('documentsModal')) this.openVault();
             
-            // Launch Studio immediately
-            mBTDB.open(newDoc.id);
+            // Logic Resolution: Intercept auto-open. Show options instead.
+            this.showOptions(newDoc.id);
         },
 
-        // Logic Resolution: Opens the Document Vault (List of saved docs)
+// Logic Resolution: Opens the Document Vault (List of saved docs)
         openVault: function(activeTab = 'All') {
             const docs = budget.documents || [];
             
@@ -5974,6 +6231,7 @@ window.mBTDB = {
                     </div>`;
                 } else {
                     // List Row (Horizontal Layout)
+                    // CRITICAL: Ensure onClick calls showOptions, NOT mBTDB.open
                     return RenderEngine.ui.card({
                         id: doc.id,
                         icon: iconSvg,
@@ -6108,31 +6366,67 @@ window.mBTDB = {
             const doc = budget.documents.find(d => d.id === docId);
             if (!doc) return;
 
-            const content = `
-                <div class="grid grid-cols-1 gap-4 p-6 bg-slate-50">
-                    <button onclick="mBTME.close('docOptionsModal'); mBTDB.open('${docId}');" 
-                        class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left w-full">
-                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                            ${mBTAssets.wand}
-                        </div>
-                        <div>
-                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Open Studio</h4>
-                            <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive Editor</p>
-                        </div>
-                    </button>
+            const attachments = doc.attachments || [];
+            
+            // Helper: Render Attachment List
+            const renderAttachmentList = () => {
+                if (attachments.length === 0) return '<div class="text-center text-[10px] text-slate-400 font-bold p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 col-span-2">No files attached</div>';
+                
+                return attachments.map((file, idx) => {
+                    const isImg = file.type && file.type.startsWith('image/');
+                    const src = (isImg && file.location !== 'internal') ? file.data : null; 
 
-                    <div class="relative">
-                        <button onclick="document.getElementById('docUpload_${docId}').click()" 
-                            class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left w-full">
-                            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                                ${mBTAssets.cloud}
+                    return RenderEngine.ui.mediaCard({
+                        id: idx,
+                        title: file.name,
+                        type: file.type.split('/')[1]?.toUpperCase() || 'FILE',
+                        size: file.size || 'N/A',
+                        location: file.location || 'legacy',
+                        src: src,
+                        onClick: `mBT.features.documents.previewAttachment('${docId}', ${idx})`,
+                        actions: [
+                            { icon: mBTAssets.eye, title: 'Preview', color: 'purple', onClick: `mBT.features.documents.previewAttachment('${docId}', ${idx})` },
+                            { icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`, title: 'Download', color: 'blue', onClick: `mBT.features.documents.downloadAttachment('${docId}', ${idx})` },
+                            { icon: mBTAssets.trash, title: 'Remove', color: 'rose', onClick: `mBT.features.documents.removeAttachment('${docId}', ${idx})` }
+                        ]
+                    });
+                }).join('');
+            };
+
+            const content = `
+                <div class="flex flex-col h-full bg-slate-50">
+                    <div class="grid grid-cols-1 gap-4 p-6 shrink-0">
+                        <button onclick="mBTME.close('docOptionsModal'); mBTDB.open('${docId}');" 
+                            class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left w-full">
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                ${mBTAssets.wand}
                             </div>
                             <div>
-                                <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Upload Existing</h4>
-                                <p class="text-[10px] text-slate-400 font-bold mt-1">Store PDF or Image</p>
+                                <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Open Studio</h4>
+                                <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive Editor</p>
                             </div>
                         </button>
-                        <input type="file" id="docUpload_${docId}" class="hidden" accept="image/*,.pdf" onchange="mBT.features.documents.handleFileUpload('${docId}', this)">
+
+                        <div class="relative">
+                            <button onclick="document.getElementById('docUpload_${docId}').click()" 
+                                class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left w-full">
+                                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                    ${mBTAssets.cloud}
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Upload Existing</h4>
+                                    <p class="text-[10px] text-slate-400 font-bold mt-1">PDF, Word, Excel, Images</p>
+                                </div>
+                            </button>
+                            <input type="file" id="docUpload_${docId}" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" onchange="mBT.features.documents.handleFileUpload('${docId}', this)">
+                        </div>
+                    </div>
+                    
+                    <div class="px-6 pb-2">
+                        <h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-2 mb-3">Attachments</h4>
+                    </div>
+                    <div class="flex-grow overflow-y-auto px-6 pb-6 no-scrollbar grid grid-cols-2 gap-3 content-start" style="max-height: 200px;">
+                        ${renderAttachmentList()}
                     </div>
                 </div>`;
 
@@ -6140,15 +6434,44 @@ window.mBTDB = {
         },
 
         // Logic Resolution: Handles file attachments with proper format support
-        handleFileUpload: function(docId, input) {
+        handleFileUpload: async function(docId, input) {
             const file = input.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const doc = budget.documents.find(d => d.id === docId);
-                if (doc) {
-                    if (!doc.attachments) doc.attachments = [];
+            // Stability Limit: 7MB (IndexedDB Support)
+            if (file.size > 7 * 1024 * 1024) {
+                 mBTME.alert("File Too Large", "Please upload files smaller than 7MB to ensure offline storage stability.");
+                 return;
+            }
+
+            const doc = budget.documents.find(d => d.id === docId);
+            if (!doc) return;
+            if (!doc.attachments) doc.attachments = [];
+
+            // Protocol Branching: Bundle Mode vs Legacy
+            if (budget.storageProtocol === 'internal') {
+                const blobKey = `blob_${docId}_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                try {
+                    await mBT.data.storage.saveBlob(blobKey, file);
+                    doc.attachments.push({
+                        name: file.name,
+                        type: file.type || 'application/octet-stream',
+                        location: 'internal', 
+                        key: blobKey,
+                        data: null,
+                        size: (file.size / 1024).toFixed(1) + ' KB',
+                        ts: new Date().toISOString()
+                    });
+                    saveBudget();
+                    this.showOptions(docId);
+                } catch(e) { 
+                    console.error("Blob Storage Failed", e);
+                    mBTME.alert("Upload Error", "Failed to store file internally.");
+                }
+            } else {
+                // Legacy Base64 Path
+                const reader = new FileReader();
+                reader.onload = (e) => {
                     doc.attachments.push({
                         name: file.name,
                         type: file.type || 'application/octet-stream',
@@ -6156,11 +6479,138 @@ window.mBTDB = {
                         ts: new Date().toISOString()
                     });
                     saveBudget();
-                    mBTME.alert("Success", "File attached to document.");
-                    this.showOptions(docId); // Refresh menu
+                    // Instant Refresh (No blocking alert)
+                    this.showOptions(docId); 
+                };
+                reader.readAsDataURL(file);
+            }
+        },
+
+        // --- NEW: Binary Conversion Utility ---
+        _base64ToBuffer: function(base64) {
+            const binary_string = window.atob(base64.split(',')[1]);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        },
+
+        // --- NEW: Universal Preview Engine ---
+        previewAttachment: async function(docId, index) {
+            const doc = budget.documents.find(d => d.id === docId);
+            if (!doc || !doc.attachments || !doc.attachments[index]) return;
+            
+            // Hybrid Clone to protect state
+            const file = { ...doc.attachments[index] };
+            const name = file.name.toLowerCase();
+
+            // Resolve Internal Blob
+            if (file.location === 'internal' && file.key) {
+                file.data = await mBT.data.storage.loadBlob(file.key);
+            }
+
+            // A. Images: Direct Render
+            if (file.type.includes('image')) {
+                mBTME.open('previewFile', file.name, `<div class="flex justify-center bg-slate-900 p-4"><img src="${file.data}" class="max-w-full h-auto rounded shadow-lg"></div>`, 'max-w-4xl');
+                return;
+            }
+
+            // B. Binary Buffer Resolution (Legacy Base64 or Blob Fetch)
+            let buffer;
+            if (file.location === 'internal') {
+                const response = await fetch(file.data); // file.data is blobUrl here
+                buffer = await response.arrayBuffer();
+            } else {
+                buffer = this._base64ToBuffer(file.data);
+            }
+
+            // C. PDF: Blob URL -> iFrame
+            if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+                let url;
+                if (file.location === 'internal') {
+                    url = file.data;
+                } else {
+                    const blob = new Blob([buffer], {type: 'application/pdf'});
+                    url = URL.createObjectURL(blob);
                 }
-            };
-            reader.readAsDataURL(file);
+                mBTME.open('previewFile', file.name, `<iframe src="${url}" class="w-full h-[80vh] border-none bg-slate-100"></iframe>`, 'max-w-5xl', {noPadding: true});
+            }
+            // D. Word (DOCX): Mammoth.js
+            else if (name.endsWith('.docx')) {
+                if (typeof mammoth === 'undefined') return mBTME.alert("Error", "Word viewer offline.");
+                mBTME.showLoader("Converting DOCX...");
+                mammoth.convertToHtml({arrayBuffer: buffer})
+                    .then(result => {
+                        mBTME.hideLoader();
+                        mBTME.open('previewFile', file.name, `<div class="prose prose-sm max-w-none p-8 bg-white text-slate-800">${result.value}</div>`, 'max-w-3xl');
+                    })
+                    .catch(err => { mBTME.hideLoader(); mBTME.alert("Conversion Error", err.message); });
+            }
+            // E. Excel (XLSX): SheetJS
+            else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+                if (typeof XLSX === 'undefined') return mBTME.alert("Error", "Excel viewer offline.");
+                try {
+                    const wb = XLSX.read(buffer, {type: 'array'});
+                    const sheetName = wb.SheetNames[0];
+                    const html = XLSX.utils.sheet_to_html(wb.Sheets[sheetName]);
+                    mBTME.open('previewFile', file.name, `<div class="overflow-auto p-4 bg-white text-xs spreadsheet-view">${html}</div>`, 'max-w-5xl');
+                } catch(e) { mBTME.alert("Error", "Could not parse spreadsheet."); }
+            } 
+            // Fallback
+            else {
+                mBTME.alert("Preview Unavailable", "This file type cannot be previewed. Please download it.");
+            }
+        },
+        
+        // Logic Resolution: Trigger download from internal DataURL
+        downloadAttachment: async function(docId, index) {
+            const doc = budget.documents.find(d => d.id === docId);
+            if (doc && doc.attachments && doc.attachments[index]) {
+                const file = doc.attachments[index];
+                let blob = null;
+
+                // Helper: DataURL to Blob for robust download
+                const dataURLtoBlob = (dataurl) => {
+                    try {
+                        var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+                            bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+                        while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+                        return new Blob([u8arr], {type:mime});
+                    } catch(e) { 
+                        console.error("Blob Conversion Failed", e); 
+                        return null; 
+                    }
+                };
+
+                // Logic Upgrade: Hybrid Download
+                if (file.location === 'internal' && file.key) {
+                    const blobUrl = await mBT.data.storage.loadBlob(file.key);
+                    if (blobUrl) {
+                        const response = await fetch(blobUrl);
+                        blob = await response.blob();
+                    }
+                } else {
+                    blob = dataURLtoBlob(file.data);
+                }
+                
+                // Primary Path: Use Publisher Engine
+                if (blob && typeof mBTPublisher !== 'undefined' && mBTPublisher.io) {
+                    mBTPublisher.io.forceDownload(blob, file.name);
+                } 
+                // Fallback Path: Direct Browser Action
+                else if (blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); 
+                    a.href = url; 
+                    a.download = file.name;
+                    document.body.appendChild(a); 
+                    a.click(); 
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            }
         },
 
         removeAttachment: function(docId, index) {
