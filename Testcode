@@ -278,7 +278,7 @@
 </body>
 
 <script>
-/* ================= v19.55 TIER 1: Environment Configuration v19.55 ================= */
+/* ================= v19.54 TIER 1: Environment Configuration ================= */
 
 /* --- 1. Global System Identity --- */
     const APP_VERSION = "19.54";
@@ -476,7 +476,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         features: {} // Tier 5
     };
 
-    /* ========= v19.65 TIER 1.5: THE KERNEL (mBTCore) ========= */
+    /* ========= v19.54 TIER 1.5: THE KERNEL (mBTCore) ========= */
     // Logic Resolution: Central Event Bus and Initialization Handler
     mBT.core = {
         // Pub/Sub Event Bus
@@ -597,7 +597,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
 
 
 
-/* ========= v19.55 TIER 2: State Proxy & Storage Engine ========= */
+/* ========= v19.54 TIER 2: State Proxy & Storage Engine ========= */
 
     /* --- 1. mBT.data: THE MODEL (Unified Data Architecture) --- */
     mBT.data = {
@@ -1264,7 +1264,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         pushHistory: function(desc) { this.recorder.snapshot(desc); }
     };
 
-    /* ========= v19.55 TIER 2.5: OPEN GATE INFRASTRUCTURE (mBT.opengate) ========= */
+    /* ========= v19.54 TIER 2.5: OPEN GATE INFRASTRUCTURE (mBT.opengate) ========= */
     mBT.opengate = {
         settings: {
             optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
@@ -1495,7 +1495,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
     window.mBTOG = mBT.opengate; // OPEN GATE Alias
     window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
 
-/* ================= v19.54 TIER 3: Core Logic Engines v19.55 ================= */
+/* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
     // ... (Keep fetchExchangeRates and Mathematical Utilities) ...
 
@@ -1665,16 +1665,21 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 // 1. Calculate Costs
                 Object.values(budget.sections).forEach(sec => {
                     sec.items.forEach(item => {
-                        if (item.stageData) {
-                            Object.entries(item.stageData).forEach(([key, data]) => {
-                                const k = key.toLowerCase();
-                                if (result.stageTotals[k] !== undefined) {
-                                    const cost = (parseFloat(data.days) || 0) * (parseFloat(data.rate) || 0);
-                                    result.stageTotals[k] += cost;
-                                    result.grandTotal += cost;
-                                }
-                            });
-                        }
+                        const qty = parseFloat(item.quantity) || 0;
+                        const rate = parseFloat(item.rate) || 0;
+                        const est = parseFloat(item.total) || (qty * rate * (parseFloat(item.multiplier) || 1));
+                        const act = parseFloat(item.actual) || 0;
+                        
+                        wsData.push([
+                            "", 
+                            item.description, 
+                            qty, 
+                            item.unit, 
+                            rate, 
+                            est, 
+                            act, 
+                            act - est
+                        ]);
                     });
                 });
 
@@ -1960,7 +1965,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         }
     };
 
-/* ========= v19.55 CONNECTIVE TISSUE: Logic Resolution Utilities ========= */
+/* ========= v19.54 CONNECTIVE TISSUE: Logic Resolution Utilities ========= */
 
     // NOTE: Project Inventory, Data Hydration, and History functions 
     // have been consolidated into mBT.data (Tier 2). 
@@ -2324,7 +2329,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
 console.log("TIER 3 complete");
 
 
-/* ========= v19.54 TIER 4: Atomic Render Pipeline v19.55 ========= */
+/* ========= v19.54 TIER 4: Atomic Render Pipeline ========= */
 
     // ... (keep getAbbreviatedName function) ...
 
@@ -2621,7 +2626,7 @@ function getAbbreviatedName(name, maxLen = 25) {
             return !str ? '' : String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); 
         },
 
-        /* --- v19.55 UI BLUEPRINTS: Standardized Component Generators --- */
+        /* --- v19.54 UI BLUEPRINTS: Standardized Component Generators --- */
         ui: {
             // 1. Tab Navigation Generator
             tabs: function({ items, activeId, onClick }) {
@@ -2835,7 +2840,7 @@ function getAbbreviatedName(name, maxLen = 25) {
             </div>`;
         },
 
-        /* --- v19.55 LAYOUT ENGINES: High-level Container Abstractions --- */
+        /* --- v19.54 LAYOUT ENGINES: High-level Container Abstractions --- */
         layouts: {
             // Logic Resolution: Modular Studio Layout with Dedicated Title Bar and Expanded Control Header
             studioPanel: function({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
@@ -3473,7 +3478,7 @@ console.log("TIER 4 render defined", typeof render);
 
 
 /* ================= TIER 5: MODULE CONTROLLERS & SMART FEATURES ================= */
-    /* ========= v19.55 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
+    /* ========= v19.54 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
     // Previously: mBTME
     mBT.ui.modal = {
         containerId: 'global-modal-container',
@@ -3907,7 +3912,147 @@ console.log("TIER 4 render defined", typeof render);
                 // 3. Export
                 const blob = new Blob([html], { type: 'text/html' });
                 mBTPublisher.io.forceDownload(blob, `${title.replace(/\s+/g, '_')}_Digital.html`);
-            }
+            },
+
+            // --- RESTORED: Professional Typesetter Engine (v19.50 Logic) ---
+            professionalPdf: function(budgetData, options = {}) {
+                if (!window.jspdf) return mBTME.alert("Error", "PDF Engine missing.");
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                const fmt = mBTLE.format.currency;
+                const dateStr = new Date().toLocaleDateString();
+
+                // 1. Header
+                doc.setFontSize(16);
+                doc.setFont("helvetica", "bold");
+                doc.text(budgetData.projectName || "Untitled Budget", 14, 15);
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text(budgetData.company || "Independent Production", 14, 20);
+                doc.text(`Generated: ${dateStr}`, 14, 25);
+
+                // 2. Financial Summary Table
+                const summaryData = [
+                    ['Subtotal', fmt(budgetData.subtotal)],
+                    [`Contingency (${budgetData.contingencyPercentage}%)`, fmt(budgetData.subtotal * (budgetData.contingencyPercentage/100))],
+                    [`Sales Tax (${budgetData.salesTaxPercentage}%)`, fmt(budgetData.subtotal * (budgetData.salesTaxPercentage/100))],
+                    [`Discount (${budgetData.discountPercentage}%)`, `-${fmt((budgetData.grandTotal + (budgetData.subtotal * (budgetData.discountPercentage/100))) - budgetData.grandTotal)}`], // approx
+                    ['GRAND TOTAL', fmt(budgetData.grandTotal)]
+                ];
+
+                doc.autoTable({
+                    startY: 30,
+                    head: [['Category', 'Amount']],
+                    body: summaryData,
+                    theme: 'striped',
+                    headStyles: { fillColor: [40, 40, 40] },
+                    styles: { font: "helvetica", fontSize: 10 },
+                    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } },
+                    margin: { left: 14, right: 100 }
+                });
+
+                // 3. Detailed Line Items
+                let finalY = doc.lastAutoTable.finalY + 10;
+                const tableRows = [];
+
+                Object.entries(budgetData.sections).forEach(([key, sec]) => {
+                    // Section Header Row
+                    tableRows.push([{ content: key.toUpperCase(), colSpan: 5, styles: { fillColor: [220, 220, 220], fontStyle: 'bold' } }]);
+                    
+                    // Items
+                    sec.items.forEach(item => {
+                        const est = parseFloat(item.total) || 0;
+                        tableRows.push([
+                            item.description,
+                            item.quantity,
+                            item.unit,
+                            fmt(item.rate),
+                            fmt(est)
+                        ]);
+                    });
+
+                    // Section Total Row
+                    tableRows.push([{ content: `Total ${key}: ${fmt(sec.total)}`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } }]);
+                });
+
+                doc.autoTable({
+                    startY: finalY,
+                    head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
+                    body: tableRows,
+                    theme: 'grid',
+                    headStyles: { fillColor: [37, 99, 235] }, // Blue-600
+                    styles: { fontSize: 9, cellPadding: 2 },
+                    columnStyles: {
+                        0: { cellWidth: 'auto' },
+                        1: { cellWidth: 15, halign: 'center' },
+                        2: { cellWidth: 15, halign: 'center' },
+                        3: { cellWidth: 30, halign: 'right' },
+                        4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+                    }
+                });
+
+                doc.save(`${(budgetData.projectName||'budget').replace(/\s+/g, '_')}.pdf`);
+            },
+
+            professionalXlsx: function(budgetData) {
+                if (typeof XLSX === 'undefined') return mBTME.alert("Error", "Excel Engine missing.");
+                
+                // 1. Setup Workbook
+                const wb = XLSX.utils.book_new();
+                const wsData = [];
+                
+                // 2. Headers
+                wsData.push(["PROJECT", budgetData.projectName]);
+                wsData.push(["COMPANY", budgetData.company]);
+                wsData.push(["DATE", new Date().toLocaleDateString()]);
+                wsData.push([]); // Spacer
+                
+                // 3. Summary
+                wsData.push(["SUMMARY", "AMOUNT"]);
+                wsData.push(["Subtotal", budgetData.subtotal]);
+                wsData.push(["Contingency", budgetData.subtotal * (budgetData.contingencyPercentage/100)]);
+                wsData.push(["Grand Total", budgetData.grandTotal]);
+                wsData.push([]); 
+
+                // 4. Detail Table Headers
+                wsData.push(["SECTION", "DESCRIPTION", "QUANTITY", "UNIT", "RATE", "ESTIMATED", "ACTUAL", "VARIANCE"]);
+
+                // 5. Populate Data
+                Object.entries(budgetData.sections).forEach(([key, sec]) => {
+                    // Section Header
+                    wsData.push([key.toUpperCase(), "", "", "", "", "", "", ""]);
+                    
+                    sec.items.forEach(item => {
+                        const qty = parseFloat(item.quantity) || 0;
+                        const rate = parseFloat(item.rate) || 0;
+                        const est = qty * rate;
+                        const act = parseFloat(item.actual) || 0;
+                        
+                        wsData.push([
+                            "", 
+                            item.description, 
+                            qty, 
+                            item.unit, 
+                            rate, 
+                            est, // Formula could go here but raw numbers are safer for broad compatibility
+                            act, 
+                            act - est
+                        ]);
+                    });
+                    // Section Footer spacer
+                    wsData.push([]);
+                });
+
+                // 6. Generate Sheet
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                
+                // Set Column Widths
+                ws['!cols'] = [{wch:15}, {wch:40}, {wch:10}, {wch:10}, {wch:15}, {wch:15}, {wch:15}, {wch:15}];
+
+                XLSX.utils.book_append_sheet(wb, ws, "Budget");
+                XLSX.writeFile(wb, `${(budgetData.projectName||'budget').replace(/\s+/g, '_')}.xlsx`);
+            },
         },
 
         // --- Bridge: Main Entry Points ---
@@ -3923,7 +4068,6 @@ console.log("TIER 4 render defined", typeof render);
         renderEditor: function() { return ""; },
         interpret: function() { return ""; }
     };
-
 
 /* ========= v19.54 mBTDB: STUDIO BUILDER ENGINE ========= */
 window.mBTDB = {
@@ -4598,25 +4742,25 @@ window.mBTDB = {
                 
                 <!-- History Controls -->
                 <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
-                    <button onclick="mBTDB.undo()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Undo">${this.icons.undo}</button>
-                    <button onclick="mBTDB.redo()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Redo">${this.icons.redo}</button>
+                    <button data-action="studio-undo" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Undo">${this.icons.undo}</button>
+                    <button data-action="studio-redo" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Redo">${this.icons.redo}</button>
                 </div>
 
                 <!-- Integration Hub: Sync & Preview -->
                 <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
-                    <button onclick="mBTDB.syncFromBudget()" class="p-2 text-emerald-500 hover:text-emerald-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Budget">${mBTAssets.sync}</button>
-                    <button onclick="mBTDB.syncFromPrevious()" class="p-2 text-blue-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Previous">${mBTAssets.refresh}</button>
-                    <button onclick="mBTDB.openPreviewSelector()" class="p-2 text-purple-500 hover:text-purple-400 transition-colors rounded-lg hover:bg-slate-800" title="Document Preview">${mBTAssets.image}</button>
+                    <button data-action="studio-sync" class="p-2 text-emerald-500 hover:text-emerald-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Budget">${mBTAssets.sync}</button>
+                    <button data-action="studio-sync-prev" class="p-2 text-blue-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Previous">${mBTAssets.refresh}</button>
+                    <button data-action="studio-preview" class="p-2 text-purple-500 hover:text-purple-400 transition-colors rounded-lg hover:bg-slate-800" title="Document Preview">${mBTAssets.image}</button>
                 </div>
 
                 <!-- Snapshot Tools -->
                 <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
-                    <button onclick="mBTDB.snapshotDoc()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Duplicate Document">${this.icons.copy}</button>
-                    <button onclick="mBTDB.saveTemplate()" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Save Blueprint">${this.icons.save}</button>
+                    <button data-action="studio-snapshot" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Duplicate Document">${this.icons.copy}</button>
+                    <button data-action="studio-template" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Save Blueprint">${this.icons.save}</button>
                 </div>
 
                 <!-- Layout Toggle -->
-                <button onclick="mBTDB.toggleEditMode()" class="p-2 rounded-lg transition-all ${isEd ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}" title="${isEd ? 'Finish Editing' : 'Edit Layout'}">
+                <button data-action="studio-toggle-edit" class="p-2 rounded-lg transition-all ${isEd ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}" title="${isEd ? 'Finish Editing' : 'Edit Layout'}">
                     ${isEd ? checkIcon : pencilIcon}
                 </button>
             </div>
@@ -4638,7 +4782,7 @@ window.mBTDB = {
     // Note: Namespace definition hoisted to Tier 1. 
     // We extend it here for Feature modules.
 
-    /* ========= v19.65 BLUEPRINT ENGINE (mBT.features.blueprints) ========= */
+    /* ========= v19.54 BLUEPRINT ENGINE (mBT.features.blueprints) ========= */
     mBT.features.blueprints = {
         saveCurrentAsBlueprint: function() {
             if (!budget) return;
@@ -4676,7 +4820,7 @@ window.mBTDB = {
     // Core Action Binding for Blueprint
     mBT.core.action('blueprint-save', () => mBT.features.blueprints.saveCurrentAsBlueprint());
 
-    /* ========= v19.65 ACTIVITY HISTORY (mBT.features.history) ========= */
+    /* ========= v19.54 ACTIVITY HISTORY (mBT.features.history) ========= */
     mBT.features.history = {
         open: function() {
             // Get logs, newest first
@@ -4772,7 +4916,7 @@ window.mBTDB = {
         }
     };
 
-    /* ========= v19.70 ANALYTICS CORTEX (mBT.features.cortex) ========= */
+    /* ========= v19.54 ANALYTICS CORTEX (mBT.features.cortex) ========= */
     mBT.features.cortex = {
         // --- 1. Logic Engine (The Brain) ---
         logic: {
@@ -5223,7 +5367,7 @@ window.mBTDB = {
     // Global Alias Overrides (Replacing the old AI menu with the new Dashboard)
     window.openAnalyticsHub = () => mBT.features.cortex.ui.openHub();
 
-    /* ========= v19.75 STAGE INTELLIGENCE (mBT.features.stages) ========= */
+    /* ========= v19.54 STAGE INTELLIGENCE (mBT.features.stages) ========= */
     mBT.features.stages = {
         definitions: {
             'dev': ['writer', 'script', 'research', 'option', 'rights', 'legal', 'development', 'story', 'attorney', 'concept'],
@@ -5349,7 +5493,7 @@ window.mBTDB = {
         }
     };
 
-    /* ========= v19.55 RECYCLE BIN (mBT.features.trash) ========= */
+    /* ========= v19.54 RECYCLE BIN (mBT.features.trash) ========= */
 		mBT.features.trash = {
         state: { activeTab: 'documents', selected: new Set() },
         icons: { folder: mBTAssets.folder, file: mBTAssets.file, trash: mBTAssets.trash, undo: mBTAssets.undo, check: mBTAssets.target },
@@ -5569,7 +5713,7 @@ window.mBTDB = {
     window.mBTTrash = mBT.features.trash;
 
 
-    /* ========= v19.60 SETTINGS & CONFIGURATION (mBT.features.settings) ========= */
+    /* ========= v19.54 SETTINGS & CONFIGURATION (mBT.features.settings) ========= */
     mBT.features.settings = {
         
         // --- 1. Sub-View Generators ---
@@ -5863,15 +6007,23 @@ window.mBTDB = {
             const domId = 'settingsModal';
             const contentHTML = this.getTabContent(tab, subTab);
             
-            const tabNavHTML = RenderEngine.ui.tabs({
-                items: [
-                    { id: 'general', label: `General` },
-                    { id: 'database', label: `Database` },
-                    { id: 'ai', label: `AI` }
-                ],
-                activeId: tab,
-                onClick: 'mBT.features.settings.open'
-            });
+            // Tier 5 Update: Manual Tab Construction for Event Delegation
+            const tabs = [
+                { id: 'general', label: `General` },
+                { id: 'database', label: `Database` },
+                { id: 'ai', label: `AI` }
+            ];
+            
+            const tabNavHTML = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                ${tabs.map(t => {
+                    const isActive = t.id === tab;
+                    const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                    const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                    return `<button data-action="nav-settings" data-tab="${t.id}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        ${t.label}
+                    </button>`;
+                }).join('')}
+            </div>`;
 
             const existingModal = document.getElementById(domId);
             if (existingModal) {
@@ -6011,7 +6163,7 @@ window.mBTDB = {
         }
     };
 
-    /* ========= v19.65 FINANCE ENGINE (mBT.features.finance) ========= */
+    /* ========= v19.54 FINANCE ENGINE (mBT.features.finance) ========= */
     mBT.features.finance = {
         openModal: function(itemId) {
             // 1. Locate Context
@@ -6101,18 +6253,21 @@ window.mBTDB = {
         }
     };
 
-   /* --- v19.55 PUBLISH BRIDGE --- */
+    /* --- v19.54 PUBLISH BRIDGE --- */
     window.showPublishModal = function() {
         const content = `
         <div class="grid grid-cols-1 gap-4 p-6">
-            <button onclick="mBTME.close('publishModal'); window.print();" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
+            <!-- PDF Button -->
+            <button data-action="export" data-type="pdf" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.print}</div>
                 <div>
-                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Print Budget</h4>
-                    <p class="text-[10px] text-slate-400 font-bold mt-1">Generate PDF via Browser</p>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Export PDF (Report)</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Professional Formatted Document</p>
                 </div>
             </button>
-            <button onclick="mBTME.close('publishModal'); mBTPublisher.toMoo();" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
+
+            <!-- Backup (.moo) -->
+            <button data-action="export" data-type="moo" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.save}</div>
                 <div>
                     <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Backup Project</h4>
@@ -6120,7 +6275,8 @@ window.mBTDB = {
                 </div>
             </button>
             
-            <button onclick="mBTME.close('publishModal'); mBTPublisher.io.saveBundle(budget);" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
+            <!-- Bundle -->
+            <button data-action="export" data-type="bundle" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.folder}</div>
                 <div>
                     <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Export Budget</h4>
@@ -6128,25 +6284,27 @@ window.mBTDB = {
                 </div>
             </button>
             
-            <!-- New Digital Export Button -->
-           <button onclick="mBTME.close('publishModal'); if(mBTDB.state.currentDocId){ mBTPublisher.format.htmlStandalone('mBTDB_Workspace', budget.documents.find(d=>d.id===mBTDB.state.currentDocId).label); } else { mBTME.alert('Studio Required', 'Open a document in the Studio to export as Webpage.'); }" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-500 hover:shadow-lg transition-all group text-left">
+            <!-- Digital/HTML -->
+           <button data-action="export" data-type="html" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.phone}</div>
                 <div>
                     <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Digital Export</h4>
                     <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive HTML Call Sheet</p>
                 </div>
             </button>
-            <button onclick="mBTME.alert('Coming Soon', 'Excel export is in development.');" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl opacity-60 hover:opacity-100 hover:border-indigo-500 transition-all group text-left">
+
+            <!-- Excel -->
+            <button data-action="export" data-type="xlsx" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.grid}</div>
                 <div>
                     <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Excel Export</h4>
-                    <p class="text-[10px] text-slate-400 font-bold mt-1">Coming in v19.6</p>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Spreadsheet (.xlsx)</p>
                 </div>
             </button>
         </div>`;
         mBTME.open('publish', 'Publish & Export', content, 'max-w-sm');
     };
-
+    
     // --- Backward Compatibility Alias ---
     // Fix: We use .bind() to ensure 'this' refers to the settings object, not the window
     window.showSettingsModal = mBT.features.settings.open.bind(mBT.features.settings);
@@ -6155,7 +6313,7 @@ window.mBTDB = {
 
 
 
-/* ========= v19.60 DOCUMENTS HUB (mBT.features.documents) ========= */
+/* ========= v19.54 DOCUMENTS HUB (mBT.features.documents) ========= */
     mBT.features.documents = {
         // Logic Resolution: Creates a new document instance from a template definition
         createFromTemplate: function(templateId) {
@@ -7706,7 +7864,7 @@ window.updateAllHeaders = () => {
         reader.readAsText(file);
     };
 
-/* ================= v19.65 TIER 6: SYSTEM IGNITION & EVENTS ================= */
+/* ================= v19.54 TIER 6: SYSTEM IGNITION & EVENTS ================= */
 
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
@@ -7788,6 +7946,38 @@ window.updateAllHeaders = () => {
         // E. Personnel Actions
         mBT.core.action('crew-toggle', (e, el) => toggleCrewPopup(el, e));
         mBT.core.action('crew-profile', (e, el) => openCrewProfile(el, e, el.dataset.id, el.dataset.section));
+
+        // --- NEW: Registry Expansion (Instruction Set 4) ---
+        
+        // 1. Export Bridge
+        mBT.core.action('export', (e, el) => {
+            const type = el.dataset.type;
+            if(document.getElementById('publishModal')) mBTME.close('publishModal');
+            if (typeof mBTPublisher === 'undefined') return;
+
+            if (type === 'pdf') mBTPublisher.format.professionalPdf(budget);
+            else if (type === 'moo') mBTPublisher.io.saveMoo(budget);
+            else if (type === 'bundle') mBTPublisher.io.saveBundle(budget);
+            else if (type === 'html') mBTPublisher.format.htmlStandalone('budget-sections', budget.projectName);
+            else if (type === 'xlsx') mBTPublisher.format.professionalXlsx(budget);
+        });
+
+        // 2. Navigation
+        mBT.core.action('nav-settings', (e, el) => mBT.features.settings.open(el.dataset.tab));
+
+        // 3. Studio Engine
+        mBT.core.action('studio-undo', () => { if(mBTDB.undo) mBTDB.undo(); });
+        mBT.core.action('studio-redo', () => { if(mBTDB.redo) mBTDB.redo(); });
+        mBT.core.action('studio-sync', () => mBTDB.syncFromBudget());
+        mBT.core.action('studio-sync-prev', () => mBTDB.syncFromPrevious());
+        mBT.core.action('studio-preview', () => mBTDB.openPreviewSelector());
+        mBT.core.action('studio-snapshot', () => mBTDB.snapshotDoc());
+        mBT.core.action('studio-template', () => mBTDB.saveTemplate());
+        mBT.core.action('studio-toggle-edit', () => mBTDB.toggleEditMode());
+
+        // 4. Trash Logic
+        mBT.core.action('trash-toggle', (e, el) => mBT.features.trash.toggleItem(el.dataset.id));
+        mBT.core.action('trash-exec', (e, el) => mBT.features.trash.singleAction(el.dataset.act, el.dataset.id));
 
         // F. Stage Actions
         mBT.core.action('stage-update', (e, el) => {
