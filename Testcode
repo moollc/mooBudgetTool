@@ -15,6 +15,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.1.2/gridstack.min.css" rel="stylesheet"/>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap');
         
 /* --- Core Layout & Scrollbar --- */
         /* Logic Resolution: Increased bottom padding to prevent content overlap with footer */
@@ -73,9 +74,17 @@
         .sticky-th { position: sticky; top: 43px; z-index: 20; background-color: #ffffff; }
 
 /* --- 10. Document Studio Canvas --- */
-        .grid-stack { background-color: #f3f4f6; min-height: 80vh; padding: 10px !important; }
-        .grid-stack-item-content { background-color: white; border-radius: 0.75rem; border: 1px solid #e5e7eb; overflow: hidden !important; display: flex; flex-direction: column; cursor: grab; }
+        .grid-stack { background-color: #64748b; min-height: 80vh; padding: 20px !important; }
         
+        /* Print Standard Override */
+        .print-standard .grid-stack-item-content { box-shadow: none !important; border: 1px solid #000 !important; border-radius: 0 !important; }
+        .print-standard input, .print-standard textarea { color: #000 !important; font-weight: bold !important; }
+        
+        .grid-stack-item-content { background-color: white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); overflow: hidden !important; display: flex; flex-direction: column; cursor: grab; }
+        
+        /* Widget Contrast Fixes: Force darker labels on white widgets */
+        .grid-stack-item-content .text-slate-400 { color: #64748b; } 
+
         /* Stabilization: Hide tools/handles when not editing */
         #mBTDB_Workspace:not(.editing-mode) .ui-resizable-handle,
         #mBTDB_Workspace:not(.editing-mode) .widget-tools { display: none !important; }
@@ -224,6 +233,62 @@
         }
         .classic-theme .bg-slate-50 { background-color: #eee !important; }
         
+/* --- 14. Studio Interface (New) --- */
+        .studio-input { 
+            background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; 
+            padding: 6px 8px; font-size: 11px; font-weight: 700; color: #334155; 
+            transition: all 0.2s; width: 100%; 
+        }
+        .studio-input:focus { 
+            background-color: #ffffff; border-color: #3b82f6; 
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); outline: none; 
+        }
+        .studio-input:hover:not(:focus) { border-color: #cbd5e1; background-color: #f1f5f9; }
+        
+        /* GridStack Handle Fixes */
+        .grid-stack-item-content { overflow: visible !important; } /* Allow handles to show outside if needed */
+        .widget-body { overflow-y: auto; height: 100%; border-radius: 0 0 12px 12px; } /* Internal scroll */
+        
+        .ui-resizable-handle { z-index: 100 !important; }
+        .editing-mode .ui-resizable-se { 
+            display: block !important; width: 20px !important; height: 20px !important; 
+            right: 2px !important; bottom: 2px !important; 
+        }
+        .editing-mode .ui-resizable-se::after {
+            content: ''; position: absolute; right: 4px; bottom: 4px;
+            width: 6px; height: 6px; border-right: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;
+        }
+
+        /* --- 15. The Paper Protocol (WYSIWYG Layout) --- */
+        .sheet-workspace { background-color: #525659; padding: 40px; display: flex; justify-content: center; min-height: 100%; overflow-y: auto; }
+        .sheet-a4 { 
+            width: 210mm; min-height: 297mm; background: white; 
+            box-shadow: 0 0 15px rgba(0,0,0,0.5); padding: 10mm; 
+            position: relative; box-sizing: border-box; 
+            display: flex; flex-direction: column;
+        }
+        
+        /* Champion/Studio Layout Kit */
+        .cs-theme { font-family: 'Arial Narrow', 'Roboto Condensed', sans-serif; color: #000; }
+        .cs-theme input, .cs-theme textarea, .cs-theme select { background: transparent; border: 1px solid transparent; width: 100%; font-family: inherit; }
+        .cs-theme input:hover, .cs-theme textarea:hover { border-color: #e2e8f0; background-color: #f8fafc; }
+        .cs-theme input:focus, .cs-theme textarea:focus { border-color: #3b82f6; outline: none; background-color: white; }
+        
+        .cs-box { border: 2px solid #000; margin-bottom: -2px; position: relative; }
+        .cs-header-bar { background: #000; color: #fff; font-weight: 800; text-transform: uppercase; padding: 2px 6px; font-size: 10px; letter-spacing: 0.5px; }
+        
+        .cs-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+        .cs-table th { border: 1px solid #000; background: #000; color: #fff; text-transform: uppercase; padding: 4px; font-weight: 700; text-align: left; }
+        .cs-table td { border: 1px solid #000; padding: 4px; vertical-align: top; }
+        
+        /* Print Protocol */
+        @media print {
+            body { background: white; padding: 0; }
+            .sheet-workspace { background: white; padding: 0; display: block; overflow: visible; }
+            .sheet-a4 { box-shadow: none; margin: 0; width: 100%; height: 100%; page-break-after: always; padding: 0; }
+            .no-print, .widget-tools, .ui-resizable-handle { display: none !important; }
+        }
+
 </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.1.2/gridstack-all.js"></script>
@@ -1122,112 +1187,124 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 input.value = '';
             };
 
-            // Tier 2: Intent Gatekeeper
-            const askUserIntent = (data, assetReport = null) => {
-                input.value = ''; // Reset immediately so change event fires again if canceled
+        // Tier 2: Intent Gatekeeper
+        const askUserIntent = (data, assetReport = null) => {
+            const content = `
+            <div class="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+                <button id="btnImportResume" class="flex flex-col items-center gap-4 p-6 bg-emerald-50 border border-emerald-100 rounded-2xl hover:border-emerald-500 hover:shadow-xl transition-all group text-center">
+                    <div class="w-14 h-14 bg-white text-emerald-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform shadow-sm">${mBTAssets.wand}</div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-emerald-900">Resume Project</h4>
+                        <p class="text-[9px] text-emerald-600 font-bold mt-1">Load Budget & Assets</p>
+                    </div>
+                </button>
+
+                <button id="btnImportBlueprint" class="flex flex-col items-center gap-4 p-6 bg-indigo-50 border border-indigo-100 rounded-2xl hover:border-indigo-500 hover:shadow-xl transition-all group text-center">
+                    <div class="w-14 h-14 bg-white text-indigo-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform shadow-sm">${mBTAssets.copy}</div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-indigo-900">Save as Blueprint</h4>
+                        <p class="text-[9px] text-indigo-600 font-bold mt-1">Extract Structure Only</p>
+                    </div>
+                </button>
+            </div>
+            <div class="px-6 pb-4 text-center">
+                <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Source: ${mBT.ui.render.esc(data.projectName)}</p>
+            </div>`;
+
+            mBTME.open('importIntent', 'Import Strategy', content, 'max-w-lg', { noPadding: true });
+
+            setTimeout(() => {
+                const resume = document.getElementById('btnImportResume');
+                const blueprint = document.getElementById('btnImportBlueprint');
                 
-                const content = `
-                <div class="grid grid-cols-1 gap-4 p-6">
-                    <button id="btnImportProject" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
-                        <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                        </div>
-                        <div>
-                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Resume Project</h4>
-                            <p class="text-[10px] text-slate-400 font-bold mt-1">Load into Active Workspace</p>
-                        </div>
-                    </button>
-
-                    <button id="btnImportBlueprint" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
-                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                        </div>
-                        <div>
-                            <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Save as Blueprint</h4>
-                            <p class="text-[10px] text-slate-400 font-bold mt-1">Add to Template Library</p>
-                        </div>
-                    </button>
-                </div>`;
-
-                mBTME.open('importIntent', 'Import Strategy', content, 'max-w-sm');
-
-                setTimeout(() => {
-                    const btnProj = document.getElementById('btnImportProject');
-                    const btnBlue = document.getElementById('btnImportBlueprint');
-                    
-                    if(btnProj) btnProj.onclick = () => { 
-                        mBTME.close('importIntentModal'); 
-                        finalizeImport(data, assetReport); 
-                    };
-                    
-                    if(btnBlue) btnBlue.onclick = () => { 
-                        mBTME.close('importIntentModal'); 
-                        mBT.data.templates.saveFromProject(data); 
-                        mBTME.alert("Success", "Blueprint saved to library.");
-                    };
-                }, 50);
-            };
-
-            // PATH A: Bundle Import (.zip)
-            if (file.name.endsWith('.zip')) {
-                if (typeof JSZip === 'undefined') return mBTME.alert("Error", "Bundler module (JSZip) missing.");
+                if(resume) resume.onclick = () => {
+                    mBTME.close('importIntentModal');
+                    finalizeImport(data, assetReport);
+                };
                 
-                mBTME.showLoader("Unpacking Chef's Crate...");
+                if(blueprint) blueprint.onclick = () => {
+                    mBTME.close('importIntentModal');
+                    mBT.data.templates.saveFromProject(data);
+                    mBTME.alert("Success", "Structure extracted to My Blueprints.", () => {
+                        if(typeof showNewProjectModal === 'function') showNewProjectModal();
+                    });
+                };
+            }, 50);
+        };
+        
+        // --- UNIVERSAL LOADER (Zip First -> Text Fallback) ---
+        mBTME.showLoader("Analyzing Container...");
+        
+        JSZip.loadAsync(file).then(async (zip) => {
+            // PATH A: Valid Bundle (New .moo or .zip)
+            try {
+                // 1. Extract Core Data
+                const mooFile = Object.values(zip.files).find(f => f.name.endsWith('.moo') && !f.name.startsWith('__MACOSX'));
+                if (!mooFile) throw new Error("Invalid Bundle: No .moo manifest found.");
                 
-                JSZip.loadAsync(file).then(async (zip) => {
-                    // 1. Extract Core Data
-                    const mooFile = Object.values(zip.files).find(f => f.name.endsWith('.moo') && !f.name.startsWith('__MACOSX'));
-                    if (!mooFile) throw new Error("Invalid Bundle: No .moo manifest found.");
-                    
-                    const jsonStr = await mooFile.async("string");
-                    const data = JSON.parse(jsonStr);
-                    
-                    // 2. Integrity & Rehydration Loop
-                    let stats = { total: 0, restored: 0, missing: 0 };
-                    
-                    if (data.documents) {
-                        for (const doc of data.documents) {
-                            if (!doc.attachments) continue;
-                            for (let i = 0; i < doc.attachments.length; i++) {
-                                const att = doc.attachments[i];
-                                if (att.location === 'internal' && att.key) {
-                                    stats.total++;
-                                    const safeName = (att.name || 'file').replace(/[^a-z0-9.]/gi, '_');
-                                    const zipPath = `assets/${doc.id}_${i}_${safeName}`;
-                                    const assetFile = zip.file(zipPath);
-                                    
-                                    if (assetFile) {
-                                        try {
-                                            const blob = await assetFile.async("blob");
-                                            await mBT.data.storage.saveBlob(att.key, blob);
-                                            stats.restored++;
-                                        } catch (e) {
-                                            console.error("Asset Write Fail:", att.name, e);
-                                            stats.missing++;
-                                        }
-                                    } else {
+                const jsonStr = await mooFile.async("string");
+                const data = JSON.parse(jsonStr);
+                
+                // 2. Rehydration Loop
+                let stats = { total: 0, restored: 0, missing: 0 };
+                
+                if (data.documents) {
+                    for (const doc of data.documents) {
+                        if (!doc.attachments) continue;
+                        for (let i = 0; i < doc.attachments.length; i++) {
+                            const att = doc.attachments[i];
+                            if (att.location === 'internal' && att.key) {
+                                stats.total++;
+                                const safeName = (att.name || 'file').replace(/[^a-z0-9.]/gi, '_');
+                                const zipPath = `assets/${doc.id}_${i}_${safeName}`;
+                                const assetFile = zip.file(zipPath);
+                                
+                                if (assetFile) {
+                                    try {
+                                        const blob = await assetFile.async("blob");
+                                        await mBT.data.storage.saveBlob(att.key, blob);
+                                        stats.restored++;
+                                    } catch (e) {
+                                        console.error("Asset Write Fail:", att.name, e);
                                         stats.missing++;
                                     }
+                                } else {
+                                    stats.missing++;
                                 }
                             }
                         }
                     }
-                    
-                    mBTME.hideLoader();
-                    askUserIntent(data, stats);
-                    
-                }).catch(e => {
-                    mBTME.hideLoader();
-                    mBTME.alert("Bundle Error", "Corrupted Archive: " + e.message);
-                });
-                return;
+                }
+                
+                mBTME.hideLoader();
+                askUserIntent(data, stats);
+
+            } catch(e) {
+                throw e; // Pass to fallback handler
             }
 
-            // PATH B: Legacy Text Import (.json)
+        }).catch(e => {
+            // PATH B: Legacy Text Import (JSON)
+            // If JSZip failed, it's likely a text file.
+            
             const reader = new FileReader();
-            reader.onload = (e) => askUserIntent(JSON.parse(e.target.result));
+            reader.onload = (e) => {
+                mBTME.hideLoader();
+                try {
+                    const json = JSON.parse(e.target.result);
+                    askUserIntent(json);
+                } catch (parseErr) {
+                    // If both Zip and JSON fail, it's truly invalid
+                    mBTME.alert("Import Error", "File format not recognized. (Not a valid Bundle or Legacy JSON)");
+                }
+            };
+            reader.onerror = () => {
+                mBTME.hideLoader();
+                mBTME.alert("System Error", "Could not read file.");
+            };
             reader.readAsText(file);
-        },
+        });
+    },
         
         recorder: {
             snapshot: function(actionDescription) {
@@ -2629,13 +2706,16 @@ function getAbbreviatedName(name, maxLen = 25) {
         /* --- v19.54 UI BLUEPRINTS: Standardized Component Generators --- */
         ui: {
             // 1. Tab Navigation Generator
-            tabs: function({ items, activeId, onClick }) {
+            tabs: function({ items, activeId, onClick, dataAction }) {
                 return `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
                     ${items.map(t => {
                         const isActive = t.id === activeId;
                         const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
                         const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
-                        return `<button onclick="${onClick}('${t.id}')" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        // Logic Resolution: Support both legacy onClick and modern data-action delegation
+                        const actionAttr = dataAction ? `data-action="${dataAction}" data-tab="${t.id}"` : `onclick="${onClick}('${t.id}')"`;
+                        
+                        return `<button type="button" ${actionAttr} class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
                             ${t.label} ${t.count !== undefined ? `<span class="opacity-50 ml-1">(${t.count})</span>` : ''}
                         </button>`;
                     }).join('')}
@@ -2648,7 +2728,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                 const cursorClass = onClick ? 'cursor-pointer' : '';
                 
                 const actionHtml = actions.map(a => 
-                    `<button onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-500 transition-colors scale-90 hover:scale-100" title="${a.title || ''}">${a.icon}</button>`
+                    `<button type="button" aria-label="${a.title || 'Action'}" onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-500 transition-colors scale-90 hover:scale-100" title="${a.title || ''}">${a.icon}</button>`
                 ).join('');
 
                 return `<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group ${classes} ${cursorClass}" ${clickAttr}>
@@ -2671,7 +2751,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                 const cursorClass = onClick ? 'cursor-pointer' : '';
 
                 const actionHtml = actions.map(a => 
-                    `<button onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-600 transition-colors" title="${a.title || ''}">${a.icon}</button>`
+                    `<button type="button" aria-label="${a.title || 'Action'}" onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-600 transition-colors" title="${a.title || ''}">${a.icon}</button>`
                 ).join('');
 
                 return `<div class="group bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex items-center justify-between ${cursorClass}">
@@ -3720,7 +3800,7 @@ console.log("TIER 4 render defined", typeof render);
                 zip.file(`${cleanName}.moo`, JSON.stringify(budgetData, null, 2));
                 
             // 2. Add Manifest
-            const readme = `Project: ${budgetData.projectName}\nExported: ${new Date().toLocaleString()}\n\nContains master budget data (.moo) and embedded assets.`;
+            const readme = `Project: ${budgetData.projectName}\nExported: ${new Date().toLocaleString()}\n\nContains master budget data (.moo) and embedded assets.\nFormat: Unified Container (Zip-based)`;
             zip.file("README.txt", readme);
 
             // --- Asset Injection Loop ---
@@ -3760,7 +3840,7 @@ console.log("TIER 4 render defined", typeof render);
                 // 3. Generate & Download
                 try {
                     const content = await zip.generateAsync({ type: "blob" });
-                    this.forceDownload(content, `${cleanName}_bundle.zip`);
+                    this.forceDownload(content, `${cleanName}.moo`);
                 } catch(e) {
                     console.error("Bundle Error:", e);
                     mBTME.alert("Export Error", "Failed to generate bundle.");
@@ -3792,21 +3872,62 @@ console.log("TIER 4 render defined", typeof render);
                 const source = document.getElementById(elementId);
                 if(!source) return;
 
-                // Clone to isolate from current view state
+                // 1. Clone & Clean (Surgical "White Paper" Logic)
                 const clone = source.cloneNode(true);
                 clone.style.position = 'absolute';
                 clone.style.left = '-9999px';
                 clone.style.width = '1000px'; 
+                clone.style.background = '#ffffff'; // Force White Paper
+                clone.style.color = '#000000';      // Force High Contrast Text
                 clone.classList.remove('editing-mode');
                 
-                // Scrub UI controls
-                clone.querySelectorAll('button, .widget-controls, .grid-stack-handle').forEach(el => el.remove());
+                // 2. Linearize Layout (Convert Dashboard to Document Flow)
+                // Strip GridStack absolute positioning to create a vertical stack
+                const items = clone.querySelectorAll('.grid-stack-item');
+                items.forEach(item => {
+                    item.style.position = 'relative';
+                    item.style.left = 'auto';
+                    item.style.top = 'auto';
+                    item.style.width = '100%';
+                    item.style.height = 'auto';
+                    item.style.marginBottom = '20px';
+                    
+                    // Style Adjustments for Print Look
+                    const content = item.querySelector('.grid-stack-item-content');
+                    if(content) {
+                        content.style.boxShadow = 'none';
+                        content.style.border = '1px solid #000'; // Hard border for contrast
+                        content.style.borderRadius = '0'; // Square corners
+                    }
+                });
+                
+                const grid = clone.querySelector('.grid-stack');
+                if(grid) {
+                    grid.style.height = 'auto';
+                    grid.style.display = 'block'; // Disable grid behavior
+                }
+
+                // 3. De-Clutter (Remove Dashboard Artifacts)
+                const artifacts = [
+                    '.widget-header', 
+                    '.widget-tools', 
+                    '.ui-resizable-handle', 
+                    'button', 
+                    '.grid-stack-handle', 
+                    '.widget-controls'
+                ];
+                clone.querySelectorAll(artifacts.join(',')).forEach(el => el.remove());
+
+                // 4. Flatten Data (Inputs -> Text)
                 clone.querySelectorAll('textarea').forEach(el => {
                     const div = document.createElement('div');
                     div.innerHTML = el.value.replace(/\n/g, '<br>');
                     div.className = 'text-xs p-2 leading-relaxed whitespace-pre-wrap';
+                    div.style.fontFamily = 'inherit'; // Inherit Doc Font
+                    div.style.border = 'none';
                     el.parentNode.replaceChild(div, el);
                 });
+                
                 clone.querySelectorAll('input').forEach(el => {
                     if(el.type !== 'hidden') {
                         const span = document.createElement('span');
@@ -3814,10 +3935,13 @@ console.log("TIER 4 render defined", typeof render);
                         span.className = el.className;
                         span.style.border = 'none';
                         span.style.background = 'transparent';
+                        span.style.padding = '0';
+                        span.style.fontWeight = 'bold';
                         el.parentNode.replaceChild(span, el);
                     }
                 });
 
+                // 5. Capture
                 document.body.appendChild(clone);
                 html2canvas(clone, { scale: 2, useCORS: true, logging: false }).then(canvas => {
                     document.body.removeChild(clone);
@@ -3916,83 +4040,180 @@ console.log("TIER 4 render defined", typeof render);
 
             // --- RESTORED: Professional Typesetter Engine (v19.50 Logic) ---
             professionalPdf: function(budgetData, options = {}) {
-                if (!window.jspdf) return mBTME.alert("Error", "PDF Engine missing.");
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                const fmt = mBTLE.format.currency;
-                const dateStr = new Date().toLocaleDateString();
+                // ... existing professionalPdf logic ...
+            },
 
-                // 1. Header
-                doc.setFontSize(16);
-                doc.setFont("helvetica", "bold");
-                doc.text(budgetData.projectName || "Untitled Budget", 14, 15);
+            // --- NEW: Champion Layout Engine (Strict A4) ---
+            championCallSheet: function(docData) {
+                const d = docData || {};
+                const meta = d.meta || {};
+                const contacts = d.contacts || {};
+                const schedule = d.schedule || [];
+                const cast = d.cast || [];
+                const crew = d.crew || [];
+                const locs = d.locations || [];
                 
-                doc.setFontSize(10);
-                doc.setFont("helvetica", "normal");
-                doc.text(budgetData.company || "Independent Production", 14, 20);
-                doc.text(`Generated: ${dateStr}`, 14, 25);
+                // Helper: Time Format
+                const t = (val) => val || '--:--';
 
-                // 2. Financial Summary Table
-                const summaryData = [
-                    ['Subtotal', fmt(budgetData.subtotal)],
-                    [`Contingency (${budgetData.contingencyPercentage}%)`, fmt(budgetData.subtotal * (budgetData.contingencyPercentage/100))],
-                    [`Sales Tax (${budgetData.salesTaxPercentage}%)`, fmt(budgetData.subtotal * (budgetData.salesTaxPercentage/100))],
-                    [`Discount (${budgetData.discountPercentage}%)`, `-${fmt((budgetData.grandTotal + (budgetData.subtotal * (budgetData.discountPercentage/100))) - budgetData.grandTotal)}`], // approx
-                    ['GRAND TOTAL', fmt(budgetData.grandTotal)]
-                ];
+                // 1. CSS (The "Champion" Style Definition)
+                const css = `
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap');
+                        .cs-body { font-family: 'Roboto Condensed', sans-serif; font-size: 10pt; color: #000; background: #fff; width: 210mm; min-height: 297mm; padding: 10mm; box-sizing: border-box; position: relative; }
+                        .cs-header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
+                        .cs-title { font-size: 24pt; font-weight: bold; text-transform: uppercase; line-height: 0.9; }
+                        .cs-meta { font-size: 9pt; text-align: right; }
+                        
+                        .cs-grid-3 { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 10px; margin-bottom: 10px; font-size: 8pt; }
+                        .cs-box { border: 1px solid #000; }
+                        .cs-box-header { background: #000; color: #fff; font-weight: bold; padding: 2px 5px; text-transform: uppercase; font-size: 8pt; }
+                        .cs-box-content { padding: 5px; }
+                        
+                        .cs-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 9pt; }
+                        .cs-table th { background: #000; color: #fff; font-weight: bold; text-transform: uppercase; padding: 4px; border: 1px solid #000; text-align: left; }
+                        .cs-table td { border: 1px solid #000; padding: 4px; vertical-align: top; }
+                        .cs-row-grey { background: #eee; }
+                        
+                        .cs-banner { background: #000; color: #fff; font-weight: bold; text-align: center; padding: 3px; text-transform: uppercase; margin-bottom: 5px; font-size: 10pt; }
+                        
+                        .cs-weather { display: flex; justify-content: space-between; font-size: 8pt; }
+                        
+                        /* Density Utils */
+                        .text-right { text-align: right; }
+                        .text-center { text-align: center; }
+                        .font-bold { font-weight: bold; }
+                        .w-10 { width: 10%; }
+                    </style>
+                `;
 
-                doc.autoTable({
-                    startY: 30,
-                    head: [['Category', 'Amount']],
-                    body: summaryData,
-                    theme: 'striped',
-                    headStyles: { fillColor: [40, 40, 40] },
-                    styles: { font: "helvetica", fontSize: 10 },
-                    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } },
-                    margin: { left: 14, right: 100 }
-                });
+                // 2. HTML Structure (Mapped to Data)
+                const html = `
+                    <div class="cs-body">
+                        <!-- HEADER -->
+                        <div class="cs-header">
+                            <div>
+                                <div class="cs-title">${mBT.ui.render.esc(meta.productionTitle || 'UNTITLED PROJECT')}</div>
+                                <div style="font-weight:bold; font-size:12pt;">CALL SHEET</div>
+                            </div>
+                            <div class="cs-meta">
+                                <div><strong>Date:</strong> ${meta.shootDate || 'TBD'}</div>
+                                <div><strong>Crew Call:</strong> ${meta.crewCallTime || '07:00'}</div>
+                                <div style="margin-top:5px; font-size:12pt; font-weight:bold;">${mBTDB.calcShootDay(meta.shootDate)}</div>
+                            </div>
+                        </div>
 
-                // 3. Detailed Line Items
-                let finalY = doc.lastAutoTable.finalY + 10;
-                const tableRows = [];
+                        <!-- TOP INFO GRID -->
+                        <div class="cs-grid-3">
+                            <!-- Left: Production -->
+                            <div class="cs-box">
+                                <div class="cs-box-header">Production Office</div>
+                                <div class="cs-box-content">
+                                    <strong>Director:</strong> ${contacts.director || 'TBD'}<br>
+                                    <strong>Producer:</strong> ${contacts.producer || 'TBD'}<br>
+                                    <strong>1st AD:</strong> ${contacts.ad || 'TBD'}<br>
+                                    <br>
+                                    ${meta.productionCompany || 'Indie Prod'}
+                                </div>
+                            </div>
+                            
+                            <!-- Center: Locations -->
+                            <div class="cs-box">
+                                <div class="cs-box-header">Locations</div>
+                                <div class="cs-box-content">
+                                    ${locs.map((l, i) => `
+                                        <div style="margin-bottom:5px;">
+                                            <strong>LOC ${i+1}:</strong> ${l.name}<br>
+                                            ${l.address}<br>
+                                            <em style="font-size:7pt">Nearest Hosp: ${l.hospital || 'Dial 911'}</em>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
 
-                Object.entries(budgetData.sections).forEach(([key, sec]) => {
-                    // Section Header Row
-                    tableRows.push([{ content: key.toUpperCase(), colSpan: 5, styles: { fillColor: [220, 220, 220], fontStyle: 'bold' } }]);
-                    
-                    // Items
-                    sec.items.forEach(item => {
-                        const est = parseFloat(item.total) || 0;
-                        tableRows.push([
-                            item.description,
-                            item.quantity,
-                            item.unit,
-                            fmt(item.rate),
-                            fmt(est)
-                        ]);
-                    });
+                            <!-- Right: Weather & Specs -->
+                            <div class="cs-box">
+                                <div class="cs-box-header">Conditions</div>
+                                <div class="cs-box-content">
+                                    <div class="cs-weather">
+                                        <span>Sunrise: ${meta.sunriseSunset ? meta.sunriseSunset.split('/')[0] : '06:00'}</span>
+                                        <span>Sunset: ${meta.sunriseSunset ? meta.sunriseSunset.split('/')[1] : '18:00'}</span>
+                                    </div>
+                                    <hr style="border:0; border-top:1px dashed #ccc; margin:4px 0;">
+                                    ${locs[0] && locs[0].weather ? locs[0].weather : 'Sunny, 30°C'}
+                                </div>
+                            </div>
+                        </div>
 
-                    // Section Total Row
-                    tableRows.push([{ content: `Total ${key}: ${fmt(sec.total)}`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } }]);
-                });
+                        <!-- SHOOTING SCHEDULE -->
+                        <div class="cs-banner">Shooting Schedule</div>
+                        <table class="cs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:10%">Time</th>
+                                    <th style="width:8%">Scn</th>
+                                    <th style="width:8%">I/E</th>
+                                    <th>Description / Action</th>
+                                    <th style="width:15%">Cast</th>
+                                    <th style="width:15%">Location</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${schedule.map((row, i) => {
+                                    const isMeal = row.type === 'meal';
+                                    if (isMeal) return `<tr class="cs-row-grey"><td class="text-center font-bold">${t(row.time)}</td><td colspan="5" class="text-center font-bold uppercase">${row.description}</td></tr>`;
+                                    return `
+                                    <tr>
+                                        <td class="text-center font-bold">${t(row.time)}</td>
+                                        <td class="text-center">${row.scene || '-'}</td>
+                                        <td class="text-center">${row.ie || '-'}</td>
+                                        <td><strong>${row.description || ''}</strong><br><em style="font-size:8pt">${row.note || ''}</em></td>
+                                        <td class="text-center">${row.cast || ''}</td>
+                                        <td class="text-center">${row.loc || '1'}</td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
 
-                doc.autoTable({
-                    startY: finalY,
-                    head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
-                    body: tableRows,
-                    theme: 'grid',
-                    headStyles: { fillColor: [37, 99, 235] }, // Blue-600
-                    styles: { fontSize: 9, cellPadding: 2 },
-                    columnStyles: {
-                        0: { cellWidth: 'auto' },
-                        1: { cellWidth: 15, halign: 'center' },
-                        2: { cellWidth: 15, halign: 'center' },
-                        3: { cellWidth: 30, halign: 'right' },
-                        4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
-                    }
-                });
+                        <!-- CAST LIST -->
+                        <div class="cs-banner">Cast & Talent</div>
+                        <table class="cs-table">
+                            <thead>
+                                <tr>
+                                    <th>Character</th>
+                                    <th>Artist</th>
+                                    <th class="text-center">Pickup</th>
+                                    <th class="text-center">H/MU</th>
+                                    <th class="text-center">Costume</th>
+                                    <th class="text-center">Set Call</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${cast.map(c => `
+                                    <tr>
+                                        <td><strong>${c.character}</strong></td>
+                                        <td>${c.actor}</td>
+                                        <td class="text-center">${t(c.pickup)}</td>
+                                        <td class="text-center">${t(c.hmu)}</td>
+                                        <td class="text-center">${t(c.costume)}</td>
+                                        <td class="text-center font-bold">${t(c.setCall)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        
+                        <!-- FOOTER -->
+                        <div style="position: absolute; bottom: 10mm; width: 100%; border-top: 1px solid #000; padding-top:5px; font-size:8pt; text-align:center;">
+                            PRODUCED BY: ${meta.productionCompany || 'Indie Prod'} | RECYCLE BIN: Please destroy this document after use.
+                        </div>
+                    </div>
+                `;
 
-                doc.save(`${(budgetData.projectName||'budget').replace(/\s+/g, '_')}.pdf`);
+                // 3. Render
+                const win = window.open('', '_blank');
+                win.document.write('<html><head><title>Call Sheet</title>' + css + '</head><body>' + html + '</body></html>');
+                win.document.close();
+                setTimeout(() => win.print(), 500);
             },
 
             professionalXlsx: function(budgetData) {
@@ -4300,6 +4521,7 @@ window.mBTDB = {
             if (widget) { widget.x = node.x; widget.y = node.y; widget.w = node.w; widget.h = node.h; }
         });
         this._triggerSave();
+        mBT.data.save(); // Force disk commit
     },
 
     // --- 3. Publishing & Intelligence Hub ---
@@ -4368,10 +4590,20 @@ window.mBTDB = {
     autoFillWidget: function(type, docId) {
         mBTME.confirm("Auto-Fill", `Auto-fill ${type}? Current items will be preserved.`, () => {
             if(type === 'contacts') {
-                const roles = ['director', 'producer', '1st ad'];
-                roles.forEach(r => {
-                    const c = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(r));
-                    if(c) this.updateData(docId, `contacts.${r === '1st ad' ? 'ad' : r}`, `${c.name} ${c.contact||''}`);
+                const map = { 'director': 'Director', 'producer': 'Producer', 'ad': '1st AD' };
+                Object.entries(map).forEach(([key, role]) => {
+                    let hit = null;
+                    // 1. Budget Scan (Deterministic): Prioritize actual hired crew
+                    if(budget.sections) Object.values(budget.sections).some(s => {
+                        const i = s.items.find(x => x.description.toLowerCase().includes(role.toLowerCase()) && x.crew && x.crew.name);
+                        if(i) { hit = { name: i.crew.name, contact: i.crew.phone || i.crew.email }; return true; }
+                    });
+                    // 2. Global Fallback: Check address book if budget is empty
+                    if(!hit) {
+                        const g = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(role.toLowerCase()));
+                        if(g) hit = { name: g.name, contact: g.contact || g.phone };
+                    }
+                    if(hit) this.updateData(docId, `contacts.${key}`, `${hit.name} ${hit.contact||''}`);
                 });
             } else if(type === 'crew') {
                 Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
@@ -4381,6 +4613,39 @@ window.mBTDB = {
             this.renderFrame();
         });
     },
+
+    neuralFill: async function(widgetId, docId) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if(!doc) return;
+        
+        const widget = doc.content.widgets.find(w => w.id === widgetId);
+        if(!widget) return;
+
+        const provider = mBT.features.ai.getSelectedProvider();
+        const apiKey = mBT.features.ai.getStoredApiKey(provider);
+        
+        if(!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Neural Fill.");
+
+        mBTME.showLoader("Generating Content...");
+
+        // Construct Context-Aware Prompt
+        const prompt = `Generate content for a section labeled "${widget.label}" for a film production named "${budget.projectName}" (${doc.label}). Context: Film Production. Keep it professional and concise.`;
+
+        try {
+            const result = await mBT.features.ai.callUnifiedAI(provider, apiKey, prompt);
+            
+            // Logic Resolution: Sanitize output (remove markdown code fences if AI adds them)
+            const cleanResult = result.replace(/^```[a-z]*\n|```$/g, '').trim();
+            
+            this.updateData(docId, `additional.${widgetId}`, cleanResult);
+            mBTME.hideLoader();
+            this.renderFrame();
+        } catch (e) {
+            mBTME.hideLoader();
+            mBTME.alert("Generation Failed", e.message);
+        }
+    },
+
     autoFillWeather: async function(docId, index, name) {
         const btn = document.getElementById(`w-btn-${index}`);
         if(btn) btn.innerHTML = `<span class="animate-spin inline-block">...</span>`;
@@ -4414,9 +4679,21 @@ window.mBTDB = {
             { icon: mBTAssets.close, title: "Close", onClick: "mBTDB.close()", color: "rose" }
         ];
 
+        // --- NEW: Paper Protocol Structure ---
         const contentHtml = `
-            <div id="mBTDB_MetaArea" class="mb-6 bg-white p-6 shadow-sm rounded-2xl border border-slate-200 animate-in fade-in duration-500"></div>
-            <div class="grid-stack no-scrollbar"></div>
+            <div class="sheet-workspace" id="mBTDB_ScrollArea">
+                <div class="sheet-a4 cs-theme" id="mBTDB_Paper">
+                    <!-- Embedded Header (Part of the Page) -->
+                    <div id="mBTDB_MetaArea" class="mb-4"></div>
+                    <!-- The Grid (Flexible Content) -->
+                    <div class="grid-stack flex-grow"></div>
+                    <!-- Footer Branding -->
+                    <div class="mt-auto pt-4 border-t-2 border-black flex justify-between text-[8px] font-bold uppercase tracking-widest">
+                        <span>${budget.company || 'Production Office'}</span>
+                        <span>Generated by mooBudget</span>
+                    </div>
+                </div>
+            </div>
         `;
 
         container.innerHTML = RenderEngine.layouts.studioPanel({
@@ -4427,7 +4704,7 @@ window.mBTDB = {
             contentHtml: contentHtml,
             actions: actions,
             toolbarId: 'mBTDB_Buttons',
-            containerClasses: `p-6 ${this.state.isEditing ? 'editing-mode' : ''}`
+            containerClasses: 'p-0 overflow-hidden' // Remove default padding, workspace handles it
         });
 
         this._renderMetaHeader(doc);
@@ -4451,12 +4728,34 @@ window.mBTDB = {
     },
     _generateWidgetHTML: function(widget, doc) {
         const cleanTitle = widget.label || (widget.type.charAt(0).toUpperCase() + widget.type.slice(1));
-        let tools = ''; if(widget.type === 'contacts') tools += `<button onclick="mBTDB.toggleVertical('${widget.id}')" class="p-1.5 hover:bg-slate-100 rounded-md transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
-        if(widget.type !== 'image') tools += `<button onclick="mBTDB.autoFillWidget('${widget.type}', '${doc.id}')" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-all">${this.icons.wand}</button>`;
-        return `<div class="grid-stack-item-content group"><div class="widget-header flex justify-between items-center p-2 bg-white border-b border-slate-50"><input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-500 w-32 outline-none focus:text-blue-600 transition-colors"><div class="widget-tools flex items-center gap-0.5">${tools}<button onclick="mBTDB.deleteWidget('${widget.id}')" class="p-1.5 hover:text-red-600 transition-colors">${this.icons.trash}</button></div></div><div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div></div>`;
+        
+        let tools = ''; 
+        if(widget.type === 'contacts') {
+            tools += `<button type="button" aria-label="Toggle View" data-action="widget-toggle-view" data-id="${widget.id}" class="p-1.5 hover:bg-slate-100 rounded-md transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
+        }
+        if(widget.type !== 'image') {
+            // Tier 5 Logic: Hybrid Wand Router
+            // Structured data uses Deterministic Sync (AutoFill). Unstructured data uses Neural Fill (AI).
+            const isNeural = ['richText', 'treatment', 'breakdown'].includes(widget.type);
+            const action = isNeural ? 'widget-neural-fill' : 'widget-autofill';
+            const title = isNeural ? 'AI Generate' : 'Auto-Fill';
+            
+            tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-all" title="${title}">${this.icons.wand}</button>`;
+        }
+        
+        return `<div class="grid-stack-item-content group">
+            <div class="widget-header flex justify-between items-center p-2 bg-white border-b border-slate-50">
+                <input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-500 w-32 outline-none focus:text-blue-600 transition-colors">
+                <div class="widget-tools flex items-center gap-0.5">
+                    ${tools}
+                    <button type="button" aria-label="Delete Widget" data-action="widget-delete" data-id="${widget.id}" class="p-1.5 hover:text-red-600 transition-colors">${this.icons.trash}</button>
+                </div>
+            </div>
+            <div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div>
+        </div>`;
     },
     _getContentForWidget: function(widget, doc) {
-        const data = this.resolveLinkedData(doc); // LIVE SYNC (Phase 9)
+        const data = this.resolveLinkedData(doc); // LIVE SYNC (Phase 9)        
         if (widget.type === 'contacts') return this._renderContacts(doc.id, data, widget);
         if (['logistics', 'locations'].includes(widget.type)) return this._renderLogistics(doc.id, data);
         if (widget.type === 'schedule') return this._renderSchedule(doc.id, data);
@@ -4468,29 +4767,133 @@ window.mBTDB = {
     },
     _renderMetaHeader: function(doc) {
         const d = doc.content.data;
-        const html = `<div class="flex flex-wrap gap-4 items-end justify-between px-2"><div class="w-full sm:w-auto flex-grow"><input value="${d.meta.productionTitle || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-3xl font-black uppercase w-full outline-none text-slate-900 bg-transparent mb-1 tracking-tighter" placeholder="PRODUCTION TITLE"><div class="flex gap-4"><div class="flex items-center gap-1.5"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</span><input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="mbt-input w-auto font-bold border-none bg-slate-50 px-2 rounded-md"></div><div class="flex items-center gap-1.5"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Call</span><input type="text" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" onblur="mBTDB.formatTime(this)" class="mbt-input w-16 bg-yellow-300 font-black border-none text-center rounded-md" placeholder="00:00"></div><div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-0.5 rounded-md"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Day</span><span class="text-xs font-black text-slate-800">${this.calcShootDay(d.meta.shootDate)}</span></div></div></div><div class="w-48 text-right"><input value="${d.meta.productionCompany || ''}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionCompany', this.value)" class="mbt-input text-right font-bold border-none text-slate-500 italic" placeholder="Production Company"></div></div>`;
+        const lock = this.state.isEditing ? '' : 'disabled';
+        
+        // Champion Layout Masthead (3-Column Grid)
+        const html = `
+        <div class="flex justify-between items-end border-b-4 border-black pb-2 mb-2">
+            <input ${lock} value="${d.meta.productionTitle || 'UNTITLED PROJECT'}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">
+            <div class="text-right shrink-0">
+                <div class="text-2xl font-black">CALL SHEET</div>
+                <div class="flex gap-4 text-xs font-bold mt-1">
+                    <div>DATE: <input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="inline-block w-auto border-b border-slate-300"></div>
+                    <div>CALL: <input type="text" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" class="inline-block w-16 text-center border-b border-slate-300" placeholder="00:00"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-2 mb-4 text-[10px]">
+            <!-- Left: Execs & Production -->
+            <div class="cs-box p-2">
+                <div class="font-bold border-b border-black mb-1">PRODUCTION OFFICE</div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+                    <span class="font-bold">DIRECTOR:</span> <input ${lock} value="${d.contacts.director||''}" onchange="mBTDB.updateData('${doc.id}','contacts.director',this.value)" class="font-bold">
+                    <span class="font-bold">PRODUCER:</span> <input ${lock} value="${d.contacts.producer||''}" onchange="mBTDB.updateData('${doc.id}','contacts.producer',this.value)">
+                    <span class="font-bold">1st AD:</span> <input ${lock} value="${d.contacts.ad||''}" onchange="mBTDB.updateData('${doc.id}','contacts.ad',this.value)">
+                </div>
+            </div>
+            
+            <!-- Center: Locations -->
+            <div class="cs-box p-2">
+                <div class="font-bold border-b border-black mb-1">LOCATIONS</div>
+                ${(d.locations||[]).map((l,i) => `
+                    <div class="mb-2">
+                        <div class="flex justify-between"><span class="font-bold">LOC ${i+1}:</span> <input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${doc.id}','locations',${i},'name',this.value)" class="font-bold w-2/3"></div>
+                        <textarea ${lock} onchange="mBTDB.updateRow('${doc.id}','locations',${i},'address',this.value)" class="w-full resize-none h-8 leading-tight" placeholder="Address...">${l.address}</textarea>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Right: Weather / Specs -->
+            <div class="cs-box p-2">
+                <div class="font-bold border-b border-black mb-1">CONDITIONS</div>
+                <div class="flex justify-between mb-1">
+                    <span>Sunrise: <input ${lock} value="${d.meta.sunriseSunset?.split('/')[0]||''}" class="w-12 text-center border-b border-slate-200"></span>
+                    <span>Sunset: <input ${lock} value="${d.meta.sunriseSunset?.split('/')[1]||''}" class="w-12 text-center border-b border-slate-200"></span>
+                </div>
+                <textarea ${lock} class="w-full h-12 resize-none" placeholder="Weather forecast...">${d.locations?.[0]?.weather || ''}</textarea>
+            </div>
+        </div>`;
+        
         const container = document.getElementById('mBTDB_MetaArea'); if(container) container.innerHTML = html;
     },
     _renderContacts: function(docId, d, widget) {
+        const lock = this.state.isEditing ? '' : 'disabled';
         const gridClass = widget.vertical ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3";
-        const renderField = (path, val, label, role) => `<div class="relative group"><div class="flex justify-between items-center mb-1"><div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${label}</div><div class="cursor-pointer text-slate-300 hover:text-blue-500 transition-colors" onclick="mBTDB.pullFromOpenGate('${docId}', '${path}', '${role}')">${this.icons.user}</div></div><input value="${val||''}" onchange="mBTDB.updateData('${docId}', '${path}', this.value)" class="mbt-input font-bold border-slate-100 hover:border-slate-300 focus:bg-white transition-all"></div>`;
+        const renderField = (path, val, label, role) => `<div class="relative group"><div class="flex justify-between items-center mb-1"><div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${label}</div>${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500 transition-colors" onclick="mBTDB.pullFromOpenGate('${docId}', '${path}', '${role}')">${this.icons.user}</div>` : ''}</div><input ${lock} value="${val||''}" onchange="mBTDB.updateData('${docId}', '${path}', this.value)" class="studio-input font-bold disabled:bg-transparent disabled:border-slate-100 disabled:text-slate-800"></div>`;
         return `<div class="grid ${gridClass} gap-4 p-4 h-full overflow-y-auto no-scrollbar">${renderField('contacts.director', d.contacts.director, 'Director', 'director')}${renderField('contacts.producer', d.contacts.producer, 'Producer', 'producer')}${renderField('contacts.ad', d.contacts.ad, '1st AD', 'ad')}</div>`;
     },
     _renderLogistics: function(docId, d) {
-        return `<div class="flex flex-col h-full"><div class="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex gap-2 items-center justify-between"><div class="flex items-center gap-2"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sun Cycles:</span><input value="${d.meta.sunriseSunset||''}" onchange="mBTDB.updateData('${docId}','meta.sunriseSunset',this.value)" class="bg-transparent text-[10px] font-bold w-32 outline-none" placeholder="06:00 / 18:00"></div></div><div class="flex-grow overflow-y-auto p-4 space-y-4 no-scrollbar">${(d.locations||[]).map((l,i) => `<div class="flex flex-wrap gap-4 items-start border-b border-slate-50 pb-4 mb-2"><div class="w-full sm:w-1/3 space-y-2"><input value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="mbt-input font-black uppercase text-xs" placeholder="LOCATION NAME"><input type="text" value="${l.timeOnLocation||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="mbt-input text-[10px]" placeholder="Time at Location"></div><div class="w-full sm:w-1/3"><textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="mbt-input h-20 resize-none text-[10px] leading-relaxed" placeholder="Full Address...">${l.address}</textarea></div><div class="w-full sm:w-1/4 flex-grow"><div class="relative"><textarea onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="mbt-input h-20 resize-none text-[10px] bg-blue-50/30 border-blue-100" placeholder="Weather Forecast...">${l.weather}</textarea><button id="w-btn-${i}" onclick="mBTDB.autoFillWeather('${docId}', ${i}, '${l.name}')" class="absolute bottom-2 right-2 bg-white text-blue-600 p-1.5 rounded-lg shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-all">${this.icons.cloud}</button></div></div></div>`).join('')}<button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-2 bg-white text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl border border-dashed border-slate-200 transition-all flex items-center justify-center gap-2">${this.icons.plus} Add Location</button></div></div>`;
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        return `<div class="flex flex-col h-full"><div class="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex gap-2 items-center justify-between"><div class="flex items-center gap-2"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sun Cycles:</span><input ${lock} value="${d.meta.sunriseSunset||''}" onchange="mBTDB.updateData('${docId}','meta.sunriseSunset',this.value)" class="bg-transparent text-[10px] font-bold w-32 outline-none disabled:text-slate-600" placeholder="06:00 / 18:00"></div></div><div class="flex-grow overflow-y-auto p-4 space-y-4 no-scrollbar">${(d.locations||[]).map((l,i) => `<div class="flex flex-wrap gap-4 items-start border-b border-slate-50 pb-4 mb-2 relative group/loc"><div class="w-full sm:w-1/3 space-y-2"><input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="studio-input font-black uppercase text-xs disabled:bg-transparent disabled:border-none disabled:p-0 disabled:text-slate-900" placeholder="LOCATION NAME"><input ${lock} type="text" value="${l.timeOnLocation||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="studio-input text-[10px] disabled:bg-transparent disabled:border-none disabled:p-0 disabled:text-slate-500" placeholder="Time at Location"></div><div class="w-full sm:w-1/3"><textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="studio-input h-20 resize-none text-[10px] leading-relaxed disabled:bg-slate-50 disabled:text-slate-700" placeholder="Full Address...">${l.address}</textarea></div><div class="w-full sm:w-1/4 flex-grow"><div class="relative"><textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="studio-input h-20 resize-none text-[10px] bg-blue-50/30 border-blue-100 text-blue-800 disabled:opacity-100" placeholder="Weather Forecast...">${l.weather}</textarea><button id="w-btn-${i}" onclick="mBTDB.autoFillWeather('${docId}', ${i}, '${l.name}')" class="absolute bottom-2 right-2 bg-white text-blue-600 p-1.5 rounded-lg shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-all ${hideTool}">${this.icons.cloud}</button></div></div><button onclick="mBTDB.deleteRow('${docId}','locations',${i},'logistics')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool}">${this.icons.trash}</button></div>`).join('')}<button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-2 bg-white text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl border border-dashed border-slate-200 transition-all flex items-center justify-center gap-2 ${hideTool}">${this.icons.plus} Add Location</button></div></div>`;
     },
     _renderSchedule: function(docId, d) {
-        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar"><table class="w-full text-[10px] border-collapse min-w-[700px]"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-tighter"><th class="p-2 w-16 text-center">Time</th><th class="p-2 w-12 text-center">Scn</th><th class="p-2 text-left">Description / Scene Note</th><th class="p-2 w-32 text-left">Cast</th><th class="p-2 w-12 text-center">I/E</th><th class="p-2 w-32 text-left">Location</th><th class="p-2"></th></tr></thead><tbody class="divide-y divide-slate-50">${d.schedule.map((row, i) => `<tr class="${row.type==='meal'?'bg-amber-50/50':''}"><td><input value="${row.time}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" onblur="mBTDB.formatTime(this)" class="w-full text-center font-black text-slate-900 bg-transparent border-0 outline-none"></td>${row.type==='meal'? `<td colspan="4"><input value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="w-full text-center font-black uppercase text-amber-700 bg-transparent border-0 outline-none tracking-widest"></td>`: `<td><input value="${row.scene}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'scene',this.value)" class="w-full text-center font-bold bg-transparent border-0 outline-none"></td><td><input value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="w-full bg-transparent border-0 outline-none font-medium px-2"></td><td><input value="${row.cast}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'cast',this.value)" class="w-full bg-transparent border-0 outline-none italic"></td><td><input value="${row.ie}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'ie',this.value)" class="w-full text-center text-[9px] font-black uppercase bg-transparent border-0 outline-none"></td>`}<td><input value="${row.loc}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'loc',this.value)" class="w-full bg-transparent border-0 outline-none text-slate-500"></td><td class="text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','schedule',${i}, 'schedule')" class="text-slate-200 hover:text-red-500 transition-colors">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="flex gap-2 p-2 bg-slate-50/50 border-t border-slate-100 widget-controls"><button onclick="mBTDB.addRow('${docId}','schedule','shot')" class="flex-1 bg-white border border-slate-200 text-emerald-600 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl hover:shadow-sm transition-all">+ Add Shot</button><button onclick="mBTDB.addRow('${docId}','schedule','meal')" class="flex-1 bg-white border border-slate-200 text-amber-600 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl hover:shadow-sm transition-all">+ Add Meal</button></div></div>`;
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        
+        // Champion Layout: High-Density Table
+        return `
+        <div class="h-full flex flex-col cs-box border-none">
+            <div class="cs-header-bar flex justify-between items-center">
+                <span>SHOOTING SCHEDULE</span>
+                <span class="text-[8px] font-normal opacity-70">CONFIDENTIAL</span>
+            </div>
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-12 text-center">TIME</th>
+                            <th class="w-10 text-center">SCN</th>
+                            <th class="w-10 text-center">I/E</th>
+                            <th class="text-left">DESCRIPTION / ACTION / NOTES</th>
+                            <th class="w-16 text-center">CAST</th>
+                            <th class="w-20 text-left">LOC</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${d.schedule.map((row, i) => {
+                            const isMeal = row.type === 'meal';
+                            const rowBg = isMeal ? 'bg-slate-100 font-bold' : '';
+                            return `
+                            <tr class="${rowBg} hover:bg-blue-50 transition-colors">
+                                <td class="p-1"><input ${lock} value="${row.time}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="text-center font-bold" placeholder="00:00"></td>
+                                ${isMeal ? 
+                                `<td colspan="5" class="p-1 text-center uppercase tracking-widest text-[10px]"><input ${lock} value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="text-center w-full uppercase"></td>` : 
+                                `
+                                <td class="p-1"><input ${lock} value="${row.scene}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'scene',this.value)" class="text-center"></td>
+                                <td class="p-1"><input ${lock} value="${row.ie}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'ie',this.value)" class="text-center uppercase"></td>
+                                <td class="p-1"><input ${lock} value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="font-medium w-full"></td>
+                                <td class="p-1"><input ${lock} value="${row.cast}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'cast',this.value)" class="text-center font-bold text-slate-600"></td>
+                                <td class="p-1"><input ${lock} value="${row.loc}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'loc',this.value)" class="text-xs"></td>
+                                `}
+                                <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','schedule',${i}, 'schedule')" class="text-slate-300 hover:text-red-500">×</button></td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex gap-2 p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','schedule','shot')" class="flex-1 bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Shot</button>
+                <button onclick="mBTDB.addRow('${docId}','schedule','meal')" class="flex-1 bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Meal</button>
+            </div>
+        </div>`;
     },
     _renderCrew: function(docId, d) {
-        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar"><table class="w-full text-[10px] border-collapse"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-2 text-left">Department</th><th class="p-2 text-left">Position</th><th class="p-2 text-left">Name</th><th class="p-2 text-left">Contact</th><th class="p-2 w-20 text-center">Call</th><th class="p-2"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.crew||[]).map((c,i) => `<tr class="hover:bg-slate-50/30 transition-colors"><td class="p-1"><input value="${c.department||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="w-full font-black uppercase text-[9px] text-slate-400 bg-transparent border-0 outline-none"></td><td class="p-1"><input value="${c.position||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="w-full font-bold text-slate-700 bg-transparent border-0 outline-none"></td><td class="p-1"><div class="relative flex items-center"><input value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="w-full font-black text-slate-900 bg-transparent border-0 outline-none"><div class="cursor-pointer text-slate-200 hover:text-blue-500 ml-1" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position||'crew'}')">${this.icons.user}</div></div></td><td class="p-1"><input value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="w-full text-[9px] text-slate-500 bg-transparent border-0 outline-none font-mono"></td><td class="p-1"><input type="text" value="${c.callTime||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" onblur="mBTDB.formatTime(this)" class="w-full text-center font-black bg-transparent border-0 outline-none text-blue-600"></td><td class="p-1 text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-200 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30"><button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-all hover:text-blue-600">+ Add Crew Member</button></div></div>`;
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar p-2"><table class="w-full text-[10px] border-collapse"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-1 text-left w-1/4">Department</th><th class="p-1 text-left w-1/4">Position</th><th class="p-1 text-left w-1/4">Name</th><th class="p-1 text-left w-1/4">Contact</th><th class="p-1 w-16 text-center">Call</th><th class="p-1 w-8"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.crew||[]).map((c,i) => `<tr class="hover:bg-slate-50/30 transition-colors"><td class="p-1"><input ${lock} value="${c.department||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="studio-input font-black uppercase text-[9px] text-slate-400 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} value="${c.position||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="studio-input font-bold text-slate-700 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><div class="relative flex items-center"><input ${lock} value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="studio-input font-black text-slate-900 pr-6 disabled:bg-transparent disabled:border-none">${this.state.isEditing ? `<div class="absolute right-2 cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position||'crew'}')">${this.icons.user}</div>` : ''}</div></td><td class="p-1"><input ${lock} value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="studio-input text-[9px] font-mono disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.callTime||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center font-black text-blue-600 disabled:bg-transparent disabled:border-none"></td><td class="p-1 text-center widget-controls ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30 ${hideTool}"><button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-all hover:text-blue-600">+ Add Crew Member</button></div></div>`;
     },
     _renderTalent: function(docId, d) {
-        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar"><table class="w-full text-[10px] border-collapse min-w-[500px]"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-2 text-left">Character</th><th class="p-2 text-left">Actor Name</th><th class="p-2 text-left">Contact</th><th class="p-2 w-10 text-center">Status</th><th class="p-2 w-16 text-center">PU</th><th class="p-2 w-16 text-center">HMU</th><th class="p-2 w-16 text-center text-blue-600">SET</th><th class="p-2"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.cast||[]).map((c,i) => `<tr><td class="p-1"><input value="${c.character||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="w-full font-bold text-slate-500 bg-transparent border-0 outline-none px-2"></td><td class="p-1"><div class="relative flex items-center"><input value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="w-full font-black text-slate-900 bg-transparent border-0 outline-none"><div class="cursor-pointer text-slate-200 hover:text-blue-500 ml-1" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div></div></td><td class="p-1"><input value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'contact',this.value)" class="w-full text-[9px] font-mono bg-transparent border-0 outline-none text-slate-400"></td><td class="p-1"><input value="${c.status||'W'}" onchange="mBTDB.updateRow('${docId}','cast',${i},'status',this.value)" class="w-full text-center font-black uppercase bg-transparent border-0 outline-none"></td><td class="p-1"><input type="text" value="${c.pickup||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" onblur="mBTDB.formatTime(this)" class="w-full text-center bg-transparent border-0 outline-none"></td><td class="p-1"><input type="text" value="${c.hmu||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" onblur="mBTDB.formatTime(this)" class="w-full text-center bg-transparent border-0 outline-none"></td><td class="p-1"><input type="text" value="${c.setCall||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" onblur="mBTDB.formatTime(this)" class="w-full text-center font-black bg-yellow-100 rounded border-0 outline-none text-slate-900"></td><td class="p-1 text-center widget-controls"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-200 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30"><button onclick="mBTDB.addRow('${docId}','cast','talent')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl hover:text-purple-600 transition-all">+ Add Talent</button></div></div>`;
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar p-2"><table class="w-full text-[10px] border-collapse min-w-[500px]"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-1 text-left">Character</th><th class="p-1 text-left">Actor Name</th><th class="p-1 text-left">Contact</th><th class="p-1 w-10 text-center">Status</th><th class="p-1 w-14 text-center">PU</th><th class="p-1 w-14 text-center">HMU</th><th class="p-1 w-14 text-center text-blue-600">SET</th><th class="p-1 w-8"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.cast||[]).map((c,i) => `<tr><td class="p-1"><input ${lock} value="${c.character||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="studio-input font-bold text-slate-500 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><div class="relative flex items-center"><input ${lock} value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="studio-input font-black text-slate-900 pr-6 disabled:bg-transparent disabled:border-none">${this.state.isEditing ? `<div class="absolute right-2 cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div>` : ''}</div></td><td class="p-1"><input ${lock} value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'contact',this.value)" class="studio-input text-[9px] font-mono text-slate-400 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} value="${c.status||'W'}" onchange="mBTDB.updateRow('${docId}','cast',${i},'status',this.value)" class="studio-input text-center font-black uppercase disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.pickup||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.hmu||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.setCall||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center font-black bg-yellow-100 border-yellow-200 text-slate-900 disabled:opacity-100"></td><td class="p-1 text-center widget-controls ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30 ${hideTool}"><button onclick="mBTDB.addRow('${docId}','cast','talent')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl hover:text-purple-600 transition-all">+ Add Talent</button></div></div>`;
     },
     _renderRichText: function(docId, widgetId, data) {
+        const lock = this.state.isEditing ? '' : 'disabled';
         const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
-        return `<div class="h-full flex flex-col p-2"><div class="flex-grow relative"><textarea onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="w-full h-full p-2 text-xs text-slate-800 bg-transparent border-0 outline-none resize-none font-medium leading-relaxed" placeholder="Type notes...">${val||''}</textarea></div></div>`;
+        return `<div class="h-full flex flex-col p-2"><div class="flex-grow relative"><textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="studio-input h-full p-3 text-xs text-slate-800 resize-none font-medium leading-relaxed disabled:bg-transparent disabled:border-none" placeholder="Type notes...">${val||''}</textarea></div></div>`;
     },
     // Logic Resolution: New Image Rendering Logic with Optimization
     _renderImage: function(docId, widgetId, data) {
@@ -4501,14 +4904,16 @@ window.mBTDB = {
             return `
             <div class="relative w-full h-full group bg-slate-50 flex items-center justify-center overflow-hidden">
                 <img src="${val}" class="max-w-full max-h-full object-contain">
+                ${this.state.isEditing ? `
                 <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button onclick="document.getElementById('file_${widgetId}').click()" class="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-50">Change</button>
                     <button onclick="mBTDB.updateData('${docId}', 'additional.${widgetId}', '')" class="bg-white text-rose-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-50">Remove</button>
                 </div>
-                <input type="file" id="file_${widgetId}" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, '${docId}', '${widgetId}')">
+                <input type="file" id="file_${widgetId}" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, '${docId}', '${widgetId}')">` : ''}
             </div>`;
         } else {
             // Empty State
+            if (!this.state.isEditing) return `<div class="w-full h-full flex items-center justify-center bg-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-widest">Empty Image Block</div>`;
             return `
             <div class="w-full h-full flex flex-col items-center justify-center bg-slate-50 hover:bg-blue-50/50 transition-colors border-2 border-dashed border-slate-100 hover:border-blue-200 cursor-pointer p-4 group" onclick="document.getElementById('file_${widgetId}').click()">
                 <div class="text-slate-300 group-hover:text-blue-400 mb-2 scale-125 transition-transform group-hover:scale-150">${this.icons.image}</div>
@@ -4596,7 +5001,29 @@ window.mBTDB = {
         this._triggerSave();
     },
     _autoResizeWidget: function(widgetId) { const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`); if(!el) return; const body = el.querySelector('.widget-body'); if(!body) return; const currentHeight = body.style.height; body.style.height = 'auto'; const contentHeight = body.scrollHeight + 45; body.style.height = currentHeight; let newH = Math.ceil(contentHeight / 60); if(newH < 3) newH = 3; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === widgetId); if(w && w.h !== newH) { w.h = newH; this.state.grid.update(el, { h: newH }); this._triggerSave(); } },
-    formatTime: function(el) { let val = el.value.replace(/[^0-9]/g, ''); if(val.length === 4) { el.value = val.substring(0,2) + ':' + val.substring(2,4); el.dispatchEvent(new Event('change')); } },
+    formatTime: function(el, docId) {
+        let val = el.value.replace(/[^0-9]/g, '');
+        // Fetch 24h setting if docId provided
+        let is24h = false;
+        if(docId) {
+             const doc = budget.documents.find(d => d.id === docId);
+             if(doc && doc.content.data.meta.is24h) is24h = true;
+        }
+
+        if(val.length === 4) {
+            let hh = parseInt(val.substring(0,2));
+            let mm = parseInt(val.substring(2,4));
+            
+            if (is24h) {
+                if (hh > 23) hh = 23;
+                if (mm > 59) mm = 59;
+            }
+            
+            const formatted = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+            el.value = formatted;
+            el.dispatchEvent(new Event('change'));
+        }
+    },
     saveTemplate: function() { 
         const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
         mBTME.prompt("Save Template", "Template Name:", doc.label + " Preset", (name) => {
@@ -5512,21 +5939,29 @@ window.mBTDB = {
             const selectedCount = this.state.selected.size;
             const hasItems = items.length > 0;
 
-            const tabHtml = RenderEngine.ui.tabs({
-                items: [
-                    { id: 'documents', label: 'Documents', count: docTrash.length },
-                    { id: 'projects', label: 'Projects', count: projectTrash.length }
-                ],
-                activeId: type,
-                onClick: 'mBT.features.trash.open' 
-            });
+            // Tier 5 Update: Manual Tab Construction for Event Delegation
+            const tabs = [
+                { id: 'documents', label: 'Documents', count: docTrash.length },
+                { id: 'projects', label: 'Projects', count: projectTrash.length }
+            ];
+            
+            const tabHtml = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                ${tabs.map(t => {
+                    const isActive = t.id === type;
+                    const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                    const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                    return `<button data-action="nav-trash" data-tab="${t.id}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        ${t.label} <span class="opacity-50 ml-1">(${t.count})</span>
+                    </button>`;
+                }).join('')}
+            </div>`;
 
             // Logic Resolution: Dynamic Toolbar for Bulk Actions with Checkbox Logic
             const toolbarHtml = `
                 <div class="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 shadow-sm">
                     <div class="flex items-center gap-2">
                         <input type="checkbox" 
-                               onchange="mBT.features.trash.toggleAll(this.checked)" 
+                               data-action="trash-toggle-all"
                                ${hasItems && selectedCount === items.length ? 'checked' : ''} 
                                ${!hasItems ? 'disabled' : ''}
                                class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
@@ -5534,10 +5969,10 @@ window.mBTDB = {
                     </div>
                     <div class="flex gap-2">
                         ${selectedCount > 0 ? `
-                            <button onclick="mBT.features.trash.performAction('restore')" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center gap-1">${this.icons.undo} Restore</button>
-                            <button onclick="mBT.features.trash.performAction('delete')" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">${this.icons.trash} Delete</button>
+                            <button data-action="trash-bulk" data-type="restore" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center gap-1">${this.icons.undo} Restore</button>
+                            <button data-action="trash-bulk" data-type="delete" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">${this.icons.trash} Delete</button>
                         ` : `
-                            <button onclick="mBT.features.trash.performAction('empty')" class="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all" ${!hasItems ? 'disabled style="opacity:0.5"' : ''}>Empty Bin</button>
+                            <button data-action="trash-bulk" data-type="empty" class="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all" ${!hasItems ? 'disabled style="opacity:0.5"' : ''}>Empty Bin</button>
                         `}
                     </div>
                 </div>`;
@@ -5558,9 +5993,9 @@ window.mBTDB = {
                     const meta = type === 'documents' ? `Type: ${item.type || 'Custom'}` : `Company: ${item.company || 'Indie'}`;
                     
                     return `
-                    <div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer" onclick="mBT.features.trash.toggleItem('${RenderEngine.esc(id)}')">
+                    <div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer" data-action="trash-toggle" data-id="${RenderEngine.esc(id)}">
                         <div class="flex items-center gap-3 overflow-hidden flex-grow">
-                            <div class="flex-shrink-0" onclick="event.stopPropagation(); mBT.features.trash.toggleItem('${RenderEngine.esc(id)}');">
+                            <div class="flex-shrink-0">
                                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none">
                             </div>
                             <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-blue-500 group-hover:shadow-sm transition-all text-lg shrink-0">
@@ -5572,8 +6007,8 @@ window.mBTDB = {
                             </div>
                         </div>
                         <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button onclick="event.stopPropagation(); mBT.features.trash.singleAction('restore', '${RenderEngine.esc(id)}')" class="p-2 text-slate-300 hover:text-emerald-500 transition-colors" title="Restore">${this.icons.undo}</button>
-                            <button onclick="event.stopPropagation(); mBT.features.trash.singleAction('delete', '${RenderEngine.esc(id)}')" class="p-2 text-slate-300 hover:text-rose-500 transition-colors" title="Delete Forever">${this.icons.trash}</button>
+                            <button data-action="trash-single" data-type="restore" data-id="${RenderEngine.esc(id)}" class="p-2 text-slate-300 hover:text-emerald-500 transition-colors" title="Restore">${this.icons.undo}</button>
+                            <button data-action="trash-single" data-type="delete" data-id="${RenderEngine.esc(id)}" class="p-2 text-slate-300 hover:text-rose-500 transition-colors" title="Delete Forever">${this.icons.trash}</button>
                         </div>
                     </div>`;
                 }).join('');
@@ -6266,21 +6701,12 @@ window.mBTDB = {
                 </div>
             </button>
 
-            <!-- Backup (.moo) -->
-            <button data-action="export" data-type="moo" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
+            <!-- Save Project (Bundle .moo) -->
+            <button data-action="export" data-type="bundle" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
                 <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.save}</div>
                 <div>
-                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Backup Project</h4>
-                    <p class="text-[10px] text-slate-400 font-bold mt-1">Export .MOO Data File</p>
-                </div>
-            </button>
-            
-            <!-- Bundle -->
-            <button data-action="export" data-type="bundle" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
-                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.folder}</div>
-                <div>
-                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Export Budget</h4>
-                    <p class="text-[10px] text-slate-400 font-bold mt-1">Master Container (.moo)</p>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Master Project File</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Unified Container (.moo) - Includes Assets</p>
                 </div>
             </button>
             
@@ -6372,9 +6798,9 @@ window.mBTDB = {
             const renderDocItem = (doc) => {
                 const iconSvg = getIcon(doc.type);
                 if (isCompact) {
-                    // Grid Card (Vertical Layout)
+                    // Grid Card (Vertical Layout) - Tier 5 Event Delegation Update
                     return `
-                    <div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" onclick="mBT.features.documents.showOptions('${doc.id}')">
+                    <div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" data-action="doc-options" data-id="${doc.id}">
                          <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors shrink-0">
                             ${iconSvg}
                          </div>
@@ -6383,24 +6809,27 @@ window.mBTDB = {
                             <div class="text-[9px] text-slate-400 font-bold truncate w-full">${doc.type ? doc.type.toUpperCase() : 'DOC'}</div>
                          </div>
                          <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/90 rounded-lg shadow-sm p-1">
-                            <button onclick="event.stopPropagation(); mBTDB.snapshotDoc('${doc.id}')" class="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded" title="Duplicate">${mBTAssets.copy}</button>
-                            <button onclick="event.stopPropagation(); window.handleDocTrash('${doc.id}')" class="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded" title="Archive">${mBTAssets.trash}</button>
+                            <button data-action="doc-duplicate" data-id="${doc.id}" class="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded" title="Duplicate">${mBTAssets.copy}</button>
+                            <button data-action="doc-archive" data-id="${doc.id}" class="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded" title="Archive">${mBTAssets.trash}</button>
                          </div>
                     </div>`;
                 } else {
-                    // List Row (Horizontal Layout)
-                    // CRITICAL: Ensure onClick calls showOptions, NOT mBTDB.open
-                    return RenderEngine.ui.card({
-                        id: doc.id,
-                        icon: iconSvg,
-                        title: doc.label || 'Untitled Document',
-                        subtitle: doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document',
-                        onClick: `mBT.features.documents.showOptions('${doc.id}')`,
-                        actions: [
-                            { icon: mBTAssets.copy, title: 'Duplicate', color: 'blue', onClick: `mBTDB.snapshotDoc('${doc.id}')` },
-                            { icon: mBTAssets.trash, title: 'Archive', color: 'rose', onClick: `window.handleDocTrash('${doc.id}')` }
-                        ]
-                    });
+                    // List Row (Horizontal Layout) - Tier 5 Event Delegation Update
+                    return `<div class="group bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex items-center justify-between cursor-pointer">
+                        <div class="flex items-center gap-4 flex-grow overflow-hidden" data-action="doc-options" data-id="${doc.id}">
+                            <div class="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 group-hover:scale-110 transition-transform shrink-0">
+                                ${iconSvg}
+                            </div>
+                            <div class="min-w-0">
+                                <h4 class="font-black text-slate-900 text-xs uppercase tracking-tighter truncate">${mBT.ui.render.esc(doc.label || 'Untitled Document')}</h4>
+                                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest truncate">${doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document'}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button data-action="doc-duplicate" data-id="${doc.id}" class="p-2 text-slate-300 hover:text-blue-600 transition-colors" title="Duplicate">${mBTAssets.copy}</button>
+                            <button data-action="doc-archive" data-id="${doc.id}" class="p-2 text-slate-300 hover:text-rose-600 transition-colors" title="Archive">${mBTAssets.trash}</button>
+                        </div>
+                    </div>`;
                 }
             };
 
@@ -6414,15 +6843,19 @@ window.mBTDB = {
 
             // Tab Navigation
             const categories = ['All', 'Pre-Prod', 'Production', 'Post-Prod', 'Legal'];
-            const tabHtml = RenderEngine.ui.tabs({
-                items: categories.map(c => ({
-                    id: c,
-                    label: c,
-                    count: c === 'All' ? docs.length : docs.filter(d => getCat(d.type) === c).length
-                })),
-                activeId: activeTab,
-                onClick: 'mBT.features.documents.openVault'
-            });
+            
+            // Tier 5 Update: Manual Tab Construction for Event Delegation
+            const tabHtml = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                ${categories.map(c => {
+                    const count = c === 'All' ? docs.length : docs.filter(d => getCat(d.type) === c).length;
+                    const isActive = c === activeTab;
+                    const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                    const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                    return `<button data-action="nav-docs" data-tab="${c}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        ${c} <span class="opacity-50 ml-1">(${count})</span>
+                    </button>`;
+                }).join('')}
+            </div>`;
 
             // Logic Resolution: Persistent UI Updates (Prevents Flickering/Re-opening)
             const domId = 'documentsModal';
@@ -6525,6 +6958,7 @@ window.mBTDB = {
             if (!doc) return;
 
             const attachments = doc.attachments || [];
+            const hasFile = attachments.length > 0;
             
             // Helper: Render Attachment List
             const renderAttachmentList = () => {
@@ -6543,7 +6977,7 @@ window.mBTDB = {
                         src: src,
                         onClick: `mBT.features.documents.previewAttachment('${docId}', ${idx})`,
                         actions: [
-                            { icon: mBTAssets.eye, title: 'Preview', color: 'purple', onClick: `mBT.features.documents.previewAttachment('${docId}', ${idx})` },
+                            { icon: mBTAssets.print, title: 'Print', color: 'slate', onClick: `mBT.features.documents.printAttachment('${docId}', ${idx})` },
                             { icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`, title: 'Download', color: 'blue', onClick: `mBT.features.documents.downloadAttachment('${docId}', ${idx})` },
                             { icon: mBTAssets.trash, title: 'Remove', color: 'rose', onClick: `mBT.features.documents.removeAttachment('${docId}', ${idx})` }
                         ]
@@ -6554,6 +6988,7 @@ window.mBTDB = {
             const content = `
                 <div class="flex flex-col h-full bg-slate-50">
                     <div class="grid grid-cols-1 gap-4 p-6 shrink-0">
+                        ${!hasFile ? `
                         <button onclick="mBTME.close('docOptionsModal'); mBTDB.open('${docId}');" 
                             class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left w-full">
                             <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
@@ -6563,7 +6998,7 @@ window.mBTDB = {
                                 <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Open Studio</h4>
                                 <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive Editor</p>
                             </div>
-                        </button>
+                        </button>` : ''}
 
                         <div class="relative">
                             <button onclick="document.getElementById('docUpload_${docId}').click()" 
@@ -6572,7 +7007,7 @@ window.mBTDB = {
                                     ${mBTAssets.cloud}
                                 </div>
                                 <div>
-                                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Upload Existing</h4>
+                                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">${hasFile ? 'Replace Existing' : 'Upload Existing'}</h4>
                                     <p class="text-[10px] text-slate-400 font-bold mt-1">PDF, Word, Excel, Images</p>
                                 </div>
                             </button>
@@ -6722,6 +7157,43 @@ window.mBTDB = {
             }
         },
         
+        // --- NEW: Print Driver (Indirect Iframe Injection) ---
+        printAttachment: async function(docId, index) {
+            const doc = budget.documents.find(d => d.id === docId);
+            if (!doc || !doc.attachments || !doc.attachments[index]) return;
+            
+            const file = { ...doc.attachments[index] };
+            
+            // Resolve Internal Blob if needed
+            if (file.location === 'internal' && file.key) {
+                file.data = await mBT.data.storage.loadBlob(file.key);
+            }
+
+            if (file.type.includes('image') || file.type === 'application/pdf') {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = file.data;
+                document.body.appendChild(iframe);
+                
+                // Allow buffer time for rendering before print dialog
+                iframe.onload = function() {
+                    setTimeout(() => {
+                        try {
+                            iframe.contentWindow.focus();
+                            iframe.contentWindow.print();
+                        } catch(e) { 
+                            console.warn("Auto-print failed, opening new tab fallback.");
+                            window.open(file.data, '_blank');
+                        }
+                        // Cleanup
+                        setTimeout(() => document.body.removeChild(iframe), 60000);
+                    }, 500);
+                };
+            } else {
+                mBTME.alert("Print Error", "Cannot print this file type directly. Please download it.");
+            }
+        },
+
         // Logic Resolution: Trigger download from internal DataURL
         downloadAttachment: async function(docId, index) {
             const doc = budget.documents.find(d => d.id === docId);
@@ -7974,10 +8446,24 @@ window.updateAllHeaders = () => {
         mBT.core.action('studio-snapshot', () => mBTDB.snapshotDoc());
         mBT.core.action('studio-template', () => mBTDB.saveTemplate());
         mBT.core.action('studio-toggle-edit', () => mBTDB.toggleEditMode());
+        
+        mBT.core.action('widget-toggle-view', (e, el) => mBTDB.toggleVertical(el.dataset.id));
+        mBT.core.action('widget-neural-fill', (e, el) => mBTDB.neuralFill(el.dataset.id, el.dataset.docId));
+        mBT.core.action('widget-autofill', (e, el) => mBTDB.autoFillWidget(el.dataset.type, el.dataset.docId));
+        mBT.core.action('widget-delete', (e, el) => mBTDB.deleteWidget(el.dataset.id));
+
+        // --- NEW: Documents Hub Actions ---
+        mBT.core.action('nav-docs', (e, el) => mBT.features.documents.openVault(el.dataset.tab));
+        mBT.core.action('doc-options', (e, el) => mBT.features.documents.showOptions(el.dataset.id));
+        mBT.core.action('doc-duplicate', (e, el) => mBTDB.snapshotDoc(el.dataset.id));
+        mBT.core.action('doc-archive', (e, el) => window.handleDocTrash(el.dataset.id));
 
         // 4. Trash Logic
+        mBT.core.action('nav-trash', (e, el) => mBT.features.trash.open(el.dataset.tab));
         mBT.core.action('trash-toggle', (e, el) => mBT.features.trash.toggleItem(el.dataset.id));
-        mBT.core.action('trash-exec', (e, el) => mBT.features.trash.singleAction(el.dataset.act, el.dataset.id));
+        mBT.core.action('trash-toggle-all', (e, el) => mBT.features.trash.toggleAll(el.checked));
+        mBT.core.action('trash-bulk', (e, el) => mBT.features.trash.performAction(el.dataset.type));
+        mBT.core.action('trash-single', (e, el) => mBT.features.trash.singleAction(el.dataset.type, el.dataset.id));
 
         // F. Stage Actions
         mBT.core.action('stage-update', (e, el) => {
