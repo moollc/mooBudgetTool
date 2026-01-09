@@ -1621,44 +1621,176 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
 
         // --- NON-TRUNCATABLE TEMPLATE REGISTRY (Documents) ---
         loadTemplates() {
+            // Logic Resolution: Centralized Blueprint Schemas (Migrated from Tier 5)
+            // Open Gate is now the single source of truth for Document Layouts.
             const t = [
-                { id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true },
-                { id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false },
-                { id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true },
-                { id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true },
-                { id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false },
-                { id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true },
+                // --- WRITING & CORE ---
+                {
+                    id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true,
+                    widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Screenplay" }]
+                },
+                {
+                    id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false,
+                    widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Story Treatment" }]
+                },
+                // --- PRE-PRODUCTION ---
+                {
+                    id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'cast', x: 0, y: 2, w: 6, h: 8, type: 'cast', label: "Characters" },
+                        { id: 'logistics', x: 6, y: 2, w: 6, h: 8, type: 'logistics', label: "Locations" },
+                        { id: 'notes', x: 0, y: 10, w: 12, h: 6, type: 'richText', label: "Scene Notes & Requirements" }
+                    ]
+                },
+                {
+                    id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'schedule', x: 0, y: 2, w: 12, h: 12, type: 'schedule', label: "Shot Sequence" },
+                        { id: 'logistics', x: 0, y: 14, w: 12, h: 4, type: 'logistics', label: "Locations" }
+                    ]
+                },
+                {
+                    id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'frame1', x: 0, y: 2, w: 4, h: 6, type: 'image', label: "Frame 1" },
+                        { id: 'desc1', x: 0, y: 8, w: 4, h: 3, type: 'richText', label: "Action 1" },
+                        { id: 'frame2', x: 4, y: 2, w: 4, h: 6, type: 'image', label: "Frame 2" },
+                        { id: 'desc2', x: 4, y: 8, w: 4, h: 3, type: 'richText', label: "Action 2" },
+                        { id: 'frame3', x: 8, y: 2, w: 4, h: 6, type: 'image', label: "Frame 3" },
+                        { id: 'desc3', x: 8, y: 8, w: 4, h: 3, type: 'richText', label: "Action 3" }
+                    ]
+                },
+                {
+                    id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'logistics', x: 0, y: 2, w: 6, h: 10, type: 'richText', label: "Logistics Checklist" },
+                        { id: 'creative', x: 6, y: 2, w: 6, h: 10, type: 'richText', label: "Creative Checklist" }
+                    ]
+                },
+                {
+                    id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'cast', x: 0, y: 2, w: 12, h: 10, type: 'cast', label: "Audition List" },
+                        { id: 'notes', x: 0, y: 12, w: 12, h: 4, type: 'richText', label: "Casting Director Notes" }
+                    ]
+                },
+                {
+                    id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'logistics', x: 0, y: 2, w: 12, h: 10, type: 'logistics', label: "Location Details" },
+                        { id: 'notes', x: 0, y: 12, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)" }
+                    ]
+                },
                 { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
-                { id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false },
                 { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: 'calendar', default: false },
                 { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: 'calendar', default: false },
-                { id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false },
-                { id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget/Cost Report', icon: 'money', default: true },
+                
+                // --- FINANCIAL & PITCH ---
+                {
+                    id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'cover', x: 0, y: 2, w: 6, h: 8, type: 'image', label: "Key Art" },
+                        { id: 'synopsis', x: 6, y: 2, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis" },
+                        { id: 'mood1', x: 0, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 1" },
+                        { id: 'mood2', x: 4, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 2" },
+                        { id: 'mood3', x: 8, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 3" },
+                        { id: 'team', x: 0, y: 14, w: 12, h: 6, type: 'contacts', label: "Key Creative Team" }
+                    ]
+                },
+                {
+                    id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget Report', icon: 'money', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'summary', x: 0, y: 2, w: 12, h: 4, type: 'richText', label: "Executive Summary" },
+                        { id: 'breakdown', x: 0, y: 6, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown" }
+                    ]
+                },
                 { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: 'alert', default: false },
-                { id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false },
-                { id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true },
-                { id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true },
+
+                // --- PRODUCTION ---
+                {
+                    id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true,
+                    widgets: [
+                        { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts', label: "Key Contacts" },
+                        { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics', label: "Logistics" },
+                        { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule', label: "Schedule" },
+                        { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast', label: "Cast List" },
+                        { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew', label: "Crew List" },
+                        { id: 'notes', x: 0, y: 26, w: 12, h: 4, type: 'richText', label: "General Notes" },
+                        { id: 'footer', x: 0, y: 30, w: 12, h: 2, type: 'footer', label: "Safety Footer" }
+                    ]
+                },
+                {
+                    id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'schedule', x: 0, y: 2, w: 12, h: 6, type: 'schedule', label: "Scenes Shot" },
+                        { id: 'crew', x: 0, y: 8, w: 12, h: 6, type: 'crew', label: "Crew Attendance" },
+                        { id: 'notes', x: 0, y: 14, w: 6, h: 6, type: 'richText', label: "Production Notes" },
+                        { id: 'delays', x: 6, y: 14, w: 6, h: 6, type: 'richText', label: "Delays / Issues" }
+                    ]
+                },
+                {
+                    id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'contacts', x: 0, y: 2, w: 12, h: 4, type: 'contacts', label: "Production Team" },
+                        { id: 'crew', x: 0, y: 6, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew" }
+                    ]
+                },
+                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
                 { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: 'film', default: false },
                 { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: 'user', default: false },
                 { id: 'propList', cat: 'Production', label: 'Prop List', icon: 'hazard', default: false },
-                { id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true },
-                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
                 { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: 'coffee', default: false },
                 { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: 'money', default: false },
                 { id: 'po', cat: 'Production', label: 'Purchase Order', icon: 'receipt', default: false },
                 { id: 'timecard', cat: 'Production', label: 'Timecards', icon: 'history', default: false },
                 { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: 'sparkle', default: false },
                 { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: 'sparkle', default: false },
+
+                // --- POST & LEGAL ---
+                {
+                    id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'terms', x: 0, y: 2, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions" }
+                    ]
+                },
+                {
+                    id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'terms', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Terms of Agreement" }
+                    ]
+                },
+                {
+                    id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Permit Details" }
+                    ]
+                },
+                {
+                    id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
+                        { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Coverage Details" }
+                    ]
+                },
                 { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: 'hazard', default: false },
                 { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: 'calendar', default: true },
                 { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: 'folder', default: false },
                 { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: 'sparkle', default: false },
-                { id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true },
                 { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: 'mapPin', default: true },
                 { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: 'camera', default: false },
-                { id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false },
-                { id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false },
-                { id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false },
                 { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: 'hazard', default: false },
                 { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: 'sparkle', default: false }
             ];
@@ -4761,134 +4893,9 @@ window.mBTDB = {
         list: mBTAssets.list, image: mBTAssets.image
     },
   
-    templates: {
-        // --- CORE STANDARD ---
-        'default': { label: "Blank Document", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }] },
-        'callSheet': {
-            label: "Daily Call Sheet",
-            widgets: [
-                { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts', label: "Key Contacts" },
-                { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics', label: "Logistics" },
-                { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule', label: "Schedule" },
-                { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast', label: "Cast List" },
-                { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew', label: "Crew List" },
-                { id: 'notes', x: 0, y: 26, w: 12, h: 4, type: 'richText', label: "General Notes" }
-            ]
-        },
-        
-        // --- PRE-PRODUCTION ---
-
-        'breakdown': {
-            label: "Script Breakdown",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'cast', x: 0, y: 2, w: 6, h: 8, type: 'cast', label: "Characters" },
-                { id: 'logistics', x: 6, y: 2, w: 6, h: 8, type: 'logistics', label: "Locations" },
-                { id: 'notes', x: 0, y: 10, w: 12, h: 6, type: 'richText', label: "Scene Notes & Requirements" }
-            ]
-        },
-        'storyboard': {
-            label: "Storyboard",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'frame1', x: 0, y: 2, w: 4, h: 6, type: 'image', label: "Frame 1" },
-                { id: 'desc1', x: 0, y: 8, w: 4, h: 3, type: 'richText', label: "Action 1" },
-                { id: 'frame2', x: 4, y: 2, w: 4, h: 6, type: 'image', label: "Frame 2" },
-                { id: 'desc2', x: 4, y: 8, w: 4, h: 3, type: 'richText', label: "Action 2" },
-                { id: 'frame3', x: 8, y: 2, w: 4, h: 6, type: 'image', label: "Frame 3" },
-                { id: 'desc3', x: 8, y: 8, w: 4, h: 3, type: 'richText', label: "Action 3" }
-            ]
-        },
-        'shotlist': {
-            label: "Shot List",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'schedule', x: 0, y: 2, w: 12, h: 12, type: 'schedule', label: "Shot Sequence" },
-                { id: 'logistics', x: 0, y: 14, w: 12, h: 4, type: 'logistics', label: "Locations" }
-            ]
-        },
-        'preCheck': {
-            label: "Pre-Prod Checklist",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'logistics', x: 0, y: 2, w: 6, h: 10, type: 'richText', label: "Logistics Checklist" },
-                { id: 'creative', x: 6, y: 2, w: 6, h: 10, type: 'richText', label: "Creative Checklist" }
-            ]
-        },
-        'casting': {
-
-            label: "Casting Sheet",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'cast', x: 0, y: 2, w: 12, h: 10, type: 'cast', label: "Audition List" },
-                { id: 'notes', x: 0, y: 12, w: 12, h: 4, type: 'richText', label: "Casting Director Notes" }
-            ]
-        },
-        'techScout': {
-            label: "Tech Scout Report",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'logistics', x: 0, y: 2, w: 12, h: 10, type: 'logistics', label: "Location Details" },
-                { id: 'notes', x: 0, y: 12, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)" }
-            ]
-        },
-
-        // --- PRODUCTION ---
-        'prodReport': {
-            label: "Production Report",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'schedule', x: 0, y: 2, w: 12, h: 6, type: 'schedule', label: "Scenes Shot" },
-                { id: 'crew', x: 0, y: 8, w: 12, h: 6, type: 'crew', label: "Crew Attendance" },
-                { id: 'notes', x: 0, y: 14, w: 6, h: 6, type: 'richText', label: "Production Notes" },
-                { id: 'delays', x: 6, y: 14, w: 6, h: 6, type: 'richText', label: "Delays / Issues" }
-            ]
-        },
-        'crewList': {
-            label: "Crew Contact List",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'contacts', x: 0, y: 2, w: 12, h: 4, type: 'contacts', label: "Production Team" },
-                { id: 'crew', x: 0, y: 6, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew" }
-            ]
-        },
-        
-        // --- CREATIVE & FINANCIAL ---
-        'pitchDeck': {
-            label: "Pitch Deck",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'cover', x: 0, y: 2, w: 6, h: 8, type: 'image', label: "Key Art" },
-                { id: 'synopsis', x: 6, y: 2, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis" },
-                { id: 'mood1', x: 0, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 1" },
-                { id: 'mood2', x: 4, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 2" },
-                { id: 'mood3', x: 8, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 3" },
-                { id: 'team', x: 0, y: 14, w: 12, h: 6, type: 'contacts', label: "Key Creative Team" }
-            ]
-        },
-        'budgetRep': {
-            label: "Budget Report",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'summary', x: 0, y: 2, w: 12, h: 4, type: 'richText', label: "Executive Summary" },
-                { id: 'breakdown', x: 0, y: 6, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown" }
-            ]
-        },
-        'talentAgr': {
-            label: "Talent Agreement",
-            widgets: [
-                { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                { id: 'terms', x: 0, y: 2, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions" }
-            ]
-        },
-
-        // --- WRITING / LEGAL / GENERIC ---
-        'script': { label: "Script", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Screenplay" }] },
-        'treatment': { label: "Treatment", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Story Treatment" }] },
-        'dealMemo': { label: "Deal Memo", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'terms', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Terms of Agreement" }] },
-        'insurance': { label: "Insurance", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Coverage Details" }] },
-        'permit': { label: "Permit", widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Permit Details" }] }
-    },
+    // Logic Resolution: Template Registry migrated to mBTOG (Open Gate)
+    // We clear this local object to enforce the Single Source of Truth rule.
+    templates: {}, 
 
     // --- 2. Portal Orchestration ---
     open: function(docId) {
@@ -4896,16 +4903,29 @@ window.mBTDB = {
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc) return;
         if (!doc.content) doc.content = { data: {}, widgets: [] };
+        
+        // Logic Resolution: Auto-Hydrate from Central Registry (Open Gate)
         if (!doc.content.widgets || doc.content.widgets.length === 0) {
-            // Logic Resolution: Fallback to 'script' layout for text-heavy types if specific template missing
-            let tKey = this.templates[doc.type] ? doc.type : 'default';
-            if (tKey === 'default' && ['storyboard','budgetRep','vendorBid','riskAI','carbon','postSched'].includes(doc.type)) tKey = 'script'; 
+            // Tier 2.5 Handshake: Pull blueprints from Open Gate
+            const registry = (typeof mBTOG !== 'undefined' && mBTOG.templates) ? mBTOG.templates : [];
+            let tmpl = registry.find(t => t.id === doc.type);
             
-            doc.content.widgets = JSON.parse(JSON.stringify(this.templates[tKey].widgets));
+            // Fallback Heuristics for Legacy Types
+            if (!tmpl) {
+                if (['storyboard','budgetRep','vendorBid','riskAI','carbon','postSched'].includes(doc.type)) {
+                    // Map legacy complex types to Script defaults if specific template missing
+                    tmpl = registry.find(t => t.id === 'script'); 
+                }
+                // Ultimate Fallback
+                if (!tmpl) tmpl = { widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }] };
+            }
+            
+            doc.content.widgets = JSON.parse(JSON.stringify(tmpl.widgets));
             if(!doc.content.data.meta) doc.content.data = this._generateDefaultData();
         }
+
         if(typeof mBTME !== 'undefined') {
-            // Logic Resolution: Fixed ID string to match the close() function target (removed extra 'Modal' suffix in call)
+            // Logic Resolution: Fixed ID string to match the close() function target
             mBTME.open('documentViewer', 'Document Studio', '<div id="mBTDB_Container"></div>', 'w-full h-full max-w-full', { noPadding: true, hideHeader: true });
             this.renderFrame();
         }
@@ -4915,7 +4935,8 @@ window.mBTDB = {
             this._saveLayoutState();
             this.state.isEditing = false;
         }
-        if (typeof mBTME !== 'undefined') mBTME.close('documentViewerModal');        document.body.classList.remove('print-mode');
+        if (typeof mBTME !== 'undefined') mBTME.close('documentViewerModal');
+        document.body.classList.remove('print-mode');
         this.state.currentDocId = null;
         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
         if (typeof render === 'function') render();
@@ -5890,7 +5911,23 @@ window.mBTDB = {
     _renderRichText: function(docId, widgetId, data) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
-        return `<div class="h-full flex flex-col p-2"><div class="flex-grow relative"><textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="studio-input h-full p-3 text-xs text-slate-800 resize-none font-medium leading-relaxed disabled:bg-transparent disabled:border-none" placeholder="Type notes...">${val||''}</textarea></div></div>`;
+        
+        // Logic Resolution: Typography Enforcement for Screenplays (Batch 1.2.2)
+        const doc = budget.documents.find(d => d.id === docId);
+        const widget = doc.content.widgets.find(w => w.id === widgetId);
+        
+        // Detect Script Mode via Document Type or Widget Label
+        const isScript = (doc && (doc.type === 'script' || (widget && widget.label && widget.label.toLowerCase().includes('screenplay'))));
+        
+        // Industry Standard: Courier Prime/New, 12pt, Single Spacing (1 page ~= 1 min)
+        const styleClass = isScript 
+            ? "font-mono text-sm leading-none bg-white text-black font-bold whitespace-pre-wrap border-none outline-none resize-none" 
+            : "studio-input h-full p-3 text-xs text-slate-800 font-medium leading-relaxed resize-none";
+            
+        const customStyle = isScript ? 'font-family: "Courier Prime", "Courier New", monospace; font-size: 12pt; line-height: 1.0; padding: 40px;' : '';
+        const placeholder = isScript ? 'INT. LOCATION - DAY\n\nAction description...' : 'Type notes...';
+
+        return `<div class="h-full flex flex-col p-2"><div class="flex-grow relative"><textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="${styleClass} w-full h-full disabled:bg-transparent disabled:border-none" style="${customStyle}" placeholder="${placeholder}">${val||''}</textarea></div></div>`;
     },
     // Logic Resolution: New Image Rendering Logic with Optimization
     _renderImage: function(docId, widgetId, data) {
