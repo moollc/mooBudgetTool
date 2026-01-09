@@ -80,14 +80,30 @@
         .print-standard .grid-stack-item-content { box-shadow: none !important; border: 1px solid #000 !important; border-radius: 0 !important; }
         .print-standard input, .print-standard textarea { color: #000 !important; font-weight: bold !important; }
         
-        .grid-stack-item-content { background-color: white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); overflow: hidden !important; display: flex; flex-direction: column; cursor: grab; }
+        /* Batch 1.1: Visual Hardening - Unified Container Logic */
+        /* Replaces legacy card style with Industry Standard "Flat" look */
+        .grid-stack-item-content { 
+            background-color: white; 
+            border: 2px solid #000 !important; 
+            border-radius: 0 !important; 
+            box-shadow: none !important; 
+            overflow: visible !important; /* Critical for resize handles */
+            display: flex; 
+            flex-direction: column; 
+            cursor: grab; 
+        }
         
         /* Widget Contrast Fixes: Force darker labels on white widgets */
         .grid-stack-item-content .text-slate-400 { color: #64748b; } 
 
-        /* Stabilization: Hide tools/handles when not editing */
+        /* Batch 2.2: Resize Handle Clean-up */
+        /* Ensures handles are completely invisible and unclickable in view mode */
         #mBTDB_Workspace:not(.editing-mode) .ui-resizable-handle,
-        #mBTDB_Workspace:not(.editing-mode) .widget-tools { display: none !important; }
+        #mBTDB_Workspace:not(.editing-mode) .grid-stack-handle,
+        #mBTDB_Workspace:not(.editing-mode) .widget-tools { 
+            display: none !important; 
+            pointer-events: none !important;
+        }
      
 /* --- 11. Form Utilities (Spinner Removal) --- */
         .no-spinner::-webkit-inner-spin-button, 
@@ -247,7 +263,7 @@
         
         /* GridStack Handle Fixes */
         .grid-stack-item-content { overflow: visible !important; } /* Allow handles to show outside if needed */
-        .widget-body { overflow-y: auto; height: 100%; border-radius: 0 0 12px 12px; } /* Internal scroll */
+        /* Logic Resolution: Removed legacy radius rule here, now handled in Hardening block */
         
         /* --- TIER 4 VISUAL HARDENING: Industry Standard Widget Style --- */
         /* Overrides default card look to match Champion Call Sheet aesthetic */
@@ -261,34 +277,46 @@
             cursor: grab; 
         }
 
-        /* Hardened Header Bar */
+        /* Batch 1.2: Interior Refinement - Header & Body Polish */
         .widget-header {
-            background-color: #000 !important; /* Black Bar */
+            background-color: #000 !important; 
             color: #fff !important;
+            padding: 6px 10px !important; 
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 32px; 
             border-bottom: 1px solid #000 !important;
-            padding: 4px 8px !important;
-            min-height: 24px;
         }
 
-        /* Header Input Styling */
+        /* High-Contrast Inputs in Header */
         .widget-header input {
             color: #fff !important;
             font-family: 'Roboto Condensed', sans-serif !important;
             font-weight: 700 !important;
             text-transform: uppercase !important;
             letter-spacing: 0.05em !important;
+            background: transparent !important;
         }
         .widget-header input:focus {
             background-color: rgba(255,255,255,0.2) !important;
         }
 
         /* Tool Icons in Header */
-        .widget-tools button {
-            color: #ccc !important;
-        }
+        .widget-tools button { color: #9ca3af !important; }
         .widget-tools button:hover {
             color: #fff !important;
             background-color: rgba(255,255,255,0.2) !important;
+        }
+
+        /* Body Logic: Scroll internally, strict square corners */
+        .widget-body { 
+            overflow-y: auto !important; 
+            overflow-x: hidden;
+            height: 100%; 
+            background: #fff;
+            border-radius: 0 !important; /* Strict Square */
+            padding: 0 !important; 
         }
 
         .ui-resizable-handle { z-index: 100 !important; }
@@ -5326,12 +5354,19 @@ window.mBTDB = {
             // Re-apply editing class if state persisted
             if(this.state.isEditing) wrapper.classList.add('editing-mode');
             
+            // Batch 2.1: Grid Physics Refinement
+            // Reduced cellHeight (30px) for granular text matching. Increased margin for visual breathing room.
             this.state.grid = GridStack.init({ 
-                column: 12, cellHeight: 50, minRow: 1, margin: 2, 
-                animate: true, float: false, // Logic Resolution: Gravity Enabled (Widgets snap up)
+                column: 12, 
+                cellHeight: 30, 
+                minRow: 1, 
+                margin: 5, 
+                animate: true, 
+                float: false, // Gravity Enabled (Widgets snap up)
                 resizable: { handles: 'n,e,s,w,ne,se,sw,nw' },
                 staticGrid: !this.state.isEditing 
             }, wrapper.querySelector('.grid-stack'));
+            
             this._loadWidgetsToGrid(doc);
             this._updateHeaderButtons();
             this.state.grid.on('change', () => this._triggerSave());
