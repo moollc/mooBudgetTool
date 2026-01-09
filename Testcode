@@ -249,6 +249,48 @@
         .grid-stack-item-content { overflow: visible !important; } /* Allow handles to show outside if needed */
         .widget-body { overflow-y: auto; height: 100%; border-radius: 0 0 12px 12px; } /* Internal scroll */
         
+        /* --- TIER 4 VISUAL HARDENING: Industry Standard Widget Style --- */
+        /* Overrides default card look to match Champion Call Sheet aesthetic */
+        .grid-stack-item-content { 
+            background-color: white; 
+            border: 2px solid #000 !important; /* Hard black border */
+            border-radius: 0 !important; /* Square corners */
+            box-shadow: none !important; /* Flat look */
+            display: flex; 
+            flex-direction: column; 
+            cursor: grab; 
+        }
+
+        /* Hardened Header Bar */
+        .widget-header {
+            background-color: #000 !important; /* Black Bar */
+            color: #fff !important;
+            border-bottom: 1px solid #000 !important;
+            padding: 4px 8px !important;
+            min-height: 24px;
+        }
+
+        /* Header Input Styling */
+        .widget-header input {
+            color: #fff !important;
+            font-family: 'Roboto Condensed', sans-serif !important;
+            font-weight: 700 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.05em !important;
+        }
+        .widget-header input:focus {
+            background-color: rgba(255,255,255,0.2) !important;
+        }
+
+        /* Tool Icons in Header */
+        .widget-tools button {
+            color: #ccc !important;
+        }
+        .widget-tools button:hover {
+            color: #fff !important;
+            background-color: rgba(255,255,255,0.2) !important;
+        }
+
         .ui-resizable-handle { z-index: 100 !important; }
         .editing-mode .ui-resizable-se { 
             display: block !important; width: 20px !important; height: 20px !important; 
@@ -260,12 +302,14 @@
         }
 
         /* --- 15. The Paper Protocol (WYSIWYG Layout) --- */
-        .sheet-workspace { background-color: #525659; padding: 40px; display: flex; justify-content: center; min-height: 100%; overflow-y: auto; }
+        /* Logic Resolution: Darkened workspace for "Super-App" contrast. Paper is transparent in edit mode to let widgets pop. */
+        .sheet-workspace { background-color: #0f172a; padding: 40px; display: flex; justify-content: center; min-height: 100%; overflow-y: auto; }
         .sheet-a4 { 
-            width: 210mm; min-height: 297mm; background: white; 
-            box-shadow: 0 0 15px rgba(0,0,0,0.5); padding: 10mm; 
+            width: 210mm; min-height: 297mm; background: transparent; 
+            box-shadow: none; padding: 10mm; 
             position: relative; box-sizing: border-box; 
             display: flex; flex-direction: column;
+            border: 1px dashed #334155; /* Visual Guide for Print Bounds */
         }
         
         /* Champion/Studio Layout Kit */
@@ -289,9 +333,91 @@
             .no-print, .widget-tools, .ui-resizable-handle { display: none !important; }
         }
 
-</style>
+/* --- 16. Offline Survival Kit (Tailwind Polyfill) --- */
+        /* Critical layout primitives to ensure UI structure persists without CDN */
+        
+        /* Layout & Flexbox */
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-wrap { flex-wrap: wrap; }
+        .items-center { align-items: center; }
+        .items-start { align-items: flex-start; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .justify-end { justify-content: flex-end; }
+        .flex-grow { flex-grow: 1; }
+        .shrink-0 { flex-shrink: 0; }
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .fixed { position: fixed; }
+        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+        .z-10 { z-index: 10; } .z-20 { z-index: 20; } .z-30 { z-index: 30; } .z-50 { z-index: 50; }
+        .overflow-hidden { overflow: hidden; } .overflow-y-auto { overflow-y: auto; }
+        
+        /* Grid System */
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .gap-1 { gap: 0.25rem; } .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; } .gap-4 { gap: 1rem; }
+        
+        /* Spacing */
+        .p-1 { padding: 0.25rem; } .p-2 { padding: 0.5rem; } .p-3 { padding: 0.75rem; } .p-4 { padding: 1rem; } .p-6 { padding: 1.5rem; }
+        .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; } .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; } .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; } .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+        .mb-1 { margin-bottom: 0.25rem; } .mb-2 { margin-bottom: 0.5rem; } .mb-4 { margin-bottom: 1rem; } .mt-2 { margin-top: 0.5rem; }
+        .w-full { width: 100%; } .h-full { height: 100%; } .h-screen { height: 100vh; }
+        
+        /* Typography */
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-base { font-size: 1rem; line-height: 1.5rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+        .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+        .font-bold { font-weight: 700; } .font-black { font-weight: 900; }
+        .uppercase { text-transform: uppercase; } .tracking-widest { letter-spacing: 0.1em; }
+        .text-center { text-align: center; } .text-right { text-align: right; }
+        
+        /* Decoration */
+        .rounded-lg { border-radius: 0.5rem; } .rounded-xl { border-radius: 0.75rem; } .rounded-2xl { border-radius: 1rem; } .rounded-full { border-radius: 9999px; }
+        .border { border-width: 1px; border-style: solid; } .border-b { border-bottom-width: 1px; }
+        .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        /* Colors (Fallback Palette) */
+        .bg-white { background-color: #ffffff; }
+        .bg-slate-50 { background-color: #f8fafc; }
+        .bg-slate-100 { background-color: #f1f5f9; }
+        .bg-slate-200 { background-color: #e2e8f0; }
+        .bg-slate-900 { background-color: #0f172a; }
+        .bg-blue-600 { background-color: #2563eb; }
+        .bg-emerald-600 { background-color: #059669; }
+        .bg-rose-500 { background-color: #f43f5e; }
+        .text-white { color: #ffffff; }
+        .text-slate-300 { color: #cbd5e1; }
+        .text-slate-400 { color: #94a3b8; }
+        .text-slate-500 { color: #64748b; }
+        .text-slate-800 { color: #1e293b; }
+        .text-slate-900 { color: #0f172a; }
+        .text-blue-600 { color: #2563eb; }
+        .border-slate-100 { border-color: #f1f5f9; }
+        .border-slate-200 { border-color: #e2e8f0; }
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.1.2/gridstack-all.js"></script>
+        /* State & Interactive */
+        .hidden { display: none !important; }
+        .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
+        .cursor-pointer { cursor: pointer; }
+        .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+
+        /* GridStack Offline Fallback (Vertical Stack) */
+        .no-gridstack .grid-stack { display: flex !important; flex-direction: column !important; height: auto !important; padding: 10px !important; }
+        .no-gridstack .grid-stack-item { position: relative !important; width: 100% !important; top: auto !important; left: auto !important; height: auto !important; margin-bottom: 20px; }
+        .no-gridstack .grid-stack-item-content { height: auto !important; min-height: 200px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
+        .no-gridstack .widget-body { height: 300px; overflow-y: auto; }
+        .no-gridstack .ui-resizable-handle { display: none !important; }
+    </style>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.1.2/gridstack-all.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -306,6 +432,32 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 	<script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message="" data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"></script>
+    <script>
+        // --- OFFLINE GUARDRAIL ---
+        // Checks if critical libraries loaded; applies fallback classes if not.
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof GridStack === 'undefined') {
+                console.warn("Offline Mode: GridStack missing. Enabling linear layout fallback.");
+                document.body.classList.add('no-gridstack');
+            }
+            if (typeof Sortable === 'undefined') {
+                console.warn("Offline Mode: Sortable missing. Drag-and-drop disabled.");
+            }
+            // Check if Tailwind loaded by testing a known utility class style
+            const testEl = document.createElement('div');
+            testEl.className = 'bg-slate-900';
+            document.body.appendChild(testEl);
+            const color = window.getComputedStyle(testEl).backgroundColor;
+            document.body.removeChild(testEl);
+            
+            // Logic Resolution: Detect failure and enable Safe Mode hooks
+            // rgb(15, 23, 42) is the computed value of slate-900
+            if (color !== 'rgb(15, 23, 42)' && color !== '#0f172a') {
+                console.warn("Offline Mode: Tailwind CDN failed. Reverting to Survival Kit.");
+                document.body.classList.add('tailwind-offline');
+            }
+        });
+    </script>
 </head>
 
 <body class="bg-gray-100 pb-24">
@@ -607,6 +759,12 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             // 3. State Hydration
             displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
             
+            // 3.5 Database Pre-flight (Async Migration)
+            // Ensures Rate DB is ready before UI renders
+            if(mBT.opengate && typeof mBT.opengate.init === 'function') {
+                await mBT.opengate.init();
+            }
+
             // 4. Brain Handshake
             if (typeof fetchExchangeRates === 'function') fetchExchangeRates();
             if (typeof injectFooterIcons === 'function') injectFooterIcons();
@@ -654,6 +812,9 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             // Logic Resolution: We trigger the first render via the Event Bus
             if (typeof bindAppEventListeners === 'function') bindAppEventListeners();
             
+            // Logic Resolution: Enforce Zoom/Viewport Settings immediately
+            if (mBT.ui && typeof mBT.ui.updateViewport === 'function') mBT.ui.updateViewport();
+
             this.events.emit('budget:updated');
             console.log(`Studio Core v${APP_VERSION} Synchronized via mBTCore.`);
         }
@@ -891,20 +1052,50 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         // --- STORAGE & PERSISTENCE (ASYNC UPGRADE) ---
         // Logic Resolution: Swapped synchronous localStorage for Async localForage to unblock UI thread.
         storage: {
-            async save(key, data) { await localforage.setItem(key, data); },
-            async load(key) { return await localforage.getItem(key); },
-            async remove(key) { await localforage.removeItem(key); },
-            async keys() { return await localforage.keys(); },
+            // Internal Helper: Check if Engine is Online
+            _ready: function() { return typeof localforage !== 'undefined'; },
+
+            async save(key, data) { 
+                if (this._ready()) await localforage.setItem(key, data); 
+                else localStorage.setItem(key, JSON.stringify(data)); 
+            },
+            
+            async load(key) { 
+                if (this._ready()) return await localforage.getItem(key);
+                const raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : null;
+            },
+            
+            async remove(key) { 
+                if (this._ready()) await localforage.removeItem(key);
+                else localStorage.removeItem(key);
+            },
+            
+            async keys() { 
+                if (this._ready()) return await localforage.keys();
+                return Object.keys(localStorage);
+            },
 
             // Task 1: Binary Storage Extension (Blobs)
             async saveBlob(key, blob) { 
-                try { await localforage.setItem(key, blob); return true; } 
+                try { 
+                    if (this._ready()) {
+                        await localforage.setItem(key, blob); 
+                        return true; 
+                    } else {
+                        console.warn("Blob storage requires localForage (Offline Fallback Active). Asset skipped.");
+                        return false; 
+                    }
+                } 
                 catch(e) { console.error("Blob Storage Error:", e); return false; }
             },
             async loadBlob(key) {
                 try { 
-                    const blob = await localforage.getItem(key); 
-                    return blob instanceof Blob ? URL.createObjectURL(blob) : null; 
+                    if (this._ready()) {
+                        const blob = await localforage.getItem(key); 
+                        return blob instanceof Blob ? URL.createObjectURL(blob) : null; 
+                    }
+                    return null;
                 } catch(e) { console.error("Blob Retrieval Error:", e); return null; }
             }
         },
@@ -1351,33 +1542,54 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         contacts: [], 
         templates: [], // Document Definitions (Studio Builder)
 
-        init() {
-            this.loadRates();
-            this.loadContacts();
+        async init() {
+            await Promise.all([this.loadRates(), this.loadContacts()]);
             this.loadTemplates();
-            console.log(`Open Gate Initialized: ${this.rates.length} rates, ${this.contacts.length} contacts.`);
+            console.log(`Open Gate Initialized (Async): ${this.rates.length} rates, ${this.contacts.length} contacts.`);
         },
 
-        loadRates() {
-            const stored = JSON.parse(localStorage.getItem('prodBudget_v5_globalItems') || '[]');
+        async loadRates() {
+            const key = 'prodBudget_v5_globalItems';
+            let stored = await mBT.data.storage.load(key);
+            
+            // Migration Bridge: Check legacy sync storage if async is empty
+            if (!stored) {
+                const raw = localStorage.getItem(key);
+                if(raw) {
+                    try { stored = JSON.parse(raw); await mBT.data.storage.save(key, stored); } 
+                    catch(e) { console.warn("Rate migration failed", e); }
+                }
+            }
+
             this.rates.length = 0; 
-            if (stored.length === 0) {
+            if (!stored || stored.length === 0) {
                 this.rates.push(...this._getJamaicaDatabase());
-                this.saveRates();
+                await this.saveRates();
             } else {
                 this.rates.push(...stored);
             }
         },
 
-        loadContacts() { 
-            const c = JSON.parse(localStorage.getItem('moo_contacts') || '[]');
+        async loadContacts() { 
+            const key = 'moo_contacts';
+            let c = await mBT.data.storage.load(key);
+            
+            // Migration Bridge
+            if (!c) {
+                const raw = localStorage.getItem(key);
+                if(raw) {
+                    try { c = JSON.parse(raw); await mBT.data.storage.save(key, c); }
+                    catch(e) { console.warn("Contact migration failed", e); }
+                }
+            }
+
             this.contacts.length = 0; 
-            this.contacts.push(...c);
+            if(c) this.contacts.push(...c);
         },
 
         // --- PERSISTENCE LAYER ---
-        saveRates() { localStorage.setItem('prodBudget_v5_globalItems', JSON.stringify(this.rates)); },
-        saveContacts() { localStorage.setItem('moo_contacts', JSON.stringify(this.contacts)); },
+        async saveRates() { await mBT.data.storage.save('prodBudget_v5_globalItems', this.rates); },
+        async saveContacts() { await mBT.data.storage.save('moo_contacts', this.contacts); },
 
         // --- NON-TRUNCATABLE TEMPLATE REGISTRY (Documents) ---
         loadTemplates() {
@@ -1427,7 +1639,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         },
 
         // --- INTELLIGENT INGESTION ENGINE ---
-        ingest(items, type = 'rate') {
+        async ingest(items, type = 'rate') {
             let added = 0;
             
             // PATH A: Rate Ingestion
@@ -1439,7 +1651,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                         added++;
                     }
                 });
-                if (added > 0) this.saveRates();
+                if (added > 0) await this.saveRates();
             } 
             
             // PATH B: Contact Ingestion
@@ -1469,11 +1681,11 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                         added++;
                     }
                 });
-                if (added > 0) this.saveContacts();
+                if (added > 0) await this.saveContacts();
             }
             return added;
         },
-
+        
         // --- NON-TRUNCATABLE JAMAICA 2025 DATABASE ---
         _getJamaicaDatabase() {
             return [
@@ -1565,14 +1777,11 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
     window.getProjectList = mBT.data.getList.bind(mBT.data);
     window.pushToHistory = mBT.data.pushHistory.bind(mBT.data);
     
-    // Initialize Open Gate immediately
-    mBT.opengate.init();
-    
     // --- 5. Global Aliases for Migrated Globals ---
     window.mBTOG = mBT.opengate; // OPEN GATE Alias
     window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
-
-/* ================= v19.54 TIER 3: Core Logic Engines ================= */
+    
+    /* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
     // ... (Keep fetchExchangeRates and Mathematical Utilities) ...
 
@@ -2413,6 +2622,16 @@ console.log("TIER 3 complete");
     /* --- 3. UI Namespace Consolidation --- */
     // Logic Resolution: Moving all UI logic under one roof.
 
+    // 1. Viewport Manager (Mobile Zoom Control)
+    mBT.ui.updateViewport = function() {
+        const allow = budget?.settings?.allowZoom || false;
+        const meta = document.querySelector('meta[name="viewport"]');
+        if (meta) {
+            // Toggles between locked (app-like) and unlocked (accessible) states
+            meta.content = `width=device-width, initial-scale=1.0, viewport-fit=cover${allow ? '' : ', maximum-scale=1.0, user-scalable=no'}`;
+        }
+    };
+
     // 2. The Main Render Loop (The Gatekeeper)
     mBT.ui.refresh = function() {
         const app = document.getElementById('app');
@@ -2639,8 +2858,8 @@ console.log("TIER 3 complete");
     mBT.ui.ops = {
         add: function(sectionName, item) {
             // 1. Generate HTML string using the Render Engine
-            // Note: We use the global alias RenderEngine if available, or fall back to local
-            const renderer = window.RenderEngine || mBT.ui.render;
+            // Logic Resolution: Use internal namespace directly to ensure strict dependency resolution
+            const renderer = mBT.ui.render;
             const html = renderer.lineItem(item, sectionName);
             
             // 2. Locate the specific section body
@@ -2935,6 +3154,10 @@ function getAbbreviatedName(name, maxLen = 25) {
                         ${a.icon}
                     </button>`;
 
+                // Logic Resolution: Only render the main control header if there are actually tools to show.
+                // This removes the "dead black space" in simple views like the Template Selector.
+                const showHeader = (toolbarId && toolbarId.trim().length > 0) || (actions && actions.length > 0);
+
                 return `
                 <div class="flex flex-col max-h-[90vh] bg-slate-200">
                     <!-- Sub-Header: Document Identity Bar -->
@@ -2942,7 +3165,8 @@ function getAbbreviatedName(name, maxLen = 25) {
                         <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-4">${mBT.ui.render.esc(cleanTitle)}</h3>
                     </div>
 
-                    <!-- Main Studio Header (2-Column Control Grid) -->
+                    <!-- Main Studio Header (2-Column Control Grid) - Conditionally Rendered -->
+                    ${showHeader ? `
                     <header class="bg-slate-900 p-3 flex-shrink-0 z-20 shadow-lg grid grid-cols-[1fr_auto] items-center gap-4">
                         <!-- Left: Integrated Toolbar & Operations (Occupies remaining space) -->
                         <div id="${toolbarId}" class="flex items-center gap-2 overflow-hidden min-w-0"></div>
@@ -2951,7 +3175,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                         <div class="flex justify-end shrink-0">
                             ${closeAction ? renderBtn(closeAction) : ''}
                         </div>
-                    </header>
+                    </header>` : ''}
 
                     <!-- Search & Secondary Nav -->
                     <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 shadow-sm">
@@ -3867,67 +4091,92 @@ console.log("TIER 4 render defined", typeof render);
                     });
             },
 
-            // Fast Preview (JPEG Snapshot)
-            jpeg: function(elementId, callback) {
+            // Fast Preview (JPEG Snapshot) with Linearization (Batch 4.1)
+            jpeg: function(elementId, callback, options = {}) {
                 const source = document.getElementById(elementId);
                 if(!source) return;
 
-                // 1. Clone & Clean (Surgical "White Paper" Logic)
+                // 1. Clone & Clean (WYSIWYG Capture)
                 const clone = source.cloneNode(true);
                 clone.style.position = 'absolute';
                 clone.style.left = '-9999px';
-                clone.style.width = '1000px'; 
-                clone.style.background = '#ffffff'; // Force White Paper
-                clone.style.color = '#000000';      // Force High Contrast Text
                 clone.classList.remove('editing-mode');
                 
-                // 2. Linearize Layout (Convert Dashboard to Document Flow)
-                // Strip GridStack absolute positioning to create a vertical stack
-                const items = clone.querySelectorAll('.grid-stack-item');
-                items.forEach(item => {
-                    item.style.position = 'relative';
-                    item.style.left = 'auto';
-                    item.style.top = 'auto';
-                    item.style.width = '100%';
-                    item.style.height = 'auto';
-                    item.style.marginBottom = '20px';
-                    
-                    // Style Adjustments for Print Look
-                    const content = item.querySelector('.grid-stack-item-content');
-                    if(content) {
-                        content.style.boxShadow = 'none';
-                        content.style.border = '1px solid #000'; // Hard border for contrast
-                        content.style.borderRadius = '0'; // Square corners
-                    }
-                });
+                // Capture Background
+                clone.style.background = options.bg || window.getComputedStyle(source).backgroundColor;
                 
-                const grid = clone.querySelector('.grid-stack');
-                if(grid) {
-                    grid.style.height = 'auto';
-                    grid.style.display = 'block'; // Disable grid behavior
+                // 2. Linearization Logic (The "Paper" Transform)
+                if (options.linearize) {
+                    clone.classList.remove('grid-stack'); 
+                    clone.style.height = 'auto';
+                    clone.style.minHeight = 'auto';
+                    clone.style.width = '1200px'; // Fixed width for consistent high-res render
+                    clone.style.display = 'flex';
+                    clone.style.flexDirection = 'column';
+                    clone.style.gap = '24px';
+                    clone.style.padding = '40px'; 
+                    clone.style.overflow = 'visible';
+
+                    // Select and Sort Items (Top-Left priority)
+                    const items = Array.from(clone.querySelectorAll('.grid-stack-item'));
+                    items.sort((a,b) => {
+                        const yA = parseInt(a.getAttribute('gs-y')) || 0;
+                        const yB = parseInt(b.getAttribute('gs-y')) || 0;
+                        const xA = parseInt(a.getAttribute('gs-x')) || 0;
+                        const xB = parseInt(b.getAttribute('gs-x')) || 0;
+                        return yA - yB || xA - xB;
+                    });
+
+                    // Flatten Items
+                    items.forEach(item => {
+                        item.style.position = 'relative';
+                        item.style.inset = 'auto';
+                        item.style.width = '100%';
+                        item.style.height = 'auto'; 
+                        item.style.marginBottom = '20px';
+                        item.style.border = '1px solid #000'; // Enforce strict border for standard look
+                        item.style.boxShadow = 'none';
+                        item.style.borderRadius = '0';
+
+                        // Fix content scrolling & expansion
+                        const content = item.querySelector('.grid-stack-item-content');
+                        if(content) {
+                            content.style.height = 'auto';
+                            content.style.overflow = 'visible';
+                            content.style.border = 'none'; // handled by wrapper
+                            content.style.boxShadow = 'none';
+                        }
+                        
+                        const body = item.querySelector('.widget-body');
+                        if(body) {
+                            body.style.height = 'auto';
+                            body.style.overflow = 'visible';
+                            // Expand textareas to fit content
+                            body.querySelectorAll('textarea').forEach(ta => {
+                                ta.style.height = (ta.scrollHeight + 20) + 'px';
+                            });
+                        }
+                        clone.appendChild(item); // Re-append sorted
+                    });
+                } else {
+                    // Graphic Mode: Respect original dimensions
+                    const rect = source.getBoundingClientRect();
+                    clone.style.width = source.scrollWidth + "px";
+                    clone.style.height = source.scrollHeight + "px"; 
                 }
 
                 // 3. De-Clutter (Remove Dashboard Artifacts)
                 const artifacts = [
-                    '.widget-header', 
                     '.widget-tools', 
                     '.ui-resizable-handle', 
-                    'button', 
+                    'button:not(.permanent)', 
                     '.grid-stack-handle', 
-                    '.widget-controls'
+                    '.widget-controls',
+                    '.stage-remove-btn'
                 ];
                 clone.querySelectorAll(artifacts.join(',')).forEach(el => el.remove());
 
-                // 4. Flatten Data (Inputs -> Text)
-                clone.querySelectorAll('textarea').forEach(el => {
-                    const div = document.createElement('div');
-                    div.innerHTML = el.value.replace(/\n/g, '<br>');
-                    div.className = 'text-xs p-2 leading-relaxed whitespace-pre-wrap';
-                    div.style.fontFamily = 'inherit'; // Inherit Doc Font
-                    div.style.border = 'none';
-                    el.parentNode.replaceChild(div, el);
-                });
-                
+                // 4. Flatten Data (Inputs -> Text) & Copy Canvas
                 clone.querySelectorAll('input').forEach(el => {
                     if(el.type !== 'hidden') {
                         const span = document.createElement('span');
@@ -3937,18 +4186,54 @@ console.log("TIER 4 render defined", typeof render);
                         span.style.background = 'transparent';
                         span.style.padding = '0';
                         span.style.fontWeight = 'bold';
+                        span.style.width = '100%';
+                        span.style.color = '#000'; // Force black text
+                        if(el.type === 'checkbox') span.textContent = el.checked ? '☑' : '☐';
                         el.parentNode.replaceChild(span, el);
+                    }
+                });
+                
+                clone.querySelectorAll('textarea').forEach(el => {
+                    const div = document.createElement('div');
+                    div.innerHTML = el.value.replace(/\n/g, '<br>');
+                    div.className = el.className + ' whitespace-pre-wrap';
+                    div.style.height = 'auto';
+                    div.style.border = 'none';
+                    div.style.resize = 'none';
+                    div.style.background = 'transparent';
+                    div.style.color = '#000'; // Force black text
+                    el.parentNode.replaceChild(div, el);
+                });
+                
+                // Canvas (MudMaps) - Must manually copy data
+                const origCanvases = source.querySelectorAll('canvas');
+                const cloneCanvases = clone.querySelectorAll('canvas');
+                origCanvases.forEach((orig, i) => {
+                    if(cloneCanvases[i]) {
+                        cloneCanvases[i].width = orig.width;
+                        cloneCanvases[i].height = orig.height;
+                        const ctx = cloneCanvases[i].getContext('2d');
+                        ctx.drawImage(orig, 0, 0);
                     }
                 });
 
                 // 5. Capture
                 document.body.appendChild(clone);
-                html2canvas(clone, { scale: 2, useCORS: true, logging: false }).then(canvas => {
+                
+                html2canvas(clone, { 
+                    scale: 2, // Retina quality
+                    useCORS: true, 
+                    logging: false,
+                    backgroundColor: null // Transparent base to respect clone background
+                }).then(canvas => {
                     document.body.removeChild(clone);
                     if (callback) callback(canvas.toDataURL('image/jpeg', 0.9));
+                }).catch(err => {
+                    console.error("Snapshot Failed", err);
+                    document.body.removeChild(clone);
                 });
             },
-
+            
             // Digital Export (Standalone HTML)
             htmlStandalone: function(elementId, title) {
                 const source = document.getElementById(elementId);
@@ -4040,7 +4325,98 @@ console.log("TIER 4 render defined", typeof render);
 
             // --- RESTORED: Professional Typesetter Engine (v19.50 Logic) ---
             professionalPdf: function(budgetData, options = {}) {
-                // ... existing professionalPdf logic ...
+                if (typeof window.jspdf === 'undefined') return mBTME.alert("Error", "PDF Engine missing.");
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF(mBTPublisher.config.pdf.jsPDF);
+                const currency = displayCurrency || 'JMD';
+                const fmt = (val) => mBTLE.format.currency(val, currency);
+
+                // --- 1. Header & Meta ---
+                doc.setFontSize(18);
+                doc.setFont("helvetica", "bold");
+                doc.text((budgetData.projectName || "Untitled Production").toUpperCase(), 105, 15, { align: "center" });
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text(`${budgetData.company || "Independent"} | Date: ${new Date().toLocaleDateString()}`, 105, 22, { align: "center" });
+
+                // --- 2. Executive Summary ---
+                const summaryData = [
+                    ["Subtotal", fmt(budgetData.subtotal)],
+                    [`Contingency (${budgetData.contingencyPercentage}%)`, fmt(budgetData.subtotal * (budgetData.contingencyPercentage/100))],
+                    [`Sales Tax (${budgetData.salesTaxPercentage}%)`, fmt(budgetData.subtotal * (budgetData.salesTaxPercentage/100))],
+                    [`Discount (${budgetData.discountPercentage}%)`, `-${fmt(budgetData.subtotal * (budgetData.discountPercentage/100))}`],
+                    [{content: "GRAND TOTAL", styles: {fontStyle: 'bold', fillColor: [240, 253, 244]}}, {content: fmt(budgetData.grandTotal), styles: {fontStyle: 'bold', textColor: [21, 128, 61]}}] // Emerald-700
+                ];
+
+                doc.autoTable({
+                    startY: 30,
+                    head: [['Financial Summary', 'Amount']],
+                    body: summaryData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' }, // Slate-900
+                    columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 'auto', halign: 'right' } },
+                    margin: { left: 14, right: 14 }
+                });
+
+                // --- 3. Detailed Line Items ---
+                let finalY = doc.lastAutoTable.finalY + 10;
+                
+                const bodyRows = [];
+                
+                Object.entries(budgetData.sections).forEach(([secName, sec]) => {
+                    // Section Header Row
+                    bodyRows.push([{ content: secName.toUpperCase(), colSpan: 5, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [71, 85, 105] } }]); // Slate-100/600
+                    
+                    sec.items.forEach(item => {
+                        const total = parseFloat(item.total) || 0;
+                        const rate = parseFloat(item.rate) || 0;
+                        const qty = parseFloat(item.quantity) || 0;
+                        
+                        bodyRows.push([
+                            item.description,
+                            qty,
+                            item.unit,
+                            fmt(rate),
+                            fmt(total)
+                        ]);
+                    });
+                    
+                    // Section Footer
+                    bodyRows.push([{ content: `Total ${secName}: ${fmt(sec.total)}`, colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } }]); // Blue-600
+                });
+
+                doc.autoTable({
+                    startY: finalY,
+                    head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
+                    body: bodyRows,
+                    theme: 'plain',
+                    styles: { fontSize: 9, cellPadding: 2 },
+                    headStyles: { fillColor: [51, 65, 85], textColor: 255 }, // Slate-700
+                    columnStyles: {
+                        0: { cellWidth: 'auto' },
+                        1: { cellWidth: 15, halign: 'center' },
+                        2: { cellWidth: 20, halign: 'center' },
+                        3: { cellWidth: 30, halign: 'right' },
+                        4: { cellWidth: 30, halign: 'right' }
+                    },
+                    margin: { left: 14, right: 14 },
+                    didDrawPage: function (data) {
+                        // Footer
+                        const str = "Page " + doc.internal.getNumberOfPages();
+                        doc.setFontSize(8);
+                        doc.setTextColor(150);
+                        const pageSize = doc.internal.pageSize;
+                        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+                        doc.text(str, data.settings.margin.left, pageHeight - 10);
+                        doc.text(`Generated by mooBudget v${APP_VERSION}`, pageSize.width - 14, pageHeight - 10, { align: 'right' });
+                    }
+                });
+
+                // --- 4. Output ---
+                const filename = `${(budgetData.projectName || 'Budget').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                doc.save(filename);
             },
 
             // --- NEW: Champion Layout Engine (Strict A4) ---
@@ -4279,7 +4655,13 @@ console.log("TIER 4 render defined", typeof render);
         // --- Bridge: Main Entry Points ---
         exportToPDF: function(id, name) { this.format.pdf(id, name); },
         toMoo: function() { this.io.saveMoo(budget); },
-        generateFastPreview: function(mode, data, cb) { this.format.jpeg('mBTDB_Workspace', cb); }, // Adapter for old calls
+        
+        // Logic Resolution: Adapter for Batch 4.1 Linearization (Standard vs Graphic)
+        generateFastPreview: function(mode, data, cb) { 
+            const opts = (mode === 'standard') ? { linearize: true, bg: '#ffffff' } : {};
+            this.format.jpeg('mBTDB_Workspace', cb, opts); 
+        }, 
+        
         downloadJPEG: function(url, title) {
             const a = document.createElement('a'); a.href = url; a.download = `${title}.jpg`; a.click();
         },
@@ -4292,13 +4674,24 @@ console.log("TIER 4 render defined", typeof render);
 
 /* ========= v19.54 mBTDB: STUDIO BUILDER ENGINE ========= */
 window.mBTDB = {
-    state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1 },
+    state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1, _cache: null },
     
     // --- LIVE SYNC ENGINE (Phase 9) ---
     resolveLinkedData: function(doc) {
+        // Optimization: Return cached deeply-cloned data if available for this render cycle
+        // This prevents expensive JSON operations on purely visual updates (like toggling Edit Mode)
+        if (this.state._cache && this.state._cache.docId === doc.id) {
+            return this.state._cache.data;
+        }
+
         // Deep clone to prevent render-cycle mutations from polluting storage
         const data = JSON.parse(JSON.stringify(doc.content.data));
-        if (!budget || !budget.sections) return data;
+        
+        if (!budget || !budget.sections) {
+            // Cache even if no budget link exists
+            this.state._cache = { docId: doc.id, data: data };
+            return data;
+        }
 
         // Fast Lookup Map
         const budgetMap = new Map();
@@ -4325,6 +4718,9 @@ window.mBTDB = {
                 });
             }
         });
+
+        // Store in cache
+        this.state._cache = { docId: doc.id, data: data };
         return data;
     },
 
@@ -4510,6 +4906,19 @@ window.mBTDB = {
                 container.classList.remove('editing-mode');
                 grid.setStatic(true);
             }
+            
+            // CRITICAL FIX: Re-render UI to update 'disabled' state on inputs
+            const doc = budget.documents.find(d => d.id === this.state.currentDocId);
+            if (doc) {
+                this._renderMetaHeader(doc);
+                doc.content.widgets.forEach(w => {
+                    const el = document.querySelector(`.grid-stack-item[gs-id="${w.id}"] .widget-body`);
+                    if(el) el.innerHTML = this._getContentForWidget(w, doc);
+                });
+                // Re-init canvas logic for MudMaps after re-render
+                this._initMudMaps();
+            }
+
             this._updateHeaderButtons();
         }
     },
@@ -4583,22 +4992,42 @@ window.mBTDB = {
 
     sendToDistribution: function(jpegURL) {
         const doc = budget.documents.find(d => d.id === this.state.currentDocId);
-        this.close();
-        if(window.openDocumentShareSelector) openDocumentShareSelector(doc.id);
+        // Logic Resolution: Close only the preview modal, keeping the Studio active
+        mBTME.close('previewModal'); 
+        if(window.openDocumentShareSelector) window.openDocumentShareSelector(doc.id);
+        else mBTME.alert("Module Error", "Distribution Hub not active.");
+    },
+
+    // --- NEW: AI Hospital Lookup ---
+    autoFillHospital: async function(docId, index, address) {
+        if (!address) return;
+        const provider = mBT.features.ai.getSelectedProvider();
+        const apiKey = mBT.features.ai.getStoredApiKey(provider);
+        if (!apiKey) return; // Silent skip if no AI
+
+        const prompt = `Identify the nearest emergency hospital to this address: "${address}". Return ONLY the name of the hospital. Do not include address or other text.`;
+        
+        try {
+            const result = await mBT.features.ai.callUnifiedAI(provider, apiKey, prompt);
+            // Cleanup response
+            const clean = result.replace(/Here is the.*?|The nearest.*?is/gi, '').replace(/[".]/g, '').trim();
+            this.updateRow(docId, 'locations', index, 'hospital', clean);
+        } catch (e) { console.warn("AI Hospital Lookup failed", e); }
     },
 
     autoFillWidget: function(type, docId) {
-        mBTME.confirm("Auto-Fill", `Auto-fill ${type}? Current items will be preserved.`, () => {
+        mBTME.confirm("Auto-Fill", `Auto-fill ${type}? This uses external services and AI.`, async () => {
+            const doc = budget.documents.find(d => d.id === docId);
+            if(!doc) return;
+
             if(type === 'contacts') {
                 const map = { 'director': 'Director', 'producer': 'Producer', 'ad': '1st AD' };
                 Object.entries(map).forEach(([key, role]) => {
                     let hit = null;
-                    // 1. Budget Scan (Deterministic): Prioritize actual hired crew
                     if(budget.sections) Object.values(budget.sections).some(s => {
                         const i = s.items.find(x => x.description.toLowerCase().includes(role.toLowerCase()) && x.crew && x.crew.name);
                         if(i) { hit = { name: i.crew.name, contact: i.crew.phone || i.crew.email }; return true; }
                     });
-                    // 2. Global Fallback: Check address book if budget is empty
                     if(!hit) {
                         const g = mBTOG.contacts.find(x => x.role && x.role.toLowerCase().includes(role.toLowerCase()));
                         if(g) hit = { name: g.name, contact: g.contact || g.phone };
@@ -4607,10 +5036,42 @@ window.mBTDB = {
                 });
             } else if(type === 'crew') {
                 Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
-                    if(i.crew && i.crew.name) this.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone, linkedItemId: i.id });
+                    if(i.crew && i.crew.name) {
+                        const exists = doc.content.data.crew.some(c => c.name === i.crew.name && c.department === i.description);
+                        if(!exists) {
+                            this.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone, linkedItemId: i.id });
+                        }
+                    }
                 }));
+            } 
+            // --- NEW: Logistics / Locations Support ---
+            else if (type === 'logistics' || type === 'locations') {
+                const locs = doc.content.data.locations || [];
+                mBTME.showLoader("Scanning Locations...");
+                
+                // Serial execution to prevent rate limiting
+                for (let i = 0; i < locs.length; i++) {
+                    const l = locs[i];
+                    // 1. Weather & Sun (Open-Meteo Service)
+                    if (l.name) await this.autoFillWeather(docId, i, l.name);
+                    
+                    // 2. Hospital (AI Analysis) - Only if address exists and hospital field is empty
+                    if (l.address && !l.hospital) await this.autoFillHospital(docId, i, l.address);
+                }
+                mBTME.hideLoader();
             }
-            this.renderFrame();
+            
+            // Logic Resolution: Use Surgical DOM Update instead of full RenderFrame() to preserve layout
+            const widget = doc.content.widgets.find(w => w.type === type);
+            if(widget) {
+                const content = this._getContentForWidget(widget, doc);
+                const el = document.querySelector(`.grid-stack-item[gs-id="${widget.id}"] .widget-body`);
+                if(el) el.innerHTML = content;
+                // Update Header Sun/Moon if modified
+                if(type === 'logistics' || type === 'locations') this._renderMetaHeader(doc);
+            } else {
+                this.renderFrame();
+            }
         });
     },
 
@@ -4626,10 +5087,105 @@ window.mBTDB = {
         
         if(!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Neural Fill.");
 
-        mBTME.showLoader("Generating Content...");
+        // --- HYBRID ROUTER (Batch 3.1) ---
+        const currentVal = doc.content.data.additional?.[widgetId] || "";
+        const isScript = (doc.type === 'script' || widget.label.toLowerCase().includes('script')) && widget.type === 'richText';
 
-        // Construct Context-Aware Prompt
-        const prompt = `Generate content for a section labeled "${widget.label}" for a film production named "${budget.projectName}" (${doc.label}). Context: Film Production. Keep it professional and concise.`;
+        // ROUTE 1: SCRIPT PARSING (Structure Extraction)
+        // Trigger: Script document + RichText widget + Content > 50 chars
+        if (isScript && currentVal.length > 50) {
+            mBTME.confirm("Script Analysis", "Analyze script text to extract Scenes and Cast data?", async () => {
+                mBTME.showLoader("Analyzing Screenplay...");
+                const prompt = `Analyze this screenplay text. Return valid JSON only. No markdown. 
+                Structure: { "scenes": ["INT. LOCATION - DAY", ...], "cast": ["CHARACTER NAME", ...] }. 
+                Text: \n\n ${currentVal.substring(0, 15000)}`; 
+                
+                try {
+                    const result = await mBT.features.ai.callUnifiedAI(provider, apiKey, prompt, "ROLE: Data Parser. OUTPUT: Pure JSON. No chat.");
+                    // Sanitize AI output (strip markdown code blocks)
+                    const jsonStr = result.replace(/^```json\n?|```$/g, '').trim();
+                    const data = JSON.parse(jsonStr);
+                    
+                    let report = `Extracted ${data.scenes?.length || 0} Scenes and ${data.cast?.length || 0} Characters.\n`;
+                    let updates = 0;
+
+                    // 1. Sync Schedule (Scenes)
+                    if (data.scenes && Array.isArray(data.scenes)) {
+                        if(!doc.content.data.schedule) doc.content.data.schedule = [];
+                        data.scenes.forEach(sc => {
+                            // Dedupe: Check if description matches
+                            if (!doc.content.data.schedule.some(s => s.description === sc)) {
+                                const parts = sc.split('-');
+                                const loc = parts[0] ? parts[0].replace(/INT\.|EXT\./i, '').trim() : '';
+                                
+                                mBTDB.addRow(docId, 'schedule', 'shot', { 
+                                    id: Date.now() + Math.random(), 
+                                    description: sc, 
+                                    scene: (doc.content.data.schedule.length + 1).toString(), 
+                                    time: "00:00", 
+                                    ie: sc.toUpperCase().includes("INT") ? "INT" : "EXT", 
+                                    loc: loc,
+                                    cast: "" 
+                                });
+                                updates++;
+                            }
+                        });
+                    }
+                    
+                    // 2. Sync Cast (Characters)
+                    if (data.cast && Array.isArray(data.cast)) {
+                        if(!doc.content.data.cast) doc.content.data.cast = [];
+                        data.cast.forEach(c => {
+                            if (!doc.content.data.cast.some(existing => existing.character === c)) {
+                                mBTDB.addRow(docId, 'cast', 'talent', { 
+                                    id: Date.now() + Math.random(), 
+                                    character: c, 
+                                    actor: "", swf: "W", pickup: "", hmu: "", setCall: "", costume: "" 
+                                });
+                                updates++;
+                            }
+                        });
+                    }
+                    
+                    mBTME.hideLoader();
+                    if(updates > 0) {
+                        mBTDB.renderFrame(); // Refresh UI to show new rows
+                        mBTME.alert("Analysis Complete", report + `\n${updates} items added to lists.`);
+                    }
+                    else mBTME.alert("Analysis Complete", "No new items found to add.");
+                    
+                } catch (e) {
+                    mBTME.hideLoader();
+                    mBTME.alert("Parsing Error", "AI response could not be mapped to data structure.");
+                    console.error(e);
+                }
+            });
+            return;
+        }
+
+        // ROUTE 2: CONTENT GENERATION (Creative)
+        mBTME.showLoader("Generating Content...");
+        let prompt = "";
+        
+        if (widget.type === 'footer') {
+             // Safety Footer Specific Logic
+             const locSetting = (typeof mBTOG !== 'undefined' && mBTOG.settings) ? mBTOG.settings.location : 'Jamaica';
+             const prodAddr = doc.content.data.production?.address || "";
+             const locationContext = prodAddr.length > 5 ? `Production Address: ${prodAddr}` : `Jurisdiction: ${locSetting}`;
+             
+             prompt = `Generate a professional film production call sheet footer. 
+             CONTEXT: ${locationContext}. 
+             REQUIREMENTS: 
+             1. Include a Health & Safety Disclaimer referencing specific local acts (e.g., "Health and Safety at Work Act 1974" for UK, "Factories Act" for Jamaica, "OSHA" for USA). Pick the one matching the context.
+             2. Include a strict Anti-Harassment/Bullying Policy statement with a placeholder for a contact number.
+             3. Keep it concise, serious, legalistic, and formatted as a compact block. No markdown, just text.`;
+        } else if (isScript) {
+             // Empty Script Generation
+             prompt = `Write a sample screenplay scene for a film titled "${budget.projectName}". Format: Standard Screenplay format (Scene Heading, Action, Character, Dialogue). Keep it short (1 page).`;
+        } else {
+             // General Logic
+             prompt = `Generate content for a section labeled "${widget.label}" for a film production named "${budget.projectName}" (${doc.label}). Context: Film Production. Keep it professional and concise.`;
+        }
 
         try {
             const result = await mBT.features.ai.callUnifiedAI(provider, apiKey, prompt);
@@ -4639,7 +5195,12 @@ window.mBTDB = {
             
             this.updateData(docId, `additional.${widgetId}`, cleanResult);
             mBTME.hideLoader();
-            this.renderFrame();
+            
+            // Surgical update to avoid grid flicker
+            const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"] .widget-body textarea`);
+            if(el) el.value = cleanResult;
+            else this.renderFrame(); // Fallback if DOM lost
+            
         } catch (e) {
             mBTME.hideLoader();
             mBTME.alert("Generation Failed", e.message);
@@ -4659,10 +5220,61 @@ window.mBTDB = {
             const today = wData.daily;
             const code = today.weather_code[0];
             let summary = "Clear Skies"; if(code > 3) summary = "Cloudy"; if(code > 50) summary = "Rainy";
-            const str = `${summary} | Max: ${today.temperature_2m_max[0]}°C / Min: ${today.temperature_2m_min[0]}°C\nSunrise: ${today.sunrise[0].split('T')[1]} / Sunset: ${today.sunset[0].split('T')[1]}`;
+            
+            const sunrise = today.sunrise[0].split('T')[1];
+            const sunset = today.sunset[0].split('T')[1];
+            
+            const str = `${summary} | Max: ${today.temperature_2m_max[0]}°C / Min: ${today.temperature_2m_min[0]}°C\nSunrise: ${sunrise} / Sunset: ${sunset}`;
+            
+            // Logic Fix: Sync Sunrise/Sunset to Header
+            this.updateData(docId, 'meta.sunriseSunset', `${sunrise}/${sunset}`);
             this.updateRow(docId, 'locations', index, 'weather', str);
+            
             this.renderFrame();
         } catch(e) { mBTME.alert("Sync Error", "Weather Synchronization Failure"); if(btn) btn.innerHTML = this.icons.cloud; }
+    },
+
+    // --- NEW: Header Sync Logic ---
+    syncProductionInfo: function(docId) {
+        // 1. Search Open Gate for "Production Office" contact
+        const contact = mBTOG.contacts.find(c => c.name.toLowerCase().includes('production office'));
+        
+        if (contact) {
+            const data = {
+                address: contact.address || '', 
+                phone: contact.phone || '',
+                email: contact.email || '',
+                wifi: contact.wifi || '',
+                pass: contact.pass || ''
+            };
+            
+            // Batch update manually to avoid multiple re-renders
+            const doc = budget.documents.find(d => d.id === docId);
+            if(doc) {
+                if(!doc.content.data.production) doc.content.data.production = {};
+                Object.assign(doc.content.data.production, data);
+                this._triggerSave();
+                this.renderFrame();
+                mBTME.alert("Synced", "Production Office details updated from Open Gate.");
+            }
+        } else {
+            // Fallback: Use Budget Company Name
+            this.updateData(docId, 'production.address', budget.company || '');
+            mBTME.alert("Partial Sync", "No 'Production Office' contact found in Open Gate. Synced Company Name.");
+        }
+    },
+
+    syncAgencyInfo: function(docId) {
+        // Search Open Gate for Agency roles
+        const producer = mBTOG.contacts.find(c => c.role && (c.role.toLowerCase().includes('agency producer') || c.role.toLowerCase().includes('client')));
+        const creative = mBTOG.contacts.find(c => c.role && (c.role.toLowerCase().includes('creative') || c.role.toLowerCase().includes('director')));
+        
+        let updates = 0;
+        if(producer) { this.updateData(docId, 'agency.producer', producer.name); updates++; }
+        if(creative) { this.updateData(docId, 'agency.creative', creative.name); updates++; }
+        
+        if(updates > 0) this.renderFrame();
+        else mBTME.alert("No Matches", "No contacts with 'Agency' or 'Client' roles found.");
     },
 
     // --- 4. Render Engine Handshake ---
@@ -4688,7 +5300,7 @@ window.mBTDB = {
                     <!-- The Grid (Flexible Content) -->
                     <div class="grid-stack flex-grow"></div>
                     <!-- Footer Branding -->
-                    <div class="mt-auto pt-4 border-t-2 border-black flex justify-between text-[8px] font-bold uppercase tracking-widest">
+                    <div class="mt-auto pt-4 border-t-2 border-slate-700 flex justify-between text-[8px] font-bold uppercase tracking-widest text-slate-500">
                         <span>${budget.company || 'Production Office'}</span>
                         <span>Generated by mooBudget</span>
                     </div>
@@ -4704,7 +5316,7 @@ window.mBTDB = {
             contentHtml: contentHtml,
             actions: actions,
             toolbarId: 'mBTDB_Buttons',
-            containerClasses: 'p-0 overflow-hidden' // Remove default padding, workspace handles it
+            containerClasses: 'p-0 overflow-hidden !bg-[#0f172a]' // Logic Resolution: Force Deep Slate Background
         });
 
         this._renderMetaHeader(doc);
@@ -4714,10 +5326,16 @@ window.mBTDB = {
             // Re-apply editing class if state persisted
             if(this.state.isEditing) wrapper.classList.add('editing-mode');
             
-            this.state.grid = GridStack.init({ column: 12, cellHeight: 65, minRow: 1, margin: 8, animate: true, float: true, staticGrid: !this.state.isEditing }, wrapper.querySelector('.grid-stack'));
+            this.state.grid = GridStack.init({ 
+                column: 12, cellHeight: 50, minRow: 1, margin: 2, 
+                animate: true, float: false, // Logic Resolution: Gravity Enabled (Widgets snap up)
+                resizable: { handles: 'n,e,s,w,ne,se,sw,nw' },
+                staticGrid: !this.state.isEditing 
+            }, wrapper.querySelector('.grid-stack'));
             this._loadWidgetsToGrid(doc);
             this._updateHeaderButtons();
             this.state.grid.on('change', () => this._triggerSave());
+            this._initMudMaps(); // Initialize canvases
         }, 50);
     },
 
@@ -4731,24 +5349,23 @@ window.mBTDB = {
         
         let tools = ''; 
         if(widget.type === 'contacts') {
-            tools += `<button type="button" aria-label="Toggle View" data-action="widget-toggle-view" data-id="${widget.id}" class="p-1.5 hover:bg-slate-100 rounded-md transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
+            tools += `<button type="button" aria-label="Toggle View" data-action="widget-toggle-view" data-id="${widget.id}" class="p-1 rounded transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
         }
         if(widget.type !== 'image') {
-            // Tier 5 Logic: Hybrid Wand Router
-            // Structured data uses Deterministic Sync (AutoFill). Unstructured data uses Neural Fill (AI).
-            const isNeural = ['richText', 'treatment', 'breakdown'].includes(widget.type);
+            // Logic Resolution: Enable AI Wand for text-heavy or structural widgets (Hybrid Router)
+            // Added 'footer' to enable Safety Logic and 'script' awareness for the Parser
+            const isNeural = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script','screenplay'].some(s => (widget.label||'').toLowerCase().includes(s));
             const action = isNeural ? 'widget-neural-fill' : 'widget-autofill';
-            const title = isNeural ? 'AI Generate' : 'Auto-Fill';
-            
-            tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-all" title="${title}">${this.icons.wand}</button>`;
+            const title = isNeural ? 'AI Generate / Parse' : 'Auto-Fill';
+            tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1 rounded transition-all" title="${title}">${this.icons.wand}</button>`;
         }
         
         return `<div class="grid-stack-item-content group">
-            <div class="widget-header flex justify-between items-center p-2 bg-white border-b border-slate-50">
-                <input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-500 w-32 outline-none focus:text-blue-600 transition-colors">
-                <div class="widget-tools flex items-center gap-0.5">
+            <div class="widget-header flex justify-between items-center">
+                <input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none w-48 outline-none transition-colors">
+                <div class="widget-tools flex items-center gap-1">
                     ${tools}
-                    <button type="button" aria-label="Delete Widget" data-action="widget-delete" data-id="${widget.id}" class="p-1.5 hover:text-red-600 transition-colors">${this.icons.trash}</button>
+                    <button type="button" aria-label="Delete Widget" data-action="widget-delete" data-id="${widget.id}" class="p-1 rounded transition-colors">${this.icons.trash}</button>
                 </div>
             </div>
             <div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div>
@@ -4763,12 +5380,73 @@ window.mBTDB = {
         if (widget.type === 'cast') return this._renderTalent(doc.id, data);
         if (widget.type === 'richText') return this._renderRichText(doc.id, widget.id, data);
         if (widget.type === 'image') return this._renderImage(doc.id, widget.id, data);
+        // --- Batch 2: Logistics Routing ---
+        if (widget.type === 'transport') return this._renderTransport(doc.id, data);
+        if (widget.type === 'mudmap') return this._renderMudMap(doc.id, widget.id, data);
+        if (widget.type === 'footer') return this._renderFooter(doc.id, widget.id, data);
         return '';
     },
+    
+    // --- Helper: Open Contact from Name ---
+    openContactByName: function(name) {
+        if (!name) return;
+        // Logic Resolution: Clean name by removing parenthetical contact info often added by the system
+        const rawName = name.split('(')[0].trim();
+        const cleanName = rawName.toLowerCase();
+        
+        // 1. Search Active Budget Line Items First (Priority Scan)
+        let foundInBudget = null;
+        let sectionKey = null;
+        
+        if (budget && budget.sections) {
+            Object.entries(budget.sections).some(([secName, sec]) => {
+                const item = sec.items.find(i => 
+                    i.crew && 
+                    i.crew.name && 
+                    (i.crew.name.toLowerCase() === cleanName || 
+                     i.crew.name.toLowerCase().includes(cleanName) || 
+                     cleanName.includes(i.crew.name.toLowerCase()))
+                );
+                if (item) {
+                    foundInBudget = item;
+                    sectionKey = secName;
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        if (foundInBudget) {
+            openCrewProfile(null, null, foundInBudget.id, sectionKey);
+            return;
+        }
+
+        // 2. Fallback to Global Open Gate Database
+        const contact = mBTOG.contacts.find(c => c.name.toLowerCase().includes(cleanName) || cleanName.includes(c.name.toLowerCase()));
+        
+        if (contact) {
+            openCrewProfile(null, null, contact.id, null);
+        } else {
+            mBTME.confirm("Contact Not Found", `Create a new profile for "${rawName}"?`, () => {
+                const dummyId = 'dummy_new_contact_' + Date.now();
+                openCrewProfile(null, null, dummyId, null);
+                setTimeout(() => {
+                    const nameInput = document.getElementById('crewName');
+                    if(nameInput) nameInput.value = rawName;
+                }, 100);
+            });
+        }
+    },
+
     _renderMetaHeader: function(doc) {
         const d = doc.content.data;
         const lock = this.state.isEditing ? '' : 'disabled';
+        const is24h = d.meta.is24h || false;
         
+        // Ensure agency object exists
+        if(!d.agency) d.agency = {};
+        if(!d.production) d.production = { address: '', phone: '', email: '', wifi: '', pass: '' }; // New Prod Office Data
+
         // Champion Layout Masthead (3-Column Grid)
         const html = `
         <div class="flex justify-between items-end border-b-4 border-black pb-2 mb-2">
@@ -4777,19 +5455,29 @@ window.mBTDB = {
                 <div class="text-2xl font-black">CALL SHEET</div>
                 <div class="flex gap-4 text-xs font-bold mt-1">
                     <div>DATE: <input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="inline-block w-auto border-b border-slate-300"></div>
-                    <div>CALL: <input type="text" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" class="inline-block w-16 text-center border-b border-slate-300" placeholder="00:00"></div>
+                    <div>CALL: <input type="time" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" class="inline-block w-24 text-center border-b border-slate-300"></div>
+                    <div class="flex items-center gap-1.5 ${this.state.isEditing ? '' : 'hidden'}"><input type="checkbox" ${is24h ? 'checked' : ''} onchange="mBTDB.updateData('${doc.id}', 'meta.is24h', this.checked); mBTDB.renderFrame();" class="w-3 h-3 cursor-pointer"> 24h</div>
                 </div>
             </div>
         </div>
         
         <div class="grid grid-cols-3 gap-2 mb-4 text-[10px]">
-            <!-- Left: Execs & Production -->
-            <div class="cs-box p-2">
-                <div class="font-bold border-b border-black mb-1">PRODUCTION OFFICE</div>
-                <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-                    <span class="font-bold">DIRECTOR:</span> <input ${lock} value="${d.contacts.director||''}" onchange="mBTDB.updateData('${doc.id}','contacts.director',this.value)" class="font-bold">
-                    <span class="font-bold">PRODUCER:</span> <input ${lock} value="${d.contacts.producer||''}" onchange="mBTDB.updateData('${doc.id}','contacts.producer',this.value)">
-                    <span class="font-bold">1st AD:</span> <input ${lock} value="${d.contacts.ad||''}" onchange="mBTDB.updateData('${doc.id}','contacts.ad',this.value)">
+            <!-- Left: Production Office (Address & Logistics) -->
+            <div class="cs-box p-2 flex flex-col h-full">
+                <div class="font-bold border-b border-black mb-1 flex justify-between">
+                    <span>PRODUCTION OFFICE</span>
+                    <span>${this.icons.mapPin}</span>
+                </div>
+                <div class="flex-grow space-y-1">
+                    <textarea ${lock} onchange="mBTDB.updateData('${doc.id}','production.address',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address...">${d.production.address||''}</textarea>
+                    <div class="grid grid-cols-[auto_1fr] gap-x-2 items-center">
+                        <span class="font-bold">PH:</span> <input ${lock} value="${d.production.phone||''}" onchange="mBTDB.updateData('${doc.id}','production.phone',this.value)" class="w-full" placeholder="Office Phone">
+                        <span class="font-bold">EMAIL:</span> <input ${lock} value="${d.production.email||''}" onchange="mBTDB.updateData('${doc.id}','production.email',this.value)" class="w-full" placeholder="production@email.com">
+                    </div>
+                    <div class="flex gap-2 pt-1 border-t border-slate-100 mt-1">
+                        <div class="flex-1"><span class="font-bold">WIFI:</span> <input ${lock} value="${d.production.wifi||''}" onchange="mBTDB.updateData('${doc.id}','production.wifi',this.value)" class="w-16" placeholder="Network"></div>
+                        <div class="flex-1"><span class="font-bold">PASS:</span> <input ${lock} value="${d.production.pass||''}" onchange="mBTDB.updateData('${doc.id}','production.pass',this.value)" class="w-16" placeholder="Password"></div>
+                    </div>
                 </div>
             </div>
             
@@ -4798,52 +5486,244 @@ window.mBTDB = {
                 <div class="font-bold border-b border-black mb-1">LOCATIONS</div>
                 ${(d.locations||[]).map((l,i) => `
                     <div class="mb-2">
-                        <div class="flex justify-between"><span class="font-bold">LOC ${i+1}:</span> <input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${doc.id}','locations',${i},'name',this.value)" class="font-bold w-2/3"></div>
-                        <textarea ${lock} onchange="mBTDB.updateRow('${doc.id}','locations',${i},'address',this.value)" class="w-full resize-none h-8 leading-tight" placeholder="Address...">${l.address}</textarea>
+                        <div class="flex justify-between"><span class="font-bold">                             <span class="opacity-50">HOSP:</span>
+                             <input ${lock} value="${l.hospital||''}" onchange="mBTDB.updateRow('${doc.id}','locations',${i},'hospital',this.value)" class="w-full bg-transparent border-b border-red-100 focus:border-red-500 text-red-600" placeholder="Nearest Hospital...">
+                        </div>
                     </div>
                 `).join('')}
             </div>
 
-            <!-- Right: Weather / Specs -->
-            <div class="cs-box p-2">
-                <div class="font-bold border-b border-black mb-1">CONDITIONS</div>
+            <!-- Right: Agency & Weather -->
+            <div class="cs-box p-2 flex flex-col h-full">
+                <!-- Agency Block -->
+                <div class="font-bold border-b border-black mb-1 flex justify-between items-center cursor-pointer hover:bg-slate-50" onclick="if(!event.target.closest('button')) { const b=this.nextElementSibling; b.classList.toggle('hidden'); }">
+                    <span>AGENCY / CLIENT</span> 
+                    <div class="flex gap-2">
+                        <button onclick="mBTDB.syncAgencyInfo('${doc.id}')" class="text-slate-400 hover:text-blue-600 transition-colors" title="Sync from Database">${this.icons.sync}</button>
+                        <span class="text-[8px] text-slate-400">▼</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mb-2 hidden">
+                    <span class="font-bold">PRODUCER:</span>
+                    <div class="flex items-center gap-1">
+                        <input ${lock} value="${d.agency.producer||''}" onchange="mBTDB.updateData('${doc.id}','agency.producer',this.value)" class="w-full" placeholder="Name">
+                        ${d.agency.producer ? `<button onclick="mBTDB.openContactByName('${d.agency.producer}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : ''}
+                    </div>
+                    <span class="font-bold">CREATIVE:</span>
+                    <div class="flex items-center gap-1">
+                        <input ${lock} value="${d.agency.creative||''}" onchange="mBTDB.updateData('${doc.id}','agency.creative',this.value)" class="w-full" placeholder="Name">
+                        ${d.agency.creative ? `<button onclick="mBTDB.openContactByName('${d.agency.creative}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : ''}
+                    </div>
+                </div>
+
+                <div class="font-bold border-b border-black mb-1 mt-auto">CONDITIONS</div>
                 <div class="flex justify-between mb-1">
                     <span>Sunrise: <input ${lock} value="${d.meta.sunriseSunset?.split('/')[0]||''}" class="w-12 text-center border-b border-slate-200"></span>
                     <span>Sunset: <input ${lock} value="${d.meta.sunriseSunset?.split('/')[1]||''}" class="w-12 text-center border-b border-slate-200"></span>
                 </div>
-                <textarea ${lock} class="w-full h-12 resize-none" placeholder="Weather forecast...">${d.locations?.[0]?.weather || ''}</textarea>
+                <textarea ${lock} class="w-full h-8 resize-none" placeholder="Weather forecast...">${d.locations?.[0]?.weather || ''}</textarea>
             </div>
         </div>`;
         
         const container = document.getElementById('mBTDB_MetaArea'); if(container) container.innerHTML = html;
     },
+
     _renderContacts: function(docId, d, widget) {
-        const lock = this.state.isEditing ? '' : 'disabled';
-        const gridClass = widget.vertical ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3";
-        const renderField = (path, val, label, role) => `<div class="relative group"><div class="flex justify-between items-center mb-1"><div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${label}</div>${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500 transition-colors" onclick="mBTDB.pullFromOpenGate('${docId}', '${path}', '${role}')">${this.icons.user}</div>` : ''}</div><input ${lock} value="${val||''}" onchange="mBTDB.updateData('${docId}', '${path}', this.value)" class="studio-input font-bold disabled:bg-transparent disabled:border-slate-100 disabled:text-slate-800"></div>`;
-        return `<div class="grid ${gridClass} gap-4 p-4 h-full overflow-y-auto no-scrollbar">${renderField('contacts.director', d.contacts.director, 'Director', 'director')}${renderField('contacts.producer', d.contacts.producer, 'Producer', 'producer')}${renderField('contacts.ad', d.contacts.ad, '1st AD', 'ad')}</div>`;
-    },
-    _renderLogistics: function(docId, d) {
-        const lock = this.state.isEditing ? '' : 'disabled';
-        const hideTool = this.state.isEditing ? '' : 'hidden';
-        return `<div class="flex flex-col h-full"><div class="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex gap-2 items-center justify-between"><div class="flex items-center gap-2"><span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sun Cycles:</span><input ${lock} value="${d.meta.sunriseSunset||''}" onchange="mBTDB.updateData('${docId}','meta.sunriseSunset',this.value)" class="bg-transparent text-[10px] font-bold w-32 outline-none disabled:text-slate-600" placeholder="06:00 / 18:00"></div></div><div class="flex-grow overflow-y-auto p-4 space-y-4 no-scrollbar">${(d.locations||[]).map((l,i) => `<div class="flex flex-wrap gap-4 items-start border-b border-slate-50 pb-4 mb-2 relative group/loc"><div class="w-full sm:w-1/3 space-y-2"><input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="studio-input font-black uppercase text-xs disabled:bg-transparent disabled:border-none disabled:p-0 disabled:text-slate-900" placeholder="LOCATION NAME"><input ${lock} type="text" value="${l.timeOnLocation||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="studio-input text-[10px] disabled:bg-transparent disabled:border-none disabled:p-0 disabled:text-slate-500" placeholder="Time at Location"></div><div class="w-full sm:w-1/3"><textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="studio-input h-20 resize-none text-[10px] leading-relaxed disabled:bg-slate-50 disabled:text-slate-700" placeholder="Full Address...">${l.address}</textarea></div><div class="w-full sm:w-1/4 flex-grow"><div class="relative"><textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="studio-input h-20 resize-none text-[10px] bg-blue-50/30 border-blue-100 text-blue-800 disabled:opacity-100" placeholder="Weather Forecast...">${l.weather}</textarea><button id="w-btn-${i}" onclick="mBTDB.autoFillWeather('${docId}', ${i}, '${l.name}')" class="absolute bottom-2 right-2 bg-white text-blue-600 p-1.5 rounded-lg shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-all ${hideTool}">${this.icons.cloud}</button></div></div><button onclick="mBTDB.deleteRow('${docId}','locations',${i},'logistics')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool}">${this.icons.trash}</button></div>`).join('')}<button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-2 bg-white text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl border border-dashed border-slate-200 transition-all flex items-center justify-center gap-2 ${hideTool}">${this.icons.plus} Add Location</button></div></div>`;
-    },
-    _renderSchedule: function(docId, d) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
         
-        // Champion Layout: High-Density Table
+        // Data Migration: Convert legacy object to array on read
+        if (!Array.isArray(d.contacts)) {
+            d.contacts = [
+                { role: 'DIRECTOR', name: d.contacts.director || '' },
+                { role: 'PRODUCER', name: d.contacts.producer || '' },
+                { role: '1ST AD', name: d.contacts.ad || '' }
+            ];
+        }
+
+        const renderRow = (c, i) => {
+            const hasValue = c.name && String(c.name).trim().length > 0;
+            const clearIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+            
+            return `
+            <div class="flex flex-col border-b border-slate-200 pb-1 mb-1 last:border-0 relative group/row">
+                <div class="flex justify-between items-center mb-0.5">
+                    <input ${lock} value="${c.role}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'role',this.value)" class="text-[8px] font-black uppercase tracking-widest text-slate-500 bg-transparent border-none p-0 w-2/3 outline-none focus:text-blue-600 transition-colors" placeholder="ROLE">
+                    ${this.state.isEditing ? `
+                        <div class="flex items-center gap-2 ${hideTool}">
+                            ${hasValue ? `<button type="button" class="text-slate-300 hover:text-rose-500 transition-colors flex items-center justify-center bg-slate-50 hover:bg-rose-50 rounded-full w-4 h-4" onclick="mBTDB.updateRow('${docId}', 'contacts', ${i}, 'name', ''); mBTDB._refreshWidget('${docId}', '${widget.id}')" title="Clear Field">${clearIcon}</button>` : ''}
+                            <div class="cursor-pointer text-slate-300 hover:text-blue-500 transition-colors scale-75" onclick="mBTDB.pullFromOpenGate('${docId}', 'contacts.${i}.name', '${c.role}')" title="Import from DB">${this.icons.user}</div>
+                        </div>
+                    ` : ''}
+                </div>
+                <input ${lock} value="${c.name}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'name',this.value)" class="w-full bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name...">
+                
+                <button onclick="mBTDB.deleteRow('${docId}','contacts',${i},'contacts')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool} opacity-0 group-hover/row:opacity-100">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>`;
+        };
+
         return `
         <div class="h-full flex flex-col cs-box border-none">
             <div class="cs-header-bar flex justify-between items-center">
-                <span>SHOOTING SCHEDULE</span>
-                <span class="text-[8px] font-normal opacity-70">CONFIDENTIAL</span>
+                <span>KEY CONTACTS</span>
             </div>
+            <div class="flex-grow overflow-y-auto p-2 no-scrollbar bg-white">
+                ${d.contacts.map((c, i) => renderRow(c, i)).join('')}
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','contacts','contact')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Contact</button>
+            </div>
+        </div>`;
+    },
+    
+    _renderLogistics: function(docId, d) {
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        
+        // Parse Sun Data for Display
+        const sunRaw = d.meta.sunriseSunset || '/';
+        const [sunrise, sunset] = sunRaw.split('/');
+
+        return `<div class="flex flex-col h-full">
+            <!-- Compact Sun Header (Horizontal) -->
+            <div class="px-2 py-1 border-b border-black flex justify-center items-center gap-4 bg-slate-50">
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SUN</span>
+                    <input type="text" ${lock} value="${sunrise||''}" onchange="mBTDB.formatTime(this, '${docId}'); const current = '${sunRaw}'.split('/'); current[0]=this.value; mBTDB.updateData('${docId}','meta.sunriseSunset',current.join('/'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="06:00">
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SET</span>
+                    <input type="text" ${lock} value="${sunset||''}" onchange="mBTDB.formatTime(this, '${docId}'); const current = '${sunRaw}'.split('/'); current[1]=this.value; mBTDB.updateData('${docId}','meta.sunriseSunset',current.join('/'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">
+                </div>
+            </div>
+            
+            <div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar">${(d.locations||[]).map((l,i) => `<div class="flex flex-col gap-1 border-b-2 border-black pb-2 mb-1 relative group/loc">
+            
+            <!-- Row 1: Name and Time (Refined Font Size & Width) -->
+            <div class="flex justify-between items-end gap-2 mb-1">
+                <div class="flex-grow">
+                    <label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">LOCATION ${i+1}</label>
+                    <input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="w-full bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase tracking-tight outline-none placeholder-slate-300" placeholder="NAME">
+                </div>
+                <div class="w-20 text-right shrink-0">
+                     <label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">CALL</label>
+                     <input ${lock} type="text" value="${l.timeOnLocation||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="w-full bg-transparent border-none p-0 text-xs font-black text-blue-600 text-center outline-none" placeholder="00:00">
+                </div>
+            </div>
+            
+            <!-- Row 2: Address (Compact Height) -->
+            <div class="w-full">
+                 <textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="w-full bg-slate-50 border-none rounded px-2 py-1 text-[9px] font-bold text-slate-700 placeholder-slate-400 h-10 resize-none leading-relaxed" placeholder="Full Address...">${l.address}</textarea>
+            </div>
+
+            <!-- Row 3: Hospital -->
+            <div class="flex items-center gap-1 bg-red-50 px-2 py-1 rounded border border-red-100">
+                <span class="text-[8px] font-black text-red-500 uppercase tracking-widest shrink-0">HOSP</span>
+                <input ${lock} value="${l.hospital||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'hospital',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-red-700 placeholder-red-200" placeholder="Nearest Medical...">
+            </div>
+            
+            <!-- Row 4: Weather (Stacked Below, Compact) -->
+            <div class="relative bg-blue-50 px-2 py-1 rounded border border-blue-100 h-8 flex items-center">
+                <input ${lock} value="${l.weather||''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-blue-800 placeholder-blue-200 pr-5" placeholder="Weather...">
+                <button id="w-btn-${i}" onclick="mBTDB.autoFillLocationDetails('${docId}', ${i})" class="absolute top-1/2 -translate-y-1/2 right-1 text-blue-400 hover:text-blue-600 transition-colors ${hideTool}" title="Auto-Fill details">
+                    ${this.icons.wand}
+                </button>
+            </div>
+
+            <button onclick="mBTDB.deleteRow('${docId}','locations',${i},'logistics')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>`).join('')}<button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-1.5 bg-slate-100 border border-dashed border-slate-300 text-[8px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:border-slate-400 hover:bg-slate-200 transition-all ${hideTool}">+ Add Location</button></div></div>`;
+    },
+
+    autoFillLocationDetails: async function(docId, index) {
+        const btn = document.getElementById(`w-btn-${index}`);
+        if(btn) btn.innerHTML = `...`; 
+        
+        const doc = budget.documents.find(d => d.id === docId);
+        if(!doc || !doc.content.data.locations[index]) return;
+        
+        const loc = doc.content.data.locations[index];
+        // Prioritize address for accuracy
+        const query = loc.address && loc.address.length > 5 ? loc.address : loc.name;
+        
+        try {
+            // 1. Geocoding
+            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`);
+            const geo = await geoRes.json();
+            
+            if(!geo.results) throw new Error("Location not found via Geocoding.");
+            const { latitude, longitude, name: geoName } = geo.results[0];
+            
+            // 2. Weather
+            const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+            const wData = await wRes.json();
+            
+            const today = wData.daily;
+            const code = today.weather_code[0];
+            
+            // WMO Code Mapping
+            let summary = "Clear"; 
+            if(code === 1 || code === 2 || code === 3) summary = "Partly Cloudy"; 
+            else if(code === 45 || code === 48) summary = "Foggy";
+            else if(code >= 51 && code <= 57) summary = "Drizzle";
+            else if(code >= 61 && code <= 67) summary = "Rain";
+            else if(code >= 80 && code <= 82) summary = "Showers";
+            else if(code >= 95) summary = "Thunderstorm";
+            
+            const sunrise = today.sunrise[0].split('T')[1];
+            const sunset = today.sunset[0].split('T')[1];
+            
+            // Logic Fix: Stripped Sunrise/Sunset info from weather string
+            const weatherStr = `${summary} ${Math.round(today.temperature_2m_max[0])}°/${Math.round(today.temperature_2m_min[0])}°C`; 
+            
+            // Update Weather
+            this.updateRow(docId, 'locations', index, 'weather', weatherStr);
+            
+            // Update Global Sun (First location only)
+            if (index === 0) {
+                this.updateData(docId, 'meta.sunriseSunset', `${sunrise}/${sunset}`);
+            }
+            
+            // 3. Hospital AI
+            const provider = mBT.features.ai.getSelectedProvider();
+            const apiKey = mBT.features.ai.getStoredApiKey(provider);
+            
+            if (apiKey) {
+                const prompt = `Find nearest emergency hospital to ${latitude},${longitude} (${geoName}). Return ONLY Hospital Name.`;
+                const hospitalName = await mBT.features.ai.callUnifiedAI(provider, apiKey, prompt);
+                const cleanHost = hospitalName.replace(/^(The nearest.*?is|Here is|Name:|Hospital:)/i, '').trim().replace(/\.$/, '');
+                this.updateRow(docId, 'locations', index, 'hospital', cleanHost);
+            }
+            
+            // Refresh
+            // Logic Resolution: Trigger a repaint of this specific widget if possible to avoid full reload
+            // But for safety in single-file, we call renderFrame.
+            this.renderFrame();
+            
+        } catch(e) { 
+            console.error("Autofill Logic Error:", e);
+            mBTME.alert("Sync Error", "Could not fetch location data."); 
+            if(btn) btn.innerHTML = this.icons.wand; 
+        }
+    },
+
+    // Legacy Bridge: Prevents crash if old buttons invoke this
+    autoFillWeather: async function(docId, index, name) {
+        return this.autoFillLocationDetails(docId, index);
+    },
+       _renderSchedule: function(docId, d) {
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        
+        // High-Density Table (Header Removed)
+        return `
+        <div class="h-full flex flex-col border-none">
             <div class="flex-grow overflow-auto no-scrollbar">
                 <table class="cs-table w-full">
                     <thead>
                         <tr>
-                            <th class="w-12 text-center">TIME</th>
+                            <th class="w-20 text-center">TIME</th>
                             <th class="w-10 text-center">SCN</th>
                             <th class="w-10 text-center">I/E</th>
                             <th class="text-left">DESCRIPTION / ACTION / NOTES</th>
@@ -4858,7 +5738,7 @@ window.mBTDB = {
                             const rowBg = isMeal ? 'bg-slate-100 font-bold' : '';
                             return `
                             <tr class="${rowBg} hover:bg-blue-50 transition-colors">
-                                <td class="p-1"><input ${lock} value="${row.time}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="text-center font-bold" placeholder="00:00"></td>
+                                <td class="p-1"><input ${lock} type="text" value="${row.time}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" class="text-center font-bold" placeholder="00:00"></td>
                                 ${isMeal ? 
                                 `<td colspan="5" class="p-1 text-center uppercase tracking-widest text-[10px]"><input ${lock} value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="text-center w-full uppercase"></td>` : 
                                 `
@@ -4883,12 +5763,94 @@ window.mBTDB = {
     _renderCrew: function(docId, d) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
-        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar p-2"><table class="w-full text-[10px] border-collapse"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-1 text-left w-1/4">Department</th><th class="p-1 text-left w-1/4">Position</th><th class="p-1 text-left w-1/4">Name</th><th class="p-1 text-left w-1/4">Contact</th><th class="p-1 w-16 text-center">Call</th><th class="p-1 w-8"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.crew||[]).map((c,i) => `<tr class="hover:bg-slate-50/30 transition-colors"><td class="p-1"><input ${lock} value="${c.department||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="studio-input font-black uppercase text-[9px] text-slate-400 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} value="${c.position||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="studio-input font-bold text-slate-700 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><div class="relative flex items-center"><input ${lock} value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="studio-input font-black text-slate-900 pr-6 disabled:bg-transparent disabled:border-none">${this.state.isEditing ? `<div class="absolute right-2 cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position||'crew'}')">${this.icons.user}</div>` : ''}</div></td><td class="p-1"><input ${lock} value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="studio-input text-[9px] font-mono disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.callTime||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center font-black text-blue-600 disabled:bg-transparent disabled:border-none"></td><td class="p-1 text-center widget-controls ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30 ${hideTool}"><button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-all hover:text-blue-600">+ Add Crew Member</button></div></div>`;
+        // Updated: High Density Crew List (Header Removed)
+        return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-1/4">DEPARTMENT / POSITION</th>
+                            <th class="w-1/4">NAME</th>
+                            <th class="w-20 text-center">CALL</th>
+                            <th>NOTES / INSTRUCTIONS</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.crew||[]).map((c,i) => `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-1">
+                                <input ${lock} value="${c.department||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="font-black uppercase text-[8px] text-slate-400 block w-full mb-0.5" placeholder="DEPT">
+                                <input ${lock} value="${c.position||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="font-bold text-slate-800" placeholder="Position">
+                            </td>
+                            <td class="p-1">
+                                <div class="flex items-center gap-1">
+                                    <input ${lock} value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="font-bold text-slate-900 w-full" placeholder="Name">
+                                    ${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position||'crew'}')">${this.icons.user}</div>` : 
+                                      (c.name ? `<button onclick="mBTDB.openContactByName('${c.name}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : '')}
+                                </div>
+                                <input ${lock} value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="text-[8px] font-mono text-slate-400 w-full" placeholder="Phone/Email">
+                            </td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.callTime||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" class="text-center font-black text-blue-600" placeholder="00:00"></td>
+                            <td class="p-1"><input ${lock} value="${c.notes||''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'notes',this.value)" class="italic text-slate-600 w-full" placeholder="Specific notes..."></td>
+                            <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-300 hover:text-red-500">×</button></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Crew</button>
+            </div>
+        </div>`;
     },
     _renderTalent: function(docId, d) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
-        return `<div class="h-full flex flex-col"><div class="flex-grow overflow-auto no-scrollbar p-2"><table class="w-full text-[10px] border-collapse min-w-[500px]"><thead><tr class="bg-slate-50 text-slate-400 font-black uppercase tracking-widest"><th class="p-1 text-left">Character</th><th class="p-1 text-left">Actor Name</th><th class="p-1 text-left">Contact</th><th class="p-1 w-10 text-center">Status</th><th class="p-1 w-14 text-center">PU</th><th class="p-1 w-14 text-center">HMU</th><th class="p-1 w-14 text-center text-blue-600">SET</th><th class="p-1 w-8"></th></tr></thead><tbody class="divide-y divide-slate-50">${(d.cast||[]).map((c,i) => `<tr><td class="p-1"><input ${lock} value="${c.character||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="studio-input font-bold text-slate-500 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><div class="relative flex items-center"><input ${lock} value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="studio-input font-black text-slate-900 pr-6 disabled:bg-transparent disabled:border-none">${this.state.isEditing ? `<div class="absolute right-2 cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div>` : ''}</div></td><td class="p-1"><input ${lock} value="${c.contact||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'contact',this.value)" class="studio-input text-[9px] font-mono text-slate-400 disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} value="${c.status||'W'}" onchange="mBTDB.updateRow('${docId}','cast',${i},'status',this.value)" class="studio-input text-center font-black uppercase disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.pickup||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.hmu||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center disabled:bg-transparent disabled:border-none"></td><td class="p-1"><input ${lock} type="text" value="${c.setCall||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" onblur="mBTDB.formatTime(this, '${docId}')" class="studio-input text-center font-black bg-yellow-100 border-yellow-200 text-slate-900 disabled:opacity-100"></td><td class="p-1 text-center widget-controls ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-300 hover:text-red-500">${this.icons.trash}</button></td></tr>`).join('')}</tbody></table></div><div class="p-2 border-t border-slate-100 widget-controls bg-slate-50/30 ${hideTool}"><button onclick="mBTDB.addRow('${docId}','cast','talent')" class="w-full bg-white border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-widest py-2 rounded-xl hover:text-purple-600 transition-all">+ Add Talent</button></div></div>`;
+        // Updated: High Density Cast Grid (Header Removed)
+        return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-24">CHARACTER</th>
+                            <th>ARTIST</th>
+                            <th class="w-10 text-center">SWF</th>
+                            <th class="w-20 text-center">PU</th>
+                            <th class="w-20 text-center">BF</th>
+                            <th class="w-20 text-center">H/MU</th>
+                            <th class="w-20 text-center">COST</th>
+                            <th class="w-20 text-center bg-slate-100 text-black border-black">SET</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.cast||[]).map((c,i) => `
+                        <tr>
+                            <td class="p-1"><input ${lock} value="${c.character||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="font-bold text-slate-500 uppercase"></td>
+                            <td class="p-1">
+                                <div class="flex items-center gap-1">
+                                    <input ${lock} value="${c.actor||''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="font-black text-slate-900 w-full">
+                                    ${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div>` : 
+                                      (c.actor ? `<button onclick="mBTDB.openContactByName('${c.actor}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : '')}
+                                </div>
+                            </td>
+                            <td class="p-1"><input ${lock} value="${c.swf||'W'}" onchange="mBTDB.updateRow('${docId}','cast',${i},'swf',this.value)" class="text-center font-black uppercase text-[9px]" placeholder="S/W/F"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.pickup||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.bf||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'bf',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.hmu||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.costume||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'costume',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1 bg-slate-50"><input ${lock} type="text" value="${c.setCall||''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" class="text-center font-black text-slate-900" placeholder="00:00"></td>
+                            <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-300 hover:text-red-500">×</button></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','cast','talent', {id:Date.now(), character:'', actor:'', swf:'W', pickup:'', bf:'', hmu:'', costume:'', setCall:'', contact:''})" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Talent</button>
+            </div>
+        </div>`;
     },
     _renderRichText: function(docId, widgetId, data) {
         const lock = this.state.isEditing ? '' : 'disabled';
@@ -4922,6 +5884,167 @@ window.mBTDB = {
             </div>`;
         }
     },
+
+    // --- Batch 2: Logistics Widgets (Transport, MudMap, Footer) ---
+    _renderTransport: function(docId, d) {
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const hideTool = this.state.isEditing ? '' : 'hidden';
+        // Updated: Header Removed
+        return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full text-[9px]">
+                    <thead>
+                        <tr>
+                            <th class="w-1/4">DRIVER / CONTACT</th>
+                            <th class="w-1/5">VEHICLE</th>
+                            <th class="w-10 text-center">PAX</th>
+                            <th class="w-20 text-center">TIME</th>
+                            <th>FROM > TO</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.transport||[]).map((t,i) => `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-1">
+                                <input ${lock} value="${t.driver||''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'driver',this.value)" class="font-bold text-slate-900 w-full" placeholder="Driver Name">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.vehicle||''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'vehicle',this.value)" class="text-slate-600 w-full" placeholder="Type/Plate">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.pax||''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'pax',this.value)" class="text-center font-mono" placeholder="#">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} type="time" value="${t.pickup||''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'pickup',this.value)" class="text-center font-black text-blue-600">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.route||''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'route',this.value)" class="w-full italic text-slate-500" placeholder="Loc A > Loc B">
+                            </td>
+                            <td class="p-1 text-center ${hideTool}">
+                                <button onclick="mBTDB.deleteRow('${docId}','transport',${i},'transport')" class="text-slate-300 hover:text-red-500 font-bold">×</button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','transport','move')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Movement</button>
+            </div>
+        </div>`;
+    },
+
+    _renderMudMap: function(docId, widgetId, data) {
+        // Logic Resolution: Use data-attributes to store ID references for the init function
+        return `
+        <div class="w-full h-full bg-white relative group border-2 border-black" id="mudmap_container_${widgetId}">
+            <canvas id="canvas_${widgetId}" class="mudmap-canvas absolute inset-0 w-full h-full z-10 cursor-crosshair" data-doc-id="${docId}" data-widget-id="${widgetId}"></canvas>
+            
+            ${this.state.isEditing ? `
+            <div class="absolute bottom-2 right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="mBTDB._clearMudMap('${docId}', '${widgetId}')" class="bg-white text-rose-600 px-2 py-1 rounded shadow text-[9px] font-black uppercase tracking-widest border border-rose-200 hover:bg-rose-50">Clear</button>
+            </div>
+            <div class="absolute top-2 left-2 z-0 text-[10px] font-black text-slate-100 uppercase pointer-events-none select-none tracking-widest">
+                SKETCH AREA (MUD MAP)
+            </div>` : ''}
+        </div>`;
+    },
+
+    _renderFooter: function(docId, widgetId, data) {
+        const lock = this.state.isEditing ? '' : 'disabled';
+        const val = data.additional ? data.additional[widgetId] : "";
+        // Logic Resolution: Default Caribbean/UK Safety Standard if empty
+        const defaultSafety = "EMERGENCY: DIAL 110/119 (JA) | NEAREST HOSPITAL: See Locations | SAFETY OFFICER: 1st AD\n\nHARASSMENT POLICY: This production operates a zero-tolerance policy towards harassment and bullying. Report concerns to the Producer or Unit Manager.";
+        
+        return `
+        <div class="h-full flex flex-col justify-end p-3 border-t-4 border-black mt-2 bg-slate-50">
+            <div class="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1 flex items-center gap-2">
+                ${this.icons.hazard} HEALTH & SAFETY PROTOCOLS
+            </div>
+            <textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="w-full h-full resize-none text-[9px] font-bold text-slate-800 bg-transparent outline-none leading-relaxed" placeholder="Enter safety details...">${val || defaultSafety}</textarea>
+        </div>`;
+    },
+
+    _initMudMaps: function() {
+        const canvases = document.querySelectorAll('.mudmap-canvas');
+        canvases.forEach(cvs => {
+            if(cvs.dataset.initialized) return;
+            
+            // 1. Resize Logic
+            const rect = cvs.parentElement.getBoundingClientRect();
+            cvs.width = rect.width; 
+            cvs.height = rect.height;
+            
+            const ctx = cvs.getContext('2d');
+            const docId = cvs.dataset.docId;
+            const widgetId = cvs.dataset.widgetId;
+            
+            // 2. Hydrate Data
+            const doc = budget.documents.find(d => d.id === docId);
+            if(doc && doc.content.data.additional && doc.content.data.additional[widgetId]) {
+                const img = new Image(); 
+                img.onload = () => ctx.drawImage(img, 0, 0); 
+                img.src = doc.content.data.additional[widgetId];
+            }
+            
+            // 3. Drawing Logic
+            let isDrawing = false;
+            
+            const start = (e) => { 
+                if(!mBTDB.state.isEditing) return; 
+                isDrawing = true; 
+                ctx.beginPath(); 
+                // Fix: Calculate offset correctly relative to canvas, not window
+                const bounds = cvs.getBoundingClientRect(); 
+                const x = (e.clientX || e.touches[0].clientX) - bounds.left;
+                const y = (e.clientY || e.touches[0].clientY) - bounds.top;
+                ctx.moveTo(x, y); 
+            };
+            
+            const draw = (e) => { 
+                if(!isDrawing) return; 
+                const bounds = cvs.getBoundingClientRect(); 
+                const x = (e.clientX || e.touches[0].clientX) - bounds.left;
+                const y = (e.clientY || e.touches[0].clientY) - bounds.top;
+                
+                ctx.lineTo(x, y); 
+                ctx.strokeStyle = "#000"; 
+                ctx.lineWidth = 2; 
+                ctx.lineCap = "round";
+                ctx.stroke(); 
+            };
+            
+            const end = () => { 
+                if(!isDrawing) return; 
+                isDrawing = false; 
+                // Auto-save on stroke end
+                mBTDB.updateData(docId, `additional.${widgetId}`, cvs.toDataURL()); 
+            };
+            
+            // 4. Bind Events (Mouse & Touch)
+            cvs.addEventListener('mousedown', start); 
+            cvs.addEventListener('mousemove', draw); 
+            cvs.addEventListener('mouseup', end); 
+            cvs.addEventListener('mouseout', end);
+            
+            cvs.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); });
+            cvs.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+            cvs.addEventListener('touchend', end);
+            
+            cvs.dataset.initialized = "true";
+        });
+    },
+
+    _clearMudMap: function(docId, widgetId) {
+        const cvs = document.getElementById(`canvas_${widgetId}`);
+        if(cvs) { 
+            const ctx = cvs.getContext('2d'); 
+            ctx.clearRect(0, 0, cvs.width, cvs.height); 
+            this.updateData(docId, `additional.${widgetId}`, ''); 
+        }
+    },
+
     // Logic Resolution: Silent High-Fidelity Image Processing (2K Max)
     _handleImageUpload: function(input, docId, widgetId) {
         if (!input.files || !input.files[0]) return;
@@ -4962,10 +6085,34 @@ window.mBTDB = {
     },
 
     // --- 5. Navigation & Logic Controllers ---
-    toggleVertical: function(wid) { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === wid); if(w) { w.vertical = !w.vertical; this.renderFrame(); } },
+    _refreshWidget: function(docId, widgetId) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if (!doc) return;
+        const widget = doc.content.widgets.find(w => w.id === widgetId);
+        if (!widget) return;
+        
+        const el = document.querySelector(`.grid-stack-item[gs-id="${widget.id}"] .widget-body`);
+        const workspace = document.getElementById('mBTDB_Workspace');
+        const currentScroll = workspace ? workspace.scrollTop : 0;
+
+        if (el) {
+            el.innerHTML = this._getContentForWidget(widget, doc);
+            this._autoResizeWidget(widget.id);
+            if(widget.type === 'mudmap') this._initMudMaps();
+            
+            // Logic Resolution: Restore scroll position to prevent "Jump to Top" on focus loss
+            if (workspace) workspace.scrollTop = currentScroll;
+        }
+    },
+
+    toggleVertical: function(wid) { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === wid); if(w) { w.vertical = !w.vertical; this._refreshWidget(doc.id, wid); } },    
     updateWidgetLabel: function(docId, widgetId, newLabel) { const doc = budget.documents.find(d => d.id === docId); const w = doc.content.widgets.find(x => x.id === widgetId); if(w) { w.label = newLabel; this._triggerSave(); } },
+    
     updateData: function(docId, path, value) { 
         const doc = budget.documents.find(d => d.id === docId); 
+        // Invalidate Cache
+        if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
         const parts = path.split('.'); 
         let target = doc.content.data; 
         for(let i=0; i<parts.length-1; i++) { if(!target[parts[i]]) target[parts[i]]={}; target = target[parts[i]]; } 
@@ -4976,10 +6123,60 @@ window.mBTDB = {
         
         this._triggerSave(); 
     },
-    updateRow: function(docId, section, index, key, value) { const doc = budget.documents.find(d => d.id === docId); if(doc.content.data[section][index]) { doc.content.data[section][index][key] = value; this._triggerSave(); const type = (section === 'locations') ? 'logistics' : section; const widget = doc.content.widgets.find(w => w.type === type); if(widget) this._autoResizeWidget(widget.id); } },
-    addRow: function(docId, section, type, presetData) { const doc = budget.documents.find(d => d.id === docId); if(!doc.content.data[section]) doc.content.data[section] = []; let newRow = presetData || { id: Date.now() }; if(!presetData) { if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" }; else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"", contact:"" }; else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" }; else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"", timeOnLocation:"" }; } doc.content.data[section].push(newRow); this._triggerSave(); this.renderFrame(); const widget = doc.content.widgets.find(w => w.type === (section === 'locations' ? 'logistics' : section)); if(widget) this._autoResizeWidget(widget.id); },
-    deleteRow: function(docId, section, index, widgetType) { const doc = budget.documents.find(d => d.id === docId); doc.content.data[section].splice(index, 1); this._triggerSave(); this.renderFrame(); const widget = doc.content.widgets.find(w => w.type === (widgetType || section)); if(widget) this._autoResizeWidget(widget.id); },
-    deleteWidget: function(id) { 
+    
+    updateRow: function(docId, section, index, key, value) { 
+        const doc = budget.documents.find(d => d.id === docId); 
+        if(doc.content.data[section][index]) { 
+            // Invalidate Cache
+            if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+            doc.content.data[section][index][key] = value; 
+            this._triggerSave(); 
+            const type = (section === 'locations') ? 'logistics' : section; 
+            const widget = doc.content.widgets.find(w => w.type === type); 
+            if(widget) this._autoResizeWidget(widget.id); 
+        } 
+    },
+    
+    addRow: function(docId, section, type, presetData) { 
+        const doc = budget.documents.find(d => d.id === docId); 
+        // Invalidate Cache
+        if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+        if(!doc.content.data[section]) doc.content.data[section] = []; 
+        let newRow = presetData || { id: Date.now() }; 
+        if(!presetData) { 
+            if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" }; 
+            else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"", contact:"" }; 
+            else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" }; 
+            else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"", timeOnLocation:"" }; 
+            else if(section==='transport') newRow = { ...newRow, driver:"", vehicle:"", pax:"", pickup:"", loc:"", dest:"" }; 
+        } 
+        doc.content.data[section].push(newRow); 
+        this._triggerSave(); 
+        
+        // Surgical Widget Refresh
+        const widgetType = (section === 'locations') ? 'logistics' : section;
+        const widget = doc.content.widgets.find(w => w.type === widgetType);
+        if(widget) this._refreshWidget(docId, widget.id);
+        else this.renderFrame();
+    },
+    
+    deleteRow: function(docId, section, index, widgetType) { 
+        const doc = budget.documents.find(d => d.id === docId); 
+        // Invalidate Cache
+        if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+        doc.content.data[section].splice(index, 1); 
+        this._triggerSave(); 
+        
+        // Surgical Widget Refresh
+        const type = widgetType || section;
+        const widget = doc.content.widgets.find(w => w.type === type);
+        if(widget) this._refreshWidget(docId, widget.id);
+        else this.renderFrame();
+    },
+        deleteWidget: function(id) { 
         mBTME.confirm("Delete Widget", "Remove this block from layout?", () => {
             const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
             const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`); 
@@ -4999,30 +6196,44 @@ window.mBTDB = {
         w.x = node.gridstackNode.x; w.y = node.gridstackNode.y;
         doc.content.widgets.push(w);
         this._triggerSave();
+        // Logic Fix: Ensure canvas initializes immediately after adding
+        if (type === 'mudmap') setTimeout(() => this._initMudMaps(), 50);
     },
     _autoResizeWidget: function(widgetId) { const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`); if(!el) return; const body = el.querySelector('.widget-body'); if(!body) return; const currentHeight = body.style.height; body.style.height = 'auto'; const contentHeight = body.scrollHeight + 45; body.style.height = currentHeight; let newH = Math.ceil(contentHeight / 60); if(newH < 3) newH = 3; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === widgetId); if(w && w.h !== newH) { w.h = newH; this.state.grid.update(el, { h: newH }); this._triggerSave(); } },
     formatTime: function(el, docId) {
+        // Logic Resolution: Robust manual time formatting (Smart Text)
+        // 1400 -> 14:00, 930 -> 09:30
         let val = el.value.replace(/[^0-9]/g, '');
-        // Fetch 24h setting if docId provided
+        if (val.length < 3) return; // Wait for at least 3 digits
+        
+        // Pad 3 digits to 4 (e.g., 800 -> 0800)
+        if (val.length === 3) val = '0' + val;
+        // Truncate if too long (e.g., pasted 12345)
+        if (val.length > 4) val = val.substring(0, 4);
+
+        let hh = parseInt(val.substring(0,2));
+        let mm = parseInt(val.substring(2,4));
+        
+        // Logic Resolution: Enforce Military Time Constraint from Header Setting
+        // This ensures the row data matches the document's declared format
         let is24h = false;
         if(docId) {
              const doc = budget.documents.find(d => d.id === docId);
              if(doc && doc.content.data.meta.is24h) is24h = true;
         }
 
-        if(val.length === 4) {
-            let hh = parseInt(val.substring(0,2));
-            let mm = parseInt(val.substring(2,4));
-            
-            if (is24h) {
-                if (hh > 23) hh = 23;
-                if (mm > 59) mm = 59;
-            }
-            
-            const formatted = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
-            el.value = formatted;
-            el.dispatchEvent(new Event('change'));
+        if (is24h) {
+            // Military Clamp
+            if (hh > 23) hh = 23;
+        } else {
+            // Standard Time Heuristics (Optional intelligent conversion could go here)
+            if (hh > 23) hh = 23; 
         }
+        
+        if (mm > 59) mm = 59;
+        
+        // Output format is always HH:MM for data consistency
+        el.value = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
     },
     saveTemplate: function() { 
         const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
@@ -5037,13 +6248,43 @@ window.mBTDB = {
     calcShootDay: function(dateStr) { if(!budget.startDate) return "Day 1"; const start = new Date(budget.startDate); const current = new Date(dateStr); if(isNaN(start) || isNaN(current)) return "Day 1"; const diffDays = Math.ceil((current - start) / (1000 * 60 * 60 * 24)) + 1; return `Day ${diffDays}`; },
 
     syncFromBudget: function() { 
-        mBTME.confirm("Sync Data", "Overwrite document data with Budget details?", () => {
+        mBTME.confirm("Sync Data", "Import crew & data from current Budget?", () => {
             const doc = budget.documents.find(d => d.id === this.state.currentDocId); 
-            const defaults = this._generateDefaultData(); 
-            doc.content.data.crew = defaults.crew; 
-            doc.content.data.contacts = defaults.contacts; 
+            // Invalidate Cache
+            if (this.state._cache && this.state._cache.docId === doc.id) this.state._cache = null;
+
+            // 1. Crew Map Logic (Budget Line Items -> Crew List)
+            Object.values(budget.sections).forEach(sec => sec.items.forEach(i => {
+                if(i.crew && i.crew.name) {
+                    // Check if already in list to avoid duplicates
+                    const exists = doc.content.data.crew.some(c => c.name === i.crew.name && c.department === i.description);
+                    if(!exists) {
+                        this.addRow(doc.id, 'crew', 'person', { 
+                            department: i.description, 
+                            name: i.crew.name, 
+                            contact: i.crew.phone, 
+                            linkedItemId: i.id 
+                        });
+                    }
+                }
+            }));
+
+            // 2. Key Contacts Logic (Map Specific Roles)
+            const map = { 'director': 'Director', 'producer': 'Producer', 'ad': '1st AD' };
+            Object.entries(map).forEach(([key, role]) => {
+                // Scan Budget Line Items
+                let found = null;
+                Object.values(budget.sections).some(s => {
+                    const i = s.items.find(x => x.description.toLowerCase().includes(role.toLowerCase()) && x.crew && x.crew.name);
+                    if(i) { found = i.crew.name; return true; }
+                });
+                if(found) doc.content.data.contacts[key] = found;
+            });
+
+            // 3. Refresh
             mBTLE.reconcile(); 
             this.renderFrame(); 
+            mBTME.alert("Sync Complete", "Budget personnel imported.");
         });
     },
     syncFromPrevious: function() { 
@@ -5070,6 +6311,9 @@ window.mBTDB = {
         if(!prev) return mBTME.alert("Sync Info", "No source document found.");
 
         mBTME.confirm("Sync Previous", msg, () => {
+            // Invalidate Cache
+            if (this.state._cache && this.state._cache.docId === cur.id) this.state._cache = null;
+
             if(prev.content?.data?.contacts) cur.content.data.contacts = JSON.parse(JSON.stringify(prev.content.data.contacts));
             if(prev.content?.data?.crew) cur.content.data.crew = JSON.parse(JSON.stringify(prev.content.data.crew));
             
@@ -5082,11 +6326,45 @@ window.mBTDB = {
             this.renderFrame();
         });
     },
+
     snapshotDoc: function() { const doc = budget.documents.find(d => d.id === this.state.currentDocId); const newDoc = JSON.parse(JSON.stringify(doc)); newDoc.id = 'doc_' + Date.now(); newDoc.label = doc.label + " (Copy)"; budget.documents.push(newDoc); mBTDB.open(newDoc.id); },
     pullFromOpenGate: function(docId, path, roleQuery) { 
         if (typeof mBTOG === 'undefined') return mBTME.alert("System Error", "Database Resolution Failure."); 
         
-        const matches = mBTOG.contacts.filter(c => c.role?.toLowerCase().includes(roleQuery.toLowerCase())); 
+        // Logic Resolution: Tier 5 Context-Aware Search
+        // 1. Scan Active Budget First (Inheritance)
+        const matches = [];
+        const seen = new Set(); // Prevent duplicates
+
+        if (budget.sections) {
+            Object.values(budget.sections).forEach(sec => {
+                sec.items.forEach(i => {
+                    if (i.crew && i.crew.name && i.description.toLowerCase().includes(roleQuery.toLowerCase())) {
+                        const key = `${i.crew.name}|${i.crew.phone}`;
+                        if (!seen.has(key)) {
+                            matches.push({
+                                name: i.crew.name,
+                                contact: i.crew.phone || i.crew.email,
+                                role: i.description,
+                                source: 'Budget' // Logic Resolution: Source tagging
+                            });
+                            seen.add(key);
+                        }
+                    }
+                });
+            });
+        }
+
+        // 2. Scan Global DB (Fallback)
+        const globalMatches = mBTOG.contacts.filter(c => c.role?.toLowerCase().includes(roleQuery.toLowerCase())); 
+        globalMatches.forEach(c => {
+            const key = `${c.name}|${c.contact||c.phone}`;
+            if (!seen.has(key)) {
+                matches.push({ ...c, source: 'Global DB' });
+                seen.add(key);
+            }
+        });
+
         if (matches.length === 0) return mBTME.alert("Not Found", `No ${roleQuery} found.`); 
         
         const apply = (c) => { 
@@ -5106,7 +6384,10 @@ window.mBTDB = {
             // Modern UI Replacement: Custom Modal with Buttons
             const listHtml = matches.map((c, i) => 
                 `<button onclick="mBTDB._resolveOGSelection(${i})" class="w-full text-left p-3 bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-xl transition-all group mb-2">
-                    <div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">${c.name}</div>
+                    <div class="flex justify-between items-center">
+                        <div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">${c.name}</div>
+                        <div class="text-[8px] font-bold text-slate-300 bg-white border border-slate-200 rounded px-1.5 py-0.5">${c.source}</div>
+                    </div>
                     <div class="text-[9px] text-slate-400 font-mono">${c.contact || 'No Contact'}</div>
                 </button>`
             ).join('');
@@ -5156,6 +6437,9 @@ window.mBTDB = {
                     <option value="crew">Crew List</option>
                     <option value="logistics">Logistics</option>
                     <option value="contacts">Contacts</option>
+                    <option value="transport">Transport</option>
+                    <option value="mudmap">Mud Map</option>
+                    <option value="footer">Safety Footer</option>
                 </select>
                 <button onclick="mBTDB.addWidget()" class="text-blue-600 hover:text-blue-800 transition-colors p-1 hover:bg-blue-50 rounded" title="Add Widget">
                     ${this.icons.plus}
@@ -5200,7 +6484,17 @@ window.mBTDB = {
         if(typeof saveBudget === 'function') saveBudget();
     },
     _generateDefaultData: function() {
-        return { meta: { productionTitle: budget.projectName||"", productionCompany: budget.company||"", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00" }, contacts: { director: "", producer: "", ad: "" }, schedule: [], crew: [], cast: [], locations: [{name:"Base Camp", address:"", weather:"", hospital:"", mapLink:""}], additional: {} };
+        return { 
+            meta: { productionTitle: budget.projectName||"", productionCompany: budget.company||"", shootDate: new Date().toISOString().split('T')[0], crewCallTime: "08:00" }, 
+            contacts: { director: "", producer: "", ad: "" }, 
+            agency: { producer: "", creative: "" }, // Batch 1
+            schedule: [], 
+            crew: [], 
+            cast: [], 
+            locations: [{name:"Base Camp", address:"", weather:"", hospital:"", mapLink:""}], 
+            transport: [], // Batch 2
+            additional: {} 
+        };
     }
 };
 
@@ -6285,6 +7579,7 @@ window.mBTDB = {
                 const syncAoD = budget.settings?.syncAoD || false;
                 // Logic Resolution: Prep for future legacy theme switch
                 const isClassic = budget.settings?.classicTheme || false;
+                const allowZoom = budget.settings?.allowZoom || false;
               
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-6 animate-in fade-in duration-300">
@@ -6314,24 +7609,24 @@ window.mBTDB = {
                             <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Compact View</h4>
-                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Allow Page Zoom</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Enable pinch-to-zoom gestures</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" id="compactModeToggle" ${isCompact ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <input type="checkbox" id="zoomToggle" ${allowZoom ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.allowZoom = this.checked; saveBudget(); mBT.ui.updateViewport();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                 </div>
                             </div>
                             <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Connect to AoD Database</h4>
-                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Pull crew by location, availability and role</p>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Compact View</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" id="aodSyncToggle" ${syncAoD ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.syncAoD = this.checked; saveBudget();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <input type="checkbox" id="compactModeToggle" ${isCompact ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                     </label>
                                 </div>
                             </div>
@@ -6937,20 +8232,28 @@ window.mBTDB = {
 
             const templateHtml = templates.map(renderTmplItem).join('');
 
-            const content = RenderEngine.layouts.studioPanel({
-                title: 'Select Template',
-                searchId: 'tmplSearch',
-                searchPlaceholder: 'FILTER TEMPLATES...',
-                contentId: 'templateListBody',
-                contentHtml: templateHtml,
-                actions: [] 
-            });
+            // Logic Resolution: Custom Layout (White Theme) to eliminate black studio headers
+            const content = `
+                <div class="flex flex-col max-h-[80vh] bg-slate-50">
+                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 space-y-2">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Select Template</h3>
+                            <button onclick="mBTME.close('newDocSelectorModal')" class="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all">${mBTAssets.close}</button>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="tmplSearch" placeholder="FILTER TEMPLATES..." class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                        </div>
+                    </div>
+                    <div id="templateListBody" class="flex-grow overflow-y-auto no-scrollbar p-4 space-y-3">
+                        ${templateHtml}
+                    </div>
+                </div>`;
                 
             mBTME.open('newDocSelector', 'Studio Blueprints', content, 'max-w-md', { noPadding: true, hideHeader: true });
             
             mBTME.attachSearch('tmplSearch', 'templateListBody', templates, renderTmplItem);
         },
-
 
         // Logic Resolution: Opens the Action Menu for choosing editor or storage
         showOptions: function(docId) {
@@ -7585,11 +8888,11 @@ window.mBTDB = {
 
             // Save Strategy: Debounce if realtime
             if(isRealTime) {
-                if(window._stageSaveTimer) clearTimeout(window._stageSaveTimer);
-                window._stageSaveTimer = setTimeout(saveBudget, 1000);
+                if(mBT.features.stages.state._timer) clearTimeout(mBT.features.stages.state._timer);
+                mBT.features.stages.state._timer = setTimeout(saveBudget, 1000);
             } else {
                 // Fix: Clear any pending debounce to prevent double-save on blur
-                if(window._stageSaveTimer) clearTimeout(window._stageSaveTimer);
+                if(mBT.features.stages.state._timer) clearTimeout(mBT.features.stages.state._timer);
                 saveBudget();
             }
         }
@@ -8568,6 +9871,76 @@ window.updateAllHeaders = () => {
         }
     }
     
+    // --- NEW: Support Widget (Buy Me a Coffee) ---
+    function showCoffeeWidget() {
+        const content = `
+            <div class="text-center p-6 bg-yellow-50 min-h-[300px] flex flex-col items-center justify-center">
+                <div class="w-20 h-20 bg-[#FFDD00] rounded-3xl flex items-center justify-center text-4xl shadow-xl mb-4 text-black border-4 border-white animate-bounce">
+                    ☕
+                </div>
+                <h3 class="text-xl font-black uppercase tracking-tighter text-slate-900 mb-2">Fuel the Code</h3>
+                <p class="text-xs font-bold text-slate-500 mb-6 max-w-xs leading-relaxed">
+                    mooBudget is free, offline-first, and built for the Caribbean industry. If it saves you time, consider buying a coffee for the dev team.
+                </p>
+                <div class="space-y-3 w-full max-w-xs">
+                    <a href="https://buymeacoffee.com/jaysonmy" target="_blank" class="flex items-center justify-center gap-2 w-full py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-transform active:scale-95">
+                        Open Support Page
+                    </a>
+                    <button onclick="mBTME.close('coffeeModal')" class="w-full py-3 bg-white border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">
+                        Maybe Later
+                    </button>
+                </div>
+            </div>`;
+        mBTME.open('coffee', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+    }
+
+    // --- NEW: Distribution Share Selector (Preview Handler) ---
+    window.openDocumentShareSelector = function(docId) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if (!doc) return;
+
+        // Generate Share Message
+        const shareText = (typeof mBTPublisher !== 'undefined' && mBTPublisher.comm) 
+            ? mBTPublisher.comm.generateShareSheet(doc) 
+            : `Reviewing ${doc.label}`;
+
+        // Platform Links
+        const waLink = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        const mailLink = `mailto:?subject=${encodeURIComponent("Document Review: " + doc.label)}&body=${encodeURIComponent(shareText)}`;
+
+        const content = `
+            <div class="p-6 bg-white">
+                <div class="text-center mb-6">
+                    <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-xl">
+                        ${mBTAssets.paperPlane}
+                    </div>
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-900">Distribute Document</h3>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">${doc.label}</p>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <a href="${waLink}" target="_blank" class="flex flex-col items-center gap-2 p-4 bg-[#25D366]/10 border border-[#25D366]/20 rounded-xl hover:bg-[#25D366]/20 transition-all group no-underline">
+                        <div class="text-[#25D366] text-2xl group-hover:scale-110 transition-transform">${mBTAssets.wa}</div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-[#25D366] group-hover:text-[#128c7e]">WhatsApp</span>
+                    </a>
+                    <a href="${mailLink}" target="_blank" class="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-all group no-underline">
+                        <div class="text-blue-500 text-2xl group-hover:scale-110 transition-transform">${mBTAssets.mail}</div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-blue-600">Email</span>
+                    </a>
+                </div>
+                
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Quick Copy Message</label>
+                    <div class="flex gap-2">
+                        <input type="text" value="${shareText}" class="flex-grow bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none" readonly>
+                        <button onclick="navigator.clipboard.writeText('${shareText.replace(/'/g, "\\'")}'); this.innerHTML='Copied!';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>
+                    </div>
+                </div>
+            </div>`;
+
+        mBTME.open('shareSelector', 'Share', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+    };
+
     function handleLogin() {
         if (navigator.onLine) {
             mBTME.confirm("Login", "Establish secure connection to Moo Studio Cloud infrastructure?", () => {
