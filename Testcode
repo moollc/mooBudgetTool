@@ -5860,7 +5860,7 @@ window.mBTDB = {
             </div>
         </div>`;
     },
-    _renderTalent: function(docId, d) {
+_renderTalent: function(docId, d) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
         // Updated: High Density Cast Grid (Header Removed)
@@ -5908,6 +5908,30 @@ window.mBTDB = {
             </div>
         </div>`;
     },
+    
+    // Logic Resolution: 1/8th Page Calculation Heuristic
+    // Standard screenplay format: ~54 lines per page. 1/8th page ~= 7 lines (approx 1 inch).
+    _calcPages: function(text) {
+        if (!text) return "0 Pgs";
+        // Count newlines to estimate vertical length
+        const lines = text.split(/\r\n|\r|\n/).length;
+        // Basic heuristic: 55 lines = 1 page (Courier 12pt standard)
+        const eighths = Math.ceil(lines / 7); // 7 lines per 1/8th
+        const pages = Math.floor(eighths / 8);
+        const rem = eighths % 8;
+        
+        if (pages === 0 && rem === 0) return "0 Pgs";
+        if (pages === 0) return `${rem}/8 Pgs`;
+        if (rem === 0) return `${pages} Pgs`;
+        return `${pages} ${rem}/8 Pgs`;
+    },
+
+    // Logic Resolution: Live DOM Update for Script Metrics (Batch 1.2)
+    _updateScriptHUD: function(widgetId, text) {
+        const hud = document.getElementById(`hud_${widgetId}`);
+        if(hud) hud.textContent = this._calcPages(text);
+    },
+
     _renderRichText: function(docId, widgetId, data) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
@@ -5927,11 +5951,32 @@ window.mBTDB = {
         const customStyle = isScript ? 'font-family: "Courier Prime", "Courier New", monospace; font-size: 12pt; line-height: 1.0; padding: 40px;' : '';
         const placeholder = isScript ? 'INT. LOCATION - DAY\n\nAction description...' : 'Type notes...';
 
-        return `<div class="h-full flex flex-col p-2"><div class="flex-grow relative"><textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="${styleClass} w-full h-full disabled:bg-transparent disabled:border-none" style="${customStyle}" placeholder="${placeholder}">${val||''}</textarea></div></div>`;
+        // HUD Logic: Inject Visual Counter for Scripts (Batch 1.3)
+        // Note: Initial calculation happens here on render. Live updates via oninput.
+        const hudHtml = isScript 
+            ? `<div id="hud_${widgetId}" class="absolute bottom-4 right-4 bg-slate-900/10 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black text-slate-500 border border-slate-200 pointer-events-none select-none transition-opacity z-10">
+                ${this._calcPages(val)}
+               </div>` 
+            : '';
+
+        // Added 'relative group' to container for HUD positioning
+        // Added 'oninput' for real-time math (surgical)
+        // Kept 'onchange' for data persistence (debounced)
+        return `<div class="h-full flex flex-col p-2 relative group">
+            <div class="flex-grow relative h-full">
+                <textarea ${lock} 
+                    id="input_${widgetId}"
+                    oninput="mBTDB._updateScriptHUD('${widgetId}', this.value)"
+                    onchange="mBTDB.updateData('${doc.id}', 'additional.${widgetId}', this.value)" 
+                    class="${styleClass} w-full h-full disabled:bg-transparent disabled:border-none" 
+                    style="${customStyle}" 
+                    placeholder="${placeholder}">${val||''}</textarea>
+                ${hudHtml}
+            </div>
+        </div>`;
     },
     // Logic Resolution: New Image Rendering Logic with Optimization
-    _renderImage: function(docId, widgetId, data) {
-        const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
+    _renderImage: function(docId, widgetId, data) {        const val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
         
         if (val) {
             // Image Display State
