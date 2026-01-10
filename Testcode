@@ -104,6 +104,17 @@
             display: none !important; 
             pointer-events: none !important;
         }
+        
+        /* --- [Feat15]. Visual Hardening (Flatten nested widget borders) --- */
+        /* Context: Strips borders from nested components to enforce flat industry-standard look */
+        .grid-stack-item-content .cs-box { 
+            border: none !important; 
+            margin: 0 !important; 
+            box-shadow: none !important;
+        }
+        .grid-stack-item-content .cs-table {
+            border-top: none !important;
+        }
      
 /* --- 11. Form Utilities (Spinner Removal) --- */
         .no-spinner::-webkit-inner-spin-button, 
@@ -5064,6 +5075,88 @@ window.mBTDB = {
         } catch (e) { console.warn("AI Hospital Lookup failed", e); }
     },
 
+    /* --- [Feat16]. Mud Map Intelligence (Geocoding Engine) --- */
+    getCoordinates: async function(query) {
+        if (!query) return null;
+        try {
+            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`);
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+                return { lat: data.results[0].latitude, lon: data.results[0].longitude };
+            }
+        } catch (e) { console.error("Geocoding failed", e); }
+        return null;
+    },
+
+    /* --- [Feat16]. Mud Map Intelligence (Slate Generator) --- */
+    loadMapBackground: async function(widgetId, docId) {
+        const doc = budget.documents.find(d => d.id === docId);
+        if(!doc) return;
+        
+        // 1. Find Context (First Location)
+        const loc = doc.content.data.locations?.[0];
+        const query = loc ? (loc.address || loc.name) : "";
+        
+        if(!query) return mBTME.alert("Map Error", "No location address found in Logistics.");
+        
+        mBTME.showLoader("Locating Site...");
+        
+        // 2. Geocode (Using logic from Batch 2.1)
+        const coords = await this.getCoordinates(query);
+        mBTME.hideLoader();
+        
+        if(!coords) return mBTME.alert("Not Found", "Could not locate address.");
+        
+        // 3. Generate Site Slate (Canvas Ops)
+        const cvs = document.getElementById(`canvas_${widgetId}`);
+        if(cvs) {
+            const ctx = cvs.getContext('2d');
+            const w = cvs.width;
+            const h = cvs.height;
+            
+            // A. Background & Grid
+            ctx.fillStyle = "#f8fafc"; // Slate-50
+            ctx.fillRect(0, 0, w, h);
+            
+            ctx.strokeStyle = "#e2e8f0"; // Slate-200
+            ctx.lineWidth = 1;
+            for(let x=20; x<w; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+            for(let y=20; y<h; y+=40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+            
+            // B. Header Block
+            ctx.fillStyle = "#0f172a"; // Slate-900
+            ctx.fillRect(0, 0, w, 60);
+            
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 14px 'Arial', sans-serif";
+            ctx.fillText("SITE PLAN / MUD MAP", 15, 25);
+            
+            ctx.font = "10px 'Arial', sans-serif";
+            ctx.fillStyle = "#94a3b8";
+            ctx.fillText(`LOC: ${loc.name.toUpperCase()}`, 15, 45);
+            
+            // C. GPS Watermark
+            ctx.fillStyle = "#475569";
+            ctx.font = "bold 12px 'Courier New', monospace";
+            ctx.fillText(`ADDR: ${query}`, 15, 80);
+            ctx.fillText(`GPS:  ${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`, 15, 95);
+            
+            // D. Compass Icon
+            ctx.strokeStyle = "#cbd5e1";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(w-40, 90, 20, 0, 2*Math.PI);
+            ctx.stroke();
+            
+            ctx.fillStyle = "#64748b";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText("N", w-44, 94);
+            
+            // 4. Save to State (Persist as Image Data)
+            this.updateData(docId, `additional.${widgetId}`, cvs.toDataURL());
+        }
+    },
+
     autoFillWidget: function(type, docId) {
         mBTME.confirm("Auto-Fill", `Auto-fill ${type}? This uses external services and AI.`, async () => {
             const doc = budget.documents.find(d => d.id === docId);
@@ -6060,6 +6153,8 @@ _renderTalent: function(docId, d) {
             
             ${this.state.isEditing ? `
             <div class="absolute bottom-2 right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <!-- [Feat16] Satellite Trigger -->
+                <button onclick="mBTDB.loadMapBackground('${widgetId}', '${docId}')" class="bg-white text-blue-600 px-2 py-1 rounded shadow text-[9px] font-black uppercase tracking-widest border border-blue-200 hover:bg-blue-50" title="Load Site Plan from Logistics Address">Satellite</button>
                 <button onclick="mBTDB._clearMudMap('${docId}', '${widgetId}')" class="bg-white text-rose-600 px-2 py-1 rounded shadow text-[9px] font-black uppercase tracking-widest border border-rose-200 hover:bg-rose-50">Clear</button>
             </div>
             <div class="absolute top-2 left-2 z-0 text-[10px] font-black text-slate-100 uppercase pointer-events-none select-none tracking-widest">
