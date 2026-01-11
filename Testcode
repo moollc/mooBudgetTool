@@ -80,17 +80,37 @@
         .print-standard .grid-stack-item-content { box-shadow: none !important; border: 1px solid #000 !important; border-radius: 0 !important; }
         .print-standard input, .print-standard textarea { color: #000 !important; font-weight: bold !important; }
         
-        /* Batch 1.1: Visual Hardening - Unified Container Logic */
+        /* Visual Hardening - Unified Container Logic */
         /* Replaces legacy card style with Industry Standard "Flat" look */
         .grid-stack-item-content { 
             background-color: white; 
             border: 2px solid #000 !important; 
             border-radius: 0 !important; 
             box-shadow: none !important; 
-            overflow: visible !important; /* Critical for resize handles */
+            /* Batch 3.1: Liquid CSS Engine - Vertical Flex Protocol */
+            container-type: inline-size;
+            container-name: widget;
+            overflow: hidden !important; /* Strict containment to prevent overlap */
             display: flex; 
             flex-direction: column; 
             cursor: grab; 
+        }
+
+        /* Fluid Typography (Smart Scaling) */
+        @container widget (max-width: 200px) {
+            .widget-header { padding: 2px 4px !important; min-height: 24px !important; }
+            .widget-header input { font-size: 8px !important; }
+            .widget-tools { transform: scale(0.7); transform-origin: right center; }
+            .widget-body, .cs-table { font-size: 8px !important; }
+            .cs-table th, .cs-table td { padding: 1px !important; }
+        }
+        @container widget (min-width: 201px) and (max-width: 400px) {
+            .widget-header input { font-size: 10px !important; }
+            .widget-body, .cs-table { font-size: 10px !important; }
+        }
+        @container widget (min-width: 401px) {
+            .widget-header input { font-size: 12px !important; }
+            .widget-body, .cs-table { font-size: 12px !important; }
         }
         
         /* Widget Contrast Fixes: Force darker labels on white widgets */
@@ -272,32 +292,20 @@
         }
         .studio-input:hover:not(:focus) { border-color: #cbd5e1; background-color: #f1f5f9; }
         
-        /* GridStack Handle Fixes */
-        .grid-stack-item-content { overflow: visible !important; } /* Allow handles to show outside if needed */
-        /* Logic Resolution: Removed legacy radius rule here, now handled in Hardening block */
-        
-        /* --- TIER 4 VISUAL HARDENING: Industry Standard Widget Style --- */
-        /* Overrides default card look to match Champion Call Sheet aesthetic */
-        .grid-stack-item-content { 
-            background-color: white; 
-            border: 2px solid #000 !important; /* Hard black border */
-            border-radius: 0 !important; /* Square corners */
-            box-shadow: none !important; /* Flat look */
-            display: flex; 
-            flex-direction: column; 
-            cursor: grab; 
-        }
+        /* [CLEANUP] Removed duplicate .grid-stack-item-content definitions here. */
+        /* Visual Hardening" above for the active rules. */
 
-        /* Batch 1.2: Interior Refinement - Header & Body Polish */
+        /* Interior Refinement - Header & Body Polish */
         .widget-header {
             background-color: #000 !important; 
             color: #fff !important;
-            padding: 6px 10px !important; 
+            padding: 2px 8px !important; /* Compact Padding */
             display: flex;
             align-items: center;
             justify-content: space-between;
-            min-height: 32px; 
+            min-height: 24px !important; /* Reduced Height (was 32px) */
             border-bottom: 1px solid #000 !important;
+            flex-shrink: 0; /* Prevent header collapse */
         }
 
         /* High-Contrast Inputs in Header */
@@ -305,16 +313,18 @@
             color: #fff !important;
             font-family: 'Roboto Condensed', sans-serif !important;
             font-weight: 700 !important;
+            font-size: 10px !important; /* Scaled down font */
             text-transform: uppercase !important;
             letter-spacing: 0.05em !important;
             background: transparent !important;
+            height: 100%;
         }
         .widget-header input:focus {
             background-color: rgba(255,255,255,0.2) !important;
         }
 
         /* Tool Icons in Header */
-        .widget-tools button { color: #9ca3af !important; }
+        .widget-tools button { color: #9ca3af !important; transform: scale(0.85); }
         .widget-tools button:hover {
             color: #fff !important;
             background-color: rgba(255,255,255,0.2) !important;
@@ -322,12 +332,24 @@
 
         /* Body Logic: Scroll internally, strict square corners */
         .widget-body { 
+            /* Batch 3.1: Liquid Scroll Protocol */
+            flex-grow: 1;
+            min-height: 0;
+            height: auto !important;
             overflow-y: auto !important; 
             overflow-x: hidden;
-            height: 100%; 
             background: #fff;
             border-radius: 0 !important; /* Strict Square */
             padding: 0 !important; 
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Batch 3.1: Dynamic Content Scaling */
+        .widget-body textarea, .widget-body .studio-input {
+            flex-grow: 1;
+            height: 100% !important;
+            resize: none !important;
         }
 
         .ui-resizable-handle { z-index: 100 !important; }
@@ -361,11 +383,20 @@
         .cs-header-bar { background: #000; color: #fff; font-weight: 800; text-transform: uppercase; padding: 2px 6px; font-size: 10px; letter-spacing: 0.5px; }
         
         .cs-table { width: 100%; border-collapse: collapse; font-size: 9px; }
-        .cs-table th { border: 1px solid #000; background: #000; color: #fff; text-transform: uppercase; padding: 4px; font-weight: 700; text-align: left; }
+        .cs-table th { 
+            border: 1px solid #000; 
+            background: #000; 
+            color: #fff; 
+            text-transform: uppercase; 
+            padding: 2px 4px; /* Compact Padding */
+            font-weight: 700; 
+            text-align: left;
+            font-size: 8px !important; /* Compact Font */
+            line-height: 1.1; 
+        }
         .cs-table td { border: 1px solid #000; padding: 4px; vertical-align: top; }
         
-        /* Print Protocol */
-        @media print {
+        /* Print Protocol */        @media print {
             body { background: white; padding: 0; }
             .sheet-workspace { background: white; padding: 0; display: block; overflow: visible; }
             .sheet-a4 { box-shadow: none; margin: 0; width: 100%; height: 100%; page-break-after: always; padding: 0; }
@@ -1634,68 +1665,69 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         loadTemplates() {
             // Logic Resolution: Centralized Blueprint Schemas (Migrated from Tier 5)
             // Open Gate is now the single source of truth for Document Layouts.
+            // Batch 2.3: Liquid Grid Protocol - Removed 'y' coords, added autoPosition:true
             const t = [
                 // --- WRITING & CORE ---
                 {
                     id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true,
-                    widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Screenplay" }]
+                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Screenplay", autoPosition: true }]
                 },
                 {
                     id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false,
-                    widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }, { id: 'body', x: 0, y: 2, w: 12, h: 12, type: 'richText', label: "Story Treatment" }]
+                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Story Treatment", autoPosition: true }]
                 },
                 // --- PRE-PRODUCTION ---
                 {
                     id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'cast', x: 0, y: 2, w: 6, h: 8, type: 'cast', label: "Characters" },
-                        { id: 'logistics', x: 6, y: 2, w: 6, h: 8, type: 'logistics', label: "Locations" },
-                        { id: 'notes', x: 0, y: 10, w: 12, h: 6, type: 'richText', label: "Scene Notes & Requirements" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Characters", autoPosition: true },
+                        { id: 'logistics', x: 6, w: 6, h: 6, type: 'logistics', label: "Locations", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Scene Notes & Requirements", autoPosition: true }
                     ]
                 },
                 {
                     id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'schedule', x: 0, y: 2, w: 12, h: 12, type: 'schedule', label: "Shot Sequence" },
-                        { id: 'logistics', x: 0, y: 14, w: 12, h: 4, type: 'logistics', label: "Locations" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 12, type: 'schedule', label: "Shot Sequence", autoPosition: true },
+                        { id: 'logistics', x: 0, w: 12, h: 4, type: 'logistics', label: "Locations", autoPosition: true }
                     ]
                 },
                 {
                     id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'frame1', x: 0, y: 2, w: 4, h: 6, type: 'image', label: "Frame 1" },
-                        { id: 'desc1', x: 0, y: 8, w: 4, h: 3, type: 'richText', label: "Action 1" },
-                        { id: 'frame2', x: 4, y: 2, w: 4, h: 6, type: 'image', label: "Frame 2" },
-                        { id: 'desc2', x: 4, y: 8, w: 4, h: 3, type: 'richText', label: "Action 2" },
-                        { id: 'frame3', x: 8, y: 2, w: 4, h: 6, type: 'image', label: "Frame 3" },
-                        { id: 'desc3', x: 8, y: 8, w: 4, h: 3, type: 'richText', label: "Action 3" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'frame1', x: 0, w: 4, h: 6, type: 'image', label: "Frame 1", autoPosition: true },
+                        { id: 'desc1', x: 0, w: 4, h: 3, type: 'richText', label: "Action 1", autoPosition: true },
+                        { id: 'frame2', x: 4, w: 4, h: 6, type: 'image', label: "Frame 2", autoPosition: true },
+                        { id: 'desc2', x: 4, w: 4, h: 3, type: 'richText', label: "Action 2", autoPosition: true },
+                        { id: 'frame3', x: 8, w: 4, h: 6, type: 'image', label: "Frame 3", autoPosition: true },
+                        { id: 'desc3', x: 8, w: 4, h: 3, type: 'richText', label: "Action 3", autoPosition: true }
                     ]
                 },
                 {
                     id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'logistics', x: 0, y: 2, w: 6, h: 10, type: 'richText', label: "Logistics Checklist" },
-                        { id: 'creative', x: 6, y: 2, w: 6, h: 10, type: 'richText', label: "Creative Checklist" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'logistics', x: 0, w: 6, h: 10, type: 'richText', label: "Logistics Checklist", autoPosition: true },
+                        { id: 'creative', x: 6, w: 6, h: 10, type: 'richText', label: "Creative Checklist", autoPosition: true }
                     ]
                 },
                 {
                     id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'cast', x: 0, y: 2, w: 12, h: 10, type: 'cast', label: "Audition List" },
-                        { id: 'notes', x: 0, y: 12, w: 12, h: 4, type: 'richText', label: "Casting Director Notes" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cast', x: 0, w: 12, h: 10, type: 'cast', label: "Audition List", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Casting Director Notes", autoPosition: true }
                     ]
                 },
                 {
                     id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'logistics', x: 0, y: 2, w: 12, h: 10, type: 'logistics', label: "Location Details" },
-                        { id: 'notes', x: 0, y: 12, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'logistics', x: 0, w: 12, h: 10, type: 'logistics', label: "Location Details", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)", autoPosition: true }
                     ]
                 },
                 { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
@@ -1706,21 +1738,21 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 {
                     id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'cover', x: 0, y: 2, w: 6, h: 8, type: 'image', label: "Key Art" },
-                        { id: 'synopsis', x: 6, y: 2, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis" },
-                        { id: 'mood1', x: 0, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 1" },
-                        { id: 'mood2', x: 4, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 2" },
-                        { id: 'mood3', x: 8, y: 10, w: 4, h: 4, type: 'image', label: "Tone Ref 3" },
-                        { id: 'team', x: 0, y: 14, w: 12, h: 6, type: 'contacts', label: "Key Creative Team" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cover', x: 0, w: 6, h: 8, type: 'image', label: "Key Art", autoPosition: true },
+                        { id: 'synopsis', x: 6, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis", autoPosition: true },
+                        { id: 'mood1', x: 0, w: 4, h: 4, type: 'image', label: "Tone Ref 1", autoPosition: true },
+                        { id: 'mood2', x: 4, w: 4, h: 4, type: 'image', label: "Tone Ref 2", autoPosition: true },
+                        { id: 'mood3', x: 8, w: 4, h: 4, type: 'image', label: "Tone Ref 3", autoPosition: true },
+                        { id: 'team', x: 0, w: 12, h: 6, type: 'contacts', label: "Key Creative Team", autoPosition: true }
                     ]
                 },
                 {
                     id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget Report', icon: 'money', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'summary', x: 0, y: 2, w: 12, h: 4, type: 'richText', label: "Executive Summary" },
-                        { id: 'breakdown', x: 0, y: 6, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'summary', x: 0, w: 12, h: 4, type: 'richText', label: "Executive Summary", autoPosition: true },
+                        { id: 'breakdown', x: 0, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown", autoPosition: true }
                     ]
                 },
                 { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: 'alert', default: false },
@@ -1729,31 +1761,31 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 {
                     id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true,
                     widgets: [
-                        { id: 'contacts', x: 0, y: 0, w: 12, h: 4, type: 'contacts', label: "Key Contacts" },
-                        { id: 'logistics', x: 0, y: 4, w: 12, h: 6, type: 'logistics', label: "Logistics" },
-                        { id: 'schedule', x: 0, y: 10, w: 12, h: 8, type: 'schedule', label: "Schedule" },
-                        { id: 'cast', x: 0, y: 18, w: 6, h: 8, type: 'cast', label: "Cast List" },
-                        { id: 'crew', x: 6, y: 18, w: 6, h: 8, type: 'crew', label: "Crew List" },
-                        { id: 'notes', x: 0, y: 26, w: 12, h: 4, type: 'richText', label: "General Notes" },
-                        { id: 'footer', x: 0, y: 30, w: 12, h: 2, type: 'footer', label: "Safety Footer" }
+                        { id: 'contacts', x: 0, w: 6, h: 4, type: 'contacts', label: "Key Contacts", autoPosition: true },
+                        { id: 'logistics', x: 6, w: 6, h: 4, type: 'logistics', label: "Logistics", autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 6, type: 'schedule', label: "Schedule", autoPosition: true },
+                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Cast List", autoPosition: true },
+                        { id: 'crew', x: 6, w: 6, h: 6, type: 'crew', label: "Crew List", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 2, type: 'richText', label: "General Notes", autoPosition: true },
+                        { id: 'footer', x: 0, w: 12, h: 2, type: 'footer', label: "Safety Footer", autoPosition: true }
                     ]
                 },
                 {
                     id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'schedule', x: 0, y: 2, w: 12, h: 6, type: 'schedule', label: "Scenes Shot" },
-                        { id: 'crew', x: 0, y: 8, w: 12, h: 6, type: 'crew', label: "Crew Attendance" },
-                        { id: 'notes', x: 0, y: 14, w: 6, h: 6, type: 'richText', label: "Production Notes" },
-                        { id: 'delays', x: 6, y: 14, w: 6, h: 6, type: 'richText', label: "Delays / Issues" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 5, type: 'schedule', label: "Scenes Shot", autoPosition: true },
+                        { id: 'crew', x: 0, w: 12, h: 5, type: 'crew', label: "Crew Attendance", autoPosition: true },
+                        { id: 'notes', x: 0, w: 6, h: 4, type: 'richText', label: "Production Notes", autoPosition: true },
+                        { id: 'delays', x: 6, w: 6, h: 4, type: 'richText', label: "Delays / Issues", autoPosition: true }
                     ]
                 },
                 {
                     id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'contacts', x: 0, y: 2, w: 12, h: 4, type: 'contacts', label: "Production Team" },
-                        { id: 'crew', x: 0, y: 6, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'contacts', x: 0, w: 12, h: 4, type: 'contacts', label: "Production Team", autoPosition: true },
+                        { id: 'crew', x: 0, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew", autoPosition: true }
                     ]
                 },
                 { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
@@ -1771,29 +1803,29 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 {
                     id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'terms', x: 0, y: 2, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'terms', x: 0, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions", autoPosition: true }
                     ]
                 },
                 {
                     id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'terms', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Terms of Agreement" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'terms', x: 0, w: 12, h: 10, type: 'richText', label: "Terms of Agreement", autoPosition: true }
                     ]
                 },
                 {
                     id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Permit Details" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Permit Details", autoPosition: true }
                     ]
                 },
                 {
                     id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false,
                     widgets: [
-                        { id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' },
-                        { id: 'details', x: 0, y: 2, w: 12, h: 10, type: 'richText', label: "Coverage Details" }
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Coverage Details", autoPosition: true }
                     ]
                 },
                 { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: 'hazard', default: false },
@@ -5681,43 +5713,45 @@ window.mBTDB = {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
         
-        // Data Migration: Convert legacy object to array on read
+        // Data Migration: Permanent Fix for Legacy Objects to Arrays
         if (!Array.isArray(d.contacts)) {
-            d.contacts = [
+            const newArray = [
                 { role: 'DIRECTOR', name: d.contacts.director || '' },
                 { role: 'PRODUCER', name: d.contacts.producer || '' },
                 { role: '1ST AD', name: d.contacts.ad || '' }
             ];
+            // Persist migration immediately so Add/Delete works
+            setTimeout(() => mBTDB.updateData(docId, 'contacts', newArray), 0);
+            d.contacts = newArray;
         }
 
         const renderRow = (c, i) => {
-            const hasValue = c.name && String(c.name).trim().length > 0;
-            const clearIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-            
             return `
-            <div class="flex flex-col border-b border-slate-200 pb-1 mb-1 last:border-0 relative group/row">
-                <div class="flex justify-between items-center mb-0.5">
-                    <input ${lock} value="${c.role}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'role',this.value)" class="text-[8px] font-black uppercase tracking-widest text-slate-500 bg-transparent border-none p-0 w-2/3 outline-none focus:text-blue-600 transition-colors" placeholder="ROLE">
-                    ${this.state.isEditing ? `
-                        <div class="flex items-center gap-2 ${hideTool}">
-                            ${hasValue ? `<button type="button" class="text-slate-300 hover:text-rose-500 transition-colors flex items-center justify-center bg-slate-50 hover:bg-rose-50 rounded-full w-4 h-4" onclick="mBTDB.updateRow('${docId}', 'contacts', ${i}, 'name', ''); mBTDB._refreshWidget('${docId}', '${widget.id}')" title="Clear Field">${clearIcon}</button>` : ''}
-                            <div class="cursor-pointer text-slate-300 hover:text-blue-500 transition-colors scale-75" onclick="mBTDB.pullFromOpenGate('${docId}', 'contacts.${i}.name', '${c.role}')" title="Import from DB">${this.icons.user}</div>
-                        </div>
-                    ` : ''}
-                </div>
-                <input ${lock} value="${c.name}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'name',this.value)" class="w-full bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name...">
+            <div class="flex flex-col border-b border-slate-100 pb-1 mb-1 last:border-0 group/row">
+                <!-- Role Header -->
+                <input ${lock} value="${c.role||''}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'role',this.value)" class="text-[7px] font-black uppercase tracking-widest text-slate-400 bg-transparent border-none p-0 w-full outline-none mb-0.5 focus:text-blue-600 transition-colors" placeholder="ROLE">
                 
-                <button onclick="mBTDB.deleteRow('${docId}','contacts',${i},'contacts')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool} opacity-0 group-hover/row:opacity-100">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
+                <!-- Name Row -->
+                <div class="flex items-center gap-2">
+                    <!-- Import Button (Left) -->
+                    ${this.state.isEditing ? `
+                    <button class="text-slate-300 hover:text-blue-500 transition-colors shrink-0" onclick="mBTDB.pullFromOpenGate('${docId}', 'contacts.${i}.name', '${c.role||'crew'}')" title="Import from DB">
+                        ${this.icons.user}
+                    </button>` : ''}
+                    
+                    <!-- Name Input -->
+                    <input ${lock} value="${c.name||''}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'name',this.value)" class="flex-grow bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name...">
+                    
+                    <!-- Delete Button (Right) -->
+                    <button onclick="mBTDB.deleteRow('${docId}','contacts',${i},'contacts')" class="text-slate-200 hover:text-red-500 transition-colors shrink-0 ${hideTool}" title="Remove Contact">
+                        ${this.icons.trash}
+                    </button>
+                </div>
             </div>`;
         };
 
         return `
         <div class="h-full flex flex-col cs-box border-none">
-            <div class="cs-header-bar flex justify-between items-center">
-                <span>KEY CONTACTS</span>
-            </div>
             <div class="flex-grow overflow-y-auto p-2 no-scrollbar bg-white">
                 ${d.contacts.map((c, i) => renderRow(c, i)).join('')}
             </div>
@@ -5726,7 +5760,7 @@ window.mBTDB = {
             </div>
         </div>`;
     },
-    
+        
     _renderLogistics: function(docId, d) {
         const lock = this.state.isEditing ? '' : 'disabled';
         const hideTool = this.state.isEditing ? '' : 'hidden';
@@ -5782,7 +5816,11 @@ window.mBTDB = {
             </div>
 
             <button onclick="mBTDB.deleteRow('${docId}','locations',${i},'logistics')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-        </div>`).join('')}<button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full py-1.5 bg-slate-100 border border-dashed border-slate-300 text-[8px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:border-slate-400 hover:bg-slate-200 transition-all ${hideTool}">+ Add Location</button></div></div>`;
+        </div>`).join('')}</div>
+        <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+            <button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Location</button>
+        </div>
+        </div>`;
     },
 
     autoFillLocationDetails: async function(docId, index) {
@@ -6309,7 +6347,7 @@ _renderTalent: function(docId, d) {
 
         if (el) {
             el.innerHTML = this._getContentForWidget(widget, doc);
-            this._autoResizeWidget(widget.id);
+            // Batch 3.2: Removed auto-resize call. Scrollbars handle overflow (CSS Batch 3.1).
             if(widget.type === 'mudmap') this._initMudMaps();
             
             // Logic Resolution: Restore scroll position to prevent "Jump to Top" on focus loss
@@ -6344,9 +6382,7 @@ _renderTalent: function(docId, d) {
 
             doc.content.data[section][index][key] = value; 
             this._triggerSave(); 
-            const type = (section === 'locations') ? 'logistics' : section; 
-            const widget = doc.content.widgets.find(w => w.type === type); 
-            if(widget) this._autoResizeWidget(widget.id); 
+            // Batch 3.2: Removed auto-resize logic. Data saves silently without moving UI.
         } 
     },
     
@@ -6361,12 +6397,13 @@ _renderTalent: function(docId, d) {
             if(section==='schedule') newRow = { ...newRow, type, time:"", scene:"", description: type==='meal'?"LUNCH":"New Shot", cast:"", ie:"", loc:"", note:"" }; 
             else if(section==='cast') newRow = { ...newRow, character:"", actor:"", status:"W", pickup:"", hmu:"", setCall:"", contact:"" }; 
             else if(section==='crew') newRow = { ...newRow, department:"", position:"", name:"", contact:"", callTime:"" }; 
+            else if(section==='contacts') newRow = { ...newRow, role:"", name:"" }; 
             else if(section==='locations') newRow = { ...newRow, name:"", address:"", weather:"", hospital:"", mapLink:"", timeOnLocation:"" }; 
             else if(section==='transport') newRow = { ...newRow, driver:"", vehicle:"", pax:"", pickup:"", loc:"", dest:"" }; 
         } 
         doc.content.data[section].push(newRow); 
-        this._triggerSave(); 
-        
+        this._triggerSave();
+
         // Surgical Widget Refresh
         const widgetType = (section === 'locations') ? 'logistics' : section;
         const widget = doc.content.widgets.find(w => w.type === widgetType);
@@ -6411,7 +6448,12 @@ _renderTalent: function(docId, d) {
         // Logic Fix: Ensure canvas initializes immediately after adding
         if (type === 'mudmap') setTimeout(() => this._initMudMaps(), 50);
     },
-    _autoResizeWidget: function(widgetId) { const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`); if(!el) return; const body = el.querySelector('.widget-body'); if(!body) return; const currentHeight = body.style.height; body.style.height = 'auto'; const contentHeight = body.scrollHeight + 45; body.style.height = currentHeight; let newH = Math.ceil(contentHeight / 60); if(newH < 3) newH = 3; const doc = budget.documents.find(d => d.id === this.state.currentDocId); const w = doc.content.widgets.find(x => x.id === widgetId); if(w && w.h !== newH) { w.h = newH; this.state.grid.update(el, { h: newH }); this._triggerSave(); } },
+    _autoResizeWidget: function(widgetId) {
+        // Batch 3.2: Deprecated.
+        // We rely on GridStack manual sizing + Internal Flex Scrollbars (Batch 3.1).
+        // No-op to prevent logic errors in legacy calls.
+        return;
+    },
     formatTime: function(el, docId) {
         // Logic Resolution: Robust manual time formatting (Smart Text)
         // 1400 -> 14:00, 930 -> 09:30
