@@ -537,28 +537,28 @@
     <footer class="fixed bottom-0 left-0 right-0 z-[100] p-4 pointer-events-none">
         <div class="max-w-xl mx-auto bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-[32px] shadow-2xl p-2 px-6 flex justify-between items-center pointer-events-auto">
             
-            <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
-                <div class="text-slate-400 group-hover:text-emerald-400" id="icon-stages"></div>
-                <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400">Stages</span>
+            <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-1 group transition-all active:scale-90 justify-center w-12 h-12 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-6 [&>svg]:h-6" id="icon-stages"></div>
+                <span class="hidden sm:block text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400">Stages</span>
             </button>
 
-            <button id="docsFooterBtn" aria-label="Document Vault" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
-                <div class="text-slate-400 group-hover:text-blue-400" id="icon-docs"></div>
-                <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Documents</span>
+            <button id="docsFooterBtn" aria-label="Document Vault" class="flex flex-col items-center gap-1 group transition-all active:scale-90 justify-center w-12 h-12 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-blue-400 [&>svg]:w-6 [&>svg]:h-6" id="icon-docs"></div>
+                <span class="hidden sm:block text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Documents</span>
             </button>
 
             <button id="mainActionBtn" aria-label="Main Menu" class="w-14 h-14 bg-blue-600 rounded-[22px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
-                <div id="icon-main-action"></div>
+                <div id="icon-main-action" class="[&>svg]:w-7 [&>svg]:h-7"></div>
             </button>
 
-            <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
-                <div class="text-slate-400 group-hover:text-indigo-400" id="icon-secondary-action"></div>
-                <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400">Publish</span>
+            <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-1 group transition-all active:scale-90 justify-center w-12 h-12 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-6 [&>svg]:h-6" id="icon-secondary-action"></div>
+                <span class="hidden sm:block text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400">Publish</span>
             </button>
 
-            <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-1 group transition-all active:scale-90">
-                <div class="text-slate-400 group-hover:text-amber-400" id="icon-coffee"></div>
-                <span class="text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400">Support</span>
+            <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-1 group transition-all active:scale-90 justify-center w-12 h-12 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-6 [&>svg]:h-6" id="icon-coffee"></div>
+                <span class="hidden sm:block text-[8px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400">Support</span>
             </button>
         </div>
     </footer>
