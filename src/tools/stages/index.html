@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MooBudget — Stages Studio</title>
+    <script src="../../lib/tailwind.min.js"></script>
+    <script src="../../core/components/EmbeddedMode.js"></script>
+    <script src="../../lib/Sortable.min.js"></script>
+    <script src="../../lib/localforage.min.js"></script>
+    <script src="../../scripts/storage.js"></script>
+    <script src="../../scripts/engine/mbtle.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .studio-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
+        .burn-ring { transition: stroke-dashoffset 1s ease-out, stroke 0.5s ease; }
+        .conflict-glow { box-shadow: 0 0 20px rgba(245,158,11,0.2); border-color: #f59e0b !important; animation: pulse-amber 2s infinite; }
+        @keyframes pulse-amber {
+            0%   { box-shadow: 0 0 0 0   rgba(245,158,11,0.4); }
+            70%  { box-shadow: 0 0 0 10px rgba(245,158,11,0); }
+            100% { box-shadow: 0 0 0 0   rgba(245,158,11,0); }
+        }
+        .sortable-ghost { opacity: 0.3; transform: scale(0.95); }
+        .sortable-drag  { cursor: grabbing; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .sync-bounce { animation: bounce 1s infinite; }
+        @keyframes bounce { 0%,100%{transform:translateY(-25%);animation-timing-function:cubic-bezier(.8,0,1,1)} 50%{transform:translateY(0);animation-timing-function:cubic-bezier(0,0,.2,1)} }
+        /* Tab Navigation Bar */
+        .tab-btn.active { color: #2563eb; background: #dbeafe; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: #2563eb; box-shadow: 0 0 10px rgba(37,99,235,0.5); }
+        .tab-btn[data-tab="panel-setup"] { min-width: 70px; }
+        .tab-btn[data-tab="panel-vitals"] { min-width: 70px; }
+        /* Add-item modal */
+        #add-item-modal { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.5); }
+        #add-item-modal.open { display:flex; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0 z-50">
+        <div class="flex items-center gap-4">
+            <button id="btn-back" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                Back
+            </button>
+            <div class="h-4 w-px bg-slate-800"></div>
+            <div class="flex items-center gap-2">
+                <span class="text-white text-[11px] font-black uppercase tracking-tight">Project Stages</span>
+                <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading...</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex flex-col items-end">
+                <span id="active-project-name" class="text-white text-[10px] font-black uppercase tracking-tight opacity-90">—</span>
+                <span class="text-slate-500 text-[8px] font-bold uppercase tracking-widest">Stages Studio</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sticky Tab Navigation Bar -->
+    <div class="sticky top-0 z-40 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0">
+        <div class="flex items-center gap-1.5">
+            <button data-tab="panel-setup" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">Setup</button>
+            <button data-tab="panel-vitals" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">View</button>
+            <button data-tab="dev" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dev</button>
+            <button data-tab="pre" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Pre</button>
+            <button data-tab="prod" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Prod</button>
+            <button data-tab="post" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Post</button>
+            <button data-tab="dist" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dist</button>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div id="studio-layout" class="flex-grow flex overflow-x-auto no-scrollbar bg-slate-100 snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none">
+
+        <!-- Setup Panel -->
+        <div id="panel-setup" class="studio-card min-w-[320px] w-[320px] bg-slate-900 text-white snap-start shrink-0">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Configuration</span>
+                <button onclick="mBTStageStudio.syncFromDb()" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    Sync
+                </button>
+            </div>
+            <div class="p-6 space-y-8 overflow-y-auto no-scrollbar">
+                <!-- Dates -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Start Date</label>
+                        <input type="date" id="start-date" onchange="mBTStageStudio.updateDate('start', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors">
+                    </div>
+                    <div>
+                        <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Target</label>
+                        <input type="date" id="delivery-date" onchange="mBTStageStudio.updateDate('delivery', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors" id="delivery-date-input">
+                    </div>
+                </div>
+                <!-- Cap -->
+                <div>
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Total Cap Limit</label>
+                    <div class="flex items-center gap-2 border-b-2 border-slate-700 pb-1">
+                        <span class="text-slate-600 text-xl font-black">$</span>
+                        <input type="number" id="total-cap" placeholder="0.00" oninput="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-white outline-none placeholder-slate-800">
+                    </div>
+                </div>
+                <!-- Sliders -->
+                <div id="preset-sliders" class="space-y-6"></div>
+                <!-- Industry Preset -->
+                <div class="pt-4 border-t border-slate-800">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Distribution Model</label>
+                    <select onchange="mBTStageStudio.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
+                        <option value="" disabled selected>Load Industry Preset...</option>
+                        <option value="TVC">TVC</option>
+                        <option value="Music Video">Music Video</option>
+                        <option value="Documentary">Documentary</option>
+                        <option value="Feature Film">Feature Film</option>
+                    </select>
+                </div>
+                <!-- Bulk Operations -->
+                <div class="pt-4 border-t border-slate-800">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Bulk Operations</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="mBTStageStudio.bulkAction('lockAll')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Lock All</button>
+                        <button onclick="mBTStageStudio.bulkAction('unlockAll')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Unlock All</button>
+                        <button onclick="mBTStageStudio.bulkAction('syncDays')" class="bg-slate-800 hover:bg-amber-600 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Sync Days</button>
+                        <button onclick="mBTStageStudio.bulkAction('dedupe')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Dedupe</button>
+                        <button onclick="mBTStageStudio.autoFillAll()" class="col-span-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            Neural Fill
+                        </button>
+                        <button onclick="mBTStageStudio.clearAll()" class="col-span-2 bg-slate-800 hover:bg-rose-800 text-slate-400 hover:text-rose-300 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear All Stages</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vitals Panel -->
+        <div id="panel-vitals" class="studio-card min-w-[340px] w-[340px] snap-center shrink-0">
+            <div class="p-4 border-b border-slate-100 shrink-0">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Project Vital Signs</span>
+            </div>
+            <div class="p-8 flex flex-col items-center flex-grow overflow-y-auto no-scrollbar">
+                <!-- SVG Burn Ring -->
+                <div class="relative w-48 h-48 mb-8">
+                    <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="44" stroke="#f1f5f9" stroke-width="12" fill="none"/>
+                        <circle id="burn-meter" cx="50" cy="50" r="44" stroke="#2563eb" stroke-width="12" fill="none" stroke-dasharray="276.46" stroke-dashoffset="276.46" class="burn-ring" stroke-linecap="round"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                        <span id="burn-pct" class="text-4xl font-black text-slate-900 leading-none tracking-tighter">0%</span>
+                        <span id="burn-label" class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Burn</span>
+                    </div>
+                </div>
+                <!-- Stats -->
+                <div class="w-full space-y-3">
+                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grand Total</span>
+                        <span id="stat-grand-total" class="text-sm font-black text-slate-900">$0.00</span>
+                    </div>
+                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cap Limit</span>
+                        <span id="stat-total-cap" class="text-sm font-black text-slate-900">$0.00</span>
+                    </div>
+                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Burn</span>
+                        <span id="stat-daily-burn" class="text-sm font-black text-slate-900">$0.00</span>
+                    </div>
+                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Runway</span>
+                        <span id="stat-runway" class="text-sm font-black text-slate-900">0 Days</span>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Risk</span>
+                        <span id="stat-risk" class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Minimal</span>
+                    </div>
+                </div>
+                <!-- Timeline Projections -->
+                <div class="w-full mt-8 space-y-3">
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">Timeline Projections</p>
+                    <div id="timeline-audit" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stage Cards (injected by render) -->
+        <div id="stage-cards-container" class="flex"></div>
+
+    </div>
+
+    <!-- Add Item Modal (sandboxed — no window.parent) -->
+    <div id="add-item-modal" class="items-end justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col" style="max-height:85vh">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <span id="modal-title" class="text-[10px] font-black uppercase tracking-widest text-slate-800">Add to Stage</span>
+                <button onclick="mBTStageStudio.closeAddModal()" class="text-slate-300 hover:text-slate-600 transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="p-4 border-b border-slate-50 shrink-0">
+                <input type="text" id="modal-search" placeholder="Search items..." oninput="mBTStageStudio.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
+            </div>
+            <div id="modal-list" class="flex-grow overflow-y-auto"></div>
+            <!-- Custom Item Form -->
+            <div class="p-4 border-t border-slate-100 shrink-0">
+                <button onclick="mBTStageStudio.toggleCustomForm()" class="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline mb-3 block">+ Create Custom Item</button>
+                <div id="custom-form" class="hidden space-y-3">
+                    <input type="text" id="custom-desc" placeholder="Item name" class="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-bold outline-none">
+                    <div class="flex gap-2">
+                        <input type="number" id="custom-rate" placeholder="Rate" class="flex-1 p-2 border border-slate-200 rounded-lg text-[11px] font-bold outline-none">
+                        <select id="custom-unit" class="w-1/3 p-2 border border-slate-200 rounded-lg text-[11px] font-bold outline-none">
+                            <option>Day</option>
+                            <option>Flat</option>
+                            <option>Week</option>
+                        </select>
+                    </div>
+                    <button onclick="mBTStageStudio.addCustomItem()" class="w-full py-2 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-colors">Add Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ========= Stages Studio v24 ========= */
+
+        /* --- XSS Escape --- */
+        function esc(str) {
+            var d = document.createElement('div');
+            d.textContent = String(str || '');
+            return d.innerHTML;
+        }
+
+        /* --- Currency Format (uses mBTLE if loaded, else USD fallback) --- */
+        function fmt(n) {
+            if (window.mBTLE && typeof window.mBTLE.formatCurrency === 'function') {
+                return window.mBTLE.formatCurrency(n);
+            }
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+        }
+
+        /* ========= STAGE_PRESETS (from mBT-Old.html L739) ========= */
+        var STAGE_PRESETS = {
+            'TVC':          { dev: 10, pre: 15, prod: 45, post: 20, dist: 10 },
+            'Music Video':  { dev:  5, pre: 15, prod: 50, post: 25, dist:  5 },
+            'Documentary':  { dev: 15, pre: 10, prod: 40, post: 25, dist: 10 },
+            'Feature Film': { dev: 10, pre: 20, prod: 35, post: 25, dist: 10 }
+        };
+
+        /* ========= Logic Engine (ported from mBT-Old.html L2233–L2421) ========= */
+
+        /* --- calculateMetrics --- */
+        function calculateMetrics(b) {
+            var tl = b.targetLock || { totalCap: 0, stages: {} };
+            var result = {
+                grandTotal: b.grandTotal || 0,
+                stageTotals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
+                totalCap: tl.totalCap || 0,
+                totalDays: 0,
+                dailyBurn: 0,
+                runwayDays: 0
+            };
+
+            /* Per-stage cost sums from stageData */
+            var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+            Object.values(b.sections || {}).forEach(function(sec) {
+                (sec.items || []).forEach(function(item) {
+                    if (!item.stageData) return;
+                    KEYS.forEach(function(k) {
+                        var sd = item.stageData[k];
+                        if (sd) {
+                            result.stageTotals[k] += (parseFloat(sd.days) || 0) * (parseFloat(sd.rate || item.rate) || 0);
+                        }
+                    });
+                });
+            });
+
+            KEYS.forEach(function(k) {
+                if (tl.stages && tl.stages[k]) result.totalDays += parseFloat(tl.stages[k].days) || 0;
+            });
+
+            if (result.totalDays > 0) result.dailyBurn = result.grandTotal / result.totalDays;
+            if (result.dailyBurn > 0) result.runwayDays = result.totalCap / result.dailyBurn;
+            return result;
+        }
+
+        /* --- getBurnStatus --- */
+        function getBurnStatus(current, cap) {
+            var pct = cap > 0 ? (current / cap) * 100 : 0;
+            if (pct > 100) return { color: 'text-rose-600',  ring: 'border-rose-500',  stroke: '#f43f5e', pct: pct };
+            if (pct > 85)  return { color: 'text-amber-500', ring: 'border-amber-400', stroke: '#f59e0b', pct: pct };
+            return             { color: 'text-slate-900',  ring: 'border-slate-200', stroke: '#2563eb', pct: pct };
+        }
+
+        /* --- validateTimeline --- */
+        function validateTimeline(b, stageKey) {
+            var maxItemDays = 0;
+            var hasItems = false;
+            Object.values(b.sections || {}).forEach(function(sec) {
+                (sec.items || []).forEach(function(item) {
+                    if (item.stageData && item.stageData[stageKey]) {
+                        hasItems = true;
+                        var d = parseFloat(item.stageData[stageKey].days) || 0;
+                        if (d > maxItemDays) maxItemDays = d;
+                    }
+                });
+            });
+            var userDays = (b.targetLock && b.targetLock.stages[stageKey])
+                ? (parseFloat(b.targetLock.stages[stageKey].days) || 0) : 0;
+            return {
+                isValid:    userDays >= maxItemDays,
+                maxNeeded:  maxItemDays,
+                current:    userDays,
+                delta:      userDays - maxItemDays,
+                isBankrupt: hasItems && userDays === 0
+            };
+        }
+
+        /* --- calculateTimeline (Phase 3.3 overrun + TZ fix) --- */
+        function calculateTimeline(b) {
+            var timeline = {};
+            var cursor = new Date(b.startDate || new Date());
+            /* Timezone offset fix — prevents "yesterday" bug on pure date strings */
+            cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
+
+            var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+            KEYS.forEach(function(k) {
+                var days = (b.targetLock && b.targetLock.stages[k])
+                    ? (parseFloat(b.targetLock.stages[k].days) || 0) : 0;
+                var start = new Date(cursor);
+                var end   = new Date(start.getTime() + days * 86400000);
+                var fmtD  = function(d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+                timeline[k] = { start: start, end: end, label: days > 0 ? (fmtD(start) + ' – ' + fmtD(end)) : 'SCHEDULE TBD' };
+                cursor = end;
+            });
+
+            /* Phase 3.3: Overrun */
+            if (b.deliveryDate) {
+                var target    = new Date(b.deliveryDate);
+                var targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+                var diffDays  = Math.ceil((targetAdj - cursor) / 86400000);
+                var status    = diffDays < 0 ? 'OVERDUE' : (diffDays < 7 ? 'Tight' : 'On Track');
+                var color     = diffDays < 0 ? 'text-rose-600' : (diffDays < 7 ? 'text-amber-500' : 'text-emerald-500');
+                var ring      = diffDays < 0 ? 'border-rose-500' : (diffDays < 7 ? 'border-amber-400' : 'border-slate-100');
+                timeline._analysis = { projectedEnd: cursor, targetDate: targetAdj, variance: diffDays, status: status, color: color, ring: ring };
+            }
+            return timeline;
+        }
+
+        /* --- analyzeRisk --- */
+        function analyzeRisk(metrics, timeline) {
+            if (!timeline || !timeline._analysis) return null;
+            var variance = timeline._analysis.variance;
+            if (variance >= 0) return null;
+
+            var daysLate      = Math.abs(variance);
+            var delayCost     = metrics.dailyBurn * daysLate;
+            var projectedTotal = metrics.grandTotal + delayCost;
+            var cap           = metrics.totalCap || 0;
+            var isCritical    = cap > 0 && projectedTotal > cap;
+
+            return {
+                status:         isCritical ? 'CRITICAL' : 'WARNING',
+                daysLate:       daysLate,
+                dailyBurn:      metrics.dailyBurn,
+                cost:           delayCost,
+                projectedTotal: projectedTotal,
+                message:        isCritical ? 'INSOLVENCY RISK' : 'DELAY COST',
+                subMessage:     isCritical
+                    ? ('Projected ' + fmt(projectedTotal) + ' exceeds Cap')
+                    : ('Est. Penalty: ' + fmt(delayCost))
+            };
+        }
+
+        /* ========= Studio Controller ========= */
+        var mBTStageStudio = {
+
+            state: {
+                KEYS:   ['dev', 'pre', 'prod', 'post', 'dist'],
+                TITLES: { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' },
+                projectId:  null,
+                project:    null,
+                ogItems:    [],          /* OG rate database cache */
+                _modalStage: null        /* which stage the add-item modal is targeting */
+            },
+
+            /* --- Boot --- */
+            init: function() {
+                var self = this;
+                var params = new URLSearchParams(location.search);
+                /* Prefer localforage key (shell bridge) over mBT_DB projectId */
+                self.state._projectKey = params.get('projectKey') || null;
+                self.state.projectId   = params.get('projectId') || null;
+
+                /* Back button */
+                document.getElementById('btn-back').addEventListener('click', function() {
+                    if (window.mBTBridge) window.mBTBridge.send('navigate', { route: 'home' });
+                    else if (window.parent !== window) window.parent.postMessage({ type: 'mbt:tool-action', action: 'navigate', payload: { route: 'home' } }, '*');
+                });
+
+                /* Carousel grab-scroll */
+                self._initCarouselScroll();
+
+                /* Tab Navigation Bar */
+                self._initTabNavigation();
+
+                if (!self.state._projectKey && !self.state.projectId) {
+                    self._showError('No project selected. Open a project from the dashboard first.');
+                    return;
+                }
+
+                /* Load project via localforage (shell bridge) or mBT_DB (standalone) */
+                var projectPromise;
+                if (self.state._projectKey && typeof localforage !== 'undefined') {
+                    projectPromise = localforage.getItem(self.state._projectKey);
+                } else if (self.state.projectId && window.mBT && window.mBT.storage) {
+                    projectPromise = window.mBT.storage.getProject(self.state.projectId);
+                } else {
+                    self._showError('Storage engine not available. Reload the page.');
+                    return;
+                }
+
+                /* OG items from mBT_DB if available, else empty */
+                var ogPromise = (window.mBT && window.mBT.storage)
+                    ? window.mBT.storage.getAllOGItems().catch(function() { return []; })
+                    : Promise.resolve([]);
+
+                Promise.all([projectPromise, ogPromise]).then(function(results) {
+                    var project = results[0];
+                    var ogItems = results[1];
+                    if (!project) {
+                        self._showError('Project not found. Make sure a project is open in the main tool.');
+                        return;
+                    }
+                    self.state.project = project;
+                    self.state.ogItems = ogItems || [];
+
+                    /* Ensure targetLock structure */
+                    if (!project.targetLock) project.targetLock = { enabled: true, totalCap: project.grandTotal || 0, stages: {} };
+                    if (!project.targetLock.stages) project.targetLock.stages = {};
+                    self.state.KEYS.forEach(function(k) {
+                        if (!project.targetLock.stages[k]) {
+                            project.targetLock.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false };
+                        }
+                    });
+
+                    self.render();
+                    self.initDragAndDrop();
+                }).catch(function(err) {
+                    self._showError('Failed to load project: ' + err.message);
+                });
+            },
+
+            /* --- Full Render --- */
+            render: function() {
+                var b = this.state.project;
+                if (!b) return;
+
+                /* Header */
+                document.getElementById('active-project-name').textContent = (b.company && b.company.productionTitle) ? b.company.productionTitle : 'UNTITLED';
+                document.getElementById('project-tag').textContent = b.id ? b.id.slice(-6).toUpperCase() : 'PROJECT';
+                document.getElementById('start-date').value    = b.startDate || '';
+                document.getElementById('delivery-date').value = b.deliveryDate || '';
+                document.getElementById('total-cap').value     = b.targetLock ? (b.targetLock.totalCap || '') : '';
+
+                /* Panels */
+                this.renderSliders();
+                this.renderVitals();
+                this.renderStageCards();
+            },
+
+            /* --- Sliders --- */
+            renderSliders: function() {
+                var b    = this.state.project;
+                var self = this;
+                var html = this.state.KEYS.map(function(k) {
+                    var s = b.targetLock.stages[k];
+                    return '<div class="relative">' +
+                        '<div class="flex justify-between items-center mb-1.5">' +
+                            '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + esc(self.state.TITLES[k]) + '</span>' +
+                            '<span class="text-[10px] font-black text-white">' + s.ratio.toFixed(1) + '%</span>' +
+                        '</div>' +
+                        '<div class="h-2 bg-slate-800 rounded-full relative overflow-hidden">' +
+                            '<div class="absolute top-0 left-0 h-full bg-blue-500 rounded-full pointer-events-none" style="width:' + s.ratio + '%"></div>' +
+                            '<input type="range" min="0" max="100" step="0.5" value="' + s.ratio + '" ' +
+                                'oninput="mBTStageStudio.balanceSliders(\'' + k + '\', this.value)" ' +
+                                'onchange="mBTStageStudio.save()" ' +
+                                (s.locked ? 'disabled ' : '') +
+                                'class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+                document.getElementById('preset-sliders').innerHTML = html;
+            },
+
+            /* --- Vitals Panel (burn ring + stats + timeline) --- */
+            renderVitals: function() {
+                var b        = this.state.project;
+                var metrics  = calculateMetrics(b);
+                var timeline = calculateTimeline(b);
+                var risk     = analyzeRisk(metrics, timeline);
+                var burn     = getBurnStatus(metrics.grandTotal, metrics.totalCap);
+
+                /* Risk overrides burn display */
+                var ringText  = Math.round(burn.pct) + '%';
+                var ringClass = 'text-4xl font-black leading-none tracking-tighter ' + burn.color;
+                var labelText = 'Burn';
+                var labelClass = 'text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1';
+
+                if (risk) {
+                    if (risk.status === 'CRITICAL') {
+                        burn.stroke = '#f43f5e';
+                        ringText   = 'CRITICAL';
+                        ringClass  = 'text-xl font-black leading-none tracking-tight text-rose-600';
+                        labelText  = risk.subMessage;
+                        labelClass = 'text-[8px] font-black text-rose-500 uppercase tracking-widest mt-1 animate-pulse';
+                    } else {
+                        burn.stroke = '#f59e0b';
+                        ringText   = 'DELAY';
+                        ringClass  = 'text-2xl font-black leading-none tracking-tight text-amber-500';
+                        labelText  = risk.subMessage;
+                        labelClass = 'text-[8px] font-black text-amber-500 uppercase tracking-widest mt-1';
+                    }
+                }
+
+                /* Burn ring */
+                var offset = 276.46 - (Math.min(burn.pct, 100) / 100 * 276.46);
+                var meter  = document.getElementById('burn-meter');
+                meter.style.strokeDashoffset = offset;
+                meter.setAttribute('stroke', burn.stroke);
+                document.getElementById('burn-pct').textContent  = ringText;
+                document.getElementById('burn-pct').className    = ringClass;
+                document.getElementById('burn-label').textContent = labelText;
+                document.getElementById('burn-label').className   = labelClass;
+
+                /* Stats */
+                document.getElementById('stat-grand-total').textContent = fmt(metrics.grandTotal);
+                document.getElementById('stat-total-cap').textContent   = fmt(metrics.totalCap);
+                document.getElementById('stat-daily-burn').textContent  = fmt(metrics.dailyBurn) + '/day';
+                document.getElementById('stat-runway').textContent      = Math.round(metrics.runwayDays) + ' Days';
+
+                var riskEl = document.getElementById('stat-risk');
+                if (risk && risk.status === 'CRITICAL') {
+                    riskEl.textContent = 'CRITICAL'; riskEl.className = 'text-[10px] font-black text-rose-600 uppercase tracking-widest';
+                } else if (risk && risk.status === 'WARNING') {
+                    riskEl.textContent = 'DELAY'; riskEl.className = 'text-[10px] font-black text-amber-500 uppercase tracking-widest';
+                } else if (burn.pct > 100) {
+                    riskEl.textContent = 'OVER CAP'; riskEl.className = 'text-[10px] font-black text-rose-600 uppercase tracking-widest';
+                } else if (burn.pct > 85) {
+                    riskEl.textContent = 'HIGH'; riskEl.className = 'text-[10px] font-black text-amber-500 uppercase tracking-widest';
+                } else {
+                    riskEl.textContent = 'MINIMAL'; riskEl.className = 'text-[10px] font-black text-emerald-500 uppercase tracking-widest';
+                }
+
+                /* Timeline audit */
+                var tHtml = this.state.KEYS.map(function(k) {
+                    var t = timeline[k];
+                    var analysis = timeline._analysis;
+                    var statusHtml = '';
+                    if (analysis && k === 'dist') {
+                        /* Show delivery status on the last stage */
+                        statusHtml = ' <span class="' + analysis.color + ' font-black">[' + esc(analysis.status) + ']</span>';
+                    }
+                    return '<div class="flex justify-between items-center text-[10px] font-bold">' +
+                        '<span class="text-slate-400 uppercase tracking-widest font-black text-[8px]">' + esc(k) + '</span>' +
+                        '<span class="text-slate-800">' + esc(t.label) + statusHtml + '</span>' +
+                    '</div>';
+                }).join('');
+                document.getElementById('timeline-audit').innerHTML = tHtml;
+
+                /* Delivery date input border color */
+                var deliveryInput = document.getElementById('delivery-date');
+                if (timeline._analysis) {
+                    deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
+                    if (timeline._analysis.status === 'OVERDUE') deliveryInput.classList.add('border-rose-500');
+                    else if (timeline._analysis.status === 'Tight')  deliveryInput.classList.add('border-amber-500');
+                    else                                              deliveryInput.classList.add('border-emerald-500');
+                }
+            },
+
+            /* --- Stage Cards --- */
+            renderStageCards: function() {
+                var b        = this.state.project;
+                var self     = this;
+                var metrics  = calculateMetrics(b);
+                var timeline = calculateTimeline(b);
+                var container = document.getElementById('stage-cards-container');
+
+                var html = this.state.KEYS.map(function(k) {
+                    var s         = b.targetLock.stages[k];
+                    var stageCost = metrics.stageTotals[k];
+                    var stageCap  = metrics.totalCap * (s.ratio / 100);
+                    var isOver    = stageCost > stageCap && stageCap > 0;
+                    var val       = validateTimeline(b, k);
+                    var conflict  = val.maxNeeded > val.current;
+                    var dateLabel = timeline[k] ? esc(timeline[k].label) : '';
+
+                    /* Sync Days button — amber bounce when items exceed stage duration */
+                    var syncBtn = (val.maxNeeded > val.current)
+                        ? '<button onclick="mBTStageStudio.syncDays(\'' + k + '\')" title="Sync to ' + val.maxNeeded + ' days" class="absolute -right-2 -top-2 bg-amber-500 hover:bg-amber-600 text-white w-6 h-6 rounded-full shadow-lg z-50 flex items-center justify-center sync-bounce">' +
+                          '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>' +
+                          '</button>'
+                        : '';
+
+                    /* TIME BANKRUPTCY warning */
+                    var dateDisplay = val.isBankrupt
+                        ? '<span class="text-[8px] font-black text-rose-600 animate-pulse">TIME BANKRUPTCY</span>'
+                        : '<span class="text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight">' + dateLabel + '</span>';
+
+                    return '<div id="' + k + '" class="studio-card min-w-[340px] w-[340px] snap-center shrink-0' + (conflict ? ' conflict-glow' : '') + '">' +
+                        '<div class="p-4 border-b border-slate-100 bg-white sticky top-0 z-20 shrink-0">' +
+                            '<div class="flex items-center justify-between mb-1 relative">' +
+                                /* Lock button */
+                                '<button onclick="mBTStageStudio.toggleLock(\'' + k + '\')" class="w-6 h-6 flex items-center justify-center rounded-lg ' + (s.locked ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-300 hover:bg-slate-100') + ' transition-colors">' +
+                                    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' +
+                                        (s.locked ? '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' : '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>') +
+                                    '</svg>' +
+                                '</button>' +
+                                /* Title + date */
+                                '<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">' +
+                                    '<span class="text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(self.state.TITLES[k]) + '</span>' +
+                                    dateDisplay +
+                                '</div>' +
+                                /* Days input + sync button */
+                                '<div class="relative flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100">' +
+                                    syncBtn +
+                                    '<input type="number" value="' + s.days + '" oninput="mBTStageStudio.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
+                                    '<span class="text-[7px] font-black text-slate-400 uppercase tracking-widest mr-1">Days</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-1 mt-3">' +
+                                '<div class="h-full ' + (isOver ? 'bg-rose-500' : 'bg-blue-500') + ' rounded-full transition-all duration-500" style="width:' + Math.min(stageCap > 0 ? (stageCost / stageCap) * 100 : 0, 100).toFixed(1) + '%"></div>' +
+                            '</div>' +
+                            '<div class="flex justify-between text-[8px] font-black uppercase tracking-widest">' +
+                                '<span class="' + (isOver ? 'text-rose-600' : 'text-slate-400') + '">' + fmt(stageCost) + '</span>' +
+                                '<span class="text-slate-400">Cap: ' + fmt(stageCap) + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="flex-grow p-3 space-y-2 overflow-y-auto no-scrollbar bg-slate-50/50 stage-drop-zone" data-stage="' + k + '">' +
+                            self.renderItems(k) +
+                        '</div>' +
+                        '<div class="p-4 border-t border-slate-100 bg-white shrink-0">' +
+                            '<button onclick="mBTStageStudio.openAddModal(\'' + k + '\')" class="w-full py-2 rounded-xl bg-slate-50 border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-white transition-all">+ Add Item</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+
+                container.innerHTML = html;
+                /* Re-attach drag and drop after DOM rebuild */
+                this.initDragAndDrop();
+                /* Re-attach scroll spy now that card elements exist in DOM */
+                this._observeTabPanels();
+            },
+
+            /* --- Render Items in a Stage Card --- */
+            renderItems: function(stageKey) {
+                var b = this.state.project;
+                var items = [];
+                Object.entries(b.sections || {}).forEach(function(entry) {
+                    var secName = entry[0];
+                    var sec     = entry[1];
+                    (sec.items || []).forEach(function(item) {
+                        if (item.stageData && item.stageData[stageKey]) {
+                            items.push({ item: item, secName: secName, order: item.stageData[stageKey].order || 0 });
+                        }
+                    });
+                });
+                items.sort(function(a, b) { return a.order - b.order; });
+
+                if (!items.length) {
+                    return '<div class="h-20 flex items-center justify-center text-[9px] font-black text-slate-300 uppercase tracking-widest opacity-50">No Items</div>';
+                }
+
+                return items.map(function(entry) {
+                    var item = entry.item;
+                    var sd   = item.stageData[stageKey];
+                    var cost = (parseFloat(sd.days) || 0) * (parseFloat(sd.rate || item.rate) || 0);
+                    return '<div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm stage-item group cursor-grab active:cursor-grabbing" data-id="' + esc(item.id) + '">' +
+                        '<div class="flex justify-between items-start mb-2">' +
+                            '<div class="min-w-0 flex-grow pr-2">' +
+                                '<p class="text-[10px] font-black text-slate-800 leading-tight truncate uppercase tracking-tight">' + esc(item.description || 'UNTITLED') + '</p>' +
+                                '<p class="text-[7px] font-black text-slate-400 uppercase tracking-widest truncate">' + esc(entry.secName) + '</p>' +
+                            '</div>' +
+                            '<button onclick="mBTStageStudio.removeItem(\'' + esc(item.id) + '\', \'' + stageKey + '\')" class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all shrink-0">' +
+                                '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                            '</button>' +
+                        '</div>' +
+                        '<div class="flex items-center gap-2">' +
+                            '<div>' +
+                                '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Days</label>' +
+                                '<input type="number" value="' + (sd.days || 0) + '" oninput="mBTStageStudio.updateItemDays(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 bg-slate-50 rounded text-center text-[10px] text-blue-600 font-bold outline-none no-spinner border border-slate-100">' +
+                            '</div>' +
+                            '<div>' +
+                                '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Rate</label>' +
+                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStageStudio.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-20 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
+                            '</div>' +
+                            '<div class="ml-auto text-right">' +
+                                '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Cost</label>' +
+                                '<span class="text-[10px] font-black text-slate-800 font-mono">' + fmt(cost) + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            },
+
+            /* ========= Interaction Handlers ========= */
+
+            balanceSliders: function(changedKey, value) {
+                var b      = this.state.project;
+                var stages = b.targetLock.stages;
+                var KEYS   = this.state.KEYS;
+                var newVal = parseFloat(value);
+                if (isNaN(newVal)) newVal = 0;
+
+                var lockedKeys    = KEYS.filter(function(k) { return k !== changedKey && stages[k].locked; });
+                var unlockedKeys  = KEYS.filter(function(k) { return k !== changedKey && !stages[k].locked; });
+                var lockedTotal   = lockedKeys.reduce(function(s, k) { return s + (stages[k].ratio || 0); }, 0);
+                var maxAvail      = 100 - lockedTotal;
+
+                if (newVal > maxAvail) newVal = maxAvail;
+                if (newVal < 0)        newVal = 0;
+                stages[changedKey].ratio = newVal;
+
+                var remaining          = Math.max(0, 100 - newVal - lockedTotal);
+                var currentUnlockedSum = unlockedKeys.reduce(function(s, k) { return s + (stages[k].ratio || 0); }, 0);
+                unlockedKeys.forEach(function(k) {
+                    stages[k].ratio = currentUnlockedSum <= 0.01
+                        ? remaining / unlockedKeys.length
+                        : remaining * (stages[k].ratio / currentUnlockedSum);
+                });
+
+                this.render();
+            },
+
+            applyPreset: function(name) {
+                var ratios = STAGE_PRESETS[name];
+                if (!ratios) return;
+                var stages = this.state.project.targetLock.stages;
+                Object.keys(ratios).forEach(function(k) {
+                    if (stages[k]) { stages[k].ratio = ratios[k]; stages[k].locked = false; }
+                });
+                this.render();
+                this.save();
+            },
+
+            toggleLock: function(key) {
+                var s = this.state.project.targetLock.stages[key];
+                s.locked = !s.locked;
+                this.render();
+                this.save();
+            },
+
+            updateStageDays: function(key, val) {
+                this.state.project.targetLock.stages[key].days = parseFloat(val) || 0;
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            syncDays: function(key) {
+                var val = validateTimeline(this.state.project, key);
+                if (val.maxNeeded > 0) {
+                    this.state.project.targetLock.stages[key].days = val.maxNeeded;
+                    this.renderVitals();
+                    this.renderStageCards();
+                    this.save();
+                }
+            },
+
+            updateItemDays: function(itemId, stageKey, val) {
+                var item = this._findItem(itemId);
+                if (item && item.stageData && item.stageData[stageKey]) {
+                    item.stageData[stageKey].days = parseFloat(val) || 0;
+                    this.renderVitals();
+                    this.renderStageCards();
+                    this.save();
+                }
+            },
+
+            updateItemRate: function(itemId, stageKey, val) {
+                var item = this._findItem(itemId);
+                if (item && item.stageData && item.stageData[stageKey]) {
+                    item.stageData[stageKey].rate = parseFloat(val) || 0;
+                    this.renderVitals();
+                    this.renderStageCards();
+                    this.save();
+                }
+            },
+
+            removeItem: function(itemId, stageKey) {
+                var item = this._findItem(itemId);
+                if (item && item.stageData) {
+                    delete item.stageData[stageKey];
+                    this.renderVitals();
+                    this.renderStageCards();
+                    this.save();
+                }
+            },
+
+            updateCap: function(val) {
+                this.state.project.targetLock.totalCap = parseFloat(val) || 0;
+                this.renderVitals();
+                this.save();
+            },
+
+            updateDate: function(type, val) {
+                if (type === 'start')    this.state.project.startDate    = val;
+                else                     this.state.project.deliveryDate = val;
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            bulkAction: function(action) {
+                var b    = this.state.project;
+                var KEYS = this.state.KEYS;
+                if (action === 'lockAll') {
+                    KEYS.forEach(function(k) { b.targetLock.stages[k].locked = true; });
+                    this.render(); this.save();
+                } else if (action === 'unlockAll') {
+                    KEYS.forEach(function(k) { b.targetLock.stages[k].locked = false; });
+                    this.render(); this.save();
+                } else if (action === 'syncDays') {
+                    KEYS.forEach(function(k) {
+                        var val = validateTimeline(b, k);
+                        if (val.maxNeeded > 0) b.targetLock.stages[k].days = val.maxNeeded;
+                    });
+                    this.render(); this.save();
+                } else if (action === 'dedupe') {
+                    /* Remove items assigned to multiple stages that share same description */
+                    var seen = {};
+                    Object.values(b.sections || {}).forEach(function(sec) {
+                        (sec.items || []).forEach(function(item) {
+                            var desc = (item.description || '').toLowerCase().trim();
+                            if (!item.stageData) return;
+                            KEYS.forEach(function(k) {
+                                if (!item.stageData[k]) return;
+                                var key = desc + '|' + k;
+                                if (seen[key]) delete item.stageData[k];
+                                else seen[key] = true;
+                            });
+                        });
+                    });
+                    this.render(); this.save();
+                }
+            },
+
+            autoFillAll: function() {
+                var b    = this.state.project;
+                var tl   = b.targetLock;
+                var KEYS = this.state.KEYS;
+                Object.values(b.sections || {}).forEach(function(sec) {
+                    (sec.items || []).forEach(function(item) {
+                        if (!item.stageData) item.stageData = {};
+                        var desc   = (item.description || '').toLowerCase();
+                        var target = 'prod';
+                        if (desc.includes('post') || desc.includes('edit') || desc.includes('vfx') || desc.includes('grade') || desc.includes('color')) target = 'post';
+                        else if (desc.includes('pre') || desc.includes('scout') || desc.includes('cast') || desc.includes('rehearsal')) target = 'pre';
+                        else if (desc.includes('dev') || desc.includes('script') || desc.includes('option') || desc.includes('treatment')) target = 'dev';
+                        else if (desc.includes('dist') || desc.includes('deliver') || desc.includes('master') || desc.includes('dcp')) target = 'dist';
+                        if (!item.stageData[target]) {
+                            item.stageData[target] = { days: tl.stages[target].days || 1, rate: item.rate || 0, order: 0 };
+                        }
+                    });
+                });
+                this.render(); this.save();
+            },
+
+            clearAll: function() {
+                if (!confirm('Clear all stage assignments? This cannot be undone.')) return;
+                Object.values(this.state.project.sections || {}).forEach(function(sec) {
+                    (sec.items || []).forEach(function(item) { item.stageData = {}; });
+                });
+                this.render(); this.save();
+            },
+
+            /* ========= Add Item Modal ========= */
+
+            openAddModal: function(stageKey) {
+                this.state._modalStage = stageKey;
+                var stageTitle = this.state.TITLES[stageKey] || stageKey.toUpperCase();
+                document.getElementById('modal-title').textContent = 'Add to ' + stageTitle;
+                document.getElementById('modal-search').value = '';
+                document.getElementById('custom-form').classList.add('hidden');
+                this._buildModalList('');
+                document.getElementById('add-item-modal').classList.add('open');
+            },
+
+            closeAddModal: function() {
+                document.getElementById('add-item-modal').classList.remove('open');
+                this.state._modalStage = null;
+            },
+
+            filterModalList: function(term) {
+                this._buildModalList(term);
+            },
+
+            toggleCustomForm: function() {
+                document.getElementById('custom-form').classList.toggle('hidden');
+            },
+
+            _buildModalList: function(term) {
+                var b      = this.state.project;
+                var sk     = this.state._modalStage;
+                var q      = (term || '').toLowerCase();
+                var self   = this;
+
+                /* Existing budget items not yet in this stage */
+                var existing = [];
+                Object.entries(b.sections || {}).forEach(function(entry) {
+                    var secName = entry[0];
+                    var sec     = entry[1];
+                    (sec.items || []).forEach(function(item) {
+                        if (item.stageData && item.stageData[sk]) return;
+                        if (q && !(item.description || '').toLowerCase().includes(q)) return;
+                        existing.push({ id: item.id, description: item.description, rate: item.rate, isExisting: true, secName: secName });
+                    });
+                });
+
+                /* OG rate database */
+                var ogFiltered = (this.state.ogItems || []).filter(function(i) {
+                    return !q || (i.description || '').toLowerCase().includes(q);
+                }).slice(0, 20);
+
+                var all = existing.slice(0, 15).concat(ogFiltered);
+
+                if (!all.length) {
+                    document.getElementById('modal-list').innerHTML = '<div class="p-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-widest">No matches</div>';
+                    return;
+                }
+
+                document.getElementById('modal-list').innerHTML = all.map(function(item) {
+                    var badge = item.isExisting
+                        ? '<span class="text-[7px] font-black text-emerald-600 uppercase tracking-widest">From Budget · ' + esc(item.secName) + '</span>'
+                        : '<span class="text-[7px] font-black text-blue-400 uppercase tracking-widest">Rate DB</span>';
+                    var action = item.isExisting
+                        ? 'mBTStageStudio._assignExisting(\'' + esc(item.id) + '\')'
+                        : 'mBTStageStudio._assignFromOG(\'' + esc(item.id) + '\')';
+                    return '<div onclick="' + action + '" class="p-3 border-b border-slate-50 bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors">' +
+                        '<div>' +
+                            '<div class="text-[11px] font-bold text-slate-700">' + esc(item.description) + '</div>' +
+                            badge +
+                        '</div>' +
+                        '<div class="text-[10px] font-mono font-bold text-slate-500 ml-4 shrink-0">' + fmt(item.rate) + '</div>' +
+                    '</div>';
+                }).join('');
+            },
+
+            _assignExisting: function(itemId) {
+                var sk   = this.state._modalStage;
+                var item = this._findItem(itemId);
+                if (!item) return;
+                if (!item.stageData) item.stageData = {};
+                item.stageData[sk] = { days: 1, rate: item.rate || 0, order: 0 };
+                this.closeAddModal();
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            _assignFromOG: function(ogId) {
+                var sk       = this.state._modalStage;
+                var b        = this.state.project;
+                var ogItem   = (this.state.ogItems || []).find(function(i) { return i.id === ogId; });
+                if (!ogItem) return;
+
+                /* Guess target section */
+                var secNames = Object.keys(b.sections || {});
+                var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
+                if (sk === 'post') targetSec = secNames.find(function(s) { return /post|edit/i.test(s); }) || targetSec;
+                if (sk === 'dev')  targetSec = secNames.find(function(s) { return /dev|creative/i.test(s); }) || targetSec;
+                if (!targetSec || !b.sections[targetSec]) return;
+
+                var newItem = {
+                    id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                    description: ogItem.description,
+                    quantity: 1, unit: ogItem.unit || 'Day', multiplier: 1,
+                    rate: ogItem.rate || 0, actual: 0, rateType: 'negotiable',
+                    stageData: {}
+                };
+                newItem.stageData[sk] = { days: 1, rate: ogItem.rate || 0, order: 0 };
+                b.sections[targetSec].items.push(newItem);
+
+                this.closeAddModal();
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            addCustomItem: function() {
+                var sk   = this.state._modalStage;
+                var b    = this.state.project;
+                var desc = (document.getElementById('custom-desc').value || '').trim();
+                var rate = parseFloat(document.getElementById('custom-rate').value) || 0;
+                var unit = document.getElementById('custom-unit').value;
+                if (!desc) { document.getElementById('custom-desc').focus(); return; }
+
+                var secNames  = Object.keys(b.sections || {});
+                var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
+                if (sk === 'post') targetSec = secNames.find(function(s) { return /post|edit/i.test(s); }) || targetSec;
+                if (sk === 'dev')  targetSec = secNames.find(function(s) { return /dev|creative/i.test(s); }) || targetSec;
+                if (!targetSec || !b.sections[targetSec]) return;
+
+                var newItem = {
+                    id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                    description: desc, quantity: 1, unit: unit, multiplier: 1,
+                    rate: rate, actual: 0, rateType: 'negotiable', stageData: {}
+                };
+                newItem.stageData[sk] = { days: 1, rate: rate, order: 0 };
+                b.sections[targetSec].items.push(newItem);
+
+                /* Reset form */
+                document.getElementById('custom-desc').value = '';
+                document.getElementById('custom-rate').value = '';
+                this.closeAddModal();
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            /* ========= Persistence ========= */
+
+            save: function() {
+                var self = this;
+                if (!self.state.project) return;
+                var cleanProject = JSON.parse(JSON.stringify(self.state.project));
+
+                var savePromise;
+                if (self.state._projectKey && typeof localforage !== 'undefined') {
+                    /* Shell bridge: write back to localforage so the shell sees changes */
+                    savePromise = localforage.setItem(self.state._projectKey, cleanProject);
+                } else if (window.mBT && window.mBT.storage) {
+                    savePromise = window.mBT.storage.updateProject(cleanProject);
+                } else {
+                    return;
+                }
+
+                savePromise.then(function() {
+                    /* Notify shell to reload budget from storage */
+                    var msg = { type: 'mbt:tool-action', action: 'reconcile', payload: {} };
+                    if (window.mBTBridge) window.mBTBridge.send('reconcile', {});
+                    else if (window.parent !== window) window.parent.postMessage(msg, '*');
+                }).catch(function(err) {
+                    console.error('[Stages] Save failed:', err);
+                });
+            },
+
+            syncFromDb: function() {
+                var self = this;
+                var loadPromise;
+                if (self.state._projectKey && typeof localforage !== 'undefined') {
+                    loadPromise = localforage.getItem(self.state._projectKey);
+                } else if (self.state.projectId && window.mBT && window.mBT.storage) {
+                    loadPromise = window.mBT.storage.getProject(self.state.projectId);
+                } else { return; }
+                loadPromise.then(function(project) {
+                    if (project) { self.state.project = project; self.render(); }
+                });
+            },
+
+            /* ========= Drag and Drop ========= */
+
+            initDragAndDrop: function() {
+                var self = this;
+                document.querySelectorAll('.stage-drop-zone').forEach(function(zone) {
+                    new Sortable(zone, {
+                        group: 'stages',
+                        animation: 150,
+                        ghostClass: 'sortable-ghost',
+                        dragClass: 'sortable-drag',
+                        onEnd: function(evt) {
+                            var itemId    = evt.item.dataset.id;
+                            var fromStage = evt.from.dataset.stage;
+                            var toStage   = evt.to.dataset.stage;
+
+                            if (fromStage !== toStage) {
+                                var item = self._findItem(itemId);
+                                if (item && item.stageData && item.stageData[fromStage]) {
+                                    item.stageData[toStage] = Object.assign({}, item.stageData[fromStage]);
+                                    delete item.stageData[fromStage];
+                                }
+                            }
+
+                            /* Persist new order */
+                            var itemsInStage = Array.from(evt.to.children).map(function(c) { return c.dataset.id; });
+                            itemsInStage.forEach(function(id, idx) {
+                                var item = self._findItem(id);
+                                if (item && item.stageData && item.stageData[toStage]) item.stageData[toStage].order = idx;
+                            });
+
+                            self.renderVitals();
+                            self.renderStageCards();
+                            self.save();
+                        }
+                    });
+                });
+            },
+
+            /* ========= Carousel Grab-Scroll ========= */
+
+            _initCarouselScroll: function() {
+                var slider = document.getElementById('studio-layout');
+                var isDown = false, startX, scrollLeft;
+                slider.addEventListener('mousedown', function(e) {
+                    if (['INPUT', 'BUTTON', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+                    if (e.target.closest('.stage-item') || e.target.closest('.stage-drop-zone')) return;
+                    isDown = true;
+                    startX = e.pageX - slider.offsetLeft;
+                    scrollLeft = slider.scrollLeft;
+                    slider.style.cursor = 'grabbing';
+                });
+                slider.addEventListener('mouseleave', function() { isDown = false; slider.style.cursor = 'grab'; });
+                slider.addEventListener('mouseup',    function() { isDown = false; slider.style.cursor = 'grab'; });
+                slider.addEventListener('mousemove',  function(e) {
+                    if (!isDown) return;
+                    e.preventDefault();
+                    slider.scrollLeft = scrollLeft - (e.pageX - slider.offsetLeft - startX) * 2;
+                });
+            },
+
+            /* ========= Tab Navigation Bar ========= */
+
+            _initTabNavigation: function() {
+                var self = this;
+                var tabs = document.querySelectorAll('.tab-btn');
+                self._tabBtns = tabs;
+
+                /* Tab click handler — looks up panel lazily at click time */
+                tabs.forEach(function(tab) {
+                    tab.addEventListener('click', function() {
+                        var targetPanelId = this.dataset.tab;
+                        var targetPanel = document.getElementById(targetPanelId);
+                        if (!targetPanel) return;
+                        targetPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        tabs.forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                    });
+                });
+
+                /* Create IntersectionObserver once — panels attached after cards render via _observeTabPanels() */
+                self._tabObserver = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (!entry.isIntersecting) return;
+                        var panelId = entry.target.id;
+                        if (!panelId) return;
+                        self._tabBtns.forEach(function(t) { t.classList.remove('active'); });
+                        var tab = document.querySelector('.tab-btn[data-tab="' + panelId + '"]');
+                        if (tab) tab.classList.add('active');
+                    });
+                }, {
+                    root: document.getElementById('studio-layout'),
+                    rootMargin: '0px',
+                    threshold: 0.4
+                });
+            },
+
+            /* Re-attach scroll spy after every renderStageCards call */
+            _observeTabPanels: function() {
+                if (!this._tabObserver) return;
+                var panels = ['panel-setup', 'panel-vitals', 'dev', 'pre', 'prod', 'post', 'dist'];
+                this._tabObserver.disconnect();
+                var obs = this._tabObserver;
+                panels.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) obs.observe(el);
+                });
+            },
+
+            /* ========= Utilities ========= */
+
+            _findItem: function(id) {
+                var b = this.state.project;
+                var found = null;
+                Object.values(b.sections || {}).forEach(function(sec) {
+                    if (found) return;
+                    var item = (sec.items || []).find(function(i) { return i.id === id; });
+                    if (item) found = item;
+                });
+                return found;
+            },
+
+            _showError: function(msg) {
+                document.getElementById('studio-layout').innerHTML =
+                    '<div class="flex-grow flex items-center justify-center">' +
+                        '<div class="text-center">' +
+                            '<p class="text-4xl font-black text-slate-200 uppercase tracking-tighter mb-2">Not Connected</p>' +
+                            '<p class="text-[11px] font-bold text-slate-400">' + esc(msg) + '</p>' +
+                        '</div>' +
+                    '</div>';
+            }
+        };
+
+        window.onload = function() { mBTStageStudio.init(); };
+    </script>
+</body>
+</html>
