@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mBT AI Assistant</title>
+  <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/EmbeddedMode.js"></script>
+  <style>
+    .ai-glow { animation: glow 2s ease-in-out infinite; }
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 5px rgba(99,102,241,0.5); }
+      50%       { box-shadow: 0 0 20px rgba(99,102,241,0.8); }
+    }
+    body.embedded .max-w-4xl { max-width: 100%; }
+    body.embedded .p-6 { padding: 12px; }
+    body.embedded h1 { font-size: 1.1rem; }
+    body.embedded p.text-indigo-100 { display: none; }
+
+    /* Mobile: tighten padding, ensure inputs are touch-sized */
+    @media (max-width: 480px) {
+        .max-w-4xl { padding-left: 8px !important; padding-right: 8px !important; }
+        .p-6 { padding: 12px !important; }
+        #aiInput, #llmInput { font-size: 16px; } /* prevents iOS zoom */
+        #cfgEndpoint, #cfgApiKey, #cfgModel { font-size: 16px; min-height: 44px; }
+        #tab-analytics, #tab-chat { font-size: 12px; padding: 8px 6px; }
+    }
+
+    .tab-active   { background: #4f46e5; color: #fff; }
+    .tab-inactive { background: transparent; color: #6b7280; }
+    .tab-inactive:hover { background: #f3f4f6; }
+
+    #settings-panel { display: none; }
+    #settings-panel.open { display: block; }
+
+    #section-chat { display: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-4xl mx-auto p-6">
+
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 mb-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-white">AI Assistant</h1>
+          <p class="text-indigo-100 mt-1">Budget analytics + LLM chat</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="w-3 h-3 bg-green-400 rounded-full ai-glow"></div>
+          <span class="text-white text-sm" id="aiStatus">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Context Banner -->
+    <div class="bg-white rounded-lg shadow-sm border p-3 mb-4 flex items-center gap-4 text-sm">
+      <span class="font-medium text-gray-700">Project:</span>
+      <span id="activeProject" class="text-gray-500">None</span>
+      <span class="ml-auto font-medium text-gray-700">Budget:</span>
+      <span id="activeBudget" class="text-gray-500">—</span>
+    </div>
+
+    <!-- Mode Toggle -->
+    <div class="bg-white rounded-lg border shadow-sm p-1 mb-4 flex gap-1">
+      <button id="tab-analytics" onclick="setMode('analytics')"
+        class="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors tab-active">
+        Analytics
+      </button>
+      <button id="tab-chat" onclick="setMode('chat')"
+        class="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors tab-inactive">
+        LLM Chat
+      </button>
+    </div>
+
+    <!-- ===== ANALYTICS SECTION ===== -->
+    <div id="section-analytics">
+      <div class="bg-white rounded-lg shadow-sm border p-6 mb-4">
+        <div id="chatMessages" class="overflow-y-auto p-3 space-y-3 bg-gray-50 rounded-lg mb-4" style="min-height:180px;max-height:clamp(180px,40vh,360px);"></div>
+        <div class="flex gap-3">
+          <input type="text" id="aiInput"
+            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            placeholder="budget · forecast · risk · suggest · patterns · executive · help">
+          <button onclick="handleCommand()"
+            class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
+            Run
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Commands -->
+      <div class="bg-white rounded-lg shadow-sm border p-4">
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Commands</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <button onclick="runCommand('budget')"    class="px-3 py-2 bg-blue-50   text-blue-700   rounded-lg hover:bg-blue-100   text-sm font-medium">Budget</button>
+          <button onclick="runCommand('forecast')"  class="px-3 py-2 bg-green-50  text-green-700  rounded-lg hover:bg-green-100  text-sm font-medium">Forecast</button>
+          <button onclick="runCommand('risk')"      class="px-3 py-2 bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 text-sm font-medium">Risk</button>
+          <button onclick="runCommand('suggest')"   class="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium">Suggest</button>
+          <button onclick="runCommand('patterns')"  class="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm font-medium">Patterns</button>
+          <button onclick="runCommand('executive')" class="px-3 py-2 bg-pink-50   text-pink-700   rounded-lg hover:bg-pink-100   text-sm font-medium">Executive</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== LLM CHAT SECTION ===== -->
+    <div id="section-chat">
+
+      <!-- Provider Config Bar -->
+      <div class="bg-white rounded-lg shadow-sm border p-3 mb-3 flex items-center gap-3">
+        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Provider</span>
+        <select id="llmProvider" onchange="onProviderChange()"
+          class="text-sm border rounded-md px-3 py-1.5 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="lmstudio">LM Studio (Local)</option>
+          <option value="openai">OpenAI-compatible</option>
+          <option value="claude">Claude API</option>
+        </select>
+        <span id="llmModelLabel" class="text-xs text-gray-400 flex-1">localhost:1234</span>
+        <button onclick="toggleSettings()"
+          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
+          ⚙ Settings
+        </button>
+        <button onclick="clearLLMChat()"
+          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
+          Clear
+        </button>
+      </div>
+
+      <!-- Inline Settings Panel -->
+      <div id="settings-panel" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3 text-sm">
+        <div class="font-semibold text-amber-800 mb-3 text-xs uppercase tracking-wide">LLM Configuration</div>
+        <div class="grid grid-cols-1 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Endpoint URL</label>
+            <input type="text" id="cfgEndpoint" placeholder="http://localhost:1234/v1/chat/completions"
+              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">API Key <span class="text-gray-400">(leave blank for local)</span></label>
+            <input type="password" id="cfgApiKey" placeholder="sk-..."
+              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Model ID</label>
+            <input type="text" id="cfgModel" placeholder="local-model"
+              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+          <div class="flex gap-2">
+            <button onclick="saveSettings()"
+              class="px-4 py-2 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700">
+              Save
+            </button>
+            <button onclick="toggleSettings()"
+              class="px-4 py-2 border rounded-md text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LLM Message Thread -->
+      <div class="bg-white rounded-lg shadow-sm border p-4 mb-3">
+        <div id="llmMessages" class="overflow-y-auto p-2 space-y-3 bg-gray-50 rounded-lg mb-3" style="min-height:180px;max-height:clamp(180px,40vh,360px);"></div>
+        <div class="flex gap-3">
+          <input type="text" id="llmInput"
+            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            placeholder="Ask about your budget, schedule, crew costs…">
+          <button onclick="sendLLMMessage()"
+            class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
+            Send
+          </button>
+        </div>
+      </div>
+
+      <!-- Context Injection Toggle -->
+      <div class="bg-white rounded-lg shadow-sm border p-3 flex items-center gap-3 text-sm">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="injectContext" checked
+            class="w-4 h-4 accent-indigo-600">
+          <span class="text-gray-700 font-medium">Inject budget context into system prompt</span>
+        </label>
+        <span class="ml-auto text-xs text-gray-400" id="contextHint">Includes project name, budget totals &amp; stage breakdown</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Core scripts -->
+  <script src="../../scripts/storage.js"></script>
+  <script src="../../scripts/engine/mbtle.js"></script>
+  <script src="../../config/ai.js"></script>
+  <script src="../../services/ai-context.js"></script>
+  <script src="../../services/ai-pattern-recognition.js"></script>
+  <script src="../../services/ai-reports.js"></script>
+
+  <script>
+    /* ========= mBT AI Tool v3.0 — Analytics + LLM Chat ========= */
+
+    var messagesEl = document.getElementById('chatMessages');
+    var inputEl    = document.getElementById('aiInput');
+    var llmMsgEl   = document.getElementById('llmMessages');
+    var llmInputEl = document.getElementById('llmInput');
+    var context    = null;
+    var llmHistory = [];   /* [{role, content}] for LLM session */
+
+    /* --- XSS-safe helper --- */
+    function esc(str) {
+        var d = document.createElement('div');
+        d.textContent = String(str);
+        return d.innerHTML;
+    }
+
+    /* =========================================
+       MODE TOGGLE
+    ========================================= */
+    function setMode(mode) {
+        var isAnalytics = (mode === 'analytics');
+        document.getElementById('section-analytics').style.display = isAnalytics ? '' : 'none';
+        document.getElementById('section-chat').style.display      = isAnalytics ? 'none' : '';
+        document.getElementById('tab-analytics').className = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (isAnalytics ? 'tab-active' : 'tab-inactive');
+        document.getElementById('tab-chat').className      = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (!isAnalytics ? 'tab-active' : 'tab-inactive');
+    }
+
+    /* =========================================
+       ANALYTICS MODE
+    ========================================= */
+    function addMessage(text, role) {
+        var msgEl = document.createElement('div');
+        msgEl.className = role === 'user'
+            ? 'bg-indigo-100 rounded-lg p-3 text-gray-900 text-sm'
+            : 'bg-white border rounded-lg p-3 text-gray-800 text-sm whitespace-pre-wrap';
+        var label = role === 'user'
+            ? '<div class="font-semibold text-xs mb-1 text-gray-400">You</div>'
+            : '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>';
+        msgEl.innerHTML = label + esc(text);
+        messagesEl.appendChild(msgEl);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function addTypingIndicator() {
+        var id = 'typing-' + Date.now();
+        var el = document.createElement('div');
+        el.id = id;
+        el.className = 'bg-white border rounded-lg p-3 text-sm';
+        el.innerHTML = '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>' +
+            '<div class="flex gap-1">' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>' +
+            '</div>';
+        messagesEl.appendChild(el);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return id;
+    }
+
+    function removeTyping(id) {
+        var el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    async function handleCommand() {
+        var input = inputEl.value.trim();
+        if (!input) return;
+
+        addMessage(input, 'user');
+        inputEl.value = '';
+        var typingId = addTypingIndicator();
+
+        try {
+            var lower   = input.toLowerCase();
+            var command = lower.startsWith('fore')  ? 'forecast'  :
+                          lower.startsWith('risk')  ? 'risk'      :
+                          lower.startsWith('sugg')  ? 'suggest'   :
+                          lower.startsWith('pat')   ? 'patterns'  :
+                          lower.startsWith('exec')  ? 'executive' :
+                          lower.startsWith('help')  ? 'help'      : 'budget';
+
+            context = await window.mBTAIContext.getCurrentProjectContext();
+            var response = await dispatchCommand(command, context);
+            removeTyping(typingId);
+            addMessage(response, 'ai');
+        } catch (err) {
+            removeTyping(typingId);
+            addMessage('Error: ' + err.message, 'ai');
+        }
+    }
+
+    async function dispatchCommand(command, ctx) {
+        var R = window.mBTReports;
+        var P = window.mBTPatterns;
+
+        if (command === 'budget') {
+            var ov = R.generateOverviewReport(ctx);
+            return 'Budget Overview\n─────────────\nProject: ' + (ctx.projectName || 'None') +
+                '\nTotal:     $' + ov.budget.toLocaleString() +
+                '\nSpent:     $' + ov.spent.toFixed(2) +
+                '\nRemaining: $' + ov.remaining.toFixed(2) +
+                '\nUsed:      ' + ov.utilization.toFixed(1) + '%' +
+                '\n\n' + ov.insights;
+        }
+
+        if (command === 'forecast') {
+            var trend = P.calculateTrend(ctx.allocations);
+            var fc    = R.generateForecastReport(ctx.allocations, trend);
+            return 'Forecast\n─────────────\nCurrent: $' + parseFloat(fc.current).toFixed(2) +
+                '\n7-Day Projection: $' + (fc.sevenDayProjection || 'N/A') +
+                '\nTrend: ' + (fc.trend || 'unknown') +
+                '\n\n' + (fc.note || '');
+        }
+
+        if (command === 'risk') {
+            var rpt = R.generateRiskReport(ctx);
+            if (!rpt.risks.length) return 'Risk Assessment\n─────────────\nNo significant risks detected.';
+            var lines = ['Risk Assessment\n─────────────\nLevel: ' + rpt.riskLevel.toUpperCase()];
+            rpt.risks.forEach(function (r) {
+                lines.push((r.severity === 'critical' ? '[CRITICAL]' : '[WARNING]') + ' ' + r.message);
+            });
+            if (rpt.recommendations.length) {
+                lines.push('\nRecommendations:');
+                rpt.recommendations.forEach(function (rec) { lines.push('• ' + rec); });
+            }
+            return lines.join('\n');
+        }
+
+        if (command === 'suggest') {
+            var bench = window.mBTAIContext.getIndustryBenchmarks();
+            var opps  = P.findOptimizationOpportunities(ctx.allocations, bench);
+            var opt   = R.generateOptimizationReport(ctx.allocations, opps);
+            if (!opt.recommendations.length && !opt.opportunities.length) {
+                return 'Optimization\n─────────────\nNo optimization opportunities detected.';
+            }
+            var sugLines = ['Optimization\n─────────────'];
+            opt.recommendations.forEach(function (r) { sugLines.push('• ' + r.category + ' (' + r.percentage + '%) — ' + r.suggestion); });
+            opt.opportunities.forEach(function (o) { sugLines.push('• ' + o.category + ': ' + o.recommendation + ' (save ~$' + o.savings + ')'); });
+            return sugLines.join('\n');
+        }
+
+        if (command === 'patterns') {
+            var pat = P.detectSpendingPatterns(ctx.allocations);
+            if (!pat.patterns.length && !pat.anomalies.length) {
+                return 'Patterns\n─────────────\nInsufficient data (need 7+ records).';
+            }
+            var patLines = ['Patterns\n─────────────'];
+            pat.patterns.forEach(function (p) { if (p) patLines.push(p.description); });
+            if (pat.trend) patLines.push('Trend: ' + pat.trend.direction + ' (slope: ' + pat.trend.slope.toFixed(2) + '/day)');
+            if (pat.anomalies.length) {
+                patLines.push('\nAnomalies:');
+                pat.anomalies.slice(0, 5).forEach(function (a) {
+                    patLines.push('• ' + a.date + ' — ' + a.type + ' $' + parseFloat(a.amount).toFixed(2) + ' (expected ~$' + parseFloat(a.expected).toFixed(2) + ')');
+                });
+            }
+            return patLines.join('\n');
+        }
+
+        if (command === 'executive') {
+            var pat2 = P.detectSpendingPatterns(ctx.allocations);
+            var exec = R.generateExecutiveSummary(ctx, pat2);
+            var execLines = ['Executive Summary\n─────────────'];
+            exec.highlights.forEach(function (h) { execLines.push('• ' + h); });
+            execLines.push('\nMetrics:');
+            exec.keyMetrics.forEach(function (m) { execLines.push('  ' + m.label + ': ' + m.value); });
+            execLines.push('\n' + exec.actionItems);
+            return execLines.join('\n');
+        }
+
+        return 'Commands: budget · forecast · risk · suggest · patterns · executive';
+    }
+
+    function runCommand(cmd) {
+        inputEl.value = cmd;
+        handleCommand();
+    }
+
+    inputEl.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') handleCommand();
+    });
+
+    /* =========================================
+       LLM CHAT MODE
+    ========================================= */
+
+    var PROVIDER_PRESETS = {
+        lmstudio: { url: 'http://localhost:1234/v1/chat/completions', model: 'local-model',       label: 'localhost:1234' },
+        openai:   { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini',      label: 'api.openai.com' },
+        claude:   { url: 'https://api.anthropic.com/v1/messages',      model: 'claude-haiku-4-5-20251001', label: 'api.anthropic.com' }
+    };
+
+    function onProviderChange() {
+        var val = document.getElementById('llmProvider').value;
+        var preset = PROVIDER_PRESETS[val] || PROVIDER_PRESETS.lmstudio;
+        document.getElementById('llmModelLabel').textContent = preset.label;
+        /* Pre-fill settings fields with preset values if they're blank */
+        var ep = document.getElementById('cfgEndpoint');
+        if (!ep.value) ep.value = preset.url;
+        var md = document.getElementById('cfgModel');
+        if (!md.value) md.value = preset.model;
+    }
+
+    function toggleSettings() {
+        var panel = document.getElementById('settings-panel');
+        if (panel.classList.contains('open')) {
+            panel.classList.remove('open');
+        } else {
+            /* Pre-fill with current stored values */
+            document.getElementById('cfgEndpoint').value = localStorage.getItem('mbt_ai_endpoint') || '';
+            document.getElementById('cfgApiKey').value   = localStorage.getItem('mbt_ai_api_key')  || '';
+            document.getElementById('cfgModel').value    = localStorage.getItem('mbt_ai_model')    || '';
+            panel.classList.add('open');
+        }
+    }
+
+    function saveSettings() {
+        var ep  = document.getElementById('cfgEndpoint').value.trim();
+        var key = document.getElementById('cfgApiKey').value.trim();
+        var mdl = document.getElementById('cfgModel').value.trim();
+        if (ep)  localStorage.setItem('mbt_ai_endpoint', ep);
+        if (key) localStorage.setItem('mbt_ai_api_key', key);
+        if (mdl) localStorage.setItem('mbt_ai_model', mdl);
+        document.getElementById('settings-panel').classList.remove('open');
+        addLLMMessage('system', 'Settings saved.');
+    }
+
+    function buildSystemPrompt(ctx) {
+        var lines = [
+            'You are mBT AI, an expert film production budget assistant.',
+            'You help producers, line producers, and production managers with budgeting, scheduling, and cost management.',
+            '',
+            '--- PROJECT CONTEXT ---'
+        ];
+        if (ctx) {
+            lines.push('Project: ' + (ctx.projectName || 'Unnamed'));
+            lines.push('Total Budget: $' + (ctx.budget ? ctx.budget.toLocaleString() : 'N/A'));
+            if (ctx.allocations && ctx.allocations.length) {
+                var spent = ctx.allocations.reduce(function (s, a) { return s + (parseFloat(a.amount) || 0); }, 0);
+                lines.push('Total Spent: $' + spent.toFixed(2));
+                lines.push('Remaining: $' + ((ctx.budget || 0) - spent).toFixed(2));
+                lines.push('');
+                lines.push('Stage Breakdown:');
+                ctx.allocations.slice(0, 10).forEach(function (a) {
+                    lines.push('  ' + (a.description || a.stage || 'Stage') + ': $' + (parseFloat(a.amount) || 0).toFixed(2));
+                });
+            }
+        }
+        lines.push('');
+        lines.push('Answer concisely. Use figures from the project context when relevant.');
+        return lines.join('\n');
+    }
+
+    function addLLMMessage(role, text) {
+        var el = document.createElement('div');
+        if (role === 'user') {
+            el.className = 'bg-indigo-100 rounded-lg p-3 text-gray-900 text-sm';
+            el.innerHTML = '<div class="font-semibold text-xs mb-1 text-gray-400">You</div>' + esc(text);
+        } else if (role === 'system') {
+            el.className = 'text-center text-xs text-gray-400 italic py-1';
+            el.textContent = text;
+        } else {
+            el.className = 'bg-white border rounded-lg p-3 text-gray-800 text-sm whitespace-pre-wrap';
+            el.innerHTML = '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>' + esc(text);
+        }
+        llmMsgEl.appendChild(el);
+        llmMsgEl.scrollTop = llmMsgEl.scrollHeight;
+    }
+
+    function addLLMTyping() {
+        var id = 'llm-typing-' + Date.now();
+        var el = document.createElement('div');
+        el.id = id;
+        el.className = 'bg-white border rounded-lg p-3 text-sm';
+        el.innerHTML = '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>' +
+            '<div class="flex gap-1">' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>' +
+            '<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>' +
+            '</div>';
+        llmMsgEl.appendChild(el);
+        llmMsgEl.scrollTop = llmMsgEl.scrollHeight;
+        return id;
+    }
+
+    function removeLLMTyping(id) {
+        var el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    function clearLLMChat() {
+        llmMsgEl.innerHTML = '';
+        llmHistory = [];
+        addLLMMessage('system', 'Chat cleared.');
+    }
+
+    function callLLM(userMessage, systemPrompt) {
+        var provider = document.getElementById('llmProvider').value;
+        var endpoint = localStorage.getItem('mbt_ai_endpoint') ||
+                       (PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.lmstudio).url;
+        var apiKey   = localStorage.getItem('mbt_ai_api_key') || '';
+        var model    = localStorage.getItem('mbt_ai_model') ||
+                       (PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.lmstudio).model;
+
+        /* Build messages array */
+        var messages = [];
+        if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+        llmHistory.forEach(function (m) { messages.push(m); });
+        messages.push({ role: 'user', content: userMessage });
+
+        var headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+
+        /* Claude API uses a different request shape */
+        var body;
+        if (provider === 'claude') {
+            body = JSON.stringify({
+                model: model,
+                max_tokens: 1024,
+                system: systemPrompt || '',
+                messages: messages.filter(function (m) { return m.role !== 'system'; })
+            });
+            headers['x-api-key'] = apiKey;
+            headers['anthropic-version'] = '2023-06-01';
+            delete headers['Authorization'];
+        } else {
+            body = JSON.stringify({ model: model, messages: messages, temperature: 0.7 });
+        }
+
+        return fetch(endpoint, { method: 'POST', headers: headers, body: body })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                /* Claude API: data.content[0].text  |  OpenAI-compatible: data.choices[0].message.content */
+                if (data.content && data.content[0]) return data.content[0].text;
+                return data.choices[0].message.content;
+            });
+    }
+
+    function sendLLMMessage() {
+        var text = llmInputEl.value.trim();
+        if (!text) return;
+
+        addLLMMessage('user', text);
+        llmHistory.push({ role: 'user', content: text });
+        llmInputEl.value = '';
+
+        var typingId = addLLMTyping();
+        var systemPrompt = document.getElementById('injectContext').checked
+            ? buildSystemPrompt(context)
+            : 'You are mBT AI, a film production budget assistant.';
+
+        callLLM(text, systemPrompt)
+            .then(function (reply) {
+                removeLLMTyping(typingId);
+                llmHistory.push({ role: 'assistant', content: reply });
+                /* Keep last 20 turns to avoid token bloat */
+                if (llmHistory.length > 40) llmHistory = llmHistory.slice(-40);
+                addLLMMessage('ai', reply);
+            })
+            .catch(function (err) {
+                removeLLMTyping(typingId);
+                var endpoint = localStorage.getItem('mbt_ai_endpoint') || 'http://localhost:1234';
+                addLLMMessage('ai', 'Could not reach provider (' + endpoint + '). ' +
+                    'Check that your provider is running, then open ⚙ Settings to configure the endpoint and API key.');
+            });
+    }
+
+    llmInputEl.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') sendLLMMessage();
+    });
+
+    /* =========================================
+       INIT
+    ========================================= */
+    async function init() {
+        try {
+            context = await window.mBTAIContext.getCurrentProjectContext();
+            document.getElementById('activeProject').textContent = context.projectName || 'None';
+            document.getElementById('activeBudget').textContent  = context.budget ? '$' + context.budget.toLocaleString() : '—';
+            document.getElementById('aiStatus').textContent      = 'Ready';
+
+            /* Preflight hints */
+            var hints = [];
+            if (!context.projectName) hints.push('No active project loaded.');
+            if (context.budget === 0)  hints.push('Budget is $0 — set a project budget to enable forecasting.');
+            if (!context.allocations || !context.allocations.length) hints.push('No stage allocations found.');
+
+            var greeting = 'Ready. Project: ' + (context.projectName || 'none loaded') + '.';
+            if (hints.length) greeting += '\n\nPreflight:\n' + hints.map(function (h) { return '⚠ ' + h; }).join('\n');
+            else greeting += ' Type a command or use the Quick Commands below.';
+
+            addMessage(greeting, 'ai');
+            addLLMMessage('system', 'LLM Chat ready. Select a provider and start chatting.');
+        } catch (e) {
+            document.getElementById('aiStatus').textContent = 'Error';
+            addMessage('Could not load project context: ' + e.message, 'ai');
+        }
+    }
+
+    /* Pre-fill provider selector from stored endpoint */
+    (function () {
+        var stored = localStorage.getItem('mbt_ai_endpoint') || '';
+        var sel = document.getElementById('llmProvider');
+        if (stored.indexOf('anthropic') !== -1) sel.value = 'claude';
+        else if (stored.indexOf('openai.com') !== -1) sel.value = 'openai';
+        else sel.value = 'lmstudio';
+        onProviderChange();
+    })();
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MBT Database - Full CRUD</title>
+  <script src="../../scripts/storage.js"></script>
+  <script src="../../scripts/engine/mbtle.js"></script>
+  <script src="../../scripts/engine/totalizer.js"></script>
+  <script src="../../core/blueprints.js"></script>
+  <script src="../../lib/gridstack-all.js"></script>
+  <script src="../../lib/mammoth.browser.min.js"></script>
+  <script src="../../lib/html2pdf.bundle.min.js"></script>
+  <script src="../../lib/Sortable.min.js"></script>
+  <script src="../../lib/html2canvas.min.js"></script>
+  <link href="../../lib/gridstack.min.css" rel="stylesheet" />
+  <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/EmbeddedMode.js"></script>
+  <style>
+    /* --- mBT Workspace Essentials --- */
+    .grid-stack {
+      background-color: #f8fafc;
+      min-height: calc(100vh - 100px);
+      padding: 8px !important;
+      border-radius: 4px;
+    }
+
+    .grid-stack-item-content {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 4px -1px rgb(0 0 0 / 0.05);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .widget-header {
+      padding: 6px 10px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: grab;
+    }
+
+    .widget-header h3 {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+    }
+
+    .widget-body {
+      padding: 10px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    /* @container Scaling logic (from Phase 9) */
+    .grid-stack-item-content {
+      container-type: size;
+      container-name: widget;
+    }
+
+    @container widget (max-width: 200px) {
+      .widget-header h3 {
+        font-size: 9px;
+      }
+
+      .widget-body {
+        padding: 8px;
+      }
+
+      .crew-avatar {
+        width: 32px;
+        height: 32px;
+      }
+    }
+
+    .editing-mode .grid-stack-item-content {
+      border: 2px dashed #94a3b8;
+    }
+
+    /* --- Crew System Styles --- */
+    .crew-wrapper {
+      position: relative;
+      z-index: 20;
+      display: inline-block;
+    }
+
+    .crew-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0, 0 0 / 0.1);
+    }
+
+    .crew-avatar:hover {
+      transform: scale(1.1);
+    }
+
+    .crew-popup {
+      position: absolute;
+      left: 45px;
+      top: 50%;
+      transform: translateY(-50%) scale(0.9);
+      background: white;
+      padding: 8px 12px;
+      border-radius: 99px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s;
+      white-space: nowrap;
+      z-index: 50;
+    }
+
+    .crew-wrapper:hover .crew-popup,
+    .crew-wrapper.mobile-active .crew-popup {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(-50%) scale(1);
+    }
+
+    .contact-action-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      background: #f1f5f9;
+      color: #64748b;
+      transition: background 0.2s;
+    }
+
+    .contact-action-btn:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    /* --- Modal System (Premium UI) --- */
+    #mbt-modal-container {
+      transition: opacity 0.3s ease;
+    }
+    #mbt-modal-container.hidden {
+      display: none;
+      opacity: 0;
+    }
+    #mbt-modal-container:not(.hidden) {
+      display: flex;
+      opacity: 1;
+    }
+    .modal-content-pill {
+      animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes modalSlideUp {
+      from { transform: translateY(20px) scale(0.95); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    /* ============================================ */
+    /* === PORTED CSS FROM mBT-Old.html (Legacy) === */
+    /* ============================================ */
+
+    /* Draggable Row Styles for Budget Editor */
+    .draggable-row { 
+      cursor: grab; 
+      transition: all 0.2s ease-in-out; 
+    }
+    .draggable-row:active { 
+      cursor: grabbing; 
+    }
+    .draggable-row.dragging { 
+      opacity: 0.5; 
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
+      transform: translateY(2px) scale(1.02); 
+      z-index: 1000; 
+    }
+    .drag-over { 
+      background-color: #f3f4f6; 
+      border-top: 2px solid #3b82f6; 
+      border-bottom: 2px solid #3b82f6; 
+      transition: all 0.2s ease-in-out; 
+    }
+
+    /* Champion Layout Kit - Dense Typography & Borders */
+    .cs-theme { 
+      font-family: 'Arial Narrow', 'Roboto Condensed', sans-serif; 
+      color: #000; 
+    }
+    .cs-theme input, 
+    .cs-theme textarea, 
+    .cs-theme select { 
+      background: transparent; 
+      border: 1px solid transparent; 
+      width: 100%; 
+      font-family: inherit; 
+    }
+    .cs-theme input:hover, 
+    .cs-theme textarea:hover { 
+      border-color: #e2e8f0; 
+      background-color: #f8fafc; 
+    }
+    .cs-theme input:focus, 
+    .cs-theme textarea:focus { 
+      border-color: #3b82f6; 
+      outline: none; 
+      background-color: white; 
+    }
+
+    /* cs-box - Container with black borders */
+    .cs-box { 
+      border: 2px solid #000; 
+      margin-bottom: -2px; 
+      position: relative; 
+    }
+    
+    /* cs-header-bar - Black header for boxes */
+    .cs-header-bar { 
+      background: #000; 
+      color: #fff; 
+      font-weight: 800; 
+      text-transform: uppercase; 
+      padding: 2px 6px; 
+      font-size: 10px; 
+      letter-spacing: 0.5px; 
+    }
+
+    /* cs-table - Dense budget table (9px/10px typography) */
+    .cs-table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      font-size: 9px; 
+    }
+    
+    .cs-table th { 
+      border: 1px solid #000; 
+      background: #000; 
+      color: #fff; 
+      text-transform: uppercase; 
+      padding: 2px 4px; 
+      font-weight: 700; 
+      text-align: left;
+      font-size: 10px !important; 
+      line-height: 1.2; 
+    }
+    
+    .cs-table td { 
+      border: 1px solid #000; 
+      padding: 2px 4px; 
+      vertical-align: top; 
+    }
+
+    /* Sprint 6: Tightened horizontal padding for dense layout */
+    .cs-table th, .cs-table td {
+      padding: 2px 4px !important;
+    }
+
+    /* Budget Section Header Styles */
+    .sticky-section-header { 
+      position: sticky; 
+      top: 0; 
+      z-index: 30; 
+      background-color: #f9fafb; 
+      border-bottom: 1px solid #e5e7eb; 
+    }
+    
+    /* Section Content Container */
+    .section-content {
+      animation: fadeInSlideIn 0.2s ease-in-out;
+    }
+    
+    @keyframes fadeInSlideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Line Item Input Styles */
+    .line-item-input {
+      font-size: 9px;
+      padding: 2px 4px;
+    }
+
+    .no-spinner::-webkit-inner-spin-button, 
+    .no-spinner::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    .no-spinner { 
+      -moz-appearance: textfield; 
+      appearance: none; 
+    }
+
+    /* Row Hover Effects */
+    .line-item-row:hover {
+      background-color: #eff6ff;
+      transition: background-color 0.15s ease-in-out;
+    }
+
+    /* Add Item Button Styling */
+    .add-line-item-btn {
+      font-size: 9px;
+      letter-spacing: 0.05em;
+    }
+
+    /* Variance Color Indicators */
+    .variance-positive { color: #16a34a; }
+    .variance-negative { color: #dc2626; }
+
+    /* Section Toggle Animation */
+    .section-toggle-icon {
+      transition: transform 0.2s ease-in-out;
+    }
+    .section-collapsed .section-toggle-icon {
+      transform: rotate(-90deg);
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 font-sans">
+
+<!-- ⚠️ DEPRECATED — This tool (db_full) is no longer active. Fatal STORAGE undefined bug across 100+ call sites makes it non-functional. The mBTDB Document Builder (../db/index.html) replaces all document building functionality. This file is retained for reference only. -->
+<div style="background:#7f1d1d;color:#fecaca;padding:12px 20px;font-family:monospace;font-size:12px;font-weight:700;letter-spacing:0.3px;">
+  DEPRECATED — db_full is non-functional and replaced by mBTDB Document Builder. This page is for reference only.
+</div>
+
+  <div class="min-h-screen pb-8">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+      <div>
+        <h1 class="text-xl font-bold text-gray-800">MBT Database</h1>
+        <p class="text-sm text-gray-500 mt-1">Full CRUD Project Management with Budget Editor</p>
+      </div>
+      <button id="btn-print-db"
+        class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm flex items-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print Dashboard
+      </button>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="px-6 py-6">
+
+      <!-- Search Bar -->
+      <section class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">Search</h2>
+        <div class="relative">
+          <input type="text" id="search-input"
+            class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search projects...">
+          <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" width="20" height="20"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+      </section>
+
+      <!-- Stats Dashboard -->
+      <section class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">Statistics</h2>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="bg-white rounded-lg shadow-sm p-4 text-center">
+            <p class="text-3xl font-bold text-gray-800" id="stat-total">0</p>
+            <p class="text-xs text-gray-500">Total Projects</p>
+          </div>
+          <div class="bg-blue-50 rounded-lg shadow-sm p-4 text-center">
+            <p class="text-3xl font-bold text-blue-600" id="stat-budgeted">0</p>
+            <p class="text-xs text-gray-500">Budgeted</p>
+          </div>
+          <div class="bg-green-50 rounded-lg shadow-sm p-4 text-center">
+            <p class="text-3xl font-bold text-green-600" id="stat-active">0</p>
+            <p class="text-xs text-gray-500">Active</p>
+          </div>
+          <div class="bg-yellow-50 rounded-lg shadow-sm p-4 text-center">
+            <p class="text-3xl font-bold text-yellow-600" id="stat-planning">0</p>
+            <p class="text-xs text-gray-500">Planning</p>
+          </div>
+          <div class="bg-orange-50 rounded-lg shadow-sm p-4 text-center">
+            <p class="text-3xl font-bold text-orange-600" id="stat-on-hold">0</p>
+            <p class="text-xs text-gray-500">On Hold</p>
+          </div>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <button class="btn-new-project px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm"
+            id="btn-new-project">
+            ➕ New Project
+          </button>
+        </div>
+      </section>
+
+      <!-- New Project Modal -->
+      <div class="new-project-modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        id="new-project-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+          <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-lg font-semibold">New Project</h2>
+            <button class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+          </div>
+          <div class="p-6 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+              <input type="text" id="new-project-name" class="w-full px-3 py-2 border border-gray-300 rounded"
+                placeholder="Enter project name">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea id="new-project-description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded"
+                placeholder="Enter project description..."></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Initial Budget ($)</label>
+              <input type="number" step="0.01" id="new-project-budget"
+                class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="0.00">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Initial Status</label>
+              <select id="new-project-status" class="w-full px-3 py-2 border border-gray-300 rounded">
+                <option value="Draft">Draft</option>
+                <option value="Planning">Planning</option>
+                <option value="Budgeted">Budgeted</option>
+                <option value="Active">Active</option>
+                <option value="On Hold">On Hold</option>
+              </select>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <button class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>
+            <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+              id="btn-create-project">Create</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Filter -->
+      <section class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">Filter by Status</h2>
+        <div class="flex flex-wrap gap-2">
+          <button class="status-btn px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
+            data-status="">All</button>
+          <button class="status-btn px-4 py-2 bg-blue-100 hover:bg-blue-200 rounded-lg text-sm text-blue-700"
+            data-status="Budgeted">Budgeted</button>
+          <button class="status-btn px-4 py-2 bg-green-100 hover:bg-green-200 rounded-lg text-sm text-green-700"
+            data-status="Active">Active</button>
+          <button class="status-btn px-4 py-2 bg-yellow-100 hover:bg-yellow-200 rounded-lg text-sm text-yellow-700"
+            data-status="Draft">Draft</button>
+          <button class="status-btn px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
+            data-status="Planning">Planning</button>
+          <button class="status-btn px-4 py-2 bg-orange-100 hover:bg-orange-200 rounded-lg text-sm text-orange-700"
+            data-status="On Hold">On Hold</button>
+        </div>
+      </section>
+
+      <!-- Project List -->
+      <section id="list-view">
+        <div id="project-list" class="space-y-3">
+          <!-- Projects will be inserted here by JavaScript -->
+        </div>
+        <div id="empty-state" class="hidden text-center py-12">
+          <p class="text-gray-500">No projects found.</p>
+        </div>
+      </section>
+
+      <!-- Workspace View (GridStack) -->
+      <section id="workspace-view" class="hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 id="active-project-title" class="text-xl font-black uppercase tracking-tighter text-slate-900">Project
+            Workspace</h2>
+          <div class="flex gap-2">
+            <button id="btn-back-to-list"
+              class="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-300">Back
+              to List</button>
+            <button id="btn-add-widget"
+              class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-blue-700">Add
+              Widget</button>
+          </div>
+        </div>
+        <div class="grid-stack"></div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // === STATE ===
+      let currentStatus = '';
+      let currentProject = null;
+      let grid = null;
+
+      // === RECONCILIATION ALIAS ===
+      // Port mBTLE.reconcile() from totalizer for Phase 15 compatibility
+      const TOTALIZER = window.mBT && window.mBT.totalizer ? window.mBT.totalizer : {};
+      const mBTLE = { 
+        ...window.mBT.le,
+        reconcile: function(project) {
+          if (TOTALIZER && typeof TOTALIZER.reconcile === 'function') {
+            return TOTALIZER.reconcile(project);
+          }
+          return null;
+        }
+      };
+
+
+      // === UTILITIES ===
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function fmt(val) {
+        if (typeof MBTLE !== 'undefined' && MBTLE.formatCurrency) {
+          return MBTLE.formatCurrency(val);
+        }
+        return '$' + Number(val || 0).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+      }
+
+      // === MASTER ASSETS (SVGs) ===
+      const ICONS = {
+        drag: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-30"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>`,
+        phone: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
+        mail: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+        wa: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`,
+        user: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+        plus: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+      };
+
+      // === MODAL ENGINE ===
+      const MODAL = {
+        open: function(title, content) {
+          let container = document.getElementById('mbt-modal-container');
+          if (!container) {
+            container = document.createElement('div');
+            container.id = 'mbt-modal-container';
+            container.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm hidden';
+            container.innerHTML = `
+              <div class="modal-content-pill bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h3 id="mbt-modal-title" class="text-xs font-black uppercase tracking-widest text-slate-500"></h3>
+                  <button onclick="MODAL.close()" class="p-2 hover:bg-slate-200 rounded-full transition-colors"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                </div>
+                <div id="mbt-modal-body" class="p-6 overflow-y-auto no-scrollbar"></div>
+              </div>
+            `;
+            document.body.appendChild(container);
+          }
+          document.getElementById('mbt-modal-title').textContent = title;
+          document.getElementById('mbt-modal-body').innerHTML = content;
+          container.classList.remove('hidden');
+        },
+        close: function() {
+          const container = document.getElementById('mbt-modal-container');
+          if (container) container.classList.add('hidden');
+        }
+      };
+
+      // === BUDGET EDITOR HELPER FUNCTIONS (Ported from Legacy) ===
+      
+      function calculateItemTotal(item) {
+        const qty = parseFloat(item.quantity) || 0;
+        const rate = parseFloat(item.rate) || 0;
+        const mult = parseFloat(item.multiplier) || 1;
+        return qty * rate * mult;
+      }
+
+      function formatCurrency(value, prefix = '$') {
+        return prefix + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      // === EVENT HANDLERS ===
+
+      // New Project button
+      document.getElementById('btn-new-project').addEventListener('click', () => {
+        document.getElementById('new-project-modal').classList.remove('hidden');
+      });
+
+      // New Project Modal close (X button) — use first button in header, not .close class
+      const modalHeader = document.querySelector('#new-project-modal .px-6.py-4.border-b');
+      if (modalHeader) {
+        const closeBtn = modalHeader.querySelector('button');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            document.getElementById('new-project-modal').classList.add('hidden');
+          });
+        }
+      }
+
+      // New Project Modal cancel button
+      const cancelBtn = document.querySelector('#new-project-modal .px-4.py-2.bg-gray-200');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          document.getElementById('new-project-modal').classList.add('hidden');
+        });
+      }
+
+      // Create new project
+      document.getElementById('btn-create-project').addEventListener('click', createNewProject);
+
+      // Status filter buttons
+      document.querySelectorAll('.status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('ring-2', 'ring-blue-500'));
+          btn.classList.add('ring-2', 'ring-blue-500');
+          currentStatus = btn.dataset.status;
+          loadProjects();
+        });
+      });
+
+      // Print functionality
+      document.getElementById('btn-print-db').addEventListener('click', () => {
+        window.print();
+      });
+
+      // Search functionality
+      let searchTimeout = null;
+      document.getElementById('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          const query = e.target.value.toLowerCase();
+          renderAllWithSearch(query);
+        }, 300);
+      });
+
+      // === PROJECT CREATION ===
+
+      function createNewProject() {
+        const name = document.getElementById('new-project-name').value;
+        const description = document.getElementById('new-project-description').value;
+        const budgetStr = document.getElementById('new-project-budget').value;
+        const status = document.getElementById('new-project-status').value;
+
+        if (!name) {
+          alert('Project name is required');
+          return;
+        }
+
+        const budget = budgetStr ? parseFloat(budgetStr) : 50000;
+
+        // Check if user wants to create from template
+        const useTemplate = confirm(
+          'Create from an industry-standard template?\n\n' +
+          'This will auto-populate budget categories.\n' +
+          'You can adjust categories after creation.'
+        );
+
+        let project;
+
+        if (useTemplate && window.mBT && window.mBT.blueprints) {
+          let templateBudget = window.mBT.blueprints.generateBudgetFromTemplate('commercial', budget);
+          templateBudget = window.mBT.blueprints.hydrateBudget(templateBudget);
+
+          const projectCode = 'COM_' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+          project = {
+            id: 'proj_' + Date.now(),
+            project_code: projectCode,
+            project_title: name,
+            description: description,
+            template: 'commercial',
+            total_budget: budget,
+            categories: {},
+            status: status || 'Draft',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            widgets: [
+              { id: 'w1', type: 'summary', x: 0, y: 0, w: 4, h: 4, label: 'Executive Summary' },
+              { id: 'w2', type: 'categories', x: 4, y: 0, w: 8, h: 4, label: 'Budget Breakdown' }
+            ]
+          };
+
+          // Transform categories
+          if (templateBudget.categories) {
+            Object.entries(templateBudget.categories).forEach(([key, cat]) => {
+              project.categories[key] = {
+                name: cat.name || key,
+                description: cat.description || '',
+                amount: cat.amount || 0,
+                items: cat.items || []
+              };
+            });
+          }
+        } else {
+          // Manual creation - include budget sections for Budget Editor widget
+          project = {
+            id: 'proj_' + Date.now(),
+            project_title: name,
+            description: description,
+            total_budget: budget,
+            status: status || 'Draft',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            categories: {
+              'Above The Line': { 
+                id: 'atl', 
+                isOpen: true, 
+                items: [
+                  { id: 'item_1', description: 'Director', quantity: 10, unit: 'Day', rate: 1500, multiplier: 1, actual: 0 },
+                  { id: 'item_2', description: 'Producer', quantity: 8, unit: 'Day', rate: 1200, multiplier: 1, actual: 0 }
+                ] 
+              },
+              'Production': { 
+                id: 'prod', 
+                isOpen: true, 
+                items: [
+                  { id: 'item_3', description: 'Camera Operator', quantity: 15, unit: 'Day', rate: 600, multiplier: 1, actual: 0 },
+                  { id: 'item_4', description: 'Sound Mixer', quantity: 15, unit: 'Day', rate: 500, multiplier: 1, actual: 0 }
+                ] 
+              },
+              'Post-Production': { 
+                id: 'post', 
+                isOpen: true, 
+                items: [
+                  { id: 'item_5', description: 'Editor', quantity: 20, unit: 'Day', rate: 800, multiplier: 1, actual: 0 }
+                ] 
+              },
+              'Other': { 
+                id: 'other', 
+                isOpen: true, 
+                items: [
+                  { id: 'item_6', description: 'Equipment Rental', quantity: 1, unit: 'Flat', rate: 5000, multiplier: 1, actual: 0 }
+                ] 
+              }
+            },
+            widgets: [
+              { id: 'w1', type: 'summary', x: 0, y: 0, w: 6, h: 4, label: 'Summary' },
+              { id: 'w2', type: 'editor', x: 6, y: 0, w: 6, h: 8, label: 'Budget Editor' }
+            ]
+          };
+        }
+
+// Run mBTLE.reconcile() on the new project (Phase 15 compatibility)
+if (mBTLE && typeof mBTLE.reconcile === 'function') {
+  mBTLE.reconcile(project);
+}
+
+
+        STORAGE.createProject(project).then(() => {
+          document.getElementById('new-project-modal').classList.add('hidden');
+          document.getElementById('new-project-name').value = '';
+          document.getElementById('new-project-description').value = '';
+          document.getElementById('new-project-budget').value = '';
+          loadProjects();
+        });
+      }
+
+      // === PROJECT READING ===
+
+      function loadProjects() {
+        STORAGE.getAllProjects().then(projects => {
+          const list = projects || [];
+          if (list.length === 0) {
+            showEmptyPrompt();
+          }
+          renderProjects(list, currentStatus);
+        }).catch(err => {
+          console.error('[mBT DB] Load error:', err);
+          renderProjects([], '');
+        });
+      }
+
+      function showEmptyPrompt() {
+        const empty = document.getElementById('empty-state');
+        if (!empty) return;
+        empty.classList.remove('hidden');
+        empty.innerHTML = `
+          <div class="py-16 text-center">
+            <div class="mb-4 flex justify-center"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+            <h3 class="text-lg font-bold text-gray-700 mb-2">No Projects Yet</h3>
+            <p class="text-sm text-gray-500 mb-6">Create your first production budget to get started.</p>
+            <button onclick="document.getElementById('btn-new-project').click()"
+              class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold">
+              ➕ Create First Project
+            </button>
+          </div>
+        `;
+      }
+
+      function renderProjects(projects, filterStatus = '') {
+        const list = document.getElementById('project-list');
+        const empty = document.getElementById('empty-state');
+        list.innerHTML = '';
+
+        if (projects.length === 0) {
+          return; // showEmptyPrompt handles this
+        }
+        empty.classList.add('hidden');
+
+        const filtered = projects.filter(p => {
+          if (filterStatus && p.status !== filterStatus) return false;
+          return true;
+        });
+
+        if (filtered.length === 0) {
+          list.innerHTML = '<p class="text-center text-gray-400 py-8">No projects match this filter.</p>';
+          updateStats(projects);
+          return;
+        }
+
+        filtered.forEach(project => {
+// Run mBTLE.reconcile() on load for current amounts (Phase 15 compatibility)
+if (mBTLE && typeof mBTLE.reconcile === 'function') {
+  mBTLE.reconcile(project);
+}
+
+
+          const el = document.createElement('div');
+          el.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
+          el.dataset.id = project.id;
+
+          const name = project.project_title || project.name || 'Untitled';
+          const statusLabel = project.status || 'Draft';
+          const budget = project.total_budget || project.budget || 0;
+          const date = project.updated_at || project.lastModified || project.created_at || '';
+
+          el.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <h3 class="font-semibold text-gray-800">${escapeHtml(name)}</h3>
+                <p class="text-sm text-gray-500 mt-1">Status:
+                  <span class="font-medium">${escapeHtml(statusLabel)}</span>
+                </p>
+                ${budget > 0 ? `<p class="text-sm text-gray-600 mt-1">Budget: ${fmt(budget)}</p>` : ''}
+                <p class="text-xs text-gray-400 mt-1">Modified: ${date.split('T')[0]}</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn-open px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded" data-id="${project.id}">Open</button>
+                <button class="btn-delete px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded" data-id="${project.id}">Delete</button>
+              </div>
+            </div>
+          `;
+
+          el.querySelector('.btn-open').addEventListener('click', () => {
+            document.getElementById('list-view').classList.add('hidden');
+            document.getElementById('workspace-view').classList.remove('hidden');
+            openWorkspace(project);
+          });
+          el.querySelector('.btn-delete').addEventListener('click', () => confirmDelete(project.id));
+          list.appendChild(el);
+        });
+
+        // Initialize Sortable on the project list for drag-and-drop reordering
+        if (typeof Sortable !== 'undefined') {
+          Sortable.create(list, {
+            animation: 150,
+            ghostClass: 'opacity-30',
+            onEnd: function () {
+              console.log('Sortable reordered items');
+            }
+          });
+        }
+
+        updateStats(projects);
+      }
+
+      // === WORKSPACE ENGINE (GridStack) ===
+
+      function initGrid() {
+        if (grid) return;
+        if (typeof GridStack === 'undefined') {
+          console.warn('[mBT DB] GridStack not loaded. Workspace running in fallback mode.');
+          return;
+        }
+        grid = GridStack.init({
+          column: 12,
+          cellHeight: 50,
+          margin: 10,
+          resizable: { handles: 'e,se,s,sw,w' }
+        });
+
+        grid.on('change', () => saveWorkspace());
+      }
+
+      function openWorkspace(project) {
+        currentProject = project;
+        const title = document.getElementById('active-project-title');
+        if (title) title.textContent = project.project_title || project.name || 'Project Workspace';
+        initGrid();
+        if (grid) {
+          renderWidgets(project.widgets || []);
+        } else {
+          // Fallback: show project info without GridStack
+          const container = document.querySelector('#workspace-view .grid-stack');
+          if (container) {
+            container.innerHTML = `
+              <div class="p-6 bg-white rounded-xl border border-gray-200">
+                <h3 class="text-lg font-bold mb-2">${escapeHtml(project.project_title || '')}</h3>
+                <p class="text-sm text-gray-500">Budget: ${fmt(project.total_budget || project.budget || 0)}</p>
+                <p class="text-sm text-gray-500">Status: ${project.status || 'Draft'}</p>
+                <p class="text-xs text-gray-400 mt-4">GridStack not available. Load online to enable the workspace canvas.</p>
+              </div>
+            `;
+          }
+        }
+      }
+
+      function renderWidgets(widgets) {
+        if (!grid) return;
+        grid.removeAll();
+        widgets.forEach(w => {
+          const el = createWidgetElement(w);
+          grid.addWidget(el, { x: w.x, y: w.y, w: w.w, h: w.h, id: w.id });
+        });
+      }
+
+      function createWidgetElement(w) {
+        const div = document.createElement('div');
+        div.classList.add('grid-stack-item');
+        div.setAttribute('gs-id', w.id);
+        div.innerHTML = `
+          <div class="grid-stack-item-content">
+            <div class="widget-header">
+              <h3>${escapeHtml(w.label || w.type)}</h3>
+              <button class="text-gray-400 hover:text-red-500 text-sm" onclick="window._mbtRemoveWidget('${w.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="widget-body">
+              ${getWidgetContent(w)}
+            </div>
+          </div>
+        `;
+        return div;
+      }
+
+      // ============================================
+      // BUDGET EDITOR WIDGET - Full Implementation
+      // ============================================
+      
+      function renderBudgetEditor(project) {
+        if (!project.categories || Object.keys(project.categories).length === 0) {
+          return '<p class="text-slate-400 italic text-sm">No budget categories. Add sections via settings.</p>';
+        }
+
+        const sectionNames = Object.keys(project.categories);
+        let html = '';
+
+        // Render each section with cs-table styling (port from legacy)
+        sectionNames.forEach((sectionName, idx) => {
+          const section = project.categories[sectionName];
+          const items = section.items || [];
+          
+          // Calculate section total
+          let sectionTotal = 0;
+          items.forEach(item => {
+            sectionTotal += calculateItemTotal(item);
+          });
+
+          html += `
+            <div class="mb-4 bg-white rounded-lg shadow-sm border border-gray-200">
+              <!-- Section Header -->
+              <div class="sticky-section-header relative min-h-[36px] bg-slate-50 border-b border-gray-200 select-none group z-10">
+                <div class="px-3 py-2 flex justify-between items-center cursor-pointer active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="${escapeHtml(sectionName)}">
+                  <div class="flex items-center gap-2 pointer-events-none">
+                    <svg class="section-toggle-icon w-4 h-4 text-gray-400 transform rotate-90" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+                    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-widest">${escapeHtml(sectionName)}</h2>
+                  </div>
+                  <span data-section-total="${escapeHtml(sectionName)}" class="text-sm font-mono font-bold text-blue-600">${formatCurrency(sectionTotal)}</span>
+                </div>
+              </div>
+
+              <!-- Section Content -->
+              <div class="section-content">
+                <div class="table-container overflow-x-auto relative">
+                  <table class="cs-table w-full border-collapse min-w-full table-auto">
+                    <thead class="bg-slate-50 text-xs font-bold uppercase tracking-tighter text-gray-600 border-b border-gray-200">
+                      <tr>
+                        <th class="p-1 w-12 text-center">Crew</th>
+                        <th class="p-1 w-8 text-center" title="Drag to reorder">${ICONS.drag}</th>
+                        <th class="p-1 text-left">Description</th>
+                        <th class="p-1 w-px text-center whitespace-nowrap px-2">Qty</th>
+                        <th class="p-1 w-px text-center whitespace-nowrap px-2">Unit</th>
+                        <th class="p-1 w-px text-right whitespace-nowrap px-2">Rate</th>
+                        <th class="p-1 w-px text-center whitespace-nowrap px-2">Mult</th>
+                        <th class="p-1 w-px text-right whitespace-nowrap px-2">Est.</th>
+                        <th class="p-1 w-px text-right whitespace-nowrap px-2">Act.</th>
+                        <th class="p-1 w-px text-right whitespace-nowrap px-2">Var.</th>
+                        <th class="p-1 w-6"></th>
+                      </tr>
+                    </thead>
+                    <tbody data-section-body="${escapeHtml(sectionName)}">
+          `;
+
+          // Render line items with legacy cs-table styling
+          if (items.length === 0) {
+            html += `
+              <tr class="border-b border-gray-100">
+                <td colspan="9" class="p-4 text-center text-slate-400 italic text-xs">No line items. Click "Add Line Item" to add one.</td>
+              </tr>`;
+          } else {
+              items.forEach(item => {
+                const total = calculateItemTotal(item);
+                const variance = (parseFloat(item.actual) || 0) - total;
+                const varianceClass = variance > 0 ? 'variance-negative' : (variance < 0 ? 'variance-positive' : '');
+                
+                const crew = item.crew || { name: '', phone: '', email: '' };
+                const initials = crew.name ? crew.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '?';
+
+                html += `
+                  <tr class="line-item-row border-b border-gray-100 draggable-row" data-item-id="${escapeHtml(item.id)}">
+                    <!-- Crew Column -->
+                    <td class="p-1 text-center relative overflow-visible">
+                      <div class="crew-wrapper">
+                        <button onclick="window._mbtToggleCrew(this)" class="crew-avatar ${crew.name ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-300'} text-[10px] font-black">
+                          ${initials}
+                        </button>
+                        <div class="crew-popup">
+                          ${crew.name ? `
+                            <button class="contact-action-btn action-call bg-emerald-500 text-white" title="Call" onclick="window.location.href='tel:${crew.phone}'">${ICONS.phone}</button>
+                            <button class="contact-action-btn action-wa bg-green-500 text-white" title="WhatsApp" onclick="window.open('https://wa.me/${crew.phone}', '_blank')">${ICONS.wa}</button>
+                            <button class="contact-action-btn action-email bg-blue-500 text-white" title="Email" onclick="window.location.href='mailto:${crew.email}'">${ICONS.mail}</button>
+                            <button class="contact-action-btn action-profile bg-slate-500 text-white" title="Profile" onclick="window._openCrewProfile('${sectionName}', '${item.id}')">${ICONS.user}</button>
+                          ` : `
+                            <button class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors" onclick="window._openCrewProfile('${sectionName}', '${item.id}')">
+                              ${ICONS.plus} ASSIGN
+                            </button>
+                          `}
+                        </div>
+                      </div>
+                    </td>
+                    <td class="p-1 text-center text-gray-300 drag-handle cursor-grab">⠿</td>
+                  <td class="p-1 text-left min-w-[200px]">
+                    <input type="text" value="${escapeHtml(item.description || '')}" 
+                           onchange="window._updateItemField('${sectionName}', '${item.id}', 'description', this.value)"
+                           class="line-item-input w-full bg-transparent border-none font-medium text-sm focus:ring-0 truncate" placeholder="Description">
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap">
+                    <input type="number" value="${item.quantity || 0}" 
+                           onchange="window._updateItemField('${sectionName}', '${item.id}', 'quantity', this.value)"
+                           class="line-item-input w-12 bg-transparent border-none text-center font-bold text-blue-600 focus:ring-0 no-spinner p-0" placeholder="0">
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap">
+                    <select onchange="window._updateItemField('${sectionName}', '${item.id}', 'unit', this.value)"
+                            class="line-item-input bg-transparent border-none text-xs font-bold uppercase tracking-tighter text-gray-500 focus:ring-0 cursor-pointer p-0 text-center">
+                      ${['Day','Week','Flat','Policy','Hour','Trip'].map(u => `<option value="${u}" ${item.unit === u ? 'selected' : ''}>${u.substring(0,3)}</option>`).join('')}
+                    </select>
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap">
+                    <input type="number" step="0.01" value="${item.rate || 0}" 
+                           onchange="window._updateItemField('${sectionName}', '${item.id}', 'rate', this.value)"
+                           class="line-item-input w-20 bg-transparent border-none font-mono font-bold text-sm text-gray-600 focus:ring-0 no-spinner text-right p-0">
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap">
+                    <input type="number" step="0.5" value="${item.multiplier || 1}" 
+                           onchange="window._updateItemField('${sectionName}', '${item.id}', 'multiplier', this.value)"
+                           class="line-item-input w-10 bg-transparent border-none text-center font-bold text-indigo-500 focus:ring-0 no-spinner p-0" title="Multiplier (e.g. 1.5x Overtime)">
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap font-mono font-bold text-sm text-slate-800 text-right" data-item-total="${item.id}">
+                    ${formatCurrency(total)}
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap">
+                    <input type="number" step="0.01" value="${item.actual || 0}" 
+                           onchange="window._updateItemField('${sectionName}', '${item.id}', 'actual', this.value)"
+                           class="line-item-input w-20 bg-blue-50/50 rounded border-none font-mono font-bold text-sm text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                  </td>
+                  <td class="p-1 w-px whitespace-nowrap text-right font-mono font-bold text-xs ${varianceClass}" data-item-variance="${item.id}">
+                    ${formatCurrency(variance, variance > 0 ? '+' : (variance < 0 ? '-' : ''))}
+                  </td>
+                  <td class="p-1 text-center w-6">
+                    <button onclick="window._deleteItem('${sectionName}', '${item.id}')" 
+                            class="text-gray-300 hover:text-red-500 transition-colors scale-75 md:scale-100"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                  </td>
+                </tr>`;
+
+              // Update section total when item changes
+              html += `<script>window._updateSectionTotal('${sectionName}');<\/script>`;
+            });
+          }
+
+          html += `
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Section Controls -->
+                <div class="bg-white border-t border-gray-200 flex items-center justify-between px-3 py-2 gap-2">
+                  <button onclick="window._addItem('${sectionName}')" 
+                          class="flex-1 py-2 flex items-center justify-center gap-1 text-blue-600 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all add-line-item-btn border-r border-gray-300">
+                    <span>+</span> Add Line Item
+                  </button>
+                  <button onclick="window._addSection('${sectionName}')" 
+                          class="flex-1 py-2 flex items-center justify-center gap-1 text-emerald-600 font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all border-l border-gray-300">
+                    <span>+</span> Add Section
+                  </button>
+                </div>
+              </div>
+            </div>`;
+
+          // Update section total on load
+          html += `<script>window._updateSectionTotal('${sectionName}');<\/script>`;
+        });
+
+        return html;
+      }
+
+      function getWidgetContent(w) {
+        if (!currentProject) return '<p class="text-slate-400 italic text-sm">No project loaded.</p>';
+
+        // === BUDGET EDITOR WIDGET CASE (Ported from Legacy) ===
+        if (w.type === 'editor') {
+          return renderBudgetEditor(currentProject);
+        }
+
+        if (w.type === 'summary') {
+const totals = mBTLE && typeof mBTLE.reconcile === 'function' ? mBTLE.reconcile(currentProject) : null;
+
+          const grandTotal = totals ? totals.grandTotal : (currentProject.total_budget || currentProject.budget || 0);
+          return `
+            <div class="space-y-2">
+              <p class="text-xs text-slate-500 uppercase font-black tracking-widest">Total Budget</p>
+              <p class="text-2xl font-bold text-slate-900">${fmt(grandTotal)}</p>
+              <p class="text-xs text-slate-400">Status: ${currentProject.status || 'Draft'}</p>
+              ${totals && totals.contingency > 0 ? `<p class="text-xs text-amber-500">+ Contingency: ${fmt(totals.contingency)}</p>` : ''}
+            </div>
+          `;
+        }
+
+        if (w.type === 'categories') {
+          const cats = Object.values(currentProject.categories || {});
+          if (cats.length === 0) return '<p class="text-slate-400 italic text-sm">No categories yet.</p>';
+          return `
+            <div class="space-y-2">
+              ${cats.map(c => `
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                  <span class="text-sm font-medium text-slate-700">${escapeHtml(c.name || 'Unnamed')}</span>
+                  <span class="text-sm font-bold text-blue-600">${fmt(c.amount || 0)}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        if (w.type === 'crew') {
+          return `
+            <div class="flex items-center gap-4">
+              <div class="crew-wrapper">
+                <div class="crew-avatar" onclick="window._mbtToggleCrew(this)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+                <div class="crew-popup">
+                  <span class="text-xs font-bold text-slate-700">Add Crew</span>
+                  <button class="contact-action-btn" title="Call"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
+                  <button class="contact-action-btn" title="Email"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></button>
+                </div>
+              </div>
+              <div class="flex-grow">
+                <p class="text-sm font-bold text-slate-800">Unassigned</p>
+                <p class="text-xs text-slate-400 font-medium">Click to assign crew</p>
+              </div>
+            </div>
+          `;
+        }
+
+        return `<p class="text-slate-400 italic text-sm">Widget: ${escapeHtml(w.type)}</p>`;
+      }
+
+      // === BUDGET EDITOR EVENT HANDLERS (Ported from Legacy) ===
+
+      window._updateItemField = function(sectionName, itemId, field, value) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+        
+        const item = section.items.find(i => i.id === itemId);
+        if (!item) return;
+
+        // Update the field value
+        switch(field) {
+          case 'description':
+            item.description = value;
+            break;
+          case 'quantity':
+            item.quantity = parseFloat(value) || 0;
+            break;
+          case 'rate':
+            item.rate = parseFloat(value) || 0;
+            break;
+          case 'unit':
+            item.unit = value;
+            break;
+          case 'actual':
+            item.actual = parseFloat(value) || 0;
+            break;
+          case 'multiplier':
+            item.multiplier = parseFloat(value) || 1;
+            break;
+          default:
+            // Try to parse as number for unknown fields
+            const numVal = parseFloat(value);
+            if (!isNaN(numVal)) {
+              item[field] = numVal;
+            } else {
+              item[field] = value;
+            }
+        }
+
+// Trigger mBTLE.math reconciliation on input changes (quantity, rate, actual) - Phase 15
+if (mBTLE && typeof mBTLE.reconcile === 'function') {
+  mBTLE.reconcile(currentProject);
+}
+
+
+        // Update UI immediately for responsive feedback
+        window._updateItemDisplay(sectionName, itemId);
+      };
+
+      function _updateItemDisplay(sectionName, itemId) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+        
+        const item = section.items.find(i => i.id === itemId);
+        if (!item) return;
+
+        const total = calculateItemTotal(item);
+        const variance = (parseFloat(item.actual) || 0) - total;
+        const varianceClass = variance > 0 ? 'variance-negative' : (variance < 0 ? 'variance-positive' : '');
+
+        // Update display elements
+        const totalEl = document.querySelector(`[data-item-total="${itemId}"]`);
+        if (totalEl) {
+          totalEl.textContent = formatCurrency(total);
+        }
+
+        const varianceEl = document.querySelector(`[data-item-variance="${itemId}"]`);
+        if (varianceEl) {
+          varianceEl.textContent = formatCurrency(variance, variance > 0 ? '+' : (variance < 0 ? '-' : ''));
+          varianceEl.className = `w-px whitespace-nowrap text-right font-mono font-bold text-xs ${varianceClass}`;
+        }
+
+        _updateSectionTotal(sectionName);
+      }
+
+      window._updateSectionTotal = function(sectionName) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+        
+        let sectionTotal = 0;
+        (section.items || []).forEach(item => {
+          sectionTotal += calculateItemTotal(item);
+        });
+
+        // Update display element
+        const totalEl = document.querySelector(`[data-section-total="${escapeHtml(sectionName)}"]`);
+        if (totalEl) {
+          totalEl.textContent = formatCurrency(sectionTotal);
+        }
+
+// Also trigger full reconcile for section totals via mBTLE - Phase 15
+if (mBTLE && typeof mBTLE.reconcile === 'function') {
+  mBTLE.reconcile(currentProject);
+}
+
+      };
+
+      window._addItem = function(sectionName) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+
+        // Generate unique ID and create new item (port from legacy addLineItem)
+        const newItem = {
+          id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          description: 'New Item',
+          quantity: 1,
+          unit: 'Day',
+          rate: 0,
+          multiplier: 1,
+          actual: 0
+        };
+
+        section.items.push(newItem);
+        
+        // Re-render the widget to show new item
+        const widgetBody = document.querySelector('.widget-body');
+        if (widgetBody) {
+          widgetBody.innerHTML = renderBudgetEditor(currentProject);
+        }
+
+        // Re-initialize event listeners
+        _bindSectionToggleListeners();
+      };
+
+      window._deleteItem = function(sectionName, itemId) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+
+        // Confirm deletion (port from legacy confirmDelete)
+        if (!confirm('Remove this line item from the budget?')) return;
+
+        // Find and remove the item
+        const itemIndex = section.items.findIndex(i => i.id === itemId);
+        if (itemIndex > -1) {
+          section.items.splice(itemIndex, 1);
+          
+          // Re-render the widget
+          const widgetBody = document.querySelector('.widget-body');
+          if (widgetBody) {
+            widgetBody.innerHTML = renderBudgetEditor(currentProject);
+          }
+
+          // Re-initialize event listeners
+          _bindSectionToggleListeners();
+        }
+      };
+
+      window._addSection = function(sourceSectionName) {
+        if (!currentProject || !currentProject.categories) return;
+        
+        const sourceSection = currentProject.categories[sourceSectionName];
+        if (!sourceSection) return;
+
+        // Get existing section names to avoid duplicates
+        const existingNames = Object.keys(currentProject.categories);
+        
+        // Prompt for new section name
+        const newName = prompt('Enter new section name:', 'New Section');
+        if (!newName) return; // User cancelled
+        
+        const trimmedName = newName.trim();
+        if (!trimmedName) {
+          alert('Section name cannot be empty.');
+          return;
+        }
+
+        // Check for duplicate names
+        if (existingNames.includes(trimmedName)) {
+          alert('A section with this name already exists. Please use a different name.');
+          return;
+        }
+
+        // Create new section object (port from legacy Add Section logic)
+        const newSection = {
+          id: trimmedName.toLowerCase().replace(/\s+/g, '_'),
+          isOpen: true,
+          items: []
+        };
+
+        // Add to categories in the same order as source section
+        const currentOrder = Object.keys(currentProject.categories);
+        const currentIndex = currentOrder.indexOf(sourceSectionName);
+        
+        // Insert after source section (or at end if not found)
+        const insertIndex = currentIndex >= 0 ? currentIndex + 1 : currentOrder.length;
+        
+        // Create new categories object with new section inserted
+        const newCategories = {};
+        currentOrder.forEach((name, idx) => {
+          if (idx === insertIndex) {
+            newCategories[trimmedName] = newSection;
+          }
+          newCategories[name] = currentProject.categories[name];
+        });
+        
+        // Handle case where we inserted at end
+        if (insertIndex === Object.keys(currentProject.categories).length) {
+          newCategories[trimmedName] = newSection;
+        }
+
+        currentProject.categories = newCategories;
+        
+        // Re-render the widget
+        const widgetBody = document.querySelector('.widget-body');
+        if (widgetBody) {
+          widgetBody.innerHTML = renderBudgetEditor(currentProject);
+        }
+
+        // Save to storage and re-bind listeners
+        STORAGE.updateProject(currentProject);
+        _bindSectionToggleListeners();
+      };
+
+      function _bindSectionToggleListeners() {
+        document.querySelectorAll('[data-action="section-toggle"]').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const sectionName = e.currentTarget.dataset.id;
+            if (!currentProject || !currentProject.categories[sectionName]) return;
+
+            // Toggle isOpen state
+            currentProject.categories[sectionName].isOpen = !currentProject.categories[sectionName].isOpen;
+            
+            // Save changes
+            STORAGE.updateProject(currentProject);
+
+            // Toggle CSS class for animation
+            const content = e.currentTarget.closest('.mb-4')?.querySelector('.section-content');
+            if (content) {
+              if (currentProject.categories[sectionName].isOpen) {
+                content.classList.remove('hidden');
+                e.currentTarget.querySelector('.section-toggle-icon').classList.remove('transform', 'rotate-90');
+              } else {
+                content.classList.add('hidden');
+                e.currentTarget.querySelector('.section-toggle-icon').classList.add('transform', 'rotate-90');
+              }
+            }
+
+// Trigger reconcile for section state changes via mBTLE - Phase 15
+if (mBTLE && typeof mBTLE.reconcile === 'function') {
+  mBTLE.reconcile(currentProject);
+}
+
+
+          });
+        });
+      }
+
+      // === GLOBAL HANDLERS (exposed for onclick in generated HTML) ===
+
+      window._mbtToggleCrew = function (el) {
+        const wrapper = el.parentElement;
+        const isActive = wrapper.classList.contains('mobile-active');
+        document.querySelectorAll('.crew-wrapper.mobile-active').forEach(w => w.classList.remove('mobile-active'));
+        if (!isActive) wrapper.classList.add('mobile-active');
+      };
+
+      window._openCrewProfile = function(sectionName, itemId) {
+        if (!currentProject || !currentProject.categories) return;
+        const section = currentProject.categories[sectionName];
+        if (!section) return;
+        const item = section.items.find(i => i.id === itemId);
+        if (!item) return;
+
+        const crew = item.crew || { name: '', phone: '', email: '' };
+        
+        const content = `
+          <div class="space-y-4">
+            <div class="text-center mb-6">
+              <div class="w-16 h-16 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-white font-black text-2xl shadow-lg border-2 border-white mb-2">
+                ${crew.name ? escapeHtml(crew.name[0].toUpperCase()) : '?'}
+              </div>
+              <p class="text-[10px] text-blue-500 font-bold uppercase tracking-widest">${escapeHtml(item.description)}</p>
+            </div>
+            
+            <div class="space-y-3">
+              <div>
+                <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Full Name</label>
+                <input type="text" id="crew-name" value="${escapeHtml(crew.name)}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Phone</label>
+                  <input type="tel" id="crew-phone" value="${escapeHtml(crew.phone)}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500/20">
+                </div>
+                <div>
+                  <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Email</label>
+                  <input type="email" id="crew-email" value="${escapeHtml(crew.email)}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500/20">
+                </div>
+              </div>
+            </div>
+
+            <div class="flex gap-2 pt-4">
+              ${item.crew ? `<button onclick="window._clearCrewAssignment('${sectionName}', '${itemId}')" class="flex-1 py-2 text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 rounded-xl transition-all">Clear</button>` : ''}
+              <button onclick="window._saveCrewProfile('${sectionName}', '${itemId}')" class="flex-[2] py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-xl hover:bg-black transition-all">Save Profile</button>
+            </div>
+          </div>
+        `;
+
+        MODAL.open('Crew Profile', content);
+      };
+
+      window._saveCrewProfile = function(sectionName, itemId) {
+        const name = document.getElementById('crew-name').value.trim();
+        const phone = document.getElementById('crew-phone').value.trim();
+        const email = document.getElementById('crew-email').value.trim();
+
+        if (!name) {
+          alert('Name is required.');
+          return;
+        }
+
+        const item = currentProject.categories[sectionName].items.find(i => i.id === itemId);
+        if (item) {
+          item.crew = { name, phone, email };
+          STORAGE.updateProject(currentProject);
+          MODAL.close();
+          
+          // Refresh Budget Editor widget body
+          const widgetBody = document.querySelector('.grid-stack-item[gs-id="w_editor"] .widget-body') || document.querySelector('.widget-body');
+          if (widgetBody) {
+            widgetBody.innerHTML = renderBudgetEditor(currentProject);
+          }
+        }
+      };
+
+      window._clearCrewAssignment = function(sectionName, itemId) {
+        if (!confirm('Remove this crew assignment?')) return;
+        
+        const item = currentProject.categories[sectionName].items.find(i => i.id === itemId);
+        if (item) {
+          delete item.crew;
+          STORAGE.updateProject(currentProject);
+          MODAL.close();
+          
+          const widgetBody = document.querySelector('.grid-stack-item[gs-id="w_editor"] .widget-body') || document.querySelector('.widget-body');
+          if (widgetBody) {
+            widgetBody.innerHTML = renderBudgetEditor(currentProject);
+          }
+        }
+      };
+
+      window._mbtRemoveWidget = function (id) {
+        if (!grid) return;
+        const el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`);
+        if (el) grid.removeWidget(el);
+        if (currentProject) {
+          currentProject.widgets = (currentProject.widgets || []).filter(w => w.id !== id);
+        }
+        saveWorkspace();
+      };
+
+      function saveWorkspace() {
+        if (!currentProject || !grid) return;
+        const items = grid.getGridItems();
+        const oldWidgets = currentProject.widgets || [];
+
+        currentProject.widgets = items.map(el => {
+          const node = el.gridstackNode;
+          if (!node) return null;
+          const existing = oldWidgets.find(w => w.id === node.id);
+          return {
+            id: node.id,
+            x: node.x,
+            y: node.y,
+            w: node.w,
+            h: node.h,
+            type: existing ? existing.type : 'custom',
+            label: existing ? existing.label : 'Widget'
+          };
+        }).filter(Boolean);
+
+        STORAGE.updateProject(currentProject);
+      }
+
+      // Back to list
+      document.getElementById('btn-back-to-list').addEventListener('click', () => {
+        document.getElementById('workspace-view').classList.add('hidden');
+        document.getElementById('list-view').classList.remove('hidden');
+        currentProject = null;
+        loadProjects();
+      });
+
+      // Add widget
+      document.getElementById('btn-add-widget').addEventListener('click', () => {
+        if (!currentProject || !grid) return;
+        
+        const type = prompt('Widget type:\n• summary\n• categories\n• editor (Budget Editor)\n• crew\n• custom', 'custom');
+        if (!type) return;
+        
+        const id = 'w' + Date.now();
+        const w = { id, type, x: 0, y: 0, w: 4, h: 4, label: type.charAt(0).toUpperCase() + type.slice(1) };
+        currentProject.widgets = currentProject.widgets || [];
+        currentProject.widgets.push(w);
+        
+        const el = createWidgetElement(w);
+        grid.addWidget(el, { x: 0, y: 0, w: 4, h: 4, id: id });
+        saveWorkspace();
+      });
+
+      // === PROJECT SEARCH ===
+
+      function renderAllWithSearch(query) {
+        STORAGE.getAllProjects().then(projects => {
+          if (!query) {
+            renderProjects(projects || [], currentStatus);
+            return;
+          }
+          const filtered = (projects || []).filter(p => {
+            const title = (p.project_title || p.name || '').toLowerCase();
+            const desc = (p.description || '').toLowerCase();
+            return title.includes(query) || desc.includes(query);
+          });
+          renderProjects(filtered, currentStatus);
+        });
+      }
+
+      // === PROJECT DELETION ===
+
+      function confirmDelete(id) {
+        if (!confirm('Delete this project? This cannot be undone.')) return;
+
+        STORAGE.deleteProject(id).then(() => {
+          loadProjects();
+        });
+      }
+
+      // === STATS ===
+
+      function updateStats(projectsList) {
+        const doUpdate = (all) => {
+          const budgeted = all.filter(p => p.status === 'Budgeted').length;
+          const active = all.filter(p => p.status === 'Active').length;
+          const planning = all.filter(p => p.status === 'Planning').length;
+          const onHold = all.filter(p => p.status === 'On Hold').length;
+
+          const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+          setEl('stat-total', all.length);
+          setEl('stat-budgeted', budgeted);
+          setEl('stat-active', active);
+          setEl('stat-planning', planning);
+          setEl('stat-on-hold', onHold);
+        };
+
+        if (projectsList) {
+          doUpdate(projectsList);
+        } else {
+          STORAGE.getAllProjects().then(projects => doUpdate(projects || []));
+        }
+      }
+
+      // === INITIALIZE ===
+      loadProjects();
+      
+      // Bind section toggle listeners after initial render
+      setTimeout(() => {
+        _bindSectionToggleListeners();
+        _initSortableLineItems();
+      }, 500);
+
+      function _initSortableLineItems() {
+        if (typeof Sortable === 'undefined') return;
+        document.querySelectorAll('[data-section-body]').forEach(tbody => {
+          Sortable.create(tbody, {
+            handle: '.drag-handle',
+            animation: 150,
+            ghostClass: 'bg-blue-50',
+            onEnd: function (evt) {
+              const sectionName = tbody.getAttribute('data-section-body');
+              if (!currentProject || !currentProject.categories[sectionName]) return;
+              
+              const items = currentProject.categories[sectionName].items;
+              const item = items.splice(evt.oldIndex, 1)[0];
+              items.splice(evt.newIndex, 0, item);
+              
+              STORAGE.updateProject(currentProject);
+            }
+          });
+        });
+      }
+
+    })();
+  </script>
+</body>
+
+</html>
