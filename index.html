@@ -2694,6 +2694,9 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             </div>
         </div>
 
+        <!-- Funding Tracker (Phase 44.3) -->
+        <div id="fundingCard" class="mb-4"></div>
+
         <main id="budget-sections" class="space-y-3">${renderBudgetSections()}</main>
 
         <div class="mt-6 py-1.5 px-4 bg-slate-900 rounded-xl text-[11px] text-slate-400 font-bold uppercase tracking-widest border border-black shadow-2xl">
@@ -2737,6 +2740,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         setTxt('summaryGrandTotal', fmt(budget.grandTotal));
         setTxt('summaryActualTotal', fmt(budget.actualTotal));
         setTxt('summarySubtotal', fmt(budget.subtotal));
+        if (document.getElementById('fundingCard')) mBT.features.funding.updateCard();
         setTxt('summaryDiscount', fmt(-discount)); // Show as negative visually
         setTxt('summaryContingency', fmt(contingency));
         setTxt('summaryTax', fmt(tax));
@@ -7481,6 +7485,135 @@ _renderTalent: function(docId, d) {
             } else {
                 mBTME.alert("Error", "Item reference lost.");
             }
+        }
+    };
+
+    /* ========= FUNDING TRACKER (mBT.features.funding) ========= */
+    mBT.features.funding = {
+
+        /* --- Refresh the #fundingCard DOM element --- */
+        updateCard: function() {
+            var el = document.getElementById('fundingCard');
+            if (!el) return;
+
+            var sources = budget.fundingSources || [];
+            var grandTotal = budget.grandTotal || 0;
+
+            var totalSecured = 0;
+            for (var i = 0; i < sources.length; i++) {
+                totalSecured += parseFloat(sources[i].amount) || 0;
+            }
+            var gap = grandTotal - totalSecured;
+            var pct = grandTotal > 0 ? Math.min(100, Math.round((totalSecured / grandTotal) * 100)) : 0;
+            var fullyFunded = gap <= 0;
+
+            var barColor = fullyFunded ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-rose-400';
+            var gapColor = fullyFunded ? 'text-emerald-600' : 'text-rose-500';
+
+            var esc = mBT.ui.render.esc;
+            var fmt = function(v) { return mBTLE.format.currency(v, displayCurrency); };
+
+            var rowsHtml = '';
+            for (var j = 0; j < sources.length; j++) {
+                var s = sources[j];
+                var statusCls = s.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' : s.status === 'LOI' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500';
+                rowsHtml += '<div class="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">' +
+                    '<div class="flex items-center gap-2 min-w-0">' +
+                    '<span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ' + statusCls + '">' + esc(s.status || 'Pending') + '</span>' +
+                    '<span class="text-[10px] font-bold text-slate-700 truncate">' + esc(s.name || 'Unnamed Source') + '</span>' +
+                    '</div>' +
+                    '<div class="flex items-center gap-2 shrink-0">' +
+                    '<span class="text-[10px] font-mono font-bold text-slate-800">' + fmt(s.amount || 0) + '</span>' +
+                    '<button onclick="mBT.features.funding.deleteSource(' + j + ')" class="p-1 text-slate-300 hover:text-rose-500 transition-colors rounded">' + mBTAssets.trash + '</button>' +
+                    '</div>' +
+                    '</div>';
+            }
+
+            el.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">' +
+                '<div class="px-5 pt-4 pb-3">' +
+                '<div class="flex items-center justify-between mb-3">' +
+                '<div class="flex items-center gap-2">' +
+                (fullyFunded ? '<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div>' : '<div class="w-2 h-2 rounded-full bg-slate-300"></div>') +
+                '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-700">Funding</h3>' +
+                '<span class="text-[9px] font-bold text-slate-400 ml-1">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
+                '</div>' +
+                '<button onclick="mBT.features.funding.addSource()" class="flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">' + mBTAssets.plus + ' Add Source</button>' +
+                '</div>' +
+                '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3">' +
+                '<div class="h-full rounded-full transition-all duration-500 ' + barColor + '" style="width:' + pct + '%"></div>' +
+                '</div>' +
+                '<div class="flex gap-4">' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(totalSecured) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">' + (fullyFunded ? 'Surplus' : 'Gap Remaining') + '</p><p class="text-sm font-black ' + gapColor + '">' + fmt(Math.abs(gap)) + '</p></div>' +
+                '<div class="ml-auto self-end">' +
+                (sources.length > 0 ? '<button onclick="mBT.features.funding.exportCredits()" class="text-[9px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors">Export Credits</button>' : '') +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                (sources.length > 0 ? '<div class="px-5 pb-3 border-t border-slate-50">' + rowsHtml + '</div>' : '') +
+                '</div>';
+        },
+
+        /* --- Open modal to add a new funding source --- */
+        addSource: function() {
+            var content = '<div class="space-y-4 p-2">' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Source Name</label>' +
+                '<input type="text" id="fundingName" placeholder="e.g. Creative BC, Private Investor" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>' +
+                '<div class="grid grid-cols-2 gap-3">' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Amount</label>' +
+                '<input type="number" id="fundingAmount" placeholder="0.00" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>' +
+                '<select id="fundingStatus" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">' +
+                '<option value="Confirmed">Confirmed</option><option value="LOI">LOI</option><option value="Pending" selected>Pending</option>' +
+                '</select></div></div>' +
+                '<button onclick="mBT.features.funding.saveSource()" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Add Source</button>' +
+                '</div>';
+            mBTME.open('fundingAddModal', 'Add Funding Source', content, 'max-w-sm');
+        },
+
+        /* --- Commit the add-source form --- */
+        saveSource: function() {
+            var name = (document.getElementById('fundingName') || {}).value || '';
+            var amount = parseFloat((document.getElementById('fundingAmount') || {}).value) || 0;
+            var status = (document.getElementById('fundingStatus') || {}).value || 'Pending';
+
+            if (!name.trim()) { mBTME.alert('Missing Info', 'Please enter a source name.'); return; }
+            if (!budget.fundingSources) budget.fundingSources = [];
+            budget.fundingSources.push({ name: name.trim(), amount: amount, status: status });
+            saveBudget();
+            mBTME.close('fundingAddModal');
+            mBT.features.funding.updateCard();
+        },
+
+        /* --- Delete a funding source by index --- */
+        deleteSource: function(index) {
+            mBTME.confirm('Remove Source', 'Remove this funding source?', function() {
+                if (!budget.fundingSources) return;
+                budget.fundingSources.splice(index, 1);
+                saveBudget();
+                mBT.features.funding.updateCard();
+            });
+        },
+
+        /* --- Export funding sources as a CSV credits list --- */
+        exportCredits: function() {
+            var sources = budget.fundingSources || [];
+            if (!sources.length) { mBTME.alert('No Sources', 'Add funding sources first.'); return; }
+
+            var lines = ['Source,Amount,Status'];
+            for (var i = 0; i < sources.length; i++) {
+                var s = sources[i];
+                lines.push('"' + (s.name || '').replace(/"/g, '""') + '",' + (parseFloat(s.amount) || 0).toFixed(2) + ',' + (s.status || 'Pending'));
+            }
+            var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = (budget.projectName || 'project') + '-credits.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
     };
 
