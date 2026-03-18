@@ -5,13 +5,116 @@
     /* --- 1. SUPABASE REST API PRIMITIVES --- */
 
     function getHeaders() {
-        var key = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.ANON_KEY : '';
+        var anonKey = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.ANON_KEY : '';
+        var jwt     = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.AUTH_TOKEN : '';
+        /* Use the user JWT when signed in so RLS user_id scoping works correctly. */
+        var bearer  = jwt || anonKey;
         return {
-            'apikey': key,
-            'Authorization': 'Bearer ' + key,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
+            'apikey':         anonKey,
+            'Authorization':  'Bearer ' + bearer,
+            'Content-Type':   'application/json',
+            'Prefer':         'return=representation'
         };
+    }
+
+    function getAuthHeaders() {
+        var key = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.ANON_KEY : '';
+        var jwt = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.AUTH_TOKEN : '';
+        return {
+            'apikey':         key,
+            'Authorization':  jwt ? 'Bearer ' + jwt : 'Bearer ' + key,
+            'Content-Type':   'application/json'
+        };
+    }
+
+    function getAuthUrl(path) {
+        var base = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        return base + '/auth/v1' + path;
+    }
+
+    /* --- Sign in with email + password. Stores JWT in localStorage on success. --- */
+    async function signIn(email, password) {
+        var res = await fetch(getAuthUrl('/token?grant_type=password'), {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ email: email, password: password })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error_description || data.message || 'Sign-in failed');
+        localStorage.setItem('mbt_supabase_auth_token', data.access_token);
+        localStorage.setItem('mbt_supabase_refresh_token', data.refresh_token || '');
+        localStorage.setItem('mbt_supabase_user_email', data.user ? data.user.email : email);
+        localStorage.setItem('mbt_supabase_user_id', data.user ? data.user.id : '');
+        return data;
+    }
+
+    /* --- Sign in with Google — opens the OAuth provider page in a new tab. --- */
+    function signInWithGoogle() {
+        var base = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        if (!base) { throw new Error('Supabase URL not configured'); }
+        var redirectTo = encodeURIComponent(window.location.href);
+        var url = base + '/auth/v1/authorize?provider=google&redirect_to=' + redirectTo;
+        window.open(url, '_blank');
+    }
+
+    /* --- Sign out: revoke token on server and clear localStorage. --- */
+    async function signOut() {
+        var jwt = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.AUTH_TOKEN : '';
+        if (jwt) {
+            try {
+                await fetch(getAuthUrl('/logout'), {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+            } catch (e) { /* silent — clear locally regardless */ }
+        }
+        localStorage.removeItem('mbt_supabase_auth_token');
+        localStorage.removeItem('mbt_supabase_refresh_token');
+        localStorage.removeItem('mbt_supabase_user_email');
+        localStorage.removeItem('mbt_supabase_user_id');
+    }
+
+    /* --- Get current session state from localStorage (no network call). --- */
+    function getSession() {
+        var token = localStorage.getItem('mbt_supabase_auth_token') || '';
+        var email = localStorage.getItem('mbt_supabase_user_email') || '';
+        var id    = localStorage.getItem('mbt_supabase_user_id') || '';
+        return token ? { token: token, email: email, id: id } : null;
+    }
+
+    /* --- Save / fetch user profile (profiles table). --- */
+    async function saveProfile(displayName, region, role) {
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        if (!userId) throw new Error('Not signed in');
+        var record = { id: userId, display_name: displayName || '', region: region || 'Jamaica', role: role || '', updated_at: new Date().toISOString() };
+        var res = await fetch(getBaseUrl('profiles'), {
+            method: 'POST',
+            headers: Object.assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+            body: JSON.stringify(record)
+        });
+        if (!res.ok) throw new Error('Profile save failed: ' + res.statusText);
+        var data = await res.json();
+        var profile = Array.isArray(data) ? data[0] : data;
+        localStorage.setItem('mbt_profile_display_name', profile.display_name || '');
+        localStorage.setItem('mbt_profile_region', profile.region || 'Jamaica');
+        localStorage.setItem('mbt_profile_role', profile.role || '');
+        return profile;
+    }
+
+    async function fetchProfile() {
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        if (!userId) return null;
+        var res = await fetch(getBaseUrl('profiles') + '?id=eq.' + encodeURIComponent(userId) + '&select=*', {
+            headers: getHeaders()
+        });
+        if (!res.ok) return null;
+        var rows = await res.json();
+        if (!rows || !rows.length) return null;
+        var p = rows[0];
+        localStorage.setItem('mbt_profile_display_name', p.display_name || '');
+        localStorage.setItem('mbt_profile_region', p.region || 'Jamaica');
+        localStorage.setItem('mbt_profile_role', p.role || '');
+        return p;
     }
 
     function getBaseUrl(table) {
@@ -212,7 +315,26 @@
         return JSON.stringify(exportObj, null, 2);
     }
 
-    /* --- 5. GLOBAL EXPOSURE --- */
+    /* --- 5. OFFLINE PUSH QUEUE --- */
+    /* When the app comes back online and "Sync budgets to cloud" is enabled,
+       automatically push any local changes that accumulated while offline. */
+
+    function _shouldAutoSync() {
+        return localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' &&
+               window.mBTSupabaseConfig &&
+               window.mBTSupabaseConfig.isConfigured() &&
+               window.mBTSupabaseConfig.isSignedIn();
+    }
+
+    window.addEventListener('online', function () {
+        if (_shouldAutoSync()) {
+            syncPushAll().catch(function (e) {
+                console.warn('[mBTSync] Auto-push on reconnect failed:', e);
+            });
+        }
+    });
+
+    /* --- 6. GLOBAL EXPOSURE --- */
 
     window.mBTSync = {
         pushAll:       syncPushAll,
@@ -220,7 +342,13 @@
         exportData:    exportAllData,
         sbFetchAll:    sbFetchAll,
         sbUpsert:      sbUpsert,
-        sbDelete:      sbDelete
+        sbDelete:      sbDelete,
+        signIn:        signIn,
+        signInWithGoogle: signInWithGoogle,
+        signOut:       signOut,
+        getSession:    getSession,
+        saveProfile:   saveProfile,
+        fetchProfile:  fetchProfile
     };
 
     console.log('[mBT] Supabase sync service initialized ✓');

@@ -4,10 +4,14 @@
 
     /* --- Credentials stored in localStorage per security protocol --- */
     window.mBTSupabaseConfig = {
-        get API_URL() { return localStorage.getItem('mbt_supabase_url') || ''; },
-        get ANON_KEY() { return localStorage.getItem('mbt_supabase_key') || ''; },
+        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || ''; },
+        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || ''; },
+        get AUTH_TOKEN() { return localStorage.getItem('mbt_supabase_auth_token') || ''; },
         isConfigured: function () {
             return !!(this.API_URL && this.ANON_KEY);
+        },
+        isSignedIn: function () {
+            return !!(this.AUTH_TOKEN);
         },
         SYNC: {
             ENABLED: localStorage.getItem('mbt_supabase_sync_enabled') !== 'false',

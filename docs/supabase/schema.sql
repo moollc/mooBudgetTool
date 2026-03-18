@@ -205,6 +205,38 @@ INSERT INTO og_community_rates (description, unit, rate, currency, region, sourc
 ('Music Supervisor', 'Flat', 100000, 'JMD', 'Jamaica', 'seed')
 ON CONFLICT DO NOTHING;
 
+/* --- 8. profiles (user display name, region, role — for 46.4) --- */
+CREATE TABLE IF NOT EXISTS profiles (
+    id          UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name TEXT       NOT NULL DEFAULT '',
+    region      TEXT        NOT NULL DEFAULT 'Jamaica',
+    role        TEXT        NOT NULL DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "profiles: owner read"   ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "profiles: owner insert" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "profiles: owner update" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+/* --- og_rate_averages view (community average rates by description + region) --- */
+/* Used by 46.3 to show "Community average: $X (N contributors)" in OpenGate tab. */
+CREATE OR REPLACE VIEW og_rate_averages AS
+    SELECT
+        description,
+        region,
+        ROUND(AVG(rate)::numeric, 0)            AS avg_rate,
+        COUNT(*)                                 AS contributor_count,
+        currency
+    FROM og_community_rates
+    WHERE source = 'community'
+    GROUP BY description, region, currency;
+
+/* Public read — same policy as og_community_rates. */
+GRANT SELECT ON og_rate_averages TO anon;
+GRANT SELECT ON og_rate_averages TO authenticated;
+
 /* --- Indexes for common query patterns --- */
 CREATE INDEX IF NOT EXISTS idx_stages_project      ON stages(project_id);
 CREATE INDEX IF NOT EXISTS idx_executions_project  ON executions(project_id);
