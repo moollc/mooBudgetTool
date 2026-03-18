@@ -7160,6 +7160,40 @@ _renderTalent: function(docId, d) {
                         </div>
                     </div>`;
             }
+            if (tabName === 'cloud') {
+                var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                var ogLastSync = (window.mBTOG && mBTOG.lastSync) ? mBTOG.lastSync() : null;
+                var ogLastSyncLabel = ogLastSync ? new Date(ogLastSync).toLocaleString('en-JM', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
+                var supaConfigured = !!(localStorage.getItem('mbt_supabase_url') && localStorage.getItem('mbt_supabase_key'));
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">OpenGate Community Rates</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Pull updated industry rates from the shared community database. No account required.</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="ogCloudSyncToggle" ${ogCloudOn ? 'checked' : ''} onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Last sync</span>
+                                <span class="text-[9px] font-mono text-slate-500">${ogLastSyncLabel}</span>
+                            </div>
+                            <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('OpenGate', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }); } else { mBTME.alert('OpenGate', 'Engine not available.'); }" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Project Backup</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Back up your projects, stages and contacts to Supabase for cross-device access.</p>
+                            <div class="text-[9px] font-bold mb-4 ${supaConfigured ? 'text-emerald-600' : 'text-amber-600'}">${supaConfigured ? 'Supabase configured' : 'Not configured — tap Configure to add credentials'}</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="mBTME.close('settingsModal'); openTool('./src/tools/supabase/index.html');" class="py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Configure</button>
+                                <button onclick="if(window.mBTSync && window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'Open Configure to set up Supabase first.'); }" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Push Now</button>
+                            </div>
+                        </div>
+                    </div>`;
+            }
             if (tabName === 'database') {
                 const nav = RenderEngine.ui.tabs({
                     items: [
@@ -7190,7 +7224,8 @@ _renderTalent: function(docId, d) {
             const tabs = [
                 { id: 'general', label: `General` },
                 { id: 'database', label: `OpenGate` },
-                { id: 'ai', label: `AI` }
+                { id: 'ai', label: `AI` },
+                { id: 'cloud', label: `Cloud` }
             ];
             
             const tabNavHTML = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
