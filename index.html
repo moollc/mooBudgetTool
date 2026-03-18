@@ -891,6 +891,18 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                 await mBT.opengate.init();
             }
 
+            // 3.6 Background cloud tasks (non-blocking)
+            if (mBT.opengate && typeof mBT.opengate.fetchRateAverages === 'function') {
+                mBT.opengate.fetchRateAverages(mBT.opengate.settings && mBT.opengate.settings.location).catch(function(){});
+            }
+            /* Restore cached user profile region into OpenGate if user is signed in. */
+            if (localStorage.getItem('mbt_supabase_auth_token') && localStorage.getItem('mbt_profile_region')) {
+                if (mBT.opengate && mBT.opengate.settings) {
+                    mBT.opengate.settings.location = localStorage.getItem('mbt_profile_region');
+                    localStorage.setItem('moo_og_loc', mBT.opengate.settings.location);
+                }
+            }
+
             // 4. Brain Handshake
             if (typeof fetchExchangeRates === 'function') fetchExchangeRates();
             if (typeof injectFooterIcons === 'function') injectFooterIcons();
@@ -6969,13 +6981,27 @@ _renderTalent: function(docId, d) {
                             </div>
                         </div>
                         <div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">
-                            ${mBTOG.rates.map(r => RenderEngine.ui.listRow({
-                                id: r.id || r.description,
-                                icon: mBTAssets.money, 
-                                title: r.description,
-                                subtitle: `${mBTLE.format.currency(r.rate)} / ${r.unit}`,
-                                classes: 'border-b border-slate-50'
-                            })).join('')}
+                            ${(function() {
+                                var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+                                var avgs = {};
+                                try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch(e) {}
+                                var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                                return mBTOG.rates.map(function(r) {
+                                    var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+                                    var avg = avgs[key];
+                                    var sub = mBTLE.format.currency(r.rate) + ' / ' + r.unit;
+                                    if (avg && avg.contributor_count > 0) {
+                                        sub += ' · Avg: ' + mBTLE.format.currency(avg.avg_rate) + ' (' + avg.contributor_count + ')';
+                                    }
+                                    return RenderEngine.ui.listRow({
+                                        id: r.id || r.description,
+                                        icon: mBTAssets.money,
+                                        title: r.description,
+                                        subtitle: sub,
+                                        classes: 'border-b border-slate-50'
+                                    });
+                                }).join('');
+                            })()}
                         </div>
                     </div>`;
             }
@@ -7169,8 +7195,54 @@ _renderTalent: function(docId, d) {
                 var ogLastSync = (window.mBTOG && mBTOG.lastSync) ? mBTOG.lastSync() : null;
                 var ogLastSyncLabel = ogLastSync ? new Date(ogLastSync).toLocaleString('en-JM', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
                 var supaConfigured = !!(localStorage.getItem('mbt_supabase_url') && localStorage.getItem('mbt_supabase_key'));
+                var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
+                var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
+                var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+                var profileName = localStorage.getItem('mbt_profile_display_name') || '';
+                var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
+                var profileRole = localStorage.getItem('mbt_profile_role') || '';
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
+
+                        <!-- Account Sign-In -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Account</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Sign in to sync budgets across devices and contribute to community rates.</p>
+                            ${isSignedIn ? `
+                            <div class="flex items-center justify-between mb-3">
+                                <div>
+                                    <div class="text-[10px] font-black text-emerald-700">${esc(signedInEmail)}</div>
+                                    <div class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Signed In</div>
+                                </div>
+                                <button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
+                            </div>` : `
+                            <div class="space-y-2 mb-3">
+                                <input type="email" id="cloudEmail" placeholder="Email" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
+                                <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
+                                <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="mBT.features.settings.cloudSignIn()" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Sign In</button>
+                                <button onclick="mBT.features.settings.cloudSignInGoogle()" class="py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all">Google</button>
+                            </div>`}
+                        </div>
+
+                        <!-- User Profile (visible when signed in) -->
+                        ${isSignedIn ? `
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Profile</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Your display name and region are used for community rate contributions.</p>
+                            <div class="space-y-2 mb-3">
+                                <input type="text" id="profileDisplayName" placeholder="Display name" value="${esc(profileName)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                <select id="profileRegion" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
+                                </select>
+                                <input type="text" id="profileRole" placeholder="Production role (e.g. Producer)" value="${esc(profileRole)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                            </div>
+                            <button onclick="mBT.features.settings.saveProfile()" class="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Save Profile</button>
+                        </div>` : ''}
+
+                        <!-- OpenGate Community Rates -->
                         <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                             <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">OpenGate Community Rates</h3>
                             <p class="text-[9px] text-slate-400 font-bold mb-4">Pull updated industry rates from the shared community database. No account required.</p>
@@ -7187,15 +7259,25 @@ _renderTalent: function(docId, d) {
                             </div>
                             <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('OpenGate', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }); } else { mBTME.alert('OpenGate', 'Engine not available.'); }" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
                         </div>
+
+                        <!-- Project Backup + Sync -->
                         <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                             <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Project Backup</h3>
                             <p class="text-[9px] text-slate-400 font-bold mb-4">Back up your projects, stages and contacts to Supabase for cross-device access.</p>
-                            <div class="text-[9px] font-bold mb-4 ${supaConfigured ? 'text-emerald-600' : 'text-amber-600'}">${supaConfigured ? 'Supabase configured' : 'Not configured — tap Configure to add credentials'}</div>
+                            <div class="text-[9px] font-bold mb-3 ${supaConfigured ? 'text-emerald-600' : 'text-amber-600'}">${supaConfigured ? 'Supabase configured' : 'Not configured — tap Configure to add credentials'}</div>
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Sync budgets to cloud</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="syncOnReconnectToggle" ${syncOnReconnect ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <button onclick="mBTME.close('settingsModal'); openTool('./src/tools/supabase/index.html');" class="py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Configure</button>
                                 <button onclick="if(window.mBTSync && window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'Open Configure to set up Supabase first.'); }" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Push Now</button>
                             </div>
                         </div>
+
                     </div>`;
             }
             if (tabName === 'database') {
@@ -7395,6 +7477,64 @@ _renderTalent: function(docId, d) {
                 mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
             }
             this.open('database', 'lineItems');
+        },
+
+        /* --- 46.1 Auth handlers --- */
+
+        cloudSignIn: function() {
+            var email = (document.getElementById('cloudEmail') || {}).value || '';
+            var pass  = (document.getElementById('cloudPassword') || {}).value || '';
+            var errEl = document.getElementById('cloudAuthError');
+            email = email.trim();
+            if (!email || !pass) {
+                if (errEl) { errEl.textContent = 'Email and password required.'; errEl.classList.remove('hidden'); }
+                return;
+            }
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            mBTSync.signIn(email, pass).then(function () {
+                /* On sign-in, push local data and pull remote to merge. */
+                if (window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()) {
+                    mBTSync.pushAll().catch(function(){});
+                    mBTSync.pullAll().catch(function(){});
+                    mBTSync.fetchProfile().catch(function(){});
+                }
+                mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (errEl) { errEl.textContent = e.message || 'Sign-in failed.'; errEl.classList.remove('hidden'); }
+            });
+        },
+
+        cloudSignInGoogle: function() {
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            try {
+                mBTSync.signInWithGoogle();
+            } catch (e) {
+                mBTME.alert('Google Sign-In', e.message || 'Supabase URL not configured.');
+            }
+        },
+
+        cloudSignOut: function() {
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            mBTSync.signOut().then(function () {
+                mBT.features.settings.open('cloud');
+            });
+        },
+
+        /* --- 46.4 Profile save --- */
+
+        saveProfile: function() {
+            if (!window.mBTSync) { mBTME.alert('Profile', 'Sync service not loaded.'); return; }
+            var name   = (document.getElementById('profileDisplayName') || {}).value || '';
+            var region = (document.getElementById('profileRegion') || {}).value || 'Jamaica';
+            var role   = (document.getElementById('profileRole') || {}).value || '';
+            mBTSync.saveProfile(name, region, role).then(function () {
+                /* Sync region into OpenGate settings so multiplier is correct. */
+                if (window.mBTOG && mBTOG.settings) { mBTOG.settings.location = region; localStorage.setItem('moo_og_loc', region); }
+                mBTME.alert('Profile', 'Profile saved.');
+                mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                mBTME.alert('Profile', 'Could not save profile: ' + (e.message || 'Unknown error'));
+            });
         }
     };
 
@@ -8288,7 +8428,7 @@ _renderTalent: function(docId, d) {
                     </div>
                 </div>
                 <div class="flex justify-between items-center pt-2">
-                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Unassign</button>` : '<div></div>'}
+                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${mBT.ui.render.esc(itemId)}', '${mBT.ui.render.esc(sectionName)}')">Unassign</button>` : '<div></div>'}
                     <button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>
                 </div>
             </div>`;
@@ -8452,7 +8592,7 @@ _renderTalent: function(docId, d) {
     window.renderStageDatabaseList = function(items, stageKey, targetSectionName) {
         if (!items.length) return `<div class="p-4 text-center text-xs text-gray-400">No matches.</div>`;
         return items.map(item => `
-            <div onclick="${item.isExisting ? `assignItemToStage('${item.id}', '${stageKey}')` : `addStageItemToBudget('${RenderEngine.esc(item.description)}', ${item.rate}, '${item.unit}', '${stageKey}', '${targetSectionName}')`}" 
+            <div onclick="${item.isExisting ? `assignItemToStage('${RenderEngine.esc(item.id)}', '${RenderEngine.esc(stageKey)}')` : `addStageItemToBudget('${RenderEngine.esc(item.description)}', ${item.rate}, '${RenderEngine.esc(item.unit)}', '${RenderEngine.esc(stageKey)}', '${RenderEngine.esc(targetSectionName)}')`}" 
                  class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">
                 <div><div class="text-sm font-bold text-gray-700">${item.description}</div>${item.isExisting ? `<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ${item.sectionName}</div>` : ''}</div>
                 <div class="font-mono text-xs text-gray-500 font-bold">${mBTLE.format.currency(item.rate)}</div>

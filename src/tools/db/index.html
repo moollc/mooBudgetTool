@@ -35,6 +35,8 @@
 
     /* ---- Top Bar ---- */
     #topbar { height: var(--header-h); background: #0f172a; color: #fff; display: flex; align-items: center; gap: 10px; padding: 0 12px; flex-shrink: 0; }
+    /* --- Tap targets: 44px minimum for all buttons and links --- */
+    button, a { min-height: 44px; }
     #topbar button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
     #topbar button:hover { background: rgba(255,255,255,0.2); }
     #topbar-title { font-size: 12px; font-weight: 700; color: #94a3b8; }
@@ -193,23 +195,32 @@
     #brand-logo-clear { font-size: 9px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
     #brand-logo-clear:hover { color: #dc2626; }
 
+    /* --- Mobile template picker select (hidden on desktop) --- */
+    #picker-mobile-select { display: none; }
+    /* --- Toolbar overflow group: transparent wrapper on desktop --- */
+    #overflow-btns { display: contents; }
+    #btn-more-overflow { display: none; }
+
     /* ---- Mobile Responsive Layout ---- */
     @media (max-width: 768px) {
       :root { --picker-w: 100%; }
       #workspace { flex-direction: column; }
-      #picker { width: 100%; max-height: 160px; overflow-y: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; }
+      /* Picker: slim header bar with dropdown select on mobile */
+      #picker { width: 100%; max-height: none; overflow-y: visible; border-right: none; border-bottom: 1px solid var(--border); flex-direction: column; flex-wrap: nowrap; }
       #picker-header { display: none; }
-      .tmpl-card { flex: 1 1 auto; min-width: 120px; border-bottom: none; border-right: 1px solid var(--border); }
       .tmpl-card-desc { display: none; }
+      /* Mobile template select dropdown — replaces card list on mobile */
+      #picker-mobile-select { display: block; width: 100%; min-height: 44px; padding: 8px 12px; font-size: 15px; border: none; border-bottom: 1px solid var(--border); background: var(--surface); cursor: pointer; font-family: inherit; }
       #preview-frame-wrap { padding: 6px; }
       #preview-frame { width: 100%; min-height: auto; }
       .ed-2, .ed-3, .ed-4, .ed-5 { grid-template-columns: 1fr; }
       .ed-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
       #options-bar { flex-wrap: wrap; gap: 4px; }
-
-      /* Toolbar: scroll horizontally rather than wrap/overflow */
-      #preview-toolbar { overflow-x: auto; flex-wrap: nowrap; }
-      #preview-toolbar::-webkit-scrollbar { height: 2px; }
+      /* Toolbar: primary actions only; overflow menu for the rest */
+      #preview-toolbar { overflow-x: visible; flex-wrap: wrap; }
+      #overflow-btns { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 2px solid var(--border); padding: 10px; flex-wrap: wrap; gap: 6px; z-index: 200; box-shadow: 0 -4px 12px rgba(0,0,0,0.10); }
+      #overflow-btns.open { display: flex; }
+      #btn-more-overflow { display: inline-flex; }
       /* Touch-sized table inputs — 16px font prevents iOS auto-zoom on focus */
       .ed-tbl-wrap input,
       .ed-tbl-wrap select,
@@ -231,7 +242,7 @@
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
-    <span id="topbar-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Database & Project Manager</span>
+    <span id="topbar-title">Document Builder</span>
     <span id="topbar-project"></span>
   </div>
   <div id="workspace">
@@ -243,6 +254,7 @@
       <div id="picker-search-wrap">
         <input id="picker-search" type="search" placeholder="Search documents…" autocomplete="off">
       </div>
+      <select id="picker-mobile-select" aria-label="Select a template"></select>
       <div id="tmpl-list"></div>
       <div id="saved-list"></div>
       <button id="brand-toggle">
@@ -274,37 +286,43 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Save
         </button>
-        <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-          XLSX
-        </button>
-        <button class="toolbar-btn" id="btn-csv" title="Export CSV">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-          CSV
-        </button>
-        <button class="toolbar-btn" id="btn-snapshot" title="Save budget snapshot for comparison">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Snapshot
-        </button>
-        <button class="toolbar-btn" id="btn-package" title="Export full document package (Top Sheet + Detail + Cost Report)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Package
-        </button>
-        <button class="toolbar-btn" id="btn-all-financial" title="Export all 5 financial documents as one PDF (Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-          All Financial
+        <div id="overflow-btns">
+          <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+            XLSX
+          </button>
+          <button class="toolbar-btn" id="btn-csv" title="Export CSV">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+            CSV
+          </button>
+          <button class="toolbar-btn" id="btn-snapshot" title="Save budget snapshot for comparison">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Snapshot
+          </button>
+          <button class="toolbar-btn" id="btn-package" title="Export full document package (Top Sheet + Detail + Cost Report)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Package
+          </button>
+          <button class="toolbar-btn" id="btn-all-financial" title="Export all 5 financial documents as one PDF (Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+            All Financial
+          </button>
+          <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout — no images required)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+            PDF (Alt)
+          </button>
+          <button class="toolbar-btn" id="btn-html" title="Download HTML">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            HTML
+          </button>
+        </div>
+        <button class="toolbar-btn" id="btn-more-overflow" title="More export options" aria-label="More export options">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+          More
         </button>
         <button class="toolbar-btn" id="btn-print" title="Print">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
-        </button>
-        <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout — no images required)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
-          PDF (Alt)
-        </button>
-        <button class="toolbar-btn" id="btn-html" title="Download HTML">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          HTML
         </button>
         <button class="toolbar-btn primary" id="btn-pdf" title="Export PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -375,6 +393,9 @@
   var hasUnsaved = false;      /* true when editorData changed but not yet persisted */
   var watermark = '';          /* '' | 'DRAFT' | 'CONFIDENTIAL' | 'APPROVED' | 'FOR REVIEW' */
   var brandSettings = { name: '', address: '' };
+
+  /* Mobile breakpoint helper */
+  function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
 
   /* Template categories for grouped picker */
   var TEMPLATE_CATEGORIES = [
@@ -659,6 +680,9 @@
         if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
         var titleEl = document.getElementById('preview-toolbar-title');
         if (titleEl) titleEl.textContent = tmplMeta.name;
+        /* 45.2 — Dynamic topbar title shows saved doc title */
+        var topTitle = document.getElementById('topbar-title');
+        if (topTitle) topTitle.textContent = d.title || tmplMeta.name;
         buildEditor(activeTemplateId);
         var tabBar = document.getElementById('tab-bar');
         if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
@@ -700,17 +724,26 @@
     var tmplList = document.getElementById('tmpl-list');
     var savedList = document.getElementById('saved-list');
     var searchWrap = document.getElementById('picker-search-wrap');
+    var mobileSelect = document.getElementById('picker-mobile-select');
     document.querySelectorAll('.picker-tab').forEach(function (btn) {
       btn.classList.toggle('active', btn.getAttribute('data-view') === view);
     });
     if (view === 'saved') {
       tmplList.style.display = 'none';
       if (searchWrap) searchWrap.style.display = 'none';
+      if (mobileSelect) mobileSelect.style.display = 'none';
       savedList.style.display = 'block';
       buildSavedDocsList();
     } else {
-      tmplList.style.display = 'block';
-      if (searchWrap) searchWrap.style.display = 'block';
+      if (isMobile()) {
+        tmplList.style.display = 'none';
+        if (searchWrap) searchWrap.style.display = 'none';
+        if (mobileSelect) mobileSelect.style.display = 'block';
+      } else {
+        tmplList.style.display = 'block';
+        if (searchWrap) searchWrap.style.display = 'block';
+        if (mobileSelect) mobileSelect.style.display = 'none';
+      }
       savedList.style.display = 'none';
     }
   }
@@ -1052,6 +1085,54 @@
     /* Save doc button wiring */
     document.getElementById('btn-save-doc').addEventListener('click', saveDocument);
 
+    /* 45.1 — Build mobile template select (shown on mobile, hidden on desktop) */
+    var mobileSelect = document.getElementById('picker-mobile-select');
+    if (mobileSelect) {
+      mobileSelect.innerHTML = '';
+      var blankOpt = document.createElement('option');
+      blankOpt.value = '';
+      blankOpt.textContent = 'Select a template\u2026';
+      blankOpt.disabled = true;
+      blankOpt.selected = true;
+      mobileSelect.appendChild(blankOpt);
+      TEMPLATE_CATEGORIES.forEach(function (cat) {
+        var catTemplates = cat.ids.map(function (id) { return byId[id]; }).filter(Boolean);
+        if (catTemplates.length === 0) return;
+        var grp = document.createElement('optgroup');
+        grp.label = cat.label;
+        catTemplates.forEach(function (t) {
+          var opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.name;
+          grp.appendChild(opt);
+        });
+        mobileSelect.appendChild(grp);
+      });
+      mobileSelect.addEventListener('change', function () {
+        var t = byId[this.value];
+        if (!t) return;
+        document.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
+        var matchCard = document.querySelector('.tmpl-card[data-id="' + t.id + '"]');
+        if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
+        selectTemplate(t);
+      });
+    }
+
+    /* 45.3 — Wire More overflow button */
+    var moreBtn = document.getElementById('btn-more-overflow');
+    var overflowPanel = document.getElementById('overflow-btns');
+    if (moreBtn && overflowPanel) {
+      moreBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        overflowPanel.classList.toggle('open');
+      });
+      document.addEventListener('click', function (e) {
+        if (overflowPanel.classList.contains('open') && !overflowPanel.contains(e.target) && e.target !== moreBtn) {
+          overflowPanel.classList.remove('open');
+        }
+      });
+    }
+
     /* Auto-select first template */
     var firstCard = list.querySelector('.tmpl-card');
     if (firstCard) firstCard.click();
@@ -1109,6 +1190,18 @@
     if (ind) ind.style.display = 'none';
     var titleEl = document.getElementById('preview-toolbar-title');
     if (titleEl) titleEl.textContent = tmplMeta.name;
+
+    /* 45.2 — Dynamic topbar title */
+    var topTitle = document.getElementById('topbar-title');
+    if (topTitle) topTitle.textContent = tmplMeta.name;
+
+    /* 45.1 — Sync mobile select */
+    var mSel = document.getElementById('picker-mobile-select');
+    if (mSel) mSel.value = tmplMeta.id;
+
+    /* 45.3 — Close overflow panel on template switch */
+    var ob = document.getElementById('overflow-btns');
+    if (ob) ob.classList.remove('open');
 
     /* Track recently used + toggle Save/CSV/XLSX buttons */
     addRecentTemplate(tmplMeta.id);
@@ -1409,6 +1502,25 @@
       '<div class="ed-row">' + fld('hospitalAddress', 'Hospital Address', null, true) + '</div>' +
       '<div class="ed-row ed-2">' + fld('basecamp', 'Basecamp Address') + fld('basecampParking', 'Parking Notes') + '</div>' +
       '</div>';
+    /* 45.4 — Multi-location 3-day forecast (shown when locationForecasts populated by fetchWeatherAndHospitals) */
+    if (d.locationForecasts && d.locationForecasts.length > 0) {
+      html += '<div class="ed-section"><div class="ed-section-hdr">3-Day Forecast by Location</div>';
+      d.locationForecasts.forEach(function (loc) {
+        html += '<div style="padding:4px 10px 2px;font-size:10px;font-weight:700;color:var(--muted);">' + esc(loc.address) + '</div>' +
+          '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Date</th><th>High</th><th>Low</th><th>Conditions</th><th>Sunrise</th><th>Sunset</th></tr></thead><tbody>';
+        loc.days.forEach(function (day) {
+          html += '<tr>' +
+            '<td><input readonly value="' + esc(day.date) + '"></td>' +
+            '<td><input readonly value="' + esc(day.high) + '"></td>' +
+            '<td><input readonly value="' + esc(day.low) + '"></td>' +
+            '<td><input readonly value="' + esc(day.conditions) + '"></td>' +
+            '<td><input readonly value="' + esc(day.sunrise) + '"></td>' +
+            '<td><input readonly value="' + esc(day.sunset) + '"></td></tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+      html += '</div>';
+    }
     /* Shooting Locations (dynamic) */
     html += '<div class="ed-section"><div class="ed-section-hdr">Shooting Locations</div>' +
       '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th>Notes</th><th></th></tr></thead><tbody>';
@@ -2085,61 +2197,87 @@
     if (changed) { saveEditorData(); buildEditor('callSheet'); }
   }
 
-  /* Fetch weather + nearest hospitals from a location address (requires internet) */
+  /* Fetch weather (3-day, all shooting locations) + nearest hospitals (first location) */
   function fetchWeatherAndHospitals() {
-    var locInput = document.querySelector('[data-arr="shootingLocations"][data-f="address"]');
-    var address = locInput ? locInput.value.trim() : '';
-    if (!address && editorData.shootingLocations && editorData.shootingLocations[0]) {
-      address = editorData.shootingLocations[0].address || '';
+    /* Gather all shooting location addresses */
+    var locations = (editorData && editorData.shootingLocations || [])
+      .map(function (loc) { return (loc.address || '').trim(); }).filter(Boolean);
+    if (locations.length === 0) {
+      var locInput = document.querySelector('[data-arr="shootingLocations"][data-f="address"]');
+      var fallback = locInput ? locInput.value.trim() : '';
+      if (fallback) locations = [fallback];
     }
-    if (!address) { alert('Enter a shooting location address first.'); return; }
+    if (locations.length === 0) { alert('Enter a shooting location address first.'); return; }
 
     var statusEl = document.getElementById('weather-status');
     var hospPicker = document.getElementById('hospital-picker');
-    statusEl.textContent = 'Geocoding address\u2026';
+    statusEl.textContent = 'Geocoding ' + locations.length + ' location(s)\u2026';
     hospPicker.style.display = 'none';
 
-    /* Cancel any in-progress fetch before starting a new one */
     if (weatherFetchController) { weatherFetchController.abort(); }
     weatherFetchController = new AbortController();
     var signal = weatherFetchController.signal;
 
-    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address), {
-      headers: { 'Accept': 'application/json' }, signal: signal
-    })
-    .then(function (r) { return r.json(); })
-    .then(function (geo) {
-      if (!geo || geo.length === 0) { statusEl.textContent = 'Location not found.'; return; }
-      var lat = parseFloat(geo[0].lat);
-      var lon = parseFloat(geo[0].lon);
-      statusEl.textContent = 'Fetching weather & hospitals\u2026';
+    /* Geocode all locations in parallel */
+    Promise.all(locations.map(function (address) {
+      return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address), {
+        headers: { 'Accept': 'application/json' }, signal: signal
+      }).then(function (r) { return r.json(); }).then(function (geo) {
+        if (!geo || geo.length === 0) return null;
+        return { address: address, lat: parseFloat(geo[0].lat), lon: parseFloat(geo[0].lon) };
+      });
+    })).then(function (geoResults) {
+      var validGeo = geoResults.filter(Boolean);
+      if (validGeo.length === 0) { statusEl.textContent = 'Location not found.'; return; }
 
-      var today = new Date().toISOString().split('T')[0];
-      var weatherUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
-        '&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto&forecast_days=1';
-      var overpassQuery = '[out:json][timeout:25];(node["amenity"="hospital"](around:20000,' + lat + ',' + lon + ');way["amenity"="hospital"](around:20000,' + lat + ',' + lon + '););out center 5;';
-      var overpassUrl = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery);
+      statusEl.textContent = 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
 
-      Promise.all([
-        fetch(weatherUrl, { signal: signal }).then(function (r) { return r.json(); }),
-        fetch(overpassUrl, { signal: signal }).then(function (r) { return r.json(); })
-      ]).then(function (results) {
-        var w = results[0];
-        var d = w.daily || {};
-        var maxT = d.temperature_2m_max && d.temperature_2m_max[0];
-        var minT = d.temperature_2m_min && d.temperature_2m_min[0];
-        var wcode = d.weathercode && d.weathercode[0];
-        var sunrise = d.sunrise && d.sunrise[0];
-        var sunset  = d.sunset  && d.sunset[0];
+      /* Fetch 3-day forecast for each location */
+      var weatherFetches = validGeo.map(function (g) {
+        var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + g.lat + '&longitude=' + g.lon +
+          '&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto&forecast_days=3';
+        return fetch(url, { signal: signal }).then(function (r) { return r.json(); })
+          .then(function (w) { return { geo: g, weather: w }; });
+      });
 
-        if (maxT !== undefined) editorData.weatherHigh = Math.round(maxT) + '\u00b0C';
-        if (minT !== undefined) editorData.weatherLow  = Math.round(minT) + '\u00b0C';
-        if (wcode !== undefined) editorData.weatherConditions = WMO_DESC[wcode] || ('Code ' + wcode);
-        if (sunrise) editorData.sunrise = sunrise.indexOf('T') > -1 ? sunrise.split('T')[1].slice(0,5) : sunrise;
-        if (sunset)  editorData.sunset  = sunset.indexOf('T')  > -1 ? sunset.split('T')[1].slice(0,5)  : sunset;
+      /* Hospitals for the first location only */
+      var firstGeo = validGeo[0];
+      var overpassQuery = '[out:json][timeout:25];(node["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + ');way["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + '););out center 5;';
+      var overpassFetch = fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery), { signal: signal })
+        .then(function (r) { return r.json(); });
 
-        /* Show hospital picker */
-        var hosps = (results[1].elements || []).filter(function (el) {
+      Promise.all(weatherFetches.concat([overpassFetch])).then(function (results) {
+        var hospitalData = results[results.length - 1];
+        var weatherResults = results.slice(0, -1);
+
+        /* Build locationForecasts: [{address, days:[{date,high,low,conditions,sunrise,sunset}]}] */
+        editorData.locationForecasts = weatherResults.map(function (wr) {
+          var d = wr.weather.daily || {};
+          var days = (d.time || []).map(function (date, i) {
+            return {
+              date: date,
+              high: d.temperature_2m_max[i] !== undefined ? Math.round(d.temperature_2m_max[i]) + '\u00b0C' : '',
+              low:  d.temperature_2m_min[i] !== undefined ? Math.round(d.temperature_2m_min[i]) + '\u00b0C' : '',
+              conditions: WMO_DESC[d.weathercode[i]] || ('Code ' + d.weathercode[i]),
+              sunrise: (d.sunrise && d.sunrise[i]) ? (d.sunrise[i].indexOf('T') > -1 ? d.sunrise[i].split('T')[1].slice(0,5) : d.sunrise[i]) : '',
+              sunset:  (d.sunset  && d.sunset[i])  ? (d.sunset[i].indexOf('T')  > -1 ? d.sunset[i].split('T')[1].slice(0,5)  : d.sunset[i])  : ''
+            };
+          });
+          return { address: wr.geo.address, days: days };
+        });
+
+        /* Backward compat: single-day fields from first location day 0 */
+        if (editorData.locationForecasts.length > 0 && editorData.locationForecasts[0].days.length > 0) {
+          var first = editorData.locationForecasts[0].days[0];
+          editorData.weatherHigh       = first.high;
+          editorData.weatherLow        = first.low;
+          editorData.weatherConditions = first.conditions;
+          if (first.sunrise) editorData.sunrise = first.sunrise;
+          if (first.sunset)  editorData.sunset  = first.sunset;
+        }
+
+        /* Hospital picker (first location) */
+        var hosps = (hospitalData.elements || []).filter(function (el) {
           return el.tags && el.tags.name;
         }).slice(0, 5);
         if (hosps.length > 0) {
@@ -2156,8 +2294,6 @@
           });
           hospPicker.innerHTML = pickerHtml;
           hospPicker.style.display = 'block';
-
-          /* Assign to .onclick to replace any previous handler — avoids accumulation across fetches */
           hospPicker.onclick = function (e) {
             var item = e.target.closest('.hosp-item');
             if (!item) return;
@@ -2175,15 +2311,15 @@
 
         saveEditorData();
         buildEditor('callSheet');
-        statusEl.textContent = 'Weather loaded' + (hosps.length > 0 ? ' — select a hospital above.' : '. No hospitals found nearby.');
+        statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' +
+          (hosps.length > 0 ? ' — select a hospital above.' : '.');
         setTimeout(function () { if (statusEl.textContent.indexOf('select') < 0) statusEl.textContent = ''; }, 3000);
       }).catch(function (err) {
         if (err.name === 'AbortError') return;
         statusEl.textContent = 'Network error — check connection.';
         console.error('[mBTDB weather]', err);
       });
-    })
-    .catch(function (err) {
+    }).catch(function (err) {
       if (err.name === 'AbortError') return;
       statusEl.textContent = 'Geocoding failed — check connection.';
       console.error('[mBTDB geocode]', err);

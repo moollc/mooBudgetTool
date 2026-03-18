@@ -208,7 +208,9 @@
             var self = this;
             var shareEnabled = JSON.parse(localStorage.getItem('moo_og_share') || 'false');
             if (!shareEnabled) return Promise.resolve(false);
-            var authToken = localStorage.getItem('mbt_supabase_key') || OG_CLOUD_KEY;
+            /* Use the user JWT when signed in — required for RLS to record contributed_by. */
+            var authToken = localStorage.getItem('mbt_supabase_auth_token') ||
+                            localStorage.getItem('mbt_supabase_key') || OG_CLOUD_KEY;
 
             return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE, {
                 method: 'POST',
@@ -232,6 +234,67 @@
         /* Returns ISO timestamp of last successful cloud sync, or null. */
         lastSync: function () {
             return localStorage.getItem(OG_SYNC_KEY) || null;
+        },
+
+        /*
+         * fetchRateAverages() — pulls the og_rate_averages view from Supabase.
+         * Returns a map of { "description|region": { avg_rate, contributor_count } }.
+         * Falls back to computing averages from the local cached community rates when offline.
+         * Stores result in localStorage for offline access.
+         */
+        fetchRateAverages: function (region) {
+            var AVGS_KEY = 'moo_og_rate_averages';
+            var filterRegion = region || 'Jamaica';
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                /* Offline: return cached averages or compute from local data. */
+                var cached = localStorage.getItem(AVGS_KEY);
+                if (cached) {
+                    try { return Promise.resolve(JSON.parse(cached)); } catch (e) {}
+                }
+                return Promise.resolve(this._computeLocalAverages());
+            }
+            return fetch(OG_CLOUD_URL + '/rest/v1/og_rate_averages?select=*&region=eq.' + encodeURIComponent(filterRegion), {
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
+                }
+            }).then(function (res) {
+                if (!res.ok) return null;
+                return res.json();
+            }).then(function (rows) {
+                if (!rows || !rows.length) return {};
+                var map = {};
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    map[r.description.toLowerCase() + '|' + r.region.toLowerCase()] = {
+                        avg_rate: parseFloat(r.avg_rate) || 0,
+                        contributor_count: parseInt(r.contributor_count, 10) || 0
+                    };
+                }
+                localStorage.setItem(AVGS_KEY, JSON.stringify(map));
+                return map;
+            }).catch(function () { return {}; });
+        },
+
+        /* Compute rate averages from locally cached community rates (offline fallback). */
+        _computeLocalAverages: function () {
+            var map = {};
+            for (var i = 0; i < this.rates.length; i++) {
+                var r = this.rates[i];
+                if (r.source !== 'community') continue;
+                var key = (r.description || '').toLowerCase() + '|' + (r.region || 'Jamaica').toLowerCase();
+                if (!map[key]) { map[key] = { sum: 0, count: 0 }; }
+                map[key].sum += parseFloat(r.rate) || 0;
+                map[key].count++;
+            }
+            var result = {};
+            for (var k in map) {
+                result[k] = {
+                    avg_rate: map[k].count ? Math.round(map[k].sum / map[k].count) : 0,
+                    contributor_count: map[k].count
+                };
+            }
+            return result;
         },
 
         /* --- INTELLIGENT INGESTION --- */

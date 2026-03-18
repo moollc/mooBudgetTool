@@ -25,8 +25,40 @@
         opengate: 'OpenGate',
         contacts: 'Contacts',
         security: 'Security',
+        rsi: 'Health & Telemetry',
         settings: 'Settings'
     };
+
+    /* ========= Telemetry — opt-in rolling buffer (localStorage) ========= */
+    window.mBT.telemetry = (function () {
+        var CONSENT_KEY = 'mbt_telemetry_consent';
+        var LOG_KEY = 'mbt_telemetry_log';
+        var MAX_ENTRIES = 200;
+
+        function isEnabled() {
+            return localStorage.getItem(CONSENT_KEY) === '1';
+        }
+
+        function log(event, data) {
+            if (!isEnabled()) return;
+            try {
+                var entries = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+                entries.push({ ts: Date.now(), event: event, data: data || {} });
+                if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
+                localStorage.setItem(LOG_KEY, JSON.stringify(entries));
+            } catch (e) { /* storage full — silently skip */ }
+        }
+
+        function getLog() {
+            try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { return []; }
+        }
+
+        function clear() {
+            localStorage.removeItem(LOG_KEY);
+        }
+
+        return { isEnabled: isEnabled, log: log, getLog: getLog, clear: clear };
+    }());
 
     // =========================================
     // 1. HASH ROUTER
@@ -77,6 +109,9 @@
         if (typeof handler === 'function') {
             handler(route);
         }
+
+        /* --- Telemetry: log route navigation if user has opted in --- */
+        if (window.mBT.telemetry) window.mBT.telemetry.log('route_change', { route: route });
 
         console.log('[mBT] Route →', route);
     }
