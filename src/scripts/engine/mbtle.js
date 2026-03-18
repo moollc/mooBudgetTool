@@ -198,6 +198,47 @@ var validateStage = function(data) {
   return errors;
 };
 
+// === PRODUCTION TYPE CONSTANTS ===
+
+var PRODUCTION_TYPES = {
+  indie:      { label: 'Indie',      crewScale: 0.6, equipScale: 0.5 },
+  commercial: { label: 'Commercial', crewScale: 1.0, equipScale: 1.0 },
+  feature:    { label: 'Feature',    crewScale: 1.5, equipScale: 1.8 },
+};
+
+/* Per-role stage presence: true = present in that stage */
+var ROLE_STAGE_PRESENCE = {
+  director:          { prePro: true,  principal: true,  post: false },
+  producer:          { prePro: true,  principal: true,  post: true  },
+  upm:               { prePro: true,  principal: true,  post: false },
+  '1st_ad':          { prePro: true,  principal: true,  post: false },
+  '2nd_ad':          { prePro: false, principal: true,  post: false },
+  dop:               { prePro: false, principal: true,  post: false },
+  camera_operator:   { prePro: false, principal: true,  post: false },
+  gaffer:            { prePro: false, principal: true,  post: false },
+  grip:              { prePro: false, principal: true,  post: false },
+  sound_mixer:       { prePro: false, principal: true,  post: false },
+  editor:            { prePro: false, principal: false, post: true  },
+  colorist:          { prePro: false, principal: false, post: true  },
+  vfx:               { prePro: false, principal: false, post: true  },
+  default:           { prePro: false, principal: true,  post: false },
+};
+
+/**
+ * Calculate days a crew role should work given production stage day counts.
+ * @param {string} roleKey   - Key from ROLE_STAGE_PRESENCE (or 'default')
+ * @param {Object} stageDays - { prePro: number, principal: number, post: number }
+ * @returns {number} Total working days for that role
+ */
+var stageCrewDays = function(roleKey, stageDays) {
+  var presence = ROLE_STAGE_PRESENCE[roleKey] || ROLE_STAGE_PRESENCE.default;
+  var days = 0;
+  if (presence.prePro)    days += parseFloat(stageDays.prePro)    || 0;
+  if (presence.principal) days += parseFloat(stageDays.principal) || 0;
+  if (presence.post)      days += parseFloat(stageDays.post)      || 0;
+  return days;
+};
+
 // === EXPORTS ===
 window.mBT = window.mBT || {};
 window.mBT.le = {
@@ -205,6 +246,8 @@ window.mBT.le = {
   CURRENCY_LOCALES: CURRENCY_LOCALES,
   CURRENCY_RATES: CURRENCY_RATES,
   PRECISION: PRECISION,
+  PRODUCTION_TYPES: PRODUCTION_TYPES,
+  ROLE_STAGE_PRESENCE: ROLE_STAGE_PRESENCE,
   formatCurrency: formatCurrency,
   formatValue: formatValue,
   parseCurrency: parseCurrency,
@@ -218,6 +261,7 @@ window.mBT.le = {
   aggregateReconciliations: aggregateReconciliations,
   validateProject: validateProject,
   validateStage: validateStage,
+  stageCrewDays: stageCrewDays,
 };
 
 console.log('[mBT] Logic Engine initialized ✓');

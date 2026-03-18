@@ -1,6 +1,9 @@
 # mBT Portable Bundle Script (Windows PowerShell)
 # Creates a standalone dist/ folder ready for distribution
 
+# Always run from mBT/ root regardless of where this script is launched from
+Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path | Split-Path -Parent)
+
 $OutputDir = "dist"
 $EntryFile = "index.html"
 $SrcDir = "src"

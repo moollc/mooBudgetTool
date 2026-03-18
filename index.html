@@ -542,6 +542,7 @@
     <script src="./src/lib/localforage.min.js"></script>
     <script src="./src/lib/jszip.min.js"></script>
     <!-- Tier 5: Engine Modules -->
+    <script src="./src/scripts/engine/opengate.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
 	<script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message="" data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"></script>
     <script>
@@ -589,8 +590,22 @@
                 <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Docs</span>
             </button>
 
+            <button id="contactsFooterBtn" aria-label="Crew Contacts" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400">Crew</span>
+            </button>
+
             <button id="mainActionBtn" aria-label="Main Menu" class="w-12 h-12 bg-blue-600 rounded-[18px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
                 <div id="icon-main-action" class="[&>svg]:w-6 [&>svg]:h-6"></div>
+            </button>
+
+            <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
+                <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400">Cal</span>
             </button>
 
             <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
@@ -1343,12 +1358,13 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                                 items: s.items.map((desc, idx) => {
                                     // Find matching rate in database (Safe Access)
                                     const match = rateDb.find(r => r && r.description && desc && r.description.toLowerCase() === desc.toLowerCase());
+                                    const regionMult = (typeof mBT.opengate !== 'undefined') ? mBT.opengate.settings.regionMultiplier : 1;
                                     return {
                                         id: `item_${Date.now()}_${idx}_${Math.floor(Math.random()*1000)}`,
                                         description: desc,
                                         quantity: 1,
                                         unit: match ? match.unit : 'Day',
-                                        rate: match ? match.rate : 0, // Auto-fill rate if found
+                                        rate: match ? Math.round(match.rate * regionMult) : 0, // Auto-fill rate with regional multiplier
                                         multiplier: 1,
                                         actual: 0,
                                         rateType: 'negotiable',
@@ -1677,388 +1693,10 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         pushHistory: function(desc) { this.recorder.snapshot(desc); }
     };
 
-    /* ========= v19.54 TIER 2.5: OPEN GATE INFRASTRUCTURE (mBT.opengate) ========= */
-    mBT.opengate = {
-        settings: {
-            optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
-            location: localStorage.getItem('moo_og_loc') || 'Jamaica'
-        },
-        rates: [], 
-        contacts: [], 
-        templates: [], // Document Definitions (Studio Builder)
-
-        async init() {
-            await Promise.all([this.loadRates(), this.loadContacts()]);
-            this.loadTemplates();
-            console.log(`Open Gate Initialized (Async): ${this.rates.length} rates, ${this.contacts.length} contacts.`);
-        },
-
-        async loadRates() {
-            const key = 'prodBudget_v5_globalItems';
-            let stored = await mBT.data.storage.load(key);
-            
-            // Migration Bridge: Check legacy sync storage if async is empty
-            if (!stored) {
-                const raw = localStorage.getItem(key);
-                if(raw) {
-                    try { stored = JSON.parse(raw); await mBT.data.storage.save(key, stored); } 
-                    catch(e) { console.warn("Rate migration failed", e); }
-                }
-            }
-
-            this.rates.length = 0; 
-            if (!stored || stored.length === 0) {
-                this.rates.push(...this._getJamaicaDatabase());
-                await this.saveRates();
-            } else {
-                this.rates.push(...stored);
-            }
-        },
-
-        async loadContacts() { 
-            const key = 'moo_contacts';
-            let c = await mBT.data.storage.load(key);
-            
-            // Migration Bridge
-            if (!c) {
-                const raw = localStorage.getItem(key);
-                if(raw) {
-                    try { c = JSON.parse(raw); await mBT.data.storage.save(key, c); }
-                    catch(e) { console.warn("Contact migration failed", e); }
-                }
-            }
-
-            this.contacts.length = 0; 
-            if(c) this.contacts.push(...c);
-        },
-
-        // --- PERSISTENCE LAYER ---
-        async saveRates() { await mBT.data.storage.save('prodBudget_v5_globalItems', this.rates); },
-        async saveContacts() { await mBT.data.storage.save('moo_contacts', this.contacts); },
-
-        // --- NON-TRUNCATABLE TEMPLATE REGISTRY (Documents) ---
-        loadTemplates() {
-            // Logic Resolution: Centralized Blueprint Schemas (Migrated from Tier 5)
-            // Open Gate is now the single source of truth for Document Layouts.
-            // Batch 2.3: Liquid Grid Protocol - Removed 'y' coords, added autoPosition:true
-            // Phase 1: Schema Definition - Added 'defaults' for data integrity
-            const t = [
-                // --- WRITING & CORE ---
-                {
-                    id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true,
-                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Screenplay", autoPosition: true }],
-                    defaults: { additional: { body: "INT. LOCATION - DAY\n\n" } }
-                },
-                {
-                    id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false,
-                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Story Treatment", autoPosition: true }],
-                    defaults: { additional: { body: "LOGLINE:\n\nSYNOPSIS:\n\n" } }
-                },
-                // --- PRE-PRODUCTION ---
-                {
-                    id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Characters", autoPosition: true },
-                        { id: 'logistics', x: 6, w: 6, h: 6, type: 'logistics', label: "Locations", autoPosition: true },
-                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Scene Notes & Requirements", autoPosition: true }
-                    ],
-                    defaults: { cast: [], locations: [], additional: { notes: "" } }
-                },
-                {
-                    id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'schedule', x: 0, w: 12, h: 12, type: 'schedule', label: "Shot Sequence", autoPosition: true },
-                        { id: 'logistics', x: 0, w: 12, h: 4, type: 'logistics', label: "Locations", autoPosition: true }
-                    ],
-                    defaults: { schedule: [], locations: [] }
-                },
-                {
-                    id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'frame1', x: 0, w: 4, h: 6, type: 'image', label: "Frame 1", autoPosition: true },
-                        { id: 'desc1', x: 0, w: 4, h: 3, type: 'richText', label: "Action 1", autoPosition: true },
-                        { id: 'frame2', x: 4, w: 4, h: 6, type: 'image', label: "Frame 2", autoPosition: true },
-                        { id: 'desc2', x: 4, w: 4, h: 3, type: 'richText', label: "Action 2", autoPosition: true },
-                        { id: 'frame3', x: 8, w: 4, h: 6, type: 'image', label: "Frame 3", autoPosition: true },
-                        { id: 'desc3', x: 8, w: 4, h: 3, type: 'richText', label: "Action 3", autoPosition: true }
-                    ],
-                    defaults: { additional: { desc1: "", desc2: "", desc3: "" } }
-                },
-                {
-                    id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'logistics', x: 0, w: 6, h: 10, type: 'richText', label: "Logistics Checklist", autoPosition: true },
-                        { id: 'creative', x: 6, w: 6, h: 10, type: 'richText', label: "Creative Checklist", autoPosition: true }
-                    ],
-                    defaults: { additional: { logistics: "- [ ] Permits\n- [ ] Insurance\n", creative: "- [ ] Script Lock\n- [ ] Storyboards\n" } }
-                },
-                {
-                    id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'cast', x: 0, w: 12, h: 10, type: 'cast', label: "Audition List", autoPosition: true },
-                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Casting Director Notes", autoPosition: true }
-                    ],
-                    defaults: { cast: [], additional: { notes: "" } }
-                },
-                {
-                    id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'logistics', x: 0, w: 12, h: 10, type: 'logistics', label: "Location Details", autoPosition: true },
-                        { id: 'notes', x: 0, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)", autoPosition: true }
-                    ],
-                    defaults: { locations: [], additional: { notes: "" } }
-                },
-                { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
-                { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: 'calendar', default: false },
-                { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: 'calendar', default: false },
-                
-                // --- FINANCIAL & PITCH ---
-                {
-                    id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'cover', x: 0, w: 6, h: 8, type: 'image', label: "Key Art", autoPosition: true },
-                        { id: 'synopsis', x: 6, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis", autoPosition: true },
-                        { id: 'mood1', x: 0, w: 4, h: 4, type: 'image', label: "Tone Ref 1", autoPosition: true },
-                        { id: 'mood2', x: 4, w: 4, h: 4, type: 'image', label: "Tone Ref 2", autoPosition: true },
-                        { id: 'mood3', x: 8, w: 4, h: 4, type: 'image', label: "Tone Ref 3", autoPosition: true },
-                        { id: 'team', x: 0, w: 12, h: 6, type: 'contacts', label: "Key Creative Team", autoPosition: true }
-                    ],
-                    defaults: { contacts: [], additional: { synopsis: "" } }
-                },
-                {
-                    id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget Report', icon: 'money', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'summary', x: 0, w: 12, h: 4, type: 'richText', label: "Executive Summary", autoPosition: true },
-                        { id: 'breakdown', x: 0, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown", autoPosition: true }
-                    ],
-                    defaults: { additional: { summary: "" } }
-                },
-                { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: 'alert', default: false },
-
-                // --- PRODUCTION ---
-                {
-                    id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true,
-                    widgets: [
-                        { id: 'contacts', x: 0, w: 6, h: 4, type: 'contacts', label: "Key Contacts", autoPosition: true },
-                        { id: 'logistics', x: 6, w: 6, h: 4, type: 'logistics', label: "Logistics", autoPosition: true },
-                        { id: 'schedule', x: 0, w: 12, h: 6, type: 'schedule', label: "Schedule", autoPosition: true },
-                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Cast List", autoPosition: true },
-                        { id: 'crew', x: 6, w: 6, h: 6, type: 'crew', label: "Crew List", autoPosition: true },
-                        { id: 'notes', x: 0, w: 12, h: 2, type: 'richText', label: "General Notes", autoPosition: true },
-                        { id: 'footer', x: 0, w: 12, h: 2, type: 'footer', label: "Safety Footer", autoPosition: true }
-                    ],
-                    defaults: { contacts: [], locations: [], schedule: [], cast: [], crew: [], additional: { notes: "" } }
-                },
-                {
-                    id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'schedule', x: 0, w: 12, h: 5, type: 'schedule', label: "Scenes Shot", autoPosition: true },
-                        { id: 'crew', x: 0, w: 12, h: 5, type: 'crew', label: "Crew Attendance", autoPosition: true },
-                        { id: 'notes', x: 0, w: 6, h: 4, type: 'richText', label: "Production Notes", autoPosition: true },
-                        { id: 'delays', x: 6, w: 6, h: 4, type: 'richText', label: "Delays / Issues", autoPosition: true }
-                    ],
-                    defaults: { schedule: [], crew: [], additional: { notes: "", delays: "" } }
-                },
-                {
-                    id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'contacts', x: 0, w: 12, h: 4, type: 'contacts', label: "Production Team", autoPosition: true },
-                        { id: 'crew', x: 0, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew", autoPosition: true }
-                    ],
-                    defaults: { contacts: [], crew: [] }
-                },
-                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
-                { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: 'film', default: false },
-                { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: 'user', default: false },
-                { id: 'propList', cat: 'Production', label: 'Prop List', icon: 'hazard', default: false },
-                { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: 'coffee', default: false },
-                { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: 'money', default: false },
-                { id: 'po', cat: 'Production', label: 'Purchase Order', icon: 'receipt', default: false },
-                { id: 'timecard', cat: 'Production', label: 'Timecards', icon: 'history', default: false },
-                { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: 'sparkle', default: false },
-                { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: 'sparkle', default: false },
-
-                // --- POST & LEGAL ---
-                {
-                    id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'terms', x: 0, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions", autoPosition: true }
-                    ],
-                    defaults: { additional: { terms: "STANDARD AGREEMENT\n\n1. Services...\n2. Compensation..." } }
-                },
-                {
-                    id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'terms', x: 0, w: 12, h: 10, type: 'richText', label: "Terms of Agreement", autoPosition: true }
-                    ],
-                    defaults: { additional: { terms: "DEAL MEMO\n\nName:\nRole:\nRate:" } }
-                },
-                {
-                    id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Permit Details", autoPosition: true }
-                    ],
-                    defaults: { additional: { details: "PERMIT #:\nLOCATION:\nRESTRICTIONS:" } }
-                },
-                {
-                    id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false,
-                    widgets: [
-                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
-                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Coverage Details", autoPosition: true }
-                    ],
-                    defaults: { additional: { details: "INSURER:\nPOLICY #:\nCOVERAGE:" } }
-                },
-                { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: 'hazard', default: false },
-                { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: 'calendar', default: true },
-                { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: 'folder', default: false },
-                { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: 'sparkle', default: false },
-                { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: 'mapPin', default: true },
-                { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: 'camera', default: false },
-                { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: 'hazard', default: false },
-                { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: 'sparkle', default: false }
-            ];
-            this.templates.length = 0; 
-            this.templates.push(...t);
-        },
-
-        // --- INTELLIGENT INGESTION ENGINE ---
-        async ingest(items, type = 'rate') {
-            let added = 0;
-            
-            // PATH A: Rate Ingestion
-            if (type === 'rate') {
-                const existing = new Set(this.rates.map(i => i.description.toLowerCase()));
-                items.forEach(i => {
-                    if (!existing.has(i.description.toLowerCase())) {
-                        this.rates.push({ description: i.description, unit: i.unit || 'Day', rate: parseFloat(i.rate) || 0 });
-                        added++;
-                    }
-                });
-                if (added > 0) await this.saveRates();
-            } 
-            
-            // PATH B: Contact Ingestion
-            else if (type === 'contact') {
-                const existing = new Set(this.contacts.map(c => `${c.name}|${c.role}`.toLowerCase()));
-                items.forEach(i => {
-                    // Normalize Inputs: Handles variations in CSV headers (case insensitive)
-                    const name = (i.Name || i.name || '').trim();
-                    const role = (i.Role || i.role || 'Crew').trim();
-                    const phone = (i.Phone || i.phone || '').trim();
-                    const email = (i.Email || i.email || '').trim();
-                    const contactStr = phone || email; // Legacy fallback
-
-                    if (!name) return; // Skip empty rows
-
-                    const key = `${name}|${role}`.toLowerCase();
-                    if (!existing.has(key)) {
-                        this.contacts.push({
-                            id: 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                            name: name,
-                            role: role,
-                            phone: phone,
-                            email: email,
-                            contact: contactStr
-                        });
-                        existing.add(key);
-                        added++;
-                    }
-                });
-                if (added > 0) await this.saveContacts();
-            }
-            return added;
-        },
-        
-        // --- NON-TRUNCATABLE JAMAICA 2025 DATABASE ---
-        _getJamaicaDatabase() {
-            return [
-                { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
-                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
-                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
-                { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
-                { description: 'Researcher', unit: 'Day', rate: 25000 },
-                { description: 'Concept Artist', unit: 'Day', rate: 40000 },
-                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
-                { description: 'Director', unit: 'Day', rate: 85000 },
-                { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
-                { description: 'Producer', unit: 'Day', rate: 75000 },
-                { description: 'Line Producer', unit: 'Day', rate: 65000 },
-                { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
-                { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
-                { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
-                { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
-                { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
-                { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
-                { description: 'Key PA', unit: 'Day', rate: 20000 },
-                { description: 'Set PA', unit: 'Day', rate: 15000 },
-                { description: 'Office PA', unit: 'Day', rate: 15000 },
-                { description: 'Truck PA', unit: 'Day', rate: 18000 },
-                { description: 'Location Manager', unit: 'Day', rate: 50000 },
-                { description: 'Location Scout', unit: 'Day', rate: 35000 },
-                { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
-                { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
-                { description: 'Security Guard', unit: 'Day', rate: 12000 },
-                { description: 'Craft Service', unit: 'Day', rate: 25000 },
-                { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
-                { description: 'Camera Operator', unit: 'Day', rate: 60000 },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
-                { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
-                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
-                { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
-                { description: 'Drone Operator', unit: 'Day', rate: 55000 },
-                { description: 'Camera Utility', unit: 'Day', rate: 25000 },
-                { description: 'Gaffer', unit: 'Day', rate: 55000 },
-                { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
-                { description: 'Electrician', unit: 'Day', rate: 30000 },
-                { description: 'Key Grip', unit: 'Day', rate: 50000 },
-                { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
-                { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
-                { description: 'Grip', unit: 'Day', rate: 30000 },
-                { description: 'Generator Operator', unit: 'Day', rate: 35000 },
-                { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
-                { description: 'Boom Operator', unit: 'Day', rate: 35000 },
-                { description: 'Sound Utility', unit: 'Day', rate: 25000 },
-                { description: 'Production Designer', unit: 'Day', rate: 65000 },
-                { description: 'Art Director', unit: 'Day', rate: 50000 },
-                { description: 'Set Decorator', unit: 'Day', rate: 45000 },
-                { description: 'Set Dresser', unit: 'Day', rate: 30000 },
-                { description: 'Props Master', unit: 'Day', rate: 45000 },
-                { description: 'Assistant Props', unit: 'Day', rate: 30000 },
-                { description: 'Costume Designer', unit: 'Day', rate: 55000 },
-                { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
-                { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
-                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
-                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
-                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
-                { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
-                { description: 'Editor', unit: 'Day', rate: 50000 },
-                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
-                { description: 'Colorist', unit: 'Hour', rate: 15000 },
-                { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
-                { description: 'VFX Artist', unit: 'Day', rate: 55000 },
-                { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
-                { description: 'Composer', unit: 'Flat', rate: 200000 },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
-            ];
-        }
-    };
+    /* ========= TIER 2.5: OPEN GATE BRIDGE ========= */
+    /* mBTOG is the shared Open Gate engine loaded from src/scripts/engine/opengate.js */
+    /* This alias wires it into the mBT namespace for the Budget Editor. */
+    mBT.opengate = window.mBTOG;
 
     // --- 4. BACKWARD COMPATIBILITY ALIASES (The Bridge) ---
     // Logic Resolution: Ensures all existing calls in Tier 3-6 continue to function.
@@ -2074,7 +1712,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
     window.pushToHistory = mBT.data.pushHistory.bind(mBT.data);
     
     // --- 5. Global Aliases for Migrated Globals ---
-    window.mBTOG = mBT.opengate; // OPEN GATE Alias
+    /* window.mBTOG is set by src/scripts/engine/opengate.js — mBT.opengate points to the same object */
     window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
     
     /* ================= v19.54 TIER 3: Core Logic Engines ================= */
@@ -3549,30 +3187,19 @@ function getAbbreviatedName(name, maxLen = 25) {
             const isLocked = item.rateType === 'fixed';
             const initials = crew.name ? crew.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '?';
             
-            // Logic: Clean phone for links
-            // Step 1: Generate Canonical Links via mBTPublisher.comm
             const telLink = mBTPublisher.comm.call(crew.phone);
             const waLink = mBTPublisher.comm.whatsapp(crew.phone);
             const mailLink = mBTPublisher.comm.email(crew.email);
+            const isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
 
-            // DIAGNOSTIC PROBE START
-            if (crew.name) { // Only log for assigned crew
-                console.log(`--- Crew Popup Debug for ${crew.name} (${item.description}) ---`);
-                console.log(`Phone: ${crew.phone || 'N/A'}`);
-                console.log(`Email: ${crew.email || 'N/A'}`);
-                console.log(`Generated Call Link: ${telLink}`);
-                console.log(`Generated WhatsApp Link: ${waLink}`);
-                console.log(`Generated Email Link: ${mailLink}`);
-                console.log(`Buttons should render: Call=${(crew.phone && telLink !== '#')} WA=${(crew.phone && waLink !== '#')} Email=${(crew.email && mailLink !== '#')}`);
-            }
-            // DIAGNOSTIC PROBE END
-
-            // Sprint 6: Intrinsic Sizing & Gutter Halving
+            /* --- compact mode: tighter rows, variance column hidden --- */
+            const rowPad = isCompact ? 'py-1' : 'py-2';
+            const hideVar = isCompact ? 'hidden' : '';
             // Replaced fixed widths with w-px + whitespace-nowrap for numeric columns.
             // Reduced horizontal padding from p-2 to px-1 py-2 to improve proximity.
             return `
                 <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}">
-                    <td class="px-1 py-2 text-center relative w-12 md:w-14 overflow-visible">
+                    <td class="px-1 ${rowPad} text-center relative w-12 md:w-14 overflow-visible">
                         <div class="crew-wrapper inline-block">
                             <button data-action="crew-toggle" class="crew-avatar rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
                                 <span class="text-[12px] font-black pointer-events-none">${initials}</span>
@@ -3593,49 +3220,49 @@ function getAbbreviatedName(name, maxLen = 25) {
                         </div>
                     </td>
                     
-                    <td class="px-1 py-2 w-8 drag-handle text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing text-center">${mBTAssets.drag}</td>
-                    
-                    <td class="px-1 py-2 text-left min-w-[200px]">
-                        <input type="text" data-id="${safeId}" data-section="${safeSection}" data-field="description" value="${this.esc(item.description)}" 
-                               class="w-full bg-transparent border-none font-bold text-xs md:text-sm text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item...">
+                    <td class="px-1 ${rowPad} w-8 drag-handle text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing text-center ${isCompact ? 'hidden' : ''}">${mBTAssets.drag}</td>
+
+                    <td class="px-1 ${rowPad} text-left min-w-[200px]">
+                        <input type="text" data-id="${safeId}" data-section="${safeSection}" data-field="description" value="${this.esc(item.description)}"
+                               class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item...">
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap">
-                        <input type="number" data-id="${safeId}" data-section="${safeSection}" data-field="quantity" value="${item.quantity}" 
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" data-id="${safeId}" data-section="${safeSection}" data-field="quantity" value="${item.quantity}"
                                class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0">
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap">
-                        <select data-id="${safeId}" data-section="${safeSection}" data-field="unit" 
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <select data-id="${safeId}" data-section="${safeSection}" data-field="unit"
                                 class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center">
                             ${['Day','Week','Flat','Policy','Hour'].map(u => `<option value="${u}" ${item.unit === u ? 'selected' : ''}>${u.substring(0,3)}</option>`).join('')}
                         </select>
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap">
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
                         <div class="flex items-center gap-1 justify-end md:justify-start">
                             <button data-action="row-lock" data-id="${safeId}" data-section="${safeSection}" class="hidden md:flex w-6 h-6 rounded-lg transition-all flex-shrink-0 items-center justify-center ${isLocked ? 'text-rose-500 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}">
                                 <span class="scale-75 pointer-events-none">${isLocked ? mBTAssets.lock : mBTAssets.zap}</span>
                             </button>
-                            <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="rate" value="${toDisp(item.rate).toFixed(2)}" 
+                            <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="rate" value="${toDisp(item.rate).toFixed(2)}"
                                    class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0">
                         </div>
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="${safeId}">
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="${safeId}">
                         ${isMobile ? formatAbbreviated(estimated, displayCurrency) : mBTLE.format.currency(estimated)}
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap">
-                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actual" value="${toDisp(item.actual || 0).toFixed(2)}" 
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actual" value="${toDisp(item.actual || 0).toFixed(2)}"
                                class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">
                     </td>
-                    
-                    <td class="px-1 py-2 w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="${safeId}">
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-black text-xs ${hideVar}" data-variance-id="${safeId}">
                         ${isMobile ? formatAbbreviated(variance, displayCurrency) : mBTLE.format.currency(variance)}
                     </td>
-                    
-                    <td class="px-1 py-2 text-center w-8">
+
+                    <td class="px-1 ${rowPad} text-center w-8">
                         <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100">
                             ${mBTAssets.trash}
                         </button>
@@ -3717,21 +3344,22 @@ function getAbbreviatedName(name, maxLen = 25) {
             // Note: Header moved to RenderEngine.section to prevent visual blocking. Table is now body-only.
             // Fix: Escape quotes in section name to prevent HTML attribute injection
             const safeSectionName = name.replace(/"/g, '&quot;');
-            
+            const _isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
+
             const bodyContent = `
                 <div class="table-container overflow-x-auto no-scrollbar relative">
                     <table class="w-full border-collapse min-w-full table-auto">
                         <thead class="bg-slate-50 text-[11px] font-black uppercase tracking-tighter text-slate-400 border-b border-slate-100">
                             <tr>
                                 <th class="p-1 w-12 text-center">Crew</th>
-                                <th class="p-1 w-6 text-center"></th>
+                                <th class="p-1 w-6 text-center ${_isCompact ? 'hidden' : ''}"></th>
                                 <th class="p-1 text-left">Description</th>
                                 <th class="p-1 w-px text-center whitespace-nowrap px-3">Qty</th>
                                 <th class="p-1 w-px text-center whitespace-nowrap px-3">Unit</th>
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Rate</th>
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Est</th>
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Act</th>
-                                <th class="p-1 w-px text-right whitespace-nowrap px-3">Var</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-3 ${_isCompact ? 'hidden' : ''}">Var</th>
                                 <th class="p-1 w-8"></th>
                             </tr>
                         </thead>
@@ -7308,20 +6936,32 @@ _renderTalent: function(docId, d) {
             }
             if (subTab === 'lineItems') {
                 const isSharing = mBTOG.settings.optInSharing;
+                const cloudSyncOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                const lastSync = mBTOG.lastSync ? mBTOG.lastSync() : null;
+                const lastSyncLabel = lastSync ? new Date(lastSync).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
                 return `
                     <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
                         <div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 z-10 space-y-3">
                             <div class="flex gap-2">
                                 <button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm flex items-center justify-center gap-2">
-                                    ${mBTAssets.plus} Add Line Item
+                                    ${mBTAssets.plus} Add Rate
                                 </button>
-                                <button onclick="mBT.features.settings.toggleOpenGateSharing()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}">
-                                    ${mBTAssets.cloud} ${isSharing ? 'Sharing On' : 'Share Data'}
+                                <button onclick="mBT.features.settings.toggleCloudSync()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}" title="Pull updated rates from the OpenGate community database">
+                                    ${mBTAssets.cloud} ${cloudSyncOn ? 'Cloud On' : 'Cloud Off'}
+                                </button>
+                                <button onclick="mBT.features.settings.toggleOpenGateSharing()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}" title="Contribute your anonymized rates back to the community">
+                                    ${mBTAssets.upload || mBTAssets.cloud} ${isSharing ? 'Contributing' : 'Contribute'}
                                 </button>
                             </div>
-                            <div class="relative">
-                                <input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES..." class="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                            <div class="text-[9px] text-slate-400 font-medium px-1">Last cloud sync: ${lastSyncLabel}</div>
+                            <div class="flex items-center gap-2">
+                                <div class="relative flex-1">
+                                    <input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES..." class="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                                </div>
+                                <select onchange="mBT.features.settings.setRateRegion(this.value)" aria-label="Rate region" title="Rate region multiplier" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all text-slate-600">
+                                    ${Object.keys(mBTOG.RATE_REGIONS).map(r => `<option value="${r}"${mBTOG.settings.location === r ? ' selected' : ''}>${r}${mBTOG.RATE_REGIONS[r] !== 1 ? ' ×'+mBTOG.RATE_REGIONS[r] : ' (Base)'}</option>`).join('')}
+                                </select>
                             </div>
                         </div>
                         <div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">
@@ -7549,7 +7189,7 @@ _renderTalent: function(docId, d) {
             // Tier 5 Update: Manual Tab Construction for Event Delegation
             const tabs = [
                 { id: 'general', label: `General` },
-                { id: 'database', label: `Database` },
+                { id: 'database', label: `OpenGate` },
                 { id: 'ai', label: `AI` }
             ];
             
@@ -7590,11 +7230,13 @@ _renderTalent: function(docId, d) {
         // --- 4. Internal Logic & Listeners ---
         _attachListeners: function(tab, subTab) {
             if (tab === 'database' && subTab === 'lineItems') {
+                const mult = mBTOG.settings.regionMultiplier;
+                const regionLabel = mBTOG.settings.location !== 'Jamaica' ? ` (${mBTOG.settings.location} ×${mult})` : '';
                 mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, (r) => RenderEngine.ui.listRow({
                     id: r.id || r.description,
                     icon: mBTAssets.money,
                     title: r.description,
-                    subtitle: `${mBTLE.format.currency(r.rate)} / ${r.unit}`,
+                    subtitle: `${mBTLE.format.currency(r.rate * mult)} / ${r.unit}${regionLabel}`,
                     classes: 'border-b border-slate-50'
                 }));
             }
@@ -7690,15 +7332,30 @@ _renderTalent: function(docId, d) {
             this.open('database', 'lineItems'); // Refresh list
         },
 
+        setRateRegion: function(region) {
+            mBTOG.settings.location = region;
+            localStorage.setItem('moo_og_loc', region);
+            /* Re-render the lineItems tab to reflect updated multiplier */
+            mBT.features.settings.renderSubTab('database', 'lineItems');
+        },
+
+        toggleCloudSync: function() {
+            var current = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            var next = !current;
+            localStorage.setItem('moo_og_cloud_sync', JSON.stringify(next));
+            if (next && typeof mBTOG.syncFromCloud === 'function') {
+                mBTOG.syncFromCloud();
+            }
+            this.open('database', 'lineItems');
+        },
+
         toggleOpenGateSharing: function() {
             mBTOG.settings.optInSharing = !mBTOG.settings.optInSharing;
             localStorage.setItem('moo_og_share', JSON.stringify(mBTOG.settings.optInSharing));
-            
-            // Visual feedback
             if (mBTOG.settings.optInSharing) {
-                mBTME.alert("Sharing Active", "Open Gate Sharing Enabled. Anonymous rate data will be synchronized.");
+                mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
             }
-            this.open('database', 'lineItems'); // Refresh UI toggle state
+            this.open('database', 'lineItems');
         }
     };
 
@@ -9732,6 +9389,8 @@ window.updateAllHeaders = () => {
                 // Phase 16: Footer Nav uses hybrid openTool() loader
                 if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
+                else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html');
+                else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();

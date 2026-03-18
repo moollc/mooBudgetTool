@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mBT — Production Calendar</title>
+    <script src="../../lib/tailwind.min.js"></script>
+    <script src="../../lib/localforage.min.js"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .gantt-bar { border-radius: 6px; height: 28px; display: flex; align-items: center; padding: 0 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; transition: filter .2s; }
+        .gantt-bar:hover { filter: brightness(1.1); }
+        .milestone-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+        .milestone-row:last-child { border-bottom: none; }
+        @media (max-width: 480px) {
+            .gantt-label { display: none; }
+            .milestone-row { grid-template-columns: 100px 1fr auto; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
+
+    <!-- Header -->
+    <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
+        <div class="flex items-center gap-4">
+            <button id="btn-back" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                Back
+            </button>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <span class="text-white text-[11px] font-black uppercase tracking-tight">Production Calendar</span>
+            <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading…</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="btn-export-ics" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export .ics
+            </button>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6 space-y-6">
+
+        <!-- No project warning -->
+        <div id="no-project-msg" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-[11px] text-amber-800 font-semibold">
+            No project loaded. Open this tool from the budget editor to load a project.
+        </div>
+
+        <!-- Date Range Summary -->
+        <div id="date-summary" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Timeline Overview</span>
+                <span id="total-days-label" class="text-[9px] font-black text-slate-400 uppercase tracking-widest"></span>
+            </div>
+            <div class="flex gap-4 text-[10px] mt-2">
+                <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Start</span><span id="label-start" class="font-black text-slate-800">—</span></div>
+                <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Delivery</span><span id="label-delivery" class="font-black text-slate-800">—</span></div>
+                <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Project</span><span id="label-project" class="font-black text-slate-800">—</span></div>
+            </div>
+        </div>
+
+        <!-- Gantt Chart -->
+        <div id="gantt-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-4">Stage Timeline</div>
+            <div id="gantt-chart" class="space-y-2.5"></div>
+            <!-- Date axis -->
+            <div id="gantt-axis" class="mt-3 relative" style="height:20px;"></div>
+        </div>
+
+        <!-- Milestones -->
+        <div id="milestones-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Milestones &amp; Notes</span>
+                <button id="btn-add-milestone" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add
+                </button>
+            </div>
+            <div id="milestones-list" class="space-y-0"></div>
+            <div id="no-milestones" class="text-[10px] text-slate-400 italic hidden">No milestones yet. Click Add to create one.</div>
+        </div>
+
+        <!-- Stage Date Table -->
+        <div id="stage-table-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">Stage Breakdown</div>
+            <table class="w-full text-[10px]">
+                <thead>
+                    <tr class="border-b border-slate-100">
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Stage</th>
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Days</th>
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Start</th>
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">End</th>
+                    </tr>
+                </thead>
+                <tbody id="stage-table-body"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+<script>
+/* ========= mBT Production Calendar ========= */
+
+var mBTCalendar = (function () {
+    var state = {
+        projectKey: null,
+        budget: null,
+        milestones: []  /* [{ id, date, title, note }] */
+    };
+
+    var STAGE_CONFIG = [
+        { key: 'dev',  label: 'Development',     color: '#6366f1', text: '#fff' },
+        { key: 'pre',  label: 'Pre-Production',   color: '#3b82f6', text: '#fff' },
+        { key: 'prod', label: 'Production',        color: '#10b981', text: '#fff' },
+        { key: 'post', label: 'Post-Production',   color: '#f59e0b', text: '#1e293b' },
+        { key: 'dist', label: 'Distribution',      color: '#ec4899', text: '#fff' }
+    ];
+
+    function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function fmtDate(d) {
+        if (!d) return '—';
+        if (typeof d === 'string') { d = parseDate(d); }
+        return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    }
+
+    function parseDate(str) {
+        /* Timezone-safe parse for YYYY-MM-DD strings */
+        var d = new Date(str);
+        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+        return d;
+    }
+
+    function dateToICS(d) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + m + day;
+    }
+
+    function calcTimeline(budget) {
+        if (!budget || !budget.startDate) return null;
+        var cursor = parseDate(budget.startDate);
+        var result = [];
+        STAGE_CONFIG.forEach(function (sc) {
+            var days = 0;
+            if (budget.targetLock && budget.targetLock.stages && budget.targetLock.stages[sc.key]) {
+                days = parseFloat(budget.targetLock.stages[sc.key].days) || 0;
+            }
+            var start = new Date(cursor);
+            cursor.setDate(cursor.getDate() + days);
+            var end = new Date(cursor);
+            result.push({ key: sc.key, label: sc.label, color: sc.color, text: sc.text, start: start, end: end, days: days });
+        });
+        return result;
+    }
+
+    function renderGantt(timeline) {
+        var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
+        if (totalDays === 0) {
+            document.getElementById('gantt-chart').innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the timeline.</p>';
+            return;
+        }
+        var html = '';
+        timeline.forEach(function (t) {
+            if (t.days === 0) return;
+            var pct = Math.max(4, (t.days / totalDays) * 100);
+            html += '<div class="flex items-center gap-2">' +
+                '<div class="gantt-label w-24 text-[8px] font-black text-slate-500 uppercase tracking-widest text-right shrink-0">' + esc(t.label.split('-')[0].trim()) + '</div>' +
+                '<div class="flex-1 relative" style="min-width:0;">' +
+                    '<div class="gantt-bar" style="width:' + pct.toFixed(1) + '%;background:' + t.color + ';color:' + t.text + ';">' +
+                        t.days + 'd' +
+                    '</div>' +
+                '</div>' +
+                '<div class="text-[8px] text-slate-400 shrink-0 w-20 text-right">' + fmtDate(t.start) + '</div>' +
+            '</div>';
+        });
+        document.getElementById('gantt-chart').innerHTML = html;
+    }
+
+    function renderStageTable(timeline) {
+        var html = '';
+        timeline.forEach(function (t) {
+            html += '<tr class="border-b border-slate-50">' +
+                '<td class="py-2 pr-3"><span class="inline-block w-2 h-2 rounded-full mr-2" style="background:' + t.color + ';"></span>' + esc(t.label) + '</td>' +
+                '<td class="py-2 pr-3 font-bold">' + t.days + '</td>' +
+                '<td class="py-2 pr-3 text-slate-500">' + (t.days > 0 ? fmtDate(t.start) : '—') + '</td>' +
+                '<td class="py-2 text-slate-500">' + (t.days > 0 ? fmtDate(t.end) : '—') + '</td>' +
+            '</tr>';
+        });
+        document.getElementById('stage-table-body').innerHTML = html;
+    }
+
+    function renderMilestones() {
+        var list = document.getElementById('milestones-list');
+        var empty = document.getElementById('no-milestones');
+        if (!state.milestones.length) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+        var sorted = state.milestones.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+        var html = '';
+        sorted.forEach(function (m) {
+            html += '<div class="milestone-row">' +
+                '<input type="date" value="' + esc(m.date) + '" data-id="' + esc(m.id) + '" data-field="date" onchange="mBTCalendar.updateMilestone(this)" class="text-[10px] font-bold text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
+                '<input type="text" value="' + esc(m.title) + '" data-id="' + esc(m.id) + '" data-field="title" onchange="mBTCalendar.updateMilestone(this)" placeholder="Milestone name…" class="text-[10px] text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
+                '<button data-id="' + esc(m.id) + '" onclick="mBTCalendar.deleteMilestone(this.dataset.id)" class="text-slate-300 hover:text-red-500 transition-colors ml-1" aria-label="Delete milestone">' +
+                    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                '</button>' +
+            '</div>';
+        });
+        list.innerHTML = html;
+    }
+
+    function save() {
+        if (!state.projectKey || !state.budget) return;
+        state.budget.calendarNotes = state.milestones;
+        localforage.setItem(state.projectKey, state.budget).catch(function (e) { console.error('[CAL] save failed', e); });
+    }
+
+    function load() {
+        var params = new URLSearchParams(window.location.search);
+        state.projectKey = params.get('projectKey') || null;
+
+        if (!state.projectKey) {
+            document.getElementById('no-project-msg').classList.remove('hidden');
+            document.getElementById('project-tag').textContent = 'No Project';
+            return;
+        }
+
+        localforage.getItem(state.projectKey).then(function (budget) {
+            if (!budget) {
+                document.getElementById('no-project-msg').classList.remove('hidden');
+                document.getElementById('project-tag').textContent = 'Not Found';
+                return;
+            }
+            state.budget = budget;
+            state.milestones = budget.calendarNotes || [];
+
+            document.getElementById('project-tag').textContent = budget.projectName || '—';
+            document.getElementById('label-project').textContent = budget.projectName || '—';
+            document.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
+            document.getElementById('label-delivery').textContent = budget.deliveryDate ? fmtDate(parseDate(budget.deliveryDate)) : 'Not set';
+
+            var timeline = calcTimeline(budget);
+            var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
+            document.getElementById('total-days-label').textContent = totalDays + ' total days';
+
+            ['date-summary','gantt-section','milestones-section','stage-table-section'].forEach(function (id) {
+                document.getElementById(id).classList.remove('hidden');
+            });
+
+            if (timeline) {
+                renderGantt(timeline);
+                renderStageTable(timeline);
+            }
+            renderMilestones();
+
+        }).catch(function (e) { console.error('[CAL] load failed', e); });
+    }
+
+    return {
+        init: function () {
+            load();
+
+            document.getElementById('btn-back').addEventListener('click', function () {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                } else {
+                    history.back();
+                }
+            });
+
+            document.getElementById('btn-add-milestone').addEventListener('click', function () {
+                var id = 'ms_' + Date.now();
+                state.milestones.push({ id: id, date: new Date().toISOString().slice(0, 10), title: '' });
+                renderMilestones();
+                save();
+            });
+
+            document.getElementById('btn-export-ics').addEventListener('click', function () {
+                exportICS();
+            });
+        },
+
+        updateMilestone: function (input) {
+            var id = input.dataset.id;
+            var field = input.dataset.field;
+            var m = state.milestones.find(function (x) { return x.id === id; });
+            if (m) {
+                m[field] = input.value;
+                save();
+            }
+        },
+
+        deleteMilestone: function (id) {
+            state.milestones = state.milestones.filter(function (m) { return m.id !== id; });
+            renderMilestones();
+            save();
+        }
+    };
+
+    function exportICS() {
+        var budget = state.budget;
+        if (!budget) return;
+
+        var timeline = calcTimeline(budget);
+        var lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//mBT//Production Calendar//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:PUBLISH'
+        ];
+
+        var projectName = budget.projectName || 'Production';
+
+        /* Stage milestone events */
+        if (timeline) {
+            timeline.forEach(function (t) {
+                if (t.days === 0) return;
+                lines.push(
+                    'BEGIN:VEVENT',
+                    'DTSTART;VALUE=DATE:' + dateToICS(t.start),
+                    'DTEND;VALUE=DATE:' + dateToICS(t.end),
+                    'SUMMARY:' + projectName + ' — ' + t.label + ' (' + t.days + 'd)',
+                    'DESCRIPTION:Stage: ' + t.label + '\\nDays: ' + t.days,
+                    'END:VEVENT'
+                );
+            });
+        }
+
+        /* Delivery date event */
+        if (budget.deliveryDate) {
+            var del = parseDate(budget.deliveryDate);
+            lines.push(
+                'BEGIN:VEVENT',
+                'DTSTART;VALUE=DATE:' + dateToICS(del),
+                'DTEND;VALUE=DATE:' + dateToICS(del),
+                'SUMMARY:' + projectName + ' — Delivery Target',
+                'DESCRIPTION:Delivery/distribution target date.',
+                'END:VEVENT'
+            );
+        }
+
+        /* User milestones */
+        state.milestones.forEach(function (m) {
+            if (!m.date) return;
+            var d = parseDate(m.date);
+            lines.push(
+                'BEGIN:VEVENT',
+                'DTSTART;VALUE=DATE:' + dateToICS(d),
+                'DTEND;VALUE=DATE:' + dateToICS(d),
+                'SUMMARY:' + (m.title || 'Milestone'),
+                'END:VEVENT'
+            );
+        });
+
+        lines.push('END:VCALENDAR');
+
+        var blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (budget.projectName || 'production').replace(/\s+/g, '-').toLowerCase() + '-calendar.ics';
+        a.click();
+    }
+
+})();
+
+window.addEventListener('DOMContentLoaded', function () { mBTCalendar.init(); });
+</script>
+</body>
+</html>
