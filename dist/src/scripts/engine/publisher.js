@@ -2339,12 +2339,71 @@
                 }
             },
 
+            /* ---- TEMPLATE: STORYBOARD ---- */
+            storyboard: {
+                id: 'storyboard',
+                name: 'Storyboard',
+                description: 'Visual storyboard: frame grid with shot description, shot type, and camera movement per frame.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    return {
+                        projectTitle: (budget && budget.projectName) || '',
+                        director: '',
+                        columns: '3',
+                        frames: [
+                            { num: '1', description: '', shotType: 'WS', camera: '', audio: '' },
+                            { num: '2', description: '', shotType: 'MS', camera: '', audio: '' },
+                            { num: '3', description: '', shotType: 'CU', camera: '', audio: '' },
+                            { num: '4', description: '', shotType: '', camera: '', audio: '' },
+                            { num: '5', description: '', shotType: '', camera: '', audio: '' },
+                            { num: '6', description: '', shotType: '', camera: '', audio: '' }
+                        ]
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var d = (options && options.editorData) || this.getDefaultData(budgetData);
+                    var brand = (options && options.brand) || {};
+                    var title = esc(d.projectTitle || (budgetData && budgetData.projectName) || 'Storyboard');
+                    var cols = parseInt(d.columns, 10) || 3;
+                    var logoHtml = brand.logo ? '<img src="' + brand.logo + '" style="max-height:36px;margin-bottom:6px;"><br>' : '';
+                    var css = '.sb-grid{display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:10px;margin-top:12px;}' +
+                        '.sb-frame{border:1px solid #cbd5e1;border-radius:4px;overflow:hidden;}' +
+                        '.sb-image{height:80px;background:#f8fafc;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:8pt;border-bottom:1px solid #e2e8f0;position:relative;}' +
+                        '.sb-num{position:absolute;top:4px;left:6px;font-size:7pt;font-weight:900;color:#94a3b8;}' +
+                        '.sb-meta{padding:5px 7px;font-size:7.5pt;color:#334155;}' +
+                        '.sb-label{font-size:6.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;}' +
+                        '.sb-header{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;font-size:8.5pt;}';
+                    var frames = (d.frames || []).map(function (f) {
+                        return '<div class="sb-frame">' +
+                            '<div class="sb-image">' +
+                                '<span class="sb-num">' + esc(f.num || '') + '</span>' +
+                                '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                            '</div>' +
+                            '<div class="sb-meta">' +
+                                (f.shotType ? '<span class="sb-label">Shot</span> ' + esc(f.shotType) + '<br>' : '') +
+                                (f.camera ? '<span class="sb-label">Camera</span> ' + esc(f.camera) + '<br>' : '') +
+                                (f.description ? '<div style="margin-top:3px;font-size:7pt;color:#475569;">' + esc(f.description) + '</div>' : '') +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+                    var body = '<div class="sb-header">' +
+                        '<div>' + logoHtml + '<strong style="font-size:11pt;">' + title + '</strong></div>' +
+                        '<div style="text-align:right;font-size:8pt;color:#64748b;">' +
+                            (d.director ? 'Director: ' + esc(d.director) : '') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="sb-grid">' + frames + '</div>';
+                    return engine._wrapHtml(title + ' — Storyboard', body, css);
+                }
+            },
+
             /* ---- PUBLIC API ---- */
 
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {
                 var self = this;
-                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck'].map(function (key) {
+                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard'].map(function (key) {
                     var t = self[key];
                     return { id: t.id, name: t.name, description: t.description, formats: t.formats, hasEditor: !!t.hasEditor };
                 });

@@ -30,53 +30,66 @@ mBT is a Progressive Web App for film producers, line producers, and production 
 ## Features
 
 ### Budget Management
-- **Database Builder** — 20 document templates covering every production document: top sheets, detail budgets, call sheets, purchase orders, petty cash, shooting schedules, script breakdowns, continuity logs, movement orders, and funding pitch decks
+- **Database Builder** — 21 document templates: top sheets, detail budgets, call sheets, purchase orders, petty cash, shooting schedules, script breakdowns, continuity logs, movement orders, storyboards, and funding pitch decks
 - **Stages** — model production phases (Pre-roll, Principal, Post/Wrap), allocate budgets per stage, track variance
+- **Calendar** — Gantt timeline from stage days, milestone tracking, .ics export
 - **Publisher** — export any document as PDF, Excel (XLSX), standalone HTML, or `.moo` project file
 - **Export Package** — batch-export all financial documents with a cover page in one click
 
 ### Crew & Rates
-- **Contacts** — crew and vendor registry with department grouping, rate tracking, phone and email
-- **OpenGate** — Jamaica industry rate reference database (hourly, daily, weekly rates by department)
+- **Contacts** — crew and vendor registry with department grouping, rate tracking, dietary/allergy fields, catering summary
+- **OpenGate** — open industry rate reference. Jamaica base rates (JMD) with regional multipliers for Caribbean, UK, USA, Canada, and Australia. Named after opening the camera gate: a moment of honesty about what was actually captured. The project is built on the premise that industry knowledge — rates, processes, documentation standards — should not be locked behind years of access. The gate is open.
 
 ### Intelligence
-- **AI Analytics** — local budget analysis: burn rate, forecast, risk assessment, optimization suggestions, spending patterns, executive summary — no API key required
+- **AI Analytics** — local budget analysis: burn rate, forecast, risk assessment, optimization suggestions, spending patterns, executive summary. No API key required
 - **LLM Chat** — connect to LM Studio (local), OpenAI-compatible endpoints, or Claude API for natural language budget queries with full project context injected automatically
 
 ### Platform
-- **Offline-first** — IndexedDB stores all data locally; works indefinitely without internet
-- **Supabase Sync** — optional cloud backup and cross-device sync (Settings → Cloud Sync)
+- **Offline-first** — all data stored locally; works indefinitely without internet
+- **Supabase Sync** — optional cloud backup and cross-device sync (Settings -> Cloud Sync)
 - **PWA** — installs to home screen on Android and desktop; survives browser refreshes and restarts
 - **Dark mode** — full dark theme toggle
+- **Compact mode** — reduced row padding, hidden drag handles and variance columns for dense data entry
 - **Mobile-responsive** — bottom navigation mode, safe-area insets, touch-sized targets
 
 ---
 
 ## Architecture
 
+mBT is two separate apps that share tools and data:
+
+| App | Entry Point | Storage | Purpose |
+|-----|-------------|---------|---------|
+| **Budget Editor** | `index.html` (~9,880 lines) | `localforage` (`prodBudget_v5_*` keys) | Main budget editor. All reconcile, rate, and render logic is inline. Only loads `src/lib/*.js` + `src/scripts/engine/publisher.js` from `src/`. |
+| **App Shell** | `src/core/index.html` | IndexedDB (`mBTMonolithDB`) | Navigation hub. Loads `mBT.core.js` and `src/` services. Routes to tools via hash. |
+
+Tools in `src/tools/` are shared between both apps. They receive a `?projectKey=` URL param and read/write budget data via `localforage` directly.
+
 ```
 mBT/
-├── index.html              # Shell entry point
+├── index.html              # Budget Editor (standalone)
 ├── sw.js                   # Service worker (offline cache)
 ├── manifest.json           # PWA manifest
 ├── src/
 │   ├── core/
-│   │   ├── index.html      # Navigation shell (routes, nav, panels)
+│   │   ├── index.html      # App Shell (nav hub, routes to tools)
 │   │   ├── mBT.core.js     # Hash router, theme, nav, settings
 │   │   └── services/       # OpenGate.js, Contacts.js, Security.js
 │   ├── scripts/
-│   │   ├── storage.js      # IndexedDB layer (mBTMonolithDB)
+│   │   ├── storage.js      # IndexedDB layer (Shell only)
 │   │   └── engine/
-│   │       ├── mbtle.js    # Math & currency engine
-│   │       ├── publisher.js # 20-template document engine
+│   │       ├── mbtle.js     # Math & currency engine (mBTLE)
+│   │       ├── opengate.js  # Shared rate/contact/template engine (mBTOG)
+│   │       ├── publisher.js # 21-template document engine (mBTPublisher)
 │   │       └── totalizer.js # Budget reconciliation
 │   ├── tools/
-│   │   ├── db/             # Document Builder (mBTDB)
-│   │   ├── stages/         # Stage modelling
-│   │   ├── publisher/      # Export hub
-│   │   ├── contacts/       # Crew registry
 │   │   ├── ai/             # AI analytics + LLM chat
-│   │   └── rsi/            # RSI health engine + DEBT tracker
+│   │   ├── calendar/       # Gantt timeline + .ics export (mBTCalendar)
+│   │   ├── contacts/       # Crew registry
+│   │   ├── db/             # Document Builder (mBTDB)
+│   │   ├── publisher/      # Export hub
+│   │   ├── rsi/            # RSI health engine + DEBT tracker
+│   │   └── stages/         # Stage modelling (mBTStageStudio)
 │   ├── config/             # AI config, Supabase config
 │   ├── services/           # AI context, patterns, reports, sync
 │   └── lib/                # Vendored libraries (offline, no CDN)
@@ -84,15 +97,16 @@ mBT/
 ├── docs/
 │   └── supabase/           # Schema + self-host setup guide
 └── scripts/
-    ├── bundle.bat           # Windows build script
-    └── bundle.ps1           # PowerShell build script
+    ├── bundle.bat           # CMD bundler - packages dist/
+    ├── bundle.ps1           # PowerShell bundler - same + strips dev files
+    └── validate-naming.bat  # Checks mBT namespace prefix on all tools
 ```
 
-**Stack:** Vanilla JS — no framework, no package.json, no build tools required to run. Libraries (jsPDF, html2pdf, XLSX, localforage, Tailwind, Supabase) are vendored locally in `src/lib/`.
+**Stack:** Vanilla JS. No framework, no package.json, no build tools required to run. Libraries (jsPDF, html2pdf, XLSX, localforage, Tailwind, Supabase) are vendored in `src/lib/`.
 
-**Data:** IndexedDB database named `mBTMonolithDB` with stores for projects, stages, executions, og_ref, contacts, and sessions. Optional Supabase sync via Row Level Security policies (see `docs/supabase/`).
+**Data:** Budget Editor uses `localforage` with key prefix `prodBudget_v5_*`. App Shell uses IndexedDB (`mBTMonolithDB`). Optional Supabase sync via Row Level Security policies (see `docs/supabase/`).
 
-**Routing:** Hash-based (`#db`, `#stages`, `#publisher`, etc.). Tool panels render inline in the shell; the Database Builder and other full tools load as iframes.
+**Naming convention:** All JS namespace objects must be prefixed with `mBT` (e.g. `mBTCalendar`, `mBTStageStudio`, `mBTLE`). Run `scripts\validate-naming.bat` to audit.
 
 ---
 
@@ -102,7 +116,7 @@ mBT/
 |----------|-----------|
 | Financial | Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash |
 | Production | Call Sheet, Day Out of Days, Location Agreement, Equipment List, Crew Deal Memo |
-| Scheduling | Script Breakdown, Shooting Schedule, Continuity Log, Movement Order |
+| Scheduling | Script Breakdown, Shooting Schedule, Continuity Log, Movement Order, Storyboard |
 | Legal/Admin | Release Form, NDA, Permit Request, Insurance Summary |
 | Funding | Funding Pitch Deck |
 | Reference | Production Bible |
@@ -153,14 +167,21 @@ Requires IndexedDB API. Works on Android Chrome, iOS Safari, and desktop browser
 
 ---
 
-## Building from Source
+## Scripts
+
+All scripts auto-locate the project root, so they work from any directory.
+
+| Script | What it does |
+|--------|-------------|
+| `scripts\bundle.bat` | Packages app into `dist/`. Copies source, assets, service worker. Verifies 5 critical paths. Use from Command Prompt. |
+| `scripts\bundle.ps1` | Same as above but also strips dev-only files from dist, checks 10 paths, color output. Use from PowerShell. |
+| `scripts\validate-naming.bat` | Audits `src/tools/*/index.html` for `mBT` namespace prefix. Reports PASS/FAIL/WARN per tool. |
 
 ```bat
-cd mBT
 scripts\bundle.bat
 ```
 
-Output goes to `dist/`. The script copies all source files, verifies critical paths, and produces a clean portable folder.
+Output goes to `dist/`. Double-click `dist/index.html` to run.
 
 ---
 
@@ -169,11 +190,13 @@ Output goes to `dist/`. The script copies all source files, verifies critical pa
 mBT is open-source under the MIT license. Issues and PRs welcome.
 
 **Before contributing:**
-- No framework dependencies — vanilla JS only
-- No CDN references — all libs must be in `src/lib/`
-- No `window.parent` in tools — use `window.mBT.storage` directly
+- No framework dependencies, vanilla JS only
+- No CDN references, all libs must be in `src/lib/`
+- `var`/`function` not `const`/`let`/`=>` (codebase consistency)
+- All JS namespace objects prefixed with `mBT` (e.g. `mBTCalendar`, not `CAL`). Run `scripts\validate-naming.bat` to check.
 - XSS: all user-controlled strings through `esc()` before DOM insertion
-- No emoji in UI — inline SVGs only
+- No emoji in UI, inline SVGs only
+- No hardcoded API keys, read from `localStorage`
 
 ---
 

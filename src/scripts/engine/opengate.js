@@ -1,0 +1,587 @@
+/**
+ * mBTOG — Open Gate Engine
+ *
+ * The name comes from two places.
+ *
+ * In film, "opening the gate" is a camera check — the operator physically
+ * opens the film gate after a take to inspect the aperture for dust, hair,
+ * or damage that would ruin the image. It is a moment of honesty. You look
+ * at what was actually captured before moving on.
+ *
+ * The second meaning is the one this engine was built for: removing the
+ * gatekeepers. Industry rate information, production processes, document
+ * standards — this knowledge has always been held by the few and made
+ * deliberately inaccessible to everyone else. Especially in smaller markets
+ * like the Caribbean, where there is no union rate card, no published guild
+ * scale, and no authoritative source a new producer can point to and say
+ * "this is what things cost here."
+ *
+ * Open Gate is the answer to that. A living, community-calibrated reference
+ * that gives any producer — in Jamaica, Trinidad, Barbados, or anywhere else
+ * — the same baseline knowledge that used to require years of industry access
+ * to accumulate.
+ *
+ * The gate is open. Look at what's actually there.
+ *
+ * -------------------------------------------------------------------------
+ * Shared engine loaded by both the Budget Editor (mBT/index.html) and the
+ * App Shell (src/core/index.html). Depends only on window.localforage.
+ * Sets window.mBTOG.
+ * -------------------------------------------------------------------------
+ */
+
+(function () {
+    'use strict';
+
+    /* ========= REGIONAL RATE MULTIPLIERS ========= */
+    /* Jamaica is the base (1.0). All other regions are multiples of JMD rates. */
+    var RATE_REGIONS = {
+        'Jamaica':     1.0,
+        'Trinidad':    1.3,
+        'Barbados':    1.5,
+        'Guyana':      1.2,
+        'UK':          2.8,
+        'Canada':      2.7,
+        'Australia':   2.4,
+        'USA':         3.5
+    };
+
+    /* ========= CLOUD CONFIG ========= */
+    /*
+     * Publishable key — safe to embed in client code.
+     * Supabase RLS ensures public can only READ og_community_rates.
+     * All other tables require authentication.
+     * The secret key is never embedded here.
+     */
+    var OG_CLOUD_URL = 'https://gdrgxlicnvtrbenfxypt.supabase.co';
+    var OG_CLOUD_KEY = 'sb_publishable_1e5RuNmbdBzqC_n_-dFYHw_gBJzA73k';
+    var OG_TABLE     = 'og_community_rates';
+    var OG_SYNC_KEY  = 'moo_og_last_sync';
+
+    /* ========= STORAGE HELPERS ========= */
+    /* Use localforage directly — works in both Budget Editor and App Shell. */
+
+    function _lfGet(key) {
+        return window.localforage.getItem(key).catch(function () { return null; });
+    }
+
+    function _lfSet(key, val) {
+        return window.localforage.setItem(key, val).catch(function () {});
+    }
+
+    /* Legacy migration bridge: if localforage has nothing, check localStorage. */
+    function _loadWithMigration(key) {
+        return _lfGet(key).then(function (data) {
+            if (data) return data;
+            var raw = localStorage.getItem(key);
+            if (raw) {
+                try {
+                    var parsed = JSON.parse(raw);
+                    _lfSet(key, parsed);
+                    return parsed;
+                } catch (e) {}
+            }
+            return null;
+        });
+    }
+
+    /* ========= OPEN GATE ENGINE ========= */
+
+    var mBTOG = {
+
+        RATE_REGIONS: RATE_REGIONS,
+
+        settings: {
+            optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
+            location: localStorage.getItem('moo_og_loc') || 'Jamaica',
+            get regionMultiplier() { return RATE_REGIONS[this.location] || 1.0; }
+        },
+
+        rates: [],
+        contacts: [],
+        templates: [],
+
+        /* --- INIT --- */
+
+        init: function () {
+            var self = this;
+            return self.loadRates().then(function () {
+                return self.loadContacts();
+            }).then(function () {
+                self.loadTemplates();
+                /* Attempt cloud sync after local data is ready. Non-blocking. */
+                setTimeout(function () { self.syncFromCloud(); }, 800);
+            });
+        },
+
+        /* --- RATES --- */
+
+        loadRates: function () {
+            var self = this;
+            return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
+                self.rates.length = 0;
+                if (!stored || stored.length === 0) {
+                    var defaults = self._getJamaicaDatabase();
+                    for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
+                    return self.saveRates();
+                }
+                for (var j = 0; j < stored.length; j++) { self.rates.push(stored[j]); }
+            });
+        },
+
+        saveRates: function () {
+            return _lfSet('prodBudget_v5_globalItems', this.rates);
+        },
+
+        /* --- CONTACTS --- */
+
+        loadContacts: function () {
+            var self = this;
+            return _loadWithMigration('moo_contacts').then(function (stored) {
+                self.contacts.length = 0;
+                if (stored) {
+                    for (var i = 0; i < stored.length; i++) { self.contacts.push(stored[i]); }
+                }
+            });
+        },
+
+        saveContacts: function () {
+            return _lfSet('moo_contacts', this.contacts);
+        },
+
+        /* --- CLOUD SYNC --- */
+
+        /*
+         * syncFromCloud() — pulls community rates from Supabase og_community_rates.
+         * Uses the publishable key for public read. No account required.
+         * Merges new entries only — never overwrites local edits.
+         * Respects the user's cloud sync toggle (moo_og_cloud_sync).
+         * Silently no-ops if offline or sync is disabled.
+         */
+        syncFromCloud: function () {
+            var self = this;
+            if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve(0);
+            var syncEnabled = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            if (!syncEnabled) return Promise.resolve(0);
+
+            return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE + '?select=*&order=id', {
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
+                }
+            }).then(function (res) {
+                if (!res.ok) return [];
+                return res.json();
+            }).then(function (rows) {
+                if (!rows || !rows.length) return 0;
+                var existing = {};
+                for (var i = 0; i < self.rates.length; i++) {
+                    existing[self.rates[i].description.toLowerCase()] = true;
+                }
+                var added = 0;
+                for (var j = 0; j < rows.length; j++) {
+                    var row = rows[j];
+                    if (!existing[row.description.toLowerCase()]) {
+                        self.rates.push({
+                            description: row.description,
+                            unit: row.unit || 'Day',
+                            rate: parseFloat(row.rate) || 0,
+                            region: row.region || 'Jamaica',
+                            source: row.source || 'community'
+                        });
+                        existing[row.description.toLowerCase()] = true;
+                        added++;
+                    }
+                }
+                if (added > 0) { self.saveRates(); }
+                localStorage.setItem(OG_SYNC_KEY, new Date().toISOString());
+                return added;
+            }).catch(function () { return 0; });
+        },
+
+        /*
+         * pushRate() — contribute a rate to the community database.
+         * Requires a Supabase auth token stored at mbt_supabase_key.
+         * Opt-in only — respects moo_og_share toggle.
+         */
+        pushRate: function (description, unit, rate, region) {
+            var self = this;
+            var shareEnabled = JSON.parse(localStorage.getItem('moo_og_share') || 'false');
+            if (!shareEnabled) return Promise.resolve(false);
+            var authToken = localStorage.getItem('mbt_supabase_key') || OG_CLOUD_KEY;
+
+            return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE, {
+                method: 'POST',
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    description: description,
+                    unit: unit || 'Day',
+                    rate: parseFloat(rate) || 0,
+                    region: region || self.settings.location,
+                    currency: 'JMD',
+                    source: 'community'
+                })
+            }).then(function (res) { return res.ok; }).catch(function () { return false; });
+        },
+
+        /* Returns ISO timestamp of last successful cloud sync, or null. */
+        lastSync: function () {
+            return localStorage.getItem(OG_SYNC_KEY) || null;
+        },
+
+        /* --- INTELLIGENT INGESTION --- */
+        /* Deduplicates by description (rates) or name+role (contacts) before saving. */
+
+        ingest: function (items, type) {
+            var self = this;
+            var added = 0;
+            type = type || 'rate';
+
+            if (type === 'rate') {
+                var existingRates = {};
+                for (var i = 0; i < self.rates.length; i++) {
+                    existingRates[self.rates[i].description.toLowerCase()] = true;
+                }
+                for (var j = 0; j < items.length; j++) {
+                    var item = items[j];
+                    if (!existingRates[item.description.toLowerCase()]) {
+                        self.rates.push({
+                            description: item.description,
+                            unit: item.unit || 'Day',
+                            rate: parseFloat(item.rate) || 0
+                        });
+                        existingRates[item.description.toLowerCase()] = true;
+                        added++;
+                    }
+                }
+                if (added > 0) return self.saveRates().then(function () { return added; });
+
+            } else if (type === 'contact') {
+                var existingContacts = {};
+                for (var k = 0; k < self.contacts.length; k++) {
+                    var c = self.contacts[k];
+                    existingContacts[(c.name + '|' + c.role).toLowerCase()] = true;
+                }
+                for (var m = 0; m < items.length; m++) {
+                    var ci = items[m];
+                    var name = (ci.Name || ci.name || '').trim();
+                    var role = (ci.Role || ci.role || 'Crew').trim();
+                    var phone = (ci.Phone || ci.phone || '').trim();
+                    var email = (ci.Email || ci.email || '').trim();
+                    if (!name) continue;
+                    var ckey = (name + '|' + role).toLowerCase();
+                    if (!existingContacts[ckey]) {
+                        self.contacts.push({
+                            id: 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                            name: name,
+                            role: role,
+                            phone: phone,
+                            email: email,
+                            contact: phone || email
+                        });
+                        existingContacts[ckey] = true;
+                        added++;
+                    }
+                }
+                if (added > 0) return self.saveContacts().then(function () { return added; });
+            }
+
+            return Promise.resolve(added);
+        },
+
+        /* --- TEMPLATE REGISTRY --- */
+        /* Document layout definitions for the Studio Builder (GridStack). */
+        /* This is the single source of truth for document schemas across both apps. */
+
+        loadTemplates: function () {
+            var t = [
+                /* --- WRITING & CORE --- */
+                {
+                    id: 'script', cat: 'Pre-Prod', label: 'Script', icon: 'file', default: true,
+                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Screenplay", autoPosition: true }],
+                    defaults: { additional: { body: "INT. LOCATION - DAY\n\n" } }
+                },
+                {
+                    id: 'treatment', cat: 'Pre-Prod', label: 'Story Treatment', icon: 'file', default: false,
+                    widgets: [{ id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true }, { id: 'body', x: 0, w: 12, h: 12, type: 'richText', label: "Story Treatment", autoPosition: true }],
+                    defaults: { additional: { body: "LOGLINE:\n\nSYNOPSIS:\n\n" } }
+                },
+                /* --- PRE-PRODUCTION --- */
+                {
+                    id: 'breakdown', cat: 'Pre-Prod', label: 'Script Breakdowns', icon: 'search', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Characters", autoPosition: true },
+                        { id: 'logistics', x: 6, w: 6, h: 6, type: 'logistics', label: "Locations", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Scene Notes & Requirements", autoPosition: true }
+                    ],
+                    defaults: { cast: [], locations: [], additional: { notes: "" } }
+                },
+                {
+                    id: 'shotlist', cat: 'Pre-Prod', label: 'Shot Lists', icon: 'film', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 12, type: 'schedule', label: "Shot Sequence", autoPosition: true },
+                        { id: 'logistics', x: 0, w: 12, h: 4, type: 'logistics', label: "Locations", autoPosition: true }
+                    ],
+                    defaults: { schedule: [], locations: [] }
+                },
+                {
+                    id: 'storyboard', cat: 'Pre-Prod', label: 'Storyboards', icon: 'image', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'frame1', x: 0, w: 4, h: 6, type: 'image', label: "Frame 1", autoPosition: true },
+                        { id: 'desc1', x: 0, w: 4, h: 3, type: 'richText', label: "Action 1", autoPosition: true },
+                        { id: 'frame2', x: 4, w: 4, h: 6, type: 'image', label: "Frame 2", autoPosition: true },
+                        { id: 'desc2', x: 4, w: 4, h: 3, type: 'richText', label: "Action 2", autoPosition: true },
+                        { id: 'frame3', x: 8, w: 4, h: 6, type: 'image', label: "Frame 3", autoPosition: true },
+                        { id: 'desc3', x: 8, w: 4, h: 3, type: 'richText', label: "Action 3", autoPosition: true }
+                    ],
+                    defaults: { additional: { desc1: "", desc2: "", desc3: "" } }
+                },
+                {
+                    id: 'preCheck', cat: 'Pre-Prod', label: 'Pre-Prod Checklist', icon: 'check', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'logistics', x: 0, w: 6, h: 10, type: 'richText', label: "Logistics Checklist", autoPosition: true },
+                        { id: 'creative', x: 6, w: 6, h: 10, type: 'richText', label: "Creative Checklist", autoPosition: true }
+                    ],
+                    defaults: { additional: { logistics: "- [ ] Permits\n- [ ] Insurance\n", creative: "- [ ] Script Lock\n- [ ] Storyboards\n" } }
+                },
+                {
+                    id: 'casting', cat: 'Pre-Prod', label: 'Casting Sheets', icon: 'user', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cast', x: 0, w: 12, h: 10, type: 'cast', label: "Audition List", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 4, type: 'richText', label: "Casting Director Notes", autoPosition: true }
+                    ],
+                    defaults: { cast: [], additional: { notes: "" } }
+                },
+                {
+                    id: 'techScout', cat: 'Pre-Prod', label: 'Tech Scout Report', icon: 'mapPin', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'logistics', x: 0, w: 12, h: 10, type: 'logistics', label: "Location Details", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 6, type: 'richText', label: "Tech Notes (Power/Parking/Access)", autoPosition: true }
+                    ],
+                    defaults: { locations: [], additional: { notes: "" } }
+                },
+                { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
+                { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: 'calendar', default: false },
+                { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: 'calendar', default: false },
+                /* --- FINANCIAL & PITCH --- */
+                {
+                    id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'cover', x: 0, w: 6, h: 8, type: 'image', label: "Key Art", autoPosition: true },
+                        { id: 'synopsis', x: 6, w: 6, h: 8, type: 'richText', label: "Logline & Synopsis", autoPosition: true },
+                        { id: 'mood1', x: 0, w: 4, h: 4, type: 'image', label: "Tone Ref 1", autoPosition: true },
+                        { id: 'mood2', x: 4, w: 4, h: 4, type: 'image', label: "Tone Ref 2", autoPosition: true },
+                        { id: 'mood3', x: 8, w: 4, h: 4, type: 'image', label: "Tone Ref 3", autoPosition: true },
+                        { id: 'team', x: 0, w: 12, h: 6, type: 'contacts', label: "Key Creative Team", autoPosition: true }
+                    ],
+                    defaults: { contacts: [], additional: { synopsis: "" } }
+                },
+                {
+                    id: 'budgetRep', cat: 'Pre-Prod', label: 'Budget Report', icon: 'money', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'summary', x: 0, w: 12, h: 4, type: 'richText', label: "Executive Summary", autoPosition: true },
+                        { id: 'breakdown', x: 0, w: 12, h: 12, type: 'schedule', label: "Cost Breakdown", autoPosition: true }
+                    ],
+                    defaults: { additional: { summary: "" } }
+                },
+                { id: 'vendorBid', cat: 'Pre-Prod', label: 'Vendor Bid Comparison', icon: 'alert', default: false },
+                /* --- PRODUCTION --- */
+                {
+                    id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true,
+                    widgets: [
+                        { id: 'contacts', x: 0, w: 6, h: 4, type: 'contacts', label: "Key Contacts", autoPosition: true },
+                        { id: 'logistics', x: 6, w: 6, h: 4, type: 'logistics', label: "Logistics", autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 6, type: 'schedule', label: "Schedule", autoPosition: true },
+                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Cast List", autoPosition: true },
+                        { id: 'crew', x: 6, w: 6, h: 6, type: 'crew', label: "Crew List", autoPosition: true },
+                        { id: 'notes', x: 0, w: 12, h: 2, type: 'richText', label: "General Notes", autoPosition: true },
+                        { id: 'footer', x: 0, w: 12, h: 2, type: 'footer', label: "Safety Footer", autoPosition: true }
+                    ],
+                    defaults: { contacts: [], locations: [], schedule: [], cast: [], crew: [], additional: { notes: "" } }
+                },
+                {
+                    id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'schedule', x: 0, w: 12, h: 5, type: 'schedule', label: "Scenes Shot", autoPosition: true },
+                        { id: 'crew', x: 0, w: 12, h: 5, type: 'crew', label: "Crew Attendance", autoPosition: true },
+                        { id: 'notes', x: 0, w: 6, h: 4, type: 'richText', label: "Production Notes", autoPosition: true },
+                        { id: 'delays', x: 6, w: 6, h: 4, type: 'richText', label: "Delays / Issues", autoPosition: true }
+                    ],
+                    defaults: { schedule: [], crew: [], additional: { notes: "", delays: "" } }
+                },
+                {
+                    id: 'crewList', cat: 'Production', label: 'Crew Contact List', icon: 'phone', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'contacts', x: 0, w: 12, h: 4, type: 'contacts', label: "Production Team", autoPosition: true },
+                        { id: 'crew', x: 0, w: 12, h: 12, type: 'crew', label: "Department Heads & Crew", autoPosition: true }
+                    ],
+                    defaults: { contacts: [], crew: [] }
+                },
+                { id: 'transport', cat: 'Production', label: 'Transport Schedule', icon: 'mapPin', default: false },
+                { id: 'continuity', cat: 'Production', label: 'Continuity/Sound Log', icon: 'film', default: false },
+                { id: 'muahCont', cat: 'Production', label: 'Hair/Makeup Continuity', icon: 'user', default: false },
+                { id: 'propList', cat: 'Production', label: 'Prop List', icon: 'hazard', default: false },
+                { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: 'coffee', default: false },
+                { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: 'money', default: false },
+                { id: 'po', cat: 'Production', label: 'Purchase Order', icon: 'receipt', default: false },
+                { id: 'timecard', cat: 'Production', label: 'Timecards', icon: 'history', default: false },
+                { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: 'sparkle', default: false },
+                { id: 'carbon', cat: 'Production', label: 'Carbon Calculator', icon: 'sparkle', default: false },
+                /* --- POST & LEGAL --- */
+                {
+                    id: 'talentAgr', cat: 'Legal', label: 'Talent Agreement', icon: 'check', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'terms', x: 0, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions", autoPosition: true }
+                    ],
+                    defaults: { additional: { terms: "STANDARD AGREEMENT\n\n1. Services...\n2. Compensation..." } }
+                },
+                {
+                    id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'terms', x: 0, w: 12, h: 10, type: 'richText', label: "Terms of Agreement", autoPosition: true }
+                    ],
+                    defaults: { additional: { terms: "DEAL MEMO\n\nName:\nRole:\nRate:" } }
+                },
+                {
+                    id: 'permit', cat: 'Legal', label: 'Filming Permit', icon: 'file', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Permit Details", autoPosition: true }
+                    ],
+                    defaults: { additional: { details: "PERMIT #:\nLOCATION:\nRESTRICTIONS:" } }
+                },
+                {
+                    id: 'insurance', cat: 'Legal', label: 'Insurance Cert', icon: 'lock', default: false,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'details', x: 0, w: 12, h: 10, type: 'richText', label: "Coverage Details", autoPosition: true }
+                    ],
+                    defaults: { additional: { details: "INSURER:\nPOLICY #:\nCOVERAGE:" } }
+                },
+                { id: 'vfxBreak', cat: 'Post-Prod', label: 'VFX Breakdown', icon: 'hazard', default: false },
+                { id: 'postSched', cat: 'Post-Prod', label: 'Post Schedule', icon: 'calendar', default: true },
+                { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: 'folder', default: false },
+                { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: 'sparkle', default: false },
+                { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: 'mapPin', default: true },
+                { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: 'camera', default: false },
+                { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: 'hazard', default: false },
+                { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: 'sparkle', default: false }
+            ];
+            this.templates.length = 0;
+            for (var i = 0; i < t.length; i++) { this.templates.push(t[i]); }
+        },
+
+        /* ========= JAMAICA 2025 INDUSTRY RATE DATABASE ========= */
+        /*
+         * These rates are the result of years of asking around, cross-referencing
+         * quotes, and comparing actual invoices. They are not official. There is no
+         * official source. That is the point.
+         *
+         * All rates in JMD. Apply mBTOG.settings.regionMultiplier for other markets.
+         */
+        _getJamaicaDatabase: function () {
+            return [
+                /* Pre-Production */
+                { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
+                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
+                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
+                { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
+                { description: 'Researcher', unit: 'Day', rate: 25000 },
+                { description: 'Concept Artist', unit: 'Day', rate: 40000 },
+                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+                /* Above-the-Line */
+                { description: 'Director', unit: 'Day', rate: 85000 },
+                { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
+                { description: 'Producer', unit: 'Day', rate: 75000 },
+                { description: 'Line Producer', unit: 'Day', rate: 65000 },
+                { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
+                { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
+                { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
+                { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
+                /* Production Office */
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
+                { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
+                { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
+                { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
+                { description: 'Key PA', unit: 'Day', rate: 20000 },
+                { description: 'Set PA', unit: 'Day', rate: 15000 },
+                { description: 'Office PA', unit: 'Day', rate: 15000 },
+                { description: 'Truck PA', unit: 'Day', rate: 18000 },
+                { description: 'Location Manager', unit: 'Day', rate: 50000 },
+                { description: 'Location Scout', unit: 'Day', rate: 35000 },
+                { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
+                { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
+                { description: 'Security Guard', unit: 'Day', rate: 12000 },
+                { description: 'Craft Service', unit: 'Day', rate: 25000 },
+                { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
+                /* Camera */
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
+                { description: 'Camera Operator', unit: 'Day', rate: 60000 },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
+                { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
+                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
+                { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
+                { description: 'Drone Operator', unit: 'Day', rate: 55000 },
+                { description: 'Camera Utility', unit: 'Day', rate: 25000 },
+                /* Lighting & Grip */
+                { description: 'Gaffer', unit: 'Day', rate: 55000 },
+                { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
+                { description: 'Electrician', unit: 'Day', rate: 30000 },
+                { description: 'Key Grip', unit: 'Day', rate: 50000 },
+                { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
+                { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
+                { description: 'Grip', unit: 'Day', rate: 30000 },
+                { description: 'Generator Operator', unit: 'Day', rate: 35000 },
+                /* Sound */
+                { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
+                { description: 'Boom Operator', unit: 'Day', rate: 35000 },
+                { description: 'Sound Utility', unit: 'Day', rate: 25000 },
+                /* Art & Wardrobe */
+                { description: 'Production Designer', unit: 'Day', rate: 65000 },
+                { description: 'Art Director', unit: 'Day', rate: 50000 },
+                { description: 'Set Decorator', unit: 'Day', rate: 45000 },
+                { description: 'Set Dresser', unit: 'Day', rate: 30000 },
+                { description: 'Props Master', unit: 'Day', rate: 45000 },
+                { description: 'Assistant Props', unit: 'Day', rate: 30000 },
+                { description: 'Costume Designer', unit: 'Day', rate: 55000 },
+                { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
+                { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
+                /* Hair & Makeup */
+                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
+                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
+                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
+                /* Post-Production */
+                { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
+                { description: 'Editor', unit: 'Day', rate: 50000 },
+                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
+                { description: 'Colorist', unit: 'Hour', rate: 15000 },
+                { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
+                { description: 'VFX Artist', unit: 'Day', rate: 55000 },
+                { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
+                { description: 'Composer', unit: 'Flat', rate: 200000 },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
+            ];
+        }
+    };
+
+    window.mBTOG = mBTOG;
+
+})();

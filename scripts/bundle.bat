@@ -1,4 +1,7 @@
 @echo off
+REM Always run from mBT/ root regardless of where this script is launched from
+cd /d "%~dp0.."
+
 echo ============================================
 echo    mBT Portable Bundle Script
 echo ============================================

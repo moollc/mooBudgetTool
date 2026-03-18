@@ -45,7 +45,6 @@ const urlsToCache = [
   '/src/tools/ai/index.html',
   '/src/tools/contacts/index.html',
   '/src/tools/db/index.html',
-  '/src/tools/db_full/index.html',
   '/src/tools/publisher/index.html',
   '/src/tools/rsi/index.html',
   '/src/tools/stages/index.html',

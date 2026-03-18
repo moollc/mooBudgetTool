@@ -34,6 +34,10 @@
     #settings-panel.open { display: block; }
 
     #section-chat { display: none; }
+    #offline-banner { display: none; }
+    #offline-banner.visible { display: flex; }
+    #treatment-body { display: none; }
+    #treatment-body.open { display: block; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -53,12 +57,32 @@
       </div>
     </div>
 
+    <!-- Offline Banner -->
+    <div id="offline-banner" class="items-center gap-3 bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-sm text-amber-800">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+      <span><strong>You're offline</strong> — LLM Chat unavailable. Local Analytics still work.</span>
+    </div>
+
     <!-- Context Banner -->
-    <div class="bg-white rounded-lg shadow-sm border p-3 mb-4 flex items-center gap-4 text-sm">
-      <span class="font-medium text-gray-700">Project:</span>
-      <span id="activeProject" class="text-gray-500">None</span>
-      <span class="ml-auto font-medium text-gray-700">Budget:</span>
-      <span id="activeBudget" class="text-gray-500">—</span>
+    <div class="bg-white rounded-lg shadow-sm border mb-4 text-sm">
+      <div class="p-3 flex items-center gap-4">
+        <span class="font-medium text-gray-700">Project:</span>
+        <span id="activeProject" class="text-gray-500">None</span>
+        <span class="ml-auto font-medium text-gray-700">Budget:</span>
+        <span id="activeBudget" class="text-gray-500">—</span>
+        <button onclick="toggleTreatment()" id="treatment-toggle-btn"
+          class="ml-2 text-xs px-2 py-1 border rounded text-gray-500 hover:bg-gray-50 transition-colors" aria-label="Toggle production treatment notes" title="Production treatment / context notes">
+          Treatment
+        </button>
+      </div>
+      <div id="treatment-body" class="px-3 pb-3 border-t border-gray-100">
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-2 mb-1">Production Treatment / Context Notes</label>
+        <textarea id="treatmentInput" rows="4"
+          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+          placeholder="Paste your treatment, script notes, production brief, or any context the AI should know about this project…"
+          oninput="saveTreatment()"></textarea>
+        <p class="text-xs text-gray-400 mt-1">Saved automatically. Injected into LLM system prompt when "Inject budget context" is enabled.</p>
+      </div>
     </div>
 
     <!-- Mode Toggle -->
@@ -115,14 +139,18 @@
           <option value="claude">Claude API</option>
         </select>
         <span id="llmModelLabel" class="text-xs text-gray-400 flex-1">localhost:1234</span>
-        <button onclick="toggleSettings()"
-          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
-          ⚙ Settings
-        </button>
-        <button onclick="clearLLMChat()"
-          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
-          Clear
-        </button>
+      <button onclick="toggleSettings()"
+        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium" aria-label="Open LLM settings">
+        ⚙ Settings
+      </button>
+      <button onclick="exportLLMHistory()"
+        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium" aria-label="Export LLM chat history">
+        Export
+      </button>
+      <button onclick="clearLLMChat()"
+        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium" aria-label="Clear LLM chat history">
+        Clear
+      </button>
       </div>
 
       <!-- Inline Settings Panel -->
@@ -202,11 +230,94 @@
     var context    = null;
     var llmHistory = [];   /* [{role, content}] for LLM session */
 
+    var LLM_HISTORY_KEY = 'mbt_ai_llm_history';
+    var TREATMENT_KEY   = 'mbt_ai_treatment';
+
     /* --- XSS-safe helper --- */
     function esc(str) {
         var d = document.createElement('div');
         d.textContent = String(str);
         return d.innerHTML;
+    }
+
+    /* =========================================
+       OFFLINE DETECTION
+    ========================================= */
+    function updateOfflineBanner() {
+        var banner = document.getElementById('offline-banner');
+        if (navigator.onLine) {
+            banner.classList.remove('visible');
+        } else {
+            banner.classList.add('visible');
+        }
+    }
+    window.addEventListener('online',  updateOfflineBanner);
+    window.addEventListener('offline', updateOfflineBanner);
+
+    /* =========================================
+       TREATMENT NOTES
+    ========================================= */
+    function toggleTreatment() {
+        var body = document.getElementById('treatment-body');
+        body.classList.toggle('open');
+    }
+
+    function saveTreatment() {
+        var text = document.getElementById('treatmentInput').value;
+        localStorage.setItem(TREATMENT_KEY, text);
+    }
+
+    function loadTreatment() {
+        var saved = localStorage.getItem(TREATMENT_KEY) || '';
+        document.getElementById('treatmentInput').value = saved;
+        if (saved.trim()) {
+            document.getElementById('treatment-toggle-btn').textContent = 'Treatment ●';
+        }
+    }
+
+    /* =========================================
+       LLM HISTORY PERSISTENCE
+    ========================================= */
+    function persistLLMHistory() {
+        try {
+            localStorage.setItem(LLM_HISTORY_KEY, JSON.stringify(llmHistory));
+        } catch (e) { /* storage full — don't crash */ }
+    }
+
+    function restoreLLMHistory() {
+        try {
+            var saved = localStorage.getItem(LLM_HISTORY_KEY);
+            if (!saved) return;
+            var parsed = JSON.parse(saved);
+            if (!Array.isArray(parsed) || !parsed.length) return;
+            llmHistory = parsed;
+            /* Replay restored messages into DOM */
+            parsed.forEach(function (m) {
+                if (m.role === 'user') addLLMMessage('user', m.content);
+                else if (m.role === 'assistant') addLLMMessage('ai', m.content);
+            });
+            addLLMMessage('system', 'Restored ' + parsed.length + ' messages from last session.');
+        } catch (e) { /* corrupt history — ignore */ }
+    }
+
+    function exportLLMHistory() {
+        if (!llmHistory.length) {
+            addLLMMessage('system', 'No chat history to export.');
+            return;
+        }
+        var lines = ['mBT AI Chat Export — ' + new Date().toLocaleString(), ''];
+        llmHistory.forEach(function (m) {
+            lines.push((m.role === 'user' ? 'You' : 'mBT AI') + ':');
+            lines.push(m.content);
+            lines.push('');
+        });
+        var blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'mbt-ai-chat-' + new Date().toISOString().slice(0, 10) + '.txt';
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     /* =========================================
@@ -422,11 +533,23 @@
     function buildSystemPrompt(ctx) {
         var lines = [
             'You are mBT AI, an expert film production budget assistant.',
-            'You help producers, line producers, and production managers with budgeting, scheduling, and cost management.',
-            '',
-            '--- PROJECT CONTEXT ---'
+            'You help producers, line producers, and production managers with budgeting, scheduling, crew, and cost management.',
+            'Always ground your responses in film production context. When asked an out-of-scope question, answer briefly then connect it back to production budget implications if relevant.',
+            'Use figures from the project context when available. Be concise and specific.',
+            ''
         ];
+
+        /* Treatment / production notes */
+        var treatment = (localStorage.getItem(TREATMENT_KEY) || '').trim();
+        if (treatment) {
+            lines.push('--- PRODUCTION TREATMENT / BRIEF ---');
+            lines.push(treatment);
+            lines.push('');
+        }
+
+        /* Budget context */
         if (ctx) {
+            lines.push('--- PROJECT CONTEXT ---');
             lines.push('Project: ' + (ctx.projectName || 'Unnamed'));
             lines.push('Total Budget: $' + (ctx.budget ? ctx.budget.toLocaleString() : 'N/A'));
             if (ctx.allocations && ctx.allocations.length) {
@@ -440,8 +563,7 @@
                 });
             }
         }
-        lines.push('');
-        lines.push('Answer concisely. Use figures from the project context when relevant.');
+
         return lines.join('\n');
     }
 
@@ -483,9 +605,12 @@
     }
 
     function clearLLMChat() {
-        llmMsgEl.innerHTML = '';
-        llmHistory = [];
-        addLLMMessage('system', 'Chat cleared.');
+        if (!llmHistory.length || confirm('Clear chat history? This cannot be undone.')) {
+            llmMsgEl.innerHTML = '';
+            llmHistory = [];
+            localStorage.removeItem(LLM_HISTORY_KEY);
+            addLLMMessage('system', 'Chat cleared.');
+        }
     }
 
     function callLLM(userMessage, systemPrompt) {
@@ -539,6 +664,7 @@
 
         addLLMMessage('user', text);
         llmHistory.push({ role: 'user', content: text });
+        persistLLMHistory();
         llmInputEl.value = '';
 
         var typingId = addLLMTyping();
@@ -552,6 +678,7 @@
                 llmHistory.push({ role: 'assistant', content: reply });
                 /* Keep last 20 turns to avoid token bloat */
                 if (llmHistory.length > 40) llmHistory = llmHistory.slice(-40);
+                persistLLMHistory();
                 addLLMMessage('ai', reply);
             })
             .catch(function (err) {
@@ -570,6 +697,9 @@
        INIT
     ========================================= */
     async function init() {
+        updateOfflineBanner();
+        loadTreatment();
+
         try {
             context = await window.mBTAIContext.getCurrentProjectContext();
             document.getElementById('activeProject').textContent = context.projectName || 'None';
@@ -587,7 +717,8 @@
             else greeting += ' Type a command or use the Quick Commands below.';
 
             addMessage(greeting, 'ai');
-            addLLMMessage('system', 'LLM Chat ready. Select a provider and start chatting.');
+            restoreLLMHistory();
+            if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Select a provider and start chatting.');
         } catch (e) {
             document.getElementById('aiStatus').textContent = 'Error';
             addMessage('Could not load project context: ' + e.message, 'ai');

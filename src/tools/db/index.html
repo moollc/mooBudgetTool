@@ -227,18 +227,18 @@
 
 <div id="app">
   <div id="topbar">
-    <button id="btn-back">
+    <button id="btn-back" aria-label="Go back to main app">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
-    <span id="topbar-title">mBTDB</span>
+    <span id="topbar-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Database & Project Manager</span>
     <span id="topbar-project"></span>
   </div>
   <div id="workspace">
     <div id="picker">
       <div id="picker-tabs">
-        <button class="picker-tab active" data-view="templates">Templates</button>
-        <button class="picker-tab" data-view="saved">Saved</button>
+        <button class="picker-tab active" data-view="templates" aria-label="Browse templates">Templates</button>
+        <button class="picker-tab" data-view="saved" aria-label="View saved documents">Saved</button>
       </div>
       <div id="picker-search-wrap">
         <input id="picker-search" type="search" placeholder="Search documents…" autocomplete="off">
@@ -381,7 +381,7 @@
     { label: 'Funding', ids: ['fundingPackage', 'budgetComparison', 'pitchDeck'] },
     { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash'] },
     { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood'] },
-    { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder'] },
+    { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'storyboard'] },
     { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement'] }
   ];
 
@@ -1318,6 +1318,8 @@
       html = buildMovementOrderHtml(d);
     } else if (templateId === 'pitchDeck') {
       html = buildPitchDeckHtml(d);
+    } else if (templateId === 'storyboard') {
+      html = buildStoryboardHtml(d);
     } else {
       panel.innerHTML = '<p style="padding:20px;color:var(--muted);">This template has no editor.</p>';
       return;
@@ -1894,6 +1896,38 @@
     return html;
   }
 
+  function buildStoryboardHtml(d) {
+    var frames = d.frames || [];
+    var SHOT_TYPES = ['', 'ELS', 'LS', 'WS', 'MS', 'MCU', 'CU', 'ECU', 'OTS', 'POV', 'Bird\'s Eye', 'Worm\'s Eye', 'Dutch Angle', 'Two Shot'];
+    var CAM_MOVES = ['', 'Static', 'Pan L', 'Pan R', 'Tilt Up', 'Tilt Down', 'Zoom In', 'Zoom Out', 'Dolly In', 'Dolly Out', 'Tracking', 'Handheld', 'Crane Up', 'Crane Down'];
+    var html = '<div class="ed-section"><div class="ed-section-hdr">Storyboard Info</div>' +
+      '<div class="ed-row ed-2">' + fld('projectTitle', 'Project Title', null, true) + fld('director', 'Director') + '</div>' +
+      '<div class="ed-row"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;">Grid Columns</label>' +
+      '<select data-key="columns" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;">' +
+      ['2','3'].map(function(v) { return '<option value="' + v + '"' + (String(d.columns || '3') === v ? ' selected' : '') + '>' + v + ' columns</option>'; }).join('') +
+      '</select></div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;align-items:center;justify-content:space-between;">Frames <button class="ed-add-btn" data-add="frames" style="margin:0;">+ Add Frame</button></div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#f8fafc;">' +
+      '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:36px;">#</th>' +
+      '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:100px;">Shot Type</th>' +
+      '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:110px;">Camera Move</th>' +
+      '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;">Description</th>' +
+      '<th style="width:24px;"></th></tr></thead><tbody>';
+    frames.forEach(function (f, i) {
+      var shotOpts = SHOT_TYPES.map(function(s) { return '<option value="' + esc(s) + '"' + (f.shotType === s ? ' selected' : '') + '>' + esc(s || '—') + '</option>'; }).join('');
+      var camOpts = CAM_MOVES.map(function(c) { return '<option value="' + esc(c) + '"' + (f.camera === c ? ' selected' : '') + '>' + esc(c || '—') + '</option>'; }).join('');
+      html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
+        '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="num" value="' + esc(f.num || '') + '" style="width:30px;text-align:center;"></td>' +
+        '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="shotType">' + shotOpts + '</select></td>' +
+        '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="camera">' + camOpts + '</select></td>' +
+        '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="description" value="' + esc(f.description || '') + '" placeholder="Action / notes…" style="width:100%;"></td>' +
+        '<td style="padding:4px;"><button class="ed-del" data-arr="frames" data-del="' + i + '">&times;</button></td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   /* ======== Wire Editor Events ======== */
   function wireEditor(panel) {
 
@@ -2002,7 +2036,8 @@
       scriptScenes: { num: '', intExt: 'INT', location: '', timeOfDay: 'DAY', description: '', cast: '', props: '', wardrobe: '', vehicles: '', fx: '', notes: '' },
       shootDays: { date: '', dayNum: '', location: '', crewCall: '', wrap: '', scenes: '', cast: '', pages: '', notes: '' },
       shots: { scene: '', shot: '', take: '', tc: '', description: '', costume: '', hair: '', makeup: '', props: '', timeOfDay: '', notes: '' },
-      movementRows: { name: '', role: '', pickup: '', pickupTime: '', vehicle: '', destination: '', arrivalTime: '', notes: '' }
+      movementRows: { name: '', role: '', pickup: '', pickupTime: '', vehicle: '', destination: '', arrivalTime: '', notes: '' },
+      frames: { num: '', description: '', shotType: '', camera: '' }
     };
     /* DOOD cast shares the same 'cast' key but needs special handling for days sub-object */
     if (arrName === 'cast' && activeTemplateId === 'dood') {
