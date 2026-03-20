@@ -7451,7 +7451,6 @@ _renderTalent: function(docId, d) {
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                                 </label>
                             </div>
-                            </div>
                             <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('OpenGate', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('OpenGate', 'Engine not available.'); }" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
                         </div>
 
@@ -9834,7 +9833,7 @@ window.updateAllHeaders = () => {
             const router = (e) => {
                 if (mBT.core.route(e)) return;
                 const target = e.target;
-                if (target.id === 'loginBtn') handleLogin();
+                if (target.closest('#loginBtn')) handleLogin();
                 if (target.closest('#openAiToolsBtn')) showAIToolsModal();
             };
 
