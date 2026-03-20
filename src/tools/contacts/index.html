@@ -116,15 +116,15 @@ button, a { min-height: 44px; }
 
   <script>
     (function () {
-      const STORAGE = window.mBT.storage;
-      const CONTACTS_STORE = 'mbt_contacts';
-      const PROJECTS_STORE = 'mbt_projects';
-      let currentProjectId = '';
-      let currentDept = '';
-      let allContactsData = []; // Outer scope for search
+      var STORAGE = window.mBT.storage;
+      var CONTACTS_STORE = 'mbt_contacts';
+      var PROJECTS_STORE = 'mbt_projects';
+      var currentProjectId = '';
+      var currentDept = '';
+      var allContactsData = []; // Outer scope for search
 
       // Departments with standard daily rates
-      const STANDARD_RATES = {
+      var STANDARD_RATES = {
         'Production': 450,
         'Art': 350,
         'Camera': 400,
@@ -139,14 +139,14 @@ button, a { min-height: 44px; }
 
       // Render contacts for current filter
       function renderContacts() {
-        const list = document.getElementById('contacts-list');
-        const empty = document.getElementById('empty-state');
+        var list = document.getElementById('contacts-list');
+        var empty = document.getElementById('empty-state');
 
         list.innerHTML = '';
 
         STORAGE.getItem(CONTACTS_STORE).then(contacts => {
           allContactsData = contacts || [];
-          let filtered = allContactsData;
+          var filtered = allContactsData;
 
           // Filter by project if selected
           if (currentProjectId) {
@@ -165,7 +165,7 @@ button, a { min-height: 44px; }
           empty.classList.add('hidden');
 
           filtered.forEach(contact => {
-            const el = createContactCard(contact);
+            var el = createContactCard(contact);
             list.appendChild(el);
           });
 
@@ -176,18 +176,18 @@ button, a { min-height: 44px; }
       }
 
       function createContactCard(contact) {
-        const card = document.createElement('div');
+        var card = document.createElement('div');
         card.className = 'contact-card';
 
-        const name = contact.name || 'Unnamed';
-        const email = contact.email || 'N/A';
-        const phone = contact.phone || 'N/A';
-        const dept = contact.department || 'General';
-        const rate = contact.rate || STANDARD_RATES[dept] || '?';
-        const rateFormatted = typeof rate === 'number' ? '$' + rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : rate;
-        const project = contact.projectName || contact.projectId || 'N/A';
-        const dietary = contact.dietaryRestrictions || null;
-        const allergies = contact.allergies || null;
+        var name = contact.name || 'Unnamed';
+        var email = contact.email || 'N/A';
+        var phone = contact.phone || 'N/A';
+        var dept = contact.department || 'General';
+        var rate = contact.rate || STANDARD_RATES[dept] || '?';
+        var rateFormatted = typeof rate === 'number' ? '$' + rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : rate;
+        var project = contact.projectName || contact.projectId || 'N/A';
+        var dietary = contact.dietaryRestrictions || null;
+        var allergies = contact.allergies || null;
 
         card.innerHTML = `
       <div class="flex items-start justify-between">
@@ -232,8 +232,8 @@ button, a { min-height: 44px; }
       // Load projects for filter dropdown
       function loadProjectsForFilter() {
         STORAGE.getItem(PROJECTS_STORE).then(projects => {
-          const filter = document.getElementById('project-filter');
-          const projectMap = {};
+          var filter = document.getElementById('project-filter');
+          var projectMap = {};
           (projects || []).forEach(p => {
             if (!p.name) {
               projectMap[p.id] = 'Untitled';
@@ -242,7 +242,7 @@ button, a { min-height: 44px; }
             }
           });
 
-          const options = Object.entries(projectMap)
+          var options = Object.entries(projectMap)
             .map(([id, name]) => `<option value="${id}">${escapeHtml(name)}</option>`)
             .join('');
 
@@ -276,7 +276,7 @@ button, a { min-height: 44px; }
 
       // Add contact modal
       function showAddContactModal() {
-        const modal = document.createElement('div');
+        var modal = document.createElement('div');
         modal.id = 'add-contact-modal';
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
         modal.innerHTML = `
@@ -350,27 +350,27 @@ button, a { min-height: 44px; }
       }
 
       function closeModal() {
-        const modal = document.getElementById('add-contact-modal');
+        var modal = document.getElementById('add-contact-modal');
         if (modal) modal.remove();
       }
 
       function saveContact() {
-        const name = document.getElementById('contact-name').value;
-        const dept = document.getElementById('contact-dept').value;
-        const email = document.getElementById('contact-email').value;
-        const phone = document.getElementById('contact-phone').value;
-        const customRateStr = document.getElementById('contact-rate').value;
-        let rate = customRateStr ? parseFloat(customRateStr) : STANDARD_RATES[dept];
-        const project = document.getElementById('contact-project').value;
-        const dietary = document.getElementById('contact-dietary').value.trim();
-        const allergies = document.getElementById('contact-allergies').value.trim();
+        var name = document.getElementById('contact-name').value;
+        var dept = document.getElementById('contact-dept').value;
+        var email = document.getElementById('contact-email').value;
+        var phone = document.getElementById('contact-phone').value;
+        var customRateStr = document.getElementById('contact-rate').value;
+        var rate = customRateStr ? parseFloat(customRateStr) : STANDARD_RATES[dept];
+        var project = document.getElementById('contact-project').value;
+        var dietary = document.getElementById('contact-dietary').value.trim();
+        var allergies = document.getElementById('contact-allergies').value.trim();
 
         if (!name) {
           alert('Name is required');
           return;
         }
 
-        const contact = {
+        var contact = {
           name,
           department: dept,
           email: email || null,
@@ -397,7 +397,7 @@ button, a { min-height: 44px; }
         if (!confirm('Delete this contact?')) return;
 
         STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          const filtered = contacts.filter(c => c.id !== id);
+          var filtered = contacts.filter(c => c.id !== id);
           STORAGE.setItem(CONTACTS_STORE, filtered).then(() => {
             renderContacts();
           });
@@ -414,18 +414,18 @@ button, a { min-height: 44px; }
 
       // Print handler
       document.getElementById('print-contacts-btn').addEventListener('click', () => {
-        const query = document.getElementById('contact-search').value.toLowerCase();
-        let contactsToPrint = allContactsData;
+        var query = document.getElementById('contact-search').value.toLowerCase();
+        var contactsToPrint = allContactsData;
         if (query) {
           contactsToPrint = allContactsData.filter(c => {
-            const name = (c.name || '').toLowerCase();
-            const email = (c.email || '').toLowerCase();
-            const dept = (c.department || '').toLowerCase();
+            var name = (c.name || '').toLowerCase();
+            var email = (c.email || '').toLowerCase();
+            var dept = (c.department || '').toLowerCase();
             return name.includes(query) || email.includes(query) || dept.includes(query);
           });
         }
 
-        const printHTML = `
+        var printHTML = `
           <!DOCTYPE html>
           <html>
           <head>
@@ -473,23 +473,23 @@ button, a { min-height: 44px; }
           </html>
         `;
 
-        const printWindow = window.open('', '_blank');
+        var printWindow = window.open('', '_blank');
         printWindow.document.write(printHTML);
         printWindow.document.close();
       });
 
       // Search handler
-      let searchTimeout = null;
+      var searchTimeout = null;
       document.getElementById('contact-search').addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
-          const query = e.target.value.toLowerCase();
+          var query = e.target.value.toLowerCase();
           if (query) {
             // Filter contacts by name or email
-            const filteredContacts = allContactsData.filter(c => {
-              const name = (c.name || '').toLowerCase();
-              const email = (c.email || '').toLowerCase();
-              const dept = (c.department || '').toLowerCase();
+            var filteredContacts = allContactsData.filter(c => {
+              var name = (c.name || '').toLowerCase();
+              var email = (c.email || '').toLowerCase();
+              var dept = (c.department || '').toLowerCase();
               return name.includes(query) || email.includes(query) || dept.includes(query);
             });
             renderContacts();
@@ -501,10 +501,10 @@ button, a { min-height: 44px; }
       // Catering Summary handler
       document.getElementById('catering-summary-btn').addEventListener('click', () => {
         STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          const all = contacts || [];
-          const withDietary = all.filter(c => c.dietaryRestrictions || c.allergies);
+          var all = contacts || [];
+          var withDietary = all.filter(c => c.dietaryRestrictions || c.allergies);
 
-          const rows = withDietary.length > 0
+          var rows = withDietary.length > 0
             ? withDietary.map(c => `
                 <tr>
                   <td>${escapeHtml(c.name)}</td>
@@ -515,7 +515,7 @@ button, a { min-height: 44px; }
               `).join('')
             : '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:20px">No dietary/allergy info on file.</td></tr>';
 
-          const printHTML = `<!DOCTYPE html>
+          var printHTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Catering Summary</title>
 <style>
   body { font-family: sans-serif; padding: 20px; color: #333; }
@@ -536,7 +536,7 @@ button, a { min-height: 44px; }
 <script>window.onload=()=>{window.print();window.close();}<\/script>
 </body></html>`;
 
-          const win = window.open('', '_blank');
+          var win = window.open('', '_blank');
           win.document.write(printHTML);
           win.document.close();
         });
