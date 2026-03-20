@@ -2179,14 +2179,23 @@
     var found = { director: '', producers: '', upm: '', firstAd: '', secondAd: '' };
     Object.keys(sections).forEach(function (k) {
       var sec = sections[k];
-      if ((sec.id || '').toLowerCase() !== 'atl') return;
+      var secId = (sec.id || '').toLowerCase();
+      var secName = (sec.name || '').toLowerCase();
+      // Fuzzy match for Above the Line / ATL
+      if (secId !== 'atl' && secName.indexOf('atl') < 0 && secName.indexOf('above the line') < 0) return;
+      
       (sec.items || []).forEach(function (item) {
         var d = (item.description || '').toLowerCase();
+        // Director (exclude Art Director)
         if (!found.director  && d.indexOf('director') > -1 && d.indexOf('art') < 0) found.director = item.description;
-        if (!found.producers && d.indexOf('producer') > -1)  found.producers = item.description;
-        if (!found.upm       && (d.indexOf('upm') > -1 || d.indexOf('unit production') > -1)) found.upm = item.description;
-        if (!found.firstAd   && (d.indexOf('1st ad') > -1 || d.indexOf('first ad') > -1))     found.firstAd = item.description;
-        if (!found.secondAd  && (d.indexOf('2nd ad') > -1 || d.indexOf('second ad') > -1))    found.secondAd = item.description;
+        // Producers (match Producer, Exec Producer, etc.)
+        if (!found.producers && (d.indexOf('producer') > -1 || d.indexOf('prod') > -1))  found.producers = item.description;
+        // UPM
+        if (!found.upm       && (d.indexOf('upm') > -1 || d.indexOf('unit production') > -1 || d.indexOf('unit manager') > -1)) found.upm = item.description;
+        // 1st AD
+        if (!found.firstAd   && (d.indexOf('1st ad') > -1 || d.indexOf('first ad') > -1 || d.indexOf('1ad') > -1))     found.firstAd = item.description;
+        // 2nd AD
+        if (!found.secondAd  && (d.indexOf('2nd ad') > -1 || d.indexOf('second ad') > -1 || d.indexOf('2ad') > -1))    found.secondAd = item.description;
       });
     });
     var changed = false;

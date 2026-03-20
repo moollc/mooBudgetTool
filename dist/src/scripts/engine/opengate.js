@@ -1,27 +1,30 @@
 /**
- * mBTOG — Open Gate Engine
+ * mBTOG : Open Gate Engine
  *
- * The name comes from two places.
+ * The name comes from several places.
  *
- * In film, "opening the gate" is a camera check — the operator physically
- * opens the film gate after a take to inspect the aperture for dust, hair,
- * or damage that would ruin the image. It is a moment of honesty. You look
- * at what was actually captured before moving on.
+ * In film, "opening the gate" is a camera check, physically
+ * openning the film gate after a take to inspect the aperture for anything 
+ * that ould ruin the image. Today the term "shooting open gate" means
+ * exposing the full sensor area without cropping.
+ * Both are moments of acquiring visual truth.
  *
- * The second meaning is the one this engine was built for: removing the
- * gatekeepers. Industry rate information, production processes, document
- * standards — this knowledge has always been held by the few and made
- * deliberately inaccessible to everyone else. Especially in smaller markets
- * like the Caribbean, where there is no union rate card, no published guild
- * scale, and no authoritative source a new producer can point to and say
+ * The third, I propose is akin to literally openning a gate:
+ * removing the gatekeeping.
+ * Industry rate information, production processes, document standards;
+ * this knowledge has always been held by the few
+ * (understandably, people worked and suffered years to accumulate it),
+ * especially in smaller markets like the Caribbean, where there is
+ * no union rate card, no published guild scale,
+ * and no authoritative source a new producer can point to and say
  * "this is what things cost here."
  *
  * Open Gate is the answer to that. A living, community-calibrated reference
- * that gives any producer — in Jamaica, Trinidad, Barbados, or anywhere else
- * — the same baseline knowledge that used to require years of industry access
+ * that gives any producer in Jamaica, Trinidad, Barbados, or anywhere else
+ * the same baseline knowledge that used to require years of industry access
  * to accumulate.
  *
- * The gate is open. Look at what's actually there.
+ * The gate is open. Go through it. Take a look.
  *
  * -------------------------------------------------------------------------
  * Shared engine loaded by both the Budget Editor (mBT/index.html) and the
@@ -48,7 +51,7 @@
 
     /* ========= CLOUD CONFIG ========= */
     /*
-     * Publishable key — safe to embed in client code.
+     * Publishable key : safe to embed in client code.
      * Supabase RLS ensures public can only READ og_community_rates.
      * All other tables require authentication.
      * The secret key is never embedded here.
@@ -59,7 +62,7 @@
     var OG_SYNC_KEY  = 'moo_og_last_sync';
 
     /* ========= STORAGE HELPERS ========= */
-    /* Use localforage directly — works in both Budget Editor and App Shell. */
+    /* Use localforage directly, works in both Budget Editor and App Shell. */
 
     function _lfGet(key) {
         return window.localforage.getItem(key).catch(function () { return null; });
@@ -100,6 +103,14 @@
         rates: [],
         contacts: [],
         templates: [],
+
+        search: function (query) {
+            if (!query) return this.rates;
+            var q = query.toLowerCase();
+            return this.rates.filter(function (r) {
+                return (r.description || '').toLowerCase().indexOf(q) > -1;
+            });
+        },
 
         /* --- INIT --- */
 
@@ -152,9 +163,9 @@
         /* --- CLOUD SYNC --- */
 
         /*
-         * syncFromCloud() — pulls community rates from Supabase og_community_rates.
+         * syncFromCloud() pulls community rates from Supabase og_community_rates.
          * Uses the publishable key for public read. No account required.
-         * Merges new entries only — never overwrites local edits.
+         * Merges new entries only never overwrites local edits.
          * Respects the user's cloud sync toggle (moo_og_cloud_sync).
          * Silently no-ops if offline or sync is disabled.
          */
@@ -208,7 +219,8 @@
             var self = this;
             var shareEnabled = JSON.parse(localStorage.getItem('moo_og_share') || 'false');
             if (!shareEnabled) return Promise.resolve(false);
-            var authToken = localStorage.getItem('mbt_supabase_key') || OG_CLOUD_KEY;
+            /* Use the user JWT when signed in — required for RLS to record contributed_by. */
+            var authToken = localStorage.getItem('mbt_supabase_auth_token') || OG_CLOUD_KEY;
 
             return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE, {
                 method: 'POST',
@@ -232,6 +244,67 @@
         /* Returns ISO timestamp of last successful cloud sync, or null. */
         lastSync: function () {
             return localStorage.getItem(OG_SYNC_KEY) || null;
+        },
+
+        /*
+         * fetchRateAverages() — pulls the og_rate_averages view from Supabase.
+         * Returns a map of { "description|region": { avg_rate, contributor_count } }.
+         * Falls back to computing averages from the local cached community rates when offline.
+         * Stores result in localStorage for offline access.
+         */
+        fetchRateAverages: function (region) {
+            var AVGS_KEY = 'moo_og_rate_averages';
+            var filterRegion = region || 'Jamaica';
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                /* Offline: return cached averages or compute from local data. */
+                var cached = localStorage.getItem(AVGS_KEY);
+                if (cached) {
+                    try { return Promise.resolve(JSON.parse(cached)); } catch (e) {}
+                }
+                return Promise.resolve(this._computeLocalAverages());
+            }
+            return fetch(OG_CLOUD_URL + '/rest/v1/og_rate_averages?select=*&region=eq.' + encodeURIComponent(filterRegion), {
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
+                }
+            }).then(function (res) {
+                if (!res.ok) return null;
+                return res.json();
+            }).then(function (rows) {
+                if (!rows || !rows.length) return {};
+                var map = {};
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    map[r.description.toLowerCase() + '|' + r.region.toLowerCase()] = {
+                        avg_rate: parseFloat(r.avg_rate) || 0,
+                        contributor_count: parseInt(r.contributor_count, 10) || 0
+                    };
+                }
+                localStorage.setItem(AVGS_KEY, JSON.stringify(map));
+                return map;
+            }).catch(function () { return {}; });
+        },
+
+        /* Compute rate averages from locally cached community rates (offline fallback). */
+        _computeLocalAverages: function () {
+            var map = {};
+            for (var i = 0; i < this.rates.length; i++) {
+                var r = this.rates[i];
+                if (r.source !== 'community') continue;
+                var key = (r.description || '').toLowerCase() + '|' + (r.region || 'Jamaica').toLowerCase();
+                if (!map[key]) { map[key] = { sum: 0, count: 0 }; }
+                map[key].sum += parseFloat(r.rate) || 0;
+                map[key].count++;
+            }
+            var result = {};
+            for (var k in map) {
+                result[k] = {
+                    avg_rate: map[k].count ? Math.round(map[k].sum / map[k].count) : 0,
+                    contributor_count: map[k].count
+                };
+            }
+            return result;
         },
 
         /* --- INTELLIGENT INGESTION --- */

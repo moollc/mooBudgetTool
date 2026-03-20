@@ -23,6 +23,7 @@
         publisher: 'Publisher',
         ai: 'AI Assistant',
         opengate: 'OpenGate',
+        template: 'Templates',
         contacts: 'Contacts',
         security: 'Security',
         rsi: 'Health & Telemetry',

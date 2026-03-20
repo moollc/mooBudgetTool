@@ -23,10 +23,43 @@
         publisher: 'Publisher',
         ai: 'AI Assistant',
         opengate: 'OpenGate',
+        template: 'Templates',
         contacts: 'Contacts',
         security: 'Security',
+        rsi: 'Health & Telemetry',
         settings: 'Settings'
     };
+
+    /* ========= Telemetry — opt-in rolling buffer (localStorage) ========= */
+    window.mBT.telemetry = (function () {
+        var CONSENT_KEY = 'mbt_telemetry_consent';
+        var LOG_KEY = 'mbt_telemetry_log';
+        var MAX_ENTRIES = 200;
+
+        function isEnabled() {
+            return localStorage.getItem(CONSENT_KEY) === '1';
+        }
+
+        function log(event, data) {
+            if (!isEnabled()) return;
+            try {
+                var entries = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+                entries.push({ ts: Date.now(), event: event, data: data || {} });
+                if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
+                localStorage.setItem(LOG_KEY, JSON.stringify(entries));
+            } catch (e) { /* storage full — silently skip */ }
+        }
+
+        function getLog() {
+            try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { return []; }
+        }
+
+        function clear() {
+            localStorage.removeItem(LOG_KEY);
+        }
+
+        return { isEnabled: isEnabled, log: log, getLog: getLog, clear: clear };
+    }());
 
     // =========================================
     // 1. HASH ROUTER
@@ -77,6 +110,9 @@
         if (typeof handler === 'function') {
             handler(route);
         }
+
+        /* --- Telemetry: log route navigation if user has opted in --- */
+        if (window.mBT.telemetry) window.mBT.telemetry.log('route_change', { route: route });
 
         console.log('[mBT] Route →', route);
     }
@@ -212,16 +248,21 @@
         if (!active) window.mBT.core.actions.pushToCloud();
     };
 
-    window.mBT.core.actions.pushToCloud = async function () {
-        if (!window.supabase) {
-            console.error('[mBT] Supabase library not loaded.');
+    window.mBT.core.actions.pushToCloud = function () {
+        if (!window.mBTSync) {
+            console.warn('[mBT] Supabase sync service not available.');
             return;
         }
-        // Simplified sync logic placeholder
-        console.log('[mBT] Pushing local data to Supabase...');
-        const projects = await window.mBT.storage.getAllProjects();
-        // Here you would use supabaseClient.from('projects').upsert(projects)
-        alert('Sync complete! ' + projects.length + ' projects indexed in cloud.');
+        if (!window.mBTSupabaseConfig || !mBTSupabaseConfig.isConfigured()) {
+            console.warn('[mBT] Supabase not configured — open the Cloud Backup tool to add credentials.');
+            return;
+        }
+        console.log('[mBT] Pushing to Supabase...');
+        mBTSync.pushAll().then(function (r) {
+            console.log('[mBT] Push complete — synced:', r.synced, 'errors:', r.errors);
+        }).catch(function (e) {
+            console.error('[mBT] Push failed:', e);
+        });
     };
 
     window.mBT.core.actions.openAISettings = function () {
@@ -346,6 +387,15 @@
 
         // First Run Hydration
         hydrateDefaultData();
+
+        /* --- Auto-sync: push to Supabase on interval if enabled --- */
+        if (window.mBTSupabaseConfig && mBTSupabaseConfig.SYNC.ENABLED && window.mBTSync) {
+            setInterval(function () {
+                if (navigator.onLine && mBTSupabaseConfig.isConfigured()) {
+                    window.mBT.core.actions.pushToCloud();
+                }
+            }, mBTSupabaseConfig.SYNC.AUTO_SYNC_INTERVAL);
+        }
 
         console.log('[mBT] Core module initialized ✓');
     }

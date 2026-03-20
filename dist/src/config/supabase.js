@@ -2,12 +2,16 @@
 (function () {
     'use strict';
 
-    /* --- Credentials stored in localStorage per security protocol --- */
+    /* --- Credentials stored in localStorage or fallback to OpenGate embedded keys per security protocol --- */
     window.mBTSupabaseConfig = {
-        get API_URL() { return localStorage.getItem('mbt_supabase_url') || ''; },
-        get ANON_KEY() { return localStorage.getItem('mbt_supabase_key') || ''; },
+        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || (window.mBTOGAPI && window.mBTOGAPI.cloud ? window.mBTOGAPI.cloud.url : ''); },
+        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || (window.mBTOGAPI && window.mBTOGAPI.cloud ? window.mBTOGAPI.cloud.key : ''); },
+        get AUTH_TOKEN() { return localStorage.getItem('mbt_supabase_auth_token') || ''; },
         isConfigured: function () {
             return !!(this.API_URL && this.ANON_KEY);
+        },
+        isSignedIn: function () {
+            return !!(this.AUTH_TOKEN);
         },
         SYNC: {
             ENABLED: localStorage.getItem('mbt_supabase_sync_enabled') !== 'false',
@@ -20,6 +24,21 @@
                 og_ref: true,
                 contacts: true,
                 sessions: true
+            },
+            // This function is a placeholder for where the privacy filter logic would be applied
+            // in the actual sync service's pushAll function.
+            // It's placed here to indicate the intended change location and logic.
+            applyPrivacyFilter: function(storeName, payload) {
+                // Privacy Filter: Strip contact info from og_ref push (Phase 46 Security)
+                if (storeName === 'og_ref') {
+                    const filteredPayload = Object.assign({}, payload);
+                    delete filteredPayload.contact_id;
+                    delete filteredPayload.contact_name;
+                    delete filteredPayload.contact_phone;
+                    delete filteredPayload.contact_email;
+                    return filteredPayload;
+                }
+                return payload;
             }
         }
     };
