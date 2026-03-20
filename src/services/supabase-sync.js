@@ -40,7 +40,10 @@
             body: JSON.stringify({ email: email, password: password })
         });
         var data = await res.json();
-        if (!res.ok) throw new Error(data.error_description || data.message || 'Sign-in failed');
+        if (!res.ok) {
+            console.warn('[mBTSync] Auth error:', data.error_description || data.message);
+            throw new Error('Sign-in failed. Check your email and password.');
+        }
         localStorage.setItem('mbt_supabase_auth_token', data.access_token);
         localStorage.setItem('mbt_supabase_refresh_token', data.refresh_token || '');
         localStorage.setItem('mbt_supabase_user_email', data.user ? data.user.email : email);
@@ -51,10 +54,13 @@
     /* --- Sign in with Google — opens the OAuth provider page in a new tab. --- */
     function signInWithGoogle() {
         var base = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        if (!base && typeof window.mBTOGAPI !== 'undefined' && window.mBTOGAPI.cloud) {
+            base = window.mBTOGAPI.cloud.url;
+        }
         if (!base) { throw new Error('Supabase URL not configured'); }
-        var redirectTo = encodeURIComponent(window.location.href);
+        var redirectTo = encodeURIComponent(window.location.origin + window.location.pathname + window.location.search);
         var url = base + '/auth/v1/authorize?provider=google&redirect_to=' + redirectTo;
-        window.open(url, '_blank');
+        window.location.href = url;
     }
 
     /* --- Sign out: revoke token on server and clear localStorage. --- */
@@ -238,7 +244,19 @@
                 var records = await getLocalRecords(storeName);
                 for (var j = 0; j < records.length; j++) {
                     try {
-                        await sbUpsert(tableName, records[j]);
+                        let payload = records[j];
+                        
+                        // Phase 46 Security: Privacy Filter
+                        // Strip local contact information when pushing rate references to the OpenGate community pool
+                        if (storeName === 'og_ref') {
+                            payload = Object.assign({}, payload);
+                            delete payload.contact_id;
+                            delete payload.contact_name;
+                            delete payload.contact_phone;
+                            delete payload.contact_email;
+                        }
+
+                        await sbUpsert(tableName, payload);
                         totalSynced++;
                     } catch (e) {
                         console.error('[mBTSync] Upsert error ' + tableName + ':', e);

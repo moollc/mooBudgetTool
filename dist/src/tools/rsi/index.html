@@ -47,6 +47,39 @@
     <!-- Main Layout -->
     <main class="px-6 py-6">
 
+      <!-- Telemetry Consent Banner -->
+      <section class="mb-6" id="telemetry-section">
+        <div class="bg-white rounded-lg shadow-sm p-5 border border-gray-200">
+          <h2 class="text-base font-semibold text-gray-800 mb-1">Usage Telemetry</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Opt in to record which tools you visit and when. Data stays on this device only — nothing is sent to any server.
+            Logs are capped at 200 entries and can be cleared at any time.
+          </p>
+          <div class="flex items-center gap-3 mb-4">
+            <label class="relative inline-block w-11 h-6 cursor-pointer">
+              <input type="checkbox" id="telemetry-toggle" class="sr-only peer"
+                onchange="mBTRSI.setTelemetryConsent(this.checked)">
+              <span class="block w-11 h-6 bg-gray-300 peer-checked:bg-blue-600 rounded-full transition-colors"></span>
+              <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 shadow"></span>
+            </label>
+            <span class="text-sm text-gray-700" id="telemetry-status-label">Off</span>
+          </div>
+          <div id="telemetry-log-panel" class="hidden">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-gray-600">Recent Activity (<span id="telemetry-count">0</span> entries)</span>
+              <button onclick="mBTRSI.clearTelemetry()"
+                class="text-xs text-red-500 hover:text-red-700 underline">Clear log</button>
+            </div>
+            <div id="telemetry-log-list" class="max-h-48 overflow-y-auto space-y-1 bg-gray-50 rounded p-3 text-xs text-gray-600"></div>
+          </div>
+          <p class="text-xs text-gray-400 mt-3">
+            Also controls OpenGate rate-sharing consent:
+            <button onclick="mBTRSI.toggleOGSharing()" id="og-sharing-btn"
+              class="underline text-blue-500 hover:text-blue-700 ml-1">Loading…</button>
+          </p>
+        </div>
+      </section>
+
       <!-- Stats Summary -->
       <section class="mb-6">
         <h2 class="text-lg font-semibold text-gray-700 mb-3">Health Summary</h2>
@@ -498,6 +531,74 @@
       // Initialize
       initDebt();
     })();
+  </script>
+
+  <script>
+    /* ========= mBTRSI — Telemetry Consent UI ========= */
+    window.mBTRSI = (function () {
+      var CONSENT_KEY = 'mbt_telemetry_consent';
+      var LOG_KEY = 'mbt_telemetry_log';
+      var OG_SHARING_KEY = 'moo_og_sharing';
+
+      function setTelemetryConsent(enabled) {
+        localStorage.setItem(CONSENT_KEY, enabled ? '1' : '0');
+        refreshConsentUI();
+      }
+
+      function clearTelemetry() {
+        localStorage.removeItem(LOG_KEY);
+        refreshConsentUI();
+      }
+
+      function toggleOGSharing() {
+        var current = localStorage.getItem(OG_SHARING_KEY);
+        localStorage.setItem(OG_SHARING_KEY, current === '1' ? '0' : '1');
+        refreshConsentUI();
+      }
+
+      /* --- Render consent section state from localStorage --- */
+      function refreshConsentUI() {
+        var isOn = localStorage.getItem(CONSENT_KEY) === '1';
+        var toggle = document.getElementById('telemetry-toggle');
+        var statusLabel = document.getElementById('telemetry-status-label');
+        var logPanel = document.getElementById('telemetry-log-panel');
+        var countEl = document.getElementById('telemetry-count');
+        var logList = document.getElementById('telemetry-log-list');
+        var ogBtn = document.getElementById('og-sharing-btn');
+
+        if (toggle) toggle.checked = isOn;
+        if (statusLabel) statusLabel.textContent = isOn ? 'On' : 'Off';
+
+        if (logPanel) {
+          if (isOn) {
+            logPanel.classList.remove('hidden');
+            try {
+              var entries = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+              if (countEl) countEl.textContent = entries.length;
+              if (logList) {
+                logList.innerHTML = entries.slice(-20).reverse().map(function (e) {
+                  var d = new Date(e.ts);
+                  var time = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  var detail = e.data && e.data.route ? ' → ' + e.data.route : '';
+                  return '<div class="py-0.5">' + time + ' &mdash; ' + (e.event || '') + detail + '</div>';
+                }).join('') || '<div class="text-gray-400">No entries yet.</div>';
+              }
+            } catch (err) { /* parse error */ }
+          } else {
+            logPanel.classList.add('hidden');
+          }
+        }
+
+        if (ogBtn) {
+          var ogOn = localStorage.getItem(OG_SHARING_KEY) === '1';
+          ogBtn.textContent = ogOn ? 'Rate sharing: On (click to disable)' : 'Rate sharing: Off (click to enable)';
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', refreshConsentUI);
+
+      return { setTelemetryConsent: setTelemetryConsent, clearTelemetry: clearTelemetry, toggleOGSharing: toggleOGSharing };
+    }());
   </script>
 </body>
 

@@ -91,7 +91,7 @@
 /* --- 8. Mobile Platform Support --- */
         @media (max-width: 768px) {
             .mobile-desc-truncate { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; width: 100%; display: block; }
-            .mobile-desc-truncate:focus { white-space: normal; overflow: visible; position: relative; z-index: 50; background: white; shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-radius: 4px; padding: 8px; height: auto; }
+            .mobile-desc-truncate:focus { white-space: normal; overflow: visible; position: relative; z-index: 50; background: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-radius: 4px; padding: 8px; height: auto; }
         }
 
 /* --- 9. Navigation Elements --- */
@@ -889,6 +889,18 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             // Ensures Rate DB is ready before UI renders
             if(mBT.opengate && typeof mBT.opengate.init === 'function') {
                 await mBT.opengate.init();
+            }
+
+            // 3.6 Background cloud tasks (non-blocking)
+            if (mBT.opengate && typeof mBT.opengate.fetchRateAverages === 'function') {
+                mBT.opengate.fetchRateAverages(mBT.opengate.settings && mBT.opengate.settings.location).catch(function(){});
+            }
+            /* Restore cached user profile region into OpenGate if user is signed in. */
+            if (localStorage.getItem('mbt_supabase_auth_token') && localStorage.getItem('mbt_profile_region')) {
+                if (mBT.opengate && mBT.opengate.settings) {
+                    mBT.opengate.settings.location = localStorage.getItem('mbt_profile_region');
+                    localStorage.setItem('moo_og_loc', mBT.opengate.settings.location);
+                }
             }
 
             // 4. Brain Handshake
@@ -2623,6 +2635,9 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         </header>
 
         <div class="flex gap-2 items-center mb-3">
+            <button id="templateFooterBtn" title="View Templates" class="p-2.5 bg-slate-800 text-white rounded-xl shadow-lg transition-all hover:bg-slate-700 active:scale-95 flex items-center justify-center">
+                ${mBTAssets.grid || '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>'}
+            </button>
             <button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">
                 ${mBTAssets.wand}
             </button>
@@ -2641,7 +2656,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
                     <p class="text-[11px] font-black uppercase tracking-widest text-emerald-200 mb-0.5">Actual Expenditure</p>
                     <p id="summaryActualTotal" class="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tighter truncate w-full">--</p>
                 </div>
-                <div class="flex-[1_1_140px] px-4 py-1.5 bg-slate-900 rounded-2xl shadow-xl flex flex-col justify-center min-h-[60px]">
+                <div class="flex-[1_1_140px] px-4 py-1.5 bg-slate-900 rounded-2xl shadow-xl flex flex-col justify-center min-h-[60px] min-w-[120px]">
                     <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Project Subtotal</p>
                     <p id="summarySubtotal" class="text-sm sm:text-base font-black text-white leading-tight truncate w-full">--</p>
                 </div>
@@ -2694,6 +2709,9 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
             </div>
         </div>
 
+        <!-- Funding Tracker (Phase 44.3) -->
+        <div id="fundingCard" class="mb-4"></div>
+
         <main id="budget-sections" class="space-y-3">${renderBudgetSections()}</main>
 
         <div class="mt-6 py-1.5 px-4 bg-slate-900 rounded-xl text-[11px] text-slate-400 font-bold uppercase tracking-widest border border-black shadow-2xl">
@@ -2737,6 +2755,7 @@ wallet: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="cur
         setTxt('summaryGrandTotal', fmt(budget.grandTotal));
         setTxt('summaryActualTotal', fmt(budget.actualTotal));
         setTxt('summarySubtotal', fmt(budget.subtotal));
+        if (document.getElementById('fundingCard')) mBT.features.funding.updateCard();
         setTxt('summaryDiscount', fmt(-discount)); // Show as negative visually
         setTxt('summaryContingency', fmt(contingency));
         setTxt('summaryTax', fmt(tax));
@@ -6965,13 +6984,27 @@ _renderTalent: function(docId, d) {
                             </div>
                         </div>
                         <div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">
-                            ${mBTOG.rates.map(r => RenderEngine.ui.listRow({
-                                id: r.id || r.description,
-                                icon: mBTAssets.money, 
-                                title: r.description,
-                                subtitle: `${mBTLE.format.currency(r.rate)} / ${r.unit}`,
-                                classes: 'border-b border-slate-50'
-                            })).join('')}
+                            ${(function() {
+                                var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+                                var avgs = {};
+                                try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch(e) {}
+                                var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                                return mBTOG.rates.map(function(r) {
+                                    var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+                                    var avg = avgs[key];
+                                    var sub = mBTLE.format.currency(r.rate) + ' / ' + r.unit;
+                                    if (avg && avg.contributor_count > 0) {
+                                        sub += ' · Avg: ' + mBTLE.format.currency(avg.avg_rate) + ' (' + avg.contributor_count + ')';
+                                    }
+                                    return RenderEngine.ui.listRow({
+                                        id: r.id || r.description,
+                                        icon: mBTAssets.money,
+                                        title: r.description,
+                                        subtitle: sub,
+                                        classes: 'border-b border-slate-50'
+                                    });
+                                }).join('');
+                            })()}
                         </div>
                     </div>`;
             }
@@ -7160,6 +7193,283 @@ _renderTalent: function(docId, d) {
                         </div>
                     </div>`;
             }
+            if (tabName === 'cloud') {
+                var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                var ogLastSync = (window.mBTOG && mBTOG.lastSync) ? mBTOG.lastSync() : null;
+                var ogLastSyncLabel = ogLastSync ? new Date(ogLastSync).toLocaleString('en-JM', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
+                var supaConfigured = !!(localStorage.getItem('mbt_supabase_url') && localStorage.getItem('mbt_supabase_key'));
+                var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
+                var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
+                var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+                var profileName = localStorage.getItem('mbt_profile_display_name') || '';
+                var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
+                var profileRole = localStorage.getItem('mbt_profile_role') || '';
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
+
+                        <!-- Account Sign-In -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Account</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Sign in to sync budgets across devices and contribute to community rates.</p>
+                            ${isSignedIn ? `
+                            <div class="flex items-center justify-between mb-3">
+                                <div>
+                                    <div class="text-[10px] font-black text-emerald-700">${esc(signedInEmail)}</div>
+                                    <div class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Signed In</div>
+                                </div>
+                                <button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
+                            </div>` : `
+                            <div class="space-y-2 mb-3">
+                                <input type="email" id="cloudEmail" placeholder="Email" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
+                                <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
+                                <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="mBT.features.settings.cloudSignIn()" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Sign In</button>
+                                <button onclick="mBT.features.settings.cloudSignInGoogle()" class="py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all">Google</button>
+                            </div>`}
+                        </div>
+
+                        <!-- User Profile (visible when signed in) -->
+                        ${isSignedIn ? `
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Profile</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Your display name and region are used for community rate contributions.</p>
+                            <div class="space-y-2 mb-3">
+                                <input type="text" id="profileDisplayName" placeholder="Display name" value="${esc(profileName)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                <select id="profileRegion" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
+                                </select>
+                                <input type="text" id="profileRole" placeholder="Production role (e.g. Producer)" value="${esc(profileRole)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                            </div>
+                            <button onclick="mBT.features.settings.saveProfile()" class="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Save Profile</button>
+                        </div>` : ''}
+
+                        <!-- OpenGate Community Rates -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">OpenGate Community Rates</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Pull updated industry rates from the shared community database. No account required.</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="ogCloudSyncToggle" ${ogCloudOn ? 'checked' : ''} onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Last sync</span>
+                                <span class="text-[9px] font-mono text-slate-500">${ogLastSyncLabel}</span>
+                                        <option value="YYYYMMDD" ${currentDateFormat === 'YYYYMMDD' ? 'selected' : ''}>YYYY-MM-DD</option>
+                                        <option value="MMDDYYYY" ${currentDateFormat === 'MMDDYYYY' ? 'selected' : ''}>MM-DD-YYYY</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Separator</label>
+                                    <input type="text" id="separatorInput" maxlength="1" value="${currentSeparator}" onchange="localStorage.setItem('${projectNameSeparatorKey}', this.value)" class="w-full text-[10px] p-2 bg-slate-50 border-none rounded-lg font-bold text-center outline-none">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Allow Page Zoom</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Enable pinch-to-zoom gestures</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="zoomToggle" ${allowZoom ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.allowZoom = this.checked; saveBudget(); mBT.ui.updateViewport();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Compact View</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="compactModeToggle" ${isCompact ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- NEW: Classic Theme Placeholder -->
+                            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Classic Theme</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Legacy visual style (Pre-v19.54)</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="classicThemeToggle" ${isClassic ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.classicTheme = this.checked; saveBudget(); render();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- Navigation Preference Toggle (Phase 16) -->
+                            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Open Tools In-App</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Stages, Publish etc. open inside main window</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="navPrefToggle" ${JSON.parse(localStorage.getItem('mBT_openToolsInternal') ?? 'true') ? 'checked' : ''} onchange="localStorage.setItem('mBT_openToolsInternal', this.checked);" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                             <a href="https://raw.githubusercontent.com/jaysonmy/moobudget/refs/heads/main/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-colors">${mBTAssets.cloud} Get Beta</a>
+                             <button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-4 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-rose-100 transition-colors">${mBTAssets.zap} Fix Bugs</button>
+                        </div>
+                        <div class="flex justify-center">
+                             <button onclick="mBTME.close('settingsModal'); showCoffeeWidget();" class="flex items-center gap-2 px-8 py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-transform shadow-lg">${mBTAssets.coffee} Support Development</button>
+                        </div>
+                    </div>`;
+            }
+            if (tabName === 'ai') {
+                const provider = getSelectedProvider();
+                const saveHistory = budget.aiContext?.saveHistory ?? true;
+                const storedPrompt = mBT.features.ai.getSystemPrompt();
+                
+                // Logic Resolution: Map for dynamic "Get API Key" links
+                const keyLinks = {
+                    'gemini': 'https://aistudio.google.com/app/apikey',
+                    'openai': 'https://platform.openai.com/api-keys',
+                    'deepseek': 'https://platform.deepseek.com/api_keys',
+                    'grok': 'https://console.x.ai/'
+                };
+                
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-6 animate-in fade-in duration-300">
+                        <div class="p-5 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Assistant</h3>
+                                    <p class="text-[9px] text-slate-500 font-bold mt-0.5">Configure Provider Access</p>
+                                </div>
+                                <div class="text-slate-700">${mBTAssets.sparkle}</div>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Active Provider</label>
+                                    <select id="aiProviderSelect" onchange="const link=document.getElementById('apiKeyLink'); const map=${JSON.stringify(keyLinks).replace(/"/g, "'")}; link.href=map[this.value];" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                        <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini API</option>
+                                        <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI API</option>
+                                        <option value="deepseek" ${provider === 'deepseek' ? 'selected' : ''}>DeepSeek API</option>
+                                        <option value="grok" ${provider === 'grok' ? 'selected' : ''}>Grok (xAI) API</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-1.5">
+                                        <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Credentials</label>
+                                        <a id="apiKeyLink" href="${keyLinks[provider] || '#'}" target="_blank" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest flex items-center gap-1 transition-colors">
+                                            Get API Key <span>→</span>
+                                        </a>
+                                    </div>
+                                    <input type="password" id="apiKeyInput" value="${getStoredApiKey(provider)}" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="sk-...">
+                                </div>
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Persona & Constraints</label>
+                                    <textarea id="aiSystemPromptInput" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] outline-none focus:ring-1 focus:ring-blue-500 resize-none h-16 placeholder-slate-600" placeholder="e.g. Be sarcastic. Focus only on Below The Line. Use JMD currency symbol.">${storedPrompt}</textarea>
+                                </div>
+                                <div class="flex items-center gap-3 py-1">
+                                    <div class="relative flex items-center">
+                                        <input type="checkbox" id="aiContextToggle" ${saveHistory ? 'checked' : ''} onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:''}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                                    </div>
+                                    <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
+                                </div>
+                                <button id="saveApiKeyBtn" onclick="const p=document.getElementById('aiProviderSelect').value; const k=document.getElementById('apiKeyInput').value; const s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+            if (tabName === 'cloud') {
+                var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                var ogLastSync = (window.mBTOG && mBTOG.lastSync) ? mBTOG.lastSync() : null;
+                var ogLastSyncLabel = ogLastSync ? new Date(ogLastSync).toLocaleString('en-JM', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
+                var supaConfigured = !!(localStorage.getItem('mbt_supabase_url') && localStorage.getItem('mbt_supabase_key'));
+                var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
+                var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
+                var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+                var profileName = localStorage.getItem('mbt_profile_display_name') || '';
+                var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
+                var profileRole = localStorage.getItem('mbt_profile_role') || '';
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
+
+                        <!-- Account Sign-In -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Account</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Sign in to sync budgets across devices and contribute to community rates.</p>
+                            ${isSignedIn ? `
+                            <div class="flex items-center justify-between mb-3">
+                                <div>
+                                    <div class="text-[10px] font-black text-emerald-700">${esc(signedInEmail)}</div>
+                                    <div class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Signed In</div>
+                                </div>
+                                <button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
+                            </div>` : `
+                            <div class="space-y-2 mb-3">
+                                <input type="email" id="cloudEmail" placeholder="Email" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
+                                <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
+                                <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="mBT.features.settings.cloudSignIn()" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Sign In</button>
+                                <button onclick="mBT.features.settings.cloudSignInGoogle()" class="py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all">Google</button>
+                            </div>`}
+                        </div>
+
+                        <!-- User Profile (visible when signed in) -->
+                        ${isSignedIn ? `
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Profile</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Your display name and region are used for community rate contributions.</p>
+                            <div class="space-y-2 mb-3">
+                                <input type="text" id="profileDisplayName" placeholder="Display name" value="${esc(profileName)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                <select id="profileRegion" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
+                                </select>
+                                <input type="text" id="profileRole" placeholder="Production role (e.g. Producer)" value="${esc(profileRole)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                            </div>
+                            <button onclick="mBT.features.settings.saveProfile()" class="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Save Profile</button>
+                        </div>` : ''}
+
+                        <!-- OpenGate Community Rates -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">OpenGate Community Rates</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Pull updated industry rates from the shared community database. No account required.</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="ogCloudSyncToggle" ${ogCloudOn ? 'checked' : ''} onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                </label>
+                            </div>
+                            </div>
+                            <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('OpenGate', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('OpenGate', 'Engine not available.'); }" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
+                        </div>
+
+                        <!-- Project Backup + Sync -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Background Sync</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mb-4">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>
+                            <div class="flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-Sync Changes</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="syncOnReconnectToggle" ${syncOnReconnect ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            <button onclick="if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>
+                        </div>
+                    </div>`;
+            }
             if (tabName === 'database') {
                 const nav = RenderEngine.ui.tabs({
                     items: [
@@ -7190,7 +7500,8 @@ _renderTalent: function(docId, d) {
             const tabs = [
                 { id: 'general', label: `General` },
                 { id: 'database', label: `OpenGate` },
-                { id: 'ai', label: `AI` }
+                { id: 'ai', label: `AI` },
+                { id: 'cloud', label: `Cloud` }
             ];
             
             const tabNavHTML = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
@@ -7232,13 +7543,20 @@ _renderTalent: function(docId, d) {
             if (tab === 'database' && subTab === 'lineItems') {
                 const mult = mBTOG.settings.regionMultiplier;
                 const regionLabel = mBTOG.settings.location !== 'Jamaica' ? ` (${mBTOG.settings.location} ×${mult})` : '';
-                mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, (r) => RenderEngine.ui.listRow({
-                    id: r.id || r.description,
-                    icon: mBTAssets.money,
-                    title: r.description,
-                    subtitle: `${mBTLE.format.currency(r.rate * mult)} / ${r.unit}${regionLabel}`,
-                    classes: 'border-b border-slate-50'
-                }));
+                mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, (r) => {
+                    const isCommunity = r.source === 'community';
+                    return RenderEngine.ui.listRow({
+                        id: r.id || r.description,
+                        icon: mBTAssets.money,
+                        title: r.description,
+                        subtitle: `${mBTLE.format.currency(r.rate * mult)} / ${r.unit}${regionLabel}`,
+                        classes: 'border-b border-slate-50',
+                        actions: isCommunity ? [
+                            { icon: mBTAssets.check, title: 'Approve', color: 'emerald', onClick: `mBTOGAPI.submitVote('${r.id || r.description}', 'approve')` },
+                            { icon: mBTAssets.close, title: 'Reject', color: 'rose', onClick: `mBTOGAPI.submitVote('${r.id || r.description}', 'reject')` }
+                        ] : []
+                    });
+                });
             }
             if (tab === 'database' && subTab === 'contacts') {
                 const globalContacts = mBTOG.contacts || [];
@@ -7344,7 +7662,7 @@ _renderTalent: function(docId, d) {
             var next = !current;
             localStorage.setItem('moo_og_cloud_sync', JSON.stringify(next));
             if (next && typeof mBTOG.syncFromCloud === 'function') {
-                mBTOG.syncFromCloud();
+                mBTOG.syncFromCloud().catch(function(e) { console.error("Cloud Sync Failed", e); });
             }
             this.open('database', 'lineItems');
         },
@@ -7356,6 +7674,64 @@ _renderTalent: function(docId, d) {
                 mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
             }
             this.open('database', 'lineItems');
+        },
+
+        /* --- 46.1 Auth handlers --- */
+
+        cloudSignIn: function() {
+            var email = (document.getElementById('cloudEmail') || {}).value || '';
+            var pass  = (document.getElementById('cloudPassword') || {}).value || '';
+            var errEl = document.getElementById('cloudAuthError');
+            email = email.trim();
+            if (!email || !pass) {
+                if (errEl) { errEl.textContent = 'Email and password required.'; errEl.classList.remove('hidden'); }
+                return;
+            }
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            mBTSync.signIn(email, pass).then(function () {
+                /* On sign-in, push local data and pull remote to merge. */
+                if (window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()) {
+                    mBTSync.pushAll().catch(function(){});
+                    mBTSync.pullAll().catch(function(){});
+                    mBTSync.fetchProfile().catch(function(){});
+                }
+                mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (errEl) { errEl.textContent = e.message || 'Sign-in failed.'; errEl.classList.remove('hidden'); }
+            });
+        },
+
+        cloudSignInGoogle: function() {
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            try {
+                mBTSync.signInWithGoogle();
+            } catch (e) {
+                mBTME.alert('Google Sign-In', e.message || 'Supabase URL not configured.');
+            }
+        },
+
+        cloudSignOut: function() {
+            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            mBTSync.signOut().then(function () {
+                mBT.features.settings.open('cloud');
+            });
+        },
+
+        /* --- 46.4 Profile save --- */
+
+        saveProfile: function() {
+            if (!window.mBTSync) { mBTME.alert('Profile', 'Sync service not loaded.'); return; }
+            var name   = (document.getElementById('profileDisplayName') || {}).value || '';
+            var region = (document.getElementById('profileRegion') || {}).value || 'Jamaica';
+            var role   = (document.getElementById('profileRole') || {}).value || '';
+            mBTSync.saveProfile(name, region, role).then(function () {
+                /* Sync region into OpenGate settings so multiplier is correct. */
+                if (window.mBTOG && mBTOG.settings) { mBTOG.settings.location = region; localStorage.setItem('moo_og_loc', region); }
+                mBTME.alert('Profile', 'Profile saved.');
+                mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                mBTME.alert('Profile', 'Could not save profile: ' + (e.message || 'Unknown error'));
+            });
         }
     };
 
@@ -7446,6 +7822,135 @@ _renderTalent: function(docId, d) {
             } else {
                 mBTME.alert("Error", "Item reference lost.");
             }
+        }
+    };
+
+    /* ========= FUNDING TRACKER (mBT.features.funding) ========= */
+    mBT.features.funding = {
+
+        /* --- Refresh the #fundingCard DOM element --- */
+        updateCard: function() {
+            var el = document.getElementById('fundingCard');
+            if (!el) return;
+
+            var sources = budget.fundingSources || [];
+            var grandTotal = budget.grandTotal || 0;
+
+            var totalSecured = 0;
+            for (var i = 0; i < sources.length; i++) {
+                totalSecured += parseFloat(sources[i].amount) || 0;
+            }
+            var gap = grandTotal - totalSecured;
+            var pct = grandTotal > 0 ? Math.min(100, Math.round((totalSecured / grandTotal) * 100)) : 0;
+            var fullyFunded = gap <= 0;
+
+            var barColor = fullyFunded ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-rose-400';
+            var gapColor = fullyFunded ? 'text-emerald-600' : 'text-rose-500';
+
+            var esc = mBT.ui.render.esc;
+            var fmt = function(v) { return mBTLE.format.currency(v, displayCurrency); };
+
+            var rowsHtml = '';
+            for (var j = 0; j < sources.length; j++) {
+                var s = sources[j];
+                var statusCls = s.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' : s.status === 'LOI' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500';
+                rowsHtml += '<div class="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">' +
+                    '<div class="flex items-center gap-2 min-w-0">' +
+                    '<span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ' + statusCls + '">' + esc(s.status || 'Pending') + '</span>' +
+                    '<span class="text-[10px] font-bold text-slate-700 truncate">' + esc(s.name || 'Unnamed Source') + '</span>' +
+                    '</div>' +
+                    '<div class="flex items-center gap-2 shrink-0">' +
+                    '<span class="text-[10px] font-mono font-bold text-slate-800">' + fmt(s.amount || 0) + '</span>' +
+                    '<button onclick="mBT.features.funding.deleteSource(' + j + ')" class="p-1 text-slate-300 hover:text-rose-500 transition-colors rounded">' + mBTAssets.trash + '</button>' +
+                    '</div>' +
+                    '</div>';
+            }
+
+            el.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">' +
+                '<div class="px-5 pt-4 pb-3">' +
+                '<div class="flex items-center justify-between mb-3">' +
+                '<div class="flex items-center gap-2">' +
+                (fullyFunded ? '<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div>' : '<div class="w-2 h-2 rounded-full bg-slate-300"></div>') +
+                '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-700">Funding</h3>' +
+                '<span class="text-[9px] font-bold text-slate-400 ml-1">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
+                '</div>' +
+                '<button onclick="mBT.features.funding.addSource()" class="flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">' + mBTAssets.plus + ' Add Source</button>' +
+                '</div>' +
+                '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3">' +
+                '<div class="h-full rounded-full transition-all duration-500 ' + barColor + '" style="width:' + pct + '%"></div>' +
+                '</div>' +
+                '<div class="flex gap-4">' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(totalSecured) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">' + (fullyFunded ? 'Surplus' : 'Gap Remaining') + '</p><p class="text-sm font-black ' + gapColor + '">' + fmt(Math.abs(gap)) + '</p></div>' +
+                '<div class="ml-auto self-end">' +
+                (sources.length > 0 ? '<button onclick="mBT.features.funding.exportCredits()" class="text-[9px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors">Export Credits</button>' : '') +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                (sources.length > 0 ? '<div class="px-5 pb-3 border-t border-slate-50">' + rowsHtml + '</div>' : '') +
+                '</div>';
+        },
+
+        /* --- Open modal to add a new funding source --- */
+        addSource: function() {
+            var content = '<div class="space-y-4 p-2">' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Source Name</label>' +
+                '<input type="text" id="fundingName" placeholder="e.g. Creative BC, Private Investor" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>' +
+                '<div class="grid grid-cols-2 gap-3">' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Amount</label>' +
+                '<input type="number" id="fundingAmount" placeholder="0.00" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>' +
+                '<div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>' +
+                '<select id="fundingStatus" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">' +
+                '<option value="Confirmed">Confirmed</option><option value="LOI">LOI</option><option value="Pending" selected>Pending</option>' +
+                '</select></div></div>' +
+                '<button onclick="mBT.features.funding.saveSource()" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Add Source</button>' +
+                '</div>';
+            mBTME.open('fundingAddModal', 'Add Funding Source', content, 'max-w-sm');
+        },
+
+        /* --- Commit the add-source form --- */
+        saveSource: function() {
+            var name = (document.getElementById('fundingName') || {}).value || '';
+            var amount = parseFloat((document.getElementById('fundingAmount') || {}).value) || 0;
+            var status = (document.getElementById('fundingStatus') || {}).value || 'Pending';
+
+            if (!name.trim()) { mBTME.alert('Missing Info', 'Please enter a source name.'); return; }
+            if (!budget.fundingSources) budget.fundingSources = [];
+            budget.fundingSources.push({ name: name.trim(), amount: amount, status: status });
+            saveBudget();
+            mBTME.close('fundingAddModal');
+            mBT.features.funding.updateCard();
+        },
+
+        /* --- Delete a funding source by index --- */
+        deleteSource: function(index) {
+            mBTME.confirm('Remove Source', 'Remove this funding source?', function() {
+                if (!budget.fundingSources) return;
+                budget.fundingSources.splice(index, 1);
+                saveBudget();
+                mBT.features.funding.updateCard();
+            });
+        },
+
+        /* --- Export funding sources as a CSV credits list --- */
+        exportCredits: function() {
+            var sources = budget.fundingSources || [];
+            if (!sources.length) { mBTME.alert('No Sources', 'Add funding sources first.'); return; }
+
+            var lines = ['Source,Amount,Status'];
+            for (var i = 0; i < sources.length; i++) {
+                var s = sources[i];
+                lines.push('"' + (s.name || '').replace(/"/g, '""') + '",' + (parseFloat(s.amount) || 0).toFixed(2) + ',' + (s.status || 'Pending'));
+            }
+            var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = (budget.projectName || 'project') + '-credits.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
     };
 
@@ -8120,7 +8625,7 @@ _renderTalent: function(docId, d) {
                     </div>
                 </div>
                 <div class="flex justify-between items-center pt-2">
-                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${itemId}', '${sectionName}')">Unassign</button>` : '<div></div>'}
+                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${mBT.ui.render.esc(itemId)}', '${mBT.ui.render.esc(sectionName)}')">Unassign</button>` : '<div></div>'}
                     <button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>
                 </div>
             </div>`;
@@ -8284,7 +8789,7 @@ _renderTalent: function(docId, d) {
     window.renderStageDatabaseList = function(items, stageKey, targetSectionName) {
         if (!items.length) return `<div class="p-4 text-center text-xs text-gray-400">No matches.</div>`;
         return items.map(item => `
-            <div onclick="${item.isExisting ? `assignItemToStage('${item.id}', '${stageKey}')` : `addStageItemToBudget('${RenderEngine.esc(item.description)}', ${item.rate}, '${item.unit}', '${stageKey}', '${targetSectionName}')`}" 
+            <div onclick="${item.isExisting ? `assignItemToStage('${RenderEngine.esc(item.id)}', '${RenderEngine.esc(stageKey)}')` : `addStageItemToBudget('${RenderEngine.esc(item.description)}', ${item.rate}, '${RenderEngine.esc(item.unit)}', '${RenderEngine.esc(stageKey)}', '${RenderEngine.esc(targetSectionName)}')`}" 
                  class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">
                 <div><div class="text-sm font-bold text-gray-700">${item.description}</div>${item.isExisting ? `<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ${item.sectionName}</div>` : ''}</div>
                 <div class="font-mono text-xs text-gray-500 font-bold">${mBTLE.format.currency(item.rate)}</div>
@@ -9390,6 +9895,7 @@ window.updateAllHeaders = () => {
                 if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html');
+                else if (btn.id === 'templateFooterBtn') openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
@@ -9414,10 +9920,11 @@ window.updateAllHeaders = () => {
     /* --- 4. INFRASTRUCTURE TELEMETRY --- */
     function resolveConnectivityStatus() {
         const isOnline = navigator.onLine;
+        const isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
         const btn = document.getElementById('loginBtn');
         if(btn) {
-            btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isOnline ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : 'border-rose-400 bg-rose-50 text-rose-600'}`;
-            btn.title = isOnline ? "Studio Online" : "Studio Offline";
+            btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isSignedIn ? 'border-blue-400 bg-blue-50 text-blue-600' : (isOnline ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : 'border-rose-400 bg-rose-50 text-rose-600')}`;
+            btn.title = isSignedIn ? "Signed In" : (isOnline ? "Studio Online" : "Studio Offline");
             btn.innerHTML = mBTAssets.user;
         }
         const aiBtn = document.getElementById('openAiToolsBtn');
@@ -9498,10 +10005,10 @@ window.updateAllHeaders = () => {
     };
 
     function handleLogin() {
-        if (navigator.onLine) {
-            mBTME.confirm("Login", "Establish secure connection to Moo Studio Cloud infrastructure?", () => {
-                mBTME.alert("Connected", "Environment Authenticated.");
-            });
+        if (typeof mBT !== 'undefined' && mBT.features && mBT.features.settings) {
+            mBT.features.settings.open('cloud');
+        } else {
+            mBTME.alert("Cloud Engine", "Cloud settings module not found.");
         }
     }
 
@@ -9524,6 +10031,24 @@ window.updateAllHeaders = () => {
     window.showBinModal = () => { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('documents'); };
     window.handleDocTrash = (id) => { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.trashDocument(id); };
     
+    // OAuth callback handler
+    (function () {
+        var hash = window.location.hash;
+        if (!hash || hash.indexOf('access_token=') === -1) return;
+        var params = {};
+        hash.substring(1).split('&').forEach(function (pair) {
+            var kv = pair.split('=');
+            params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+        });
+        if (params.access_token) {
+            localStorage.setItem('mbt_supabase_auth_token', params.access_token);
+            if (params.refresh_token) localStorage.setItem('mbt_supabase_refresh_token', params.refresh_token);
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        }
+    })();
+
     // System Start
     document.addEventListener('DOMContentLoaded', () => {
         if (mBT.core && typeof mBT.core.init === 'function') {
@@ -9531,6 +10056,8 @@ window.updateAllHeaders = () => {
         } else if (typeof init === 'function') {
             init(); // Fallback for safety
         }
+        // Ensure Login UI reflects current connectivity
+        resolveConnectivityStatus();
     });
 
 /* ======= END OF mBT ========== */
