@@ -7186,79 +7186,79 @@ _renderTalent: function(docId, d) {
                                         <input type="checkbox" id="aiContextToggle" ${saveHistory ? 'checked' : ''} onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:''}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">
                                         <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                                     </div>
-                                    <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
-                                </div>
-                                <button id="saveApiKeyBtn" onclick="const p=document.getElementById('aiProviderSelect').value; const k=document.getElementById('apiKeyInput').value; const s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
-                            </div>
+                                    var avg = avgs[key];
+                                    var sub = mBTLE.format.currency(r.rate) + ' / ' + r.unit;
+                                    if (avg && avg.contributor_count > 0) {
+                                        sub += ' · Avg: ' + mBTLE.format.currency(avg.avg_rate) + ' (' + avg.contributor_count + ')';
+                                    }
+                                    return RenderEngine.ui.listRow({
+                                        id: r.id || r.description,
+                                        icon: mBTAssets.money,
+                                        title: r.description,
+                                        subtitle: sub,
+                                        classes: 'border-b border-slate-50'
+                                    });
+                                }).join('');
+                            })()}
                         </div>
                     </div>`;
             }
-            if (tabName === 'cloud') {
-                var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
-                var ogLastSync = (window.mBTOG && mBTOG.lastSync) ? mBTOG.lastSync() : null;
-                var ogLastSyncLabel = ogLastSync ? new Date(ogLastSync).toLocaleString('en-JM', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never';
-                var supaConfigured = !!(localStorage.getItem('mbt_supabase_url') && localStorage.getItem('mbt_supabase_key'));
-                var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
-                var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
-                var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
-                var profileName = localStorage.getItem('mbt_profile_display_name') || '';
-                var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
-                var profileRole = localStorage.getItem('mbt_profile_role') || '';
+            if (subTab === 'templates') {
+                const templates = Array.isArray(mBTOG.templates) ? mBTOG.templates : [];
+                const listContent = templates.length > 0 ? templates.map(t => RenderEngine.ui.listRow({
+                    id: t.id,
+                    icon: mBTAssets[t.icon] || mBTAssets.file,
+                    title: t.label,
+                    subtitle: t.cat || 'General',
+                    actions: [{
+                        icon: mBTAssets.plus,
+                        title: 'Use Template',
+                        color: 'blue',
+                        onClick: `createNewDocumentFromTemplate('${t.id}')`
+                    }]
+                })).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.file, message: 'No Templates' });
+
                 return `
-                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
-
-                        <!-- Account Sign-In -->
-                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Account</h3>
-                            <p class="text-[9px] text-slate-400 font-bold mb-4">Sign in to sync budgets across devices and contribute to community rates.</p>
-                            ${isSignedIn ? `
-                            <div class="flex items-center justify-between mb-3">
-                                <div>
-                                    <div class="text-[10px] font-black text-emerald-700">${esc(signedInEmail)}</div>
-                                    <div class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Signed In</div>
-                                </div>
-                                <button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Sign Out</button>
-                            </div>` : `
-                            <div class="space-y-2 mb-3">
-                                <input type="email" id="cloudEmail" placeholder="Email" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
-                                <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
-                                <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden"></div>
+                    <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+                        <div class="p-3 bg-indigo-50 border-b border-indigo-100 shrink-0 z-10">
+                             <div class="relative">
+                                <input type="text" id="templateSearchInput" placeholder="SEARCH TEMPLATES..." class="w-full p-2.5 pr-10 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none">${mBTAssets.search}</div>
                             </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button onclick="mBT.features.settings.cloudSignIn()" class="py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Sign In</button>
-                                <button onclick="mBT.features.settings.cloudSignInGoogle()" class="py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all">Google</button>
-                            </div>`}
                         </div>
+                        <div id="templatesListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">
+                            ${listContent}
+                        </div>
+                    </div>`;
+            }
+            return '';
+        },
 
-                        <!-- User Profile (visible when signed in) -->
-                        ${isSignedIn ? `
-                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">Profile</h3>
-                            <p class="text-[9px] text-slate-400 font-bold mb-4">Your display name and region are used for community rate contributions.</p>
-                            <div class="space-y-2 mb-3">
-                                <input type="text" id="profileDisplayName" placeholder="Display name" value="${esc(profileName)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                                <select id="profileRegion" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                                    ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
-                                </select>
-                                <input type="text" id="profileRole" placeholder="Production role (e.g. Producer)" value="${esc(profileRole)}" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+        // --- 2. Main Content Generator ---
+        getTabContent: function(tabName, subTab = 'lineItems') {
+            if (tabName === 'general') {
+                const currentDateFormat = getProjectDateFormat();
+                const currentSeparator = getProjectNameSeparator();
+                const isCompact = budget.settings?.compactMode || false;
+                const syncAoD = budget.settings?.syncAoD || false;
+                // Logic Resolution: Prep for future legacy theme switch
+                const isClassic = budget.settings?.classicTheme || false;
+                const allowZoom = budget.settings?.allowZoom || false;
+              
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-6 animate-in fade-in duration-300">
+                        <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center gap-3">
+                            <div class="w-16 h-16 rounded-2xl shadow-lg border-2 border-slate-50 overflow-hidden bg-[#fdba35]">${mBTAssets.appLogo}</div>
+                            <div>
+                                <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">MooBudget Studio</h3>
+                                <p class="text-[9px] text-slate-400 font-bold mt-1">Build v${APP_VERSION} • ${navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>'}</p>
                             </div>
-                            <button onclick="mBT.features.settings.saveProfile()" class="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">Save Profile</button>
-                        </div>` : ''}
-
-                        <!-- OpenGate Community Rates -->
-                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">OpenGate Community Rates</h3>
-                            <p class="text-[9px] text-slate-400 font-bold mb-4">Pull updated industry rates from the shared community database. No account required.</p>
-                            <div class="flex items-center justify-between mb-3">
-                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
-                                <label class="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" id="ogCloudSyncToggle" ${ogCloudOn ? 'checked' : ''} onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                                </label>
-                            </div>
-                            <div class="flex items-center justify-between mb-4">
-                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Last sync</span>
-                                <span class="text-[9px] font-mono text-slate-500">${ogLastSyncLabel}</span>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Date Format</label>
+                                    <select id="dateFormatSelect" onchange="localStorage.setItem('${projectDateFormatKey}', this.value)" class="w-full text-[10px] p-2 bg-slate-50 border-none rounded-lg font-bold outline-none cursor-pointer">
                                         <option value="YYYYMMDD" ${currentDateFormat === 'YYYYMMDD' ? 'selected' : ''}>YYYY-MM-DD</option>
                                         <option value="MMDDYYYY" ${currentDateFormat === 'MMDDYYYY' ? 'selected' : ''}>MM-DD-YYYY</option>
                                     </select>
