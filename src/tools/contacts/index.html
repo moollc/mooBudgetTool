@@ -75,28 +75,28 @@ button, a { min-height: 44px; }
       <section class="mb-6">
         <div class="flex flex-wrap gap-2">
           <button data-dept=""
-            class="dept-tab px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">All</button>
+            class="dept-tab px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium" aria-label="Show all departments">All</button>
           <button data-dept="Production"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Production</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Production department">Production</button>
           <button data-dept="Art"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Art</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Art department">Art</button>
           <button data-dept="Camera"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Camera</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Camera department">Camera</button>
           <button data-dept="Sound"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Sound</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Sound department">Sound</button>
           <button data-dept="Electrical"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Electrical</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Electrical department">Electrical</button>
           <button data-dept="Editing"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Editing</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Editing department">Editing</button>
           <button data-dept="Post"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Post</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Post department">Post</button>
           <button data-dept="Transport"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Transport</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Transport department">Transport</button>
           <button data-dept="Craft Services"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Craft
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Craft Services department">Craft
             Services</button>
           <button data-dept="Miscellaneous"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm">Miscellaneous</button>
+            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Miscellaneous department">Miscellaneous</button>
         </div>
       </section>
 
@@ -288,11 +288,11 @@ button, a { min-height: 44px; }
         <div class="p-6 space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input type="text" id="contact-name" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="John Doe">
+            <input type="text" id="contact-name" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="John Doe" aria-label="Contact name">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Department *</label>
-            <select id="contact-dept" class="w-full px-3 py-2 border border-gray-300 rounded">
+            <select id="contact-dept" class="w-full px-3 py-2 border border-gray-300 rounded" aria-label="Contact department">
               <option value="Production">Production</option>
               <option value="Art">Art</option>
               <option value="Camera">Camera</option>
@@ -307,33 +307,33 @@ button, a { min-height: 44px; }
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input type="email" id="contact-email" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="john@example.com">
+            <input type="email" id="contact-email" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="john@example.com" aria-label="Contact email">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <input type="tel" id="contact-phone" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="+1 (555) 123-4567">
+            <input type="tel" id="contact-phone" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="+1 (555) 123-4567" aria-label="Contact phone">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Custom Daily Rate ($)</label>
-            <input type="number" step="0.01" id="contact-rate" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Leave empty for standard rate">
+            <input type="number" step="0.01" id="contact-rate" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Leave empty for standard rate" aria-label="Contact daily rate">
             <p class="text-xs text-gray-500 mt-1">Leave empty to use department standard rate</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Project (Optional)</label>
-            <input type="text" id="contact-project" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Project name or ID">
+            <input type="text" id="contact-project" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Project name or ID" aria-label="Contact project">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Dietary Restrictions</label>
-            <input type="text" id="contact-dietary" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Vegetarian, Vegan, Halal">
+            <input type="text" id="contact-dietary" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Vegetarian, Vegan, Halal" aria-label="Contact dietary restrictions">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
-            <input type="text" id="contact-allergies" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Nuts, Shellfish, Gluten">
+            <input type="text" id="contact-allergies" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Nuts, Shellfish, Gluten" aria-label="Contact allergies">
           </div>
         </div>
         <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>
-          <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded" id="save-contact">Save</button>
+          <button class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded" aria-label="Cancel add contact">Cancel</button>
+          <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded" id="save-contact" aria-label="Save contact">Save</button>
         </div>
       </div>
     `;
