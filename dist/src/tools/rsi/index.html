@@ -198,10 +198,10 @@
       var DEFAULT_DEBT_FILE = './DEBT.json';
       var DEBT_STORE = 'rsi_debt';
 
-      const STORAGE = window.mBT.storage;
-      let allDebtData = []; // Outer scope for search
-      let currentFilter = '';
-      let currentDebt = null;
+      var STORAGE = window.mBT.storage;
+      var allDebtData = []; // Outer scope for search
+      var currentFilter = '';
+      var currentDebt = null;
 
       /* --- Debt initialization: load from storage, seed defaults only on first run --- */
       function initDebt() {
@@ -252,11 +252,11 @@
 
       // Render debt items
       function renderDebt(debt, filter = '') {
-        const list = document.getElementById('debt-list');
-        const empty = document.getElementById('empty-state');
+        var list = document.getElementById('debt-list');
+        var empty = document.getElementById('empty-state');
         list.innerHTML = '';
 
-        let filtered = debt || [];
+        var filtered = debt || [];
         if (filter) {
           filtered = filtered.filter(d => d.category === filter || d.priority === filter);
         }
@@ -268,7 +268,7 @@
         empty.classList.add('hidden');
 
         filtered.forEach(item => {
-          const el = document.createElement('div');
+          var el = document.createElement('div');
           el.className = 'debt-item ' + (item.priority === 'critical' ? 'critical ' : '') + (item.category === 'performance' ? 'performance ' : '') + (item.category === 'security' ? 'security ' : '');
 
           el.innerHTML = `
@@ -308,10 +308,10 @@
 
       // Update stats
       function updateStats(debtList) {
-        const total = debtList || [];
-        const critical = total.filter(d => d.priority === 'critical').length;
-        const warning = total.filter(d => d.priority === 'warning').length;
-        const resolved = total.filter(d => d.status === 'resolved').length;
+        var total = debtList || [];
+        var critical = total.filter(d => d.priority === 'critical').length;
+        var warning = total.filter(d => d.priority === 'warning').length;
+        var resolved = total.filter(d => d.status === 'resolved').length;
 
         document.getElementById('total-debt').textContent = total.length;
         document.getElementById('critical-debt').textContent = critical;
@@ -353,18 +353,18 @@
 
       // === NEW DEBT CREATION ===
       function createNewDebt() {
-        const title = document.getElementById('new-debt-title').value;
-        const category = document.getElementById('new-debt-category').value;
-        const priority = document.getElementById('new-debt-priority').value;
-        const description = document.getElementById('new-debt-description').value;
-        const estimatedHours = document.getElementById('new-debt-hours').value;
+        var title = document.getElementById('new-debt-title').value;
+        var category = document.getElementById('new-debt-category').value;
+        var priority = document.getElementById('new-debt-priority').value;
+        var description = document.getElementById('new-debt-description').value;
+        var estimatedHours = document.getElementById('new-debt-hours').value;
 
         if (!title || !category || !priority) {
           alert('Title, category, and priority are required');
           return;
         }
 
-        const debtItem = {
+        var debtItem = {
           id: 'debt_' + Date.now(),
           title,
           category,
@@ -393,7 +393,7 @@
       function openEditor(item) {
         currentDebt = item;
 
-        const modal = document.createElement('div');
+        var modal = document.createElement('div');
         modal.id = 'edit-debt-modal';
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
         modal.innerHTML = `
@@ -451,7 +451,7 @@
       }
 
       function closeEditorModal() {
-        const modal = document.getElementById('edit-debt-modal');
+        var modal = document.getElementById('edit-debt-modal');
         if (modal) modal.remove();
         currentDebt = null;
       }
@@ -459,13 +459,13 @@
       function saveDebtEditor() {
         if (!currentDebt) return;
 
-        const title = document.getElementById('edit-debt-title').value;
-        const category = document.getElementById('edit-debt-category').value;
-        const priority = document.getElementById('edit-debt-priority').value;
-        const description = document.getElementById('edit-debt-description').value;
-        const estimatedHours = document.getElementById('edit-debt-hours').value;
+        var title = document.getElementById('edit-debt-title').value;
+        var category = document.getElementById('edit-debt-category').value;
+        var priority = document.getElementById('edit-debt-priority').value;
+        var description = document.getElementById('edit-debt-description').value;
+        var estimatedHours = document.getElementById('edit-debt-hours').value;
 
-        const updated = {
+        var updated = {
           ...currentDebt,
           title,
           category,
@@ -510,7 +510,7 @@
         if (!confirm('Delete this debt item?')) return;
 
         STORAGE.getItem(DEBT_STORE).then(debt => {
-          const filtered = debt.filter(d => d.id !== id);
+          var filtered = debt.filter(d => d.id !== id);
           STORAGE.setItem(DEBT_STORE, filtered).then(function () {
             allDebtData = filtered;
             renderDebt(filtered, currentFilter);

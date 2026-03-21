@@ -656,5 +656,6 @@
     };
 
     window.mBTOG = mBTOG;
+    window.mBTOG.cloud = { url: OG_CLOUD_URL, key: OG_CLOUD_KEY };
 
 })();
