@@ -4,8 +4,8 @@
 
     /* --- Credentials stored in localStorage or fallback to OpenGate embedded keys per security protocol --- */
     window.mBTSupabaseConfig = {
-        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || (window.mBTOGAPI && window.mBTOGAPI.cloud ? window.mBTOGAPI.cloud.url : ''); },
-        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || (window.mBTOGAPI && window.mBTOGAPI.cloud ? window.mBTOGAPI.cloud.key : ''); },
+        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.url : ''); },
+        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.key : ''); },
         get AUTH_TOKEN() { return localStorage.getItem('mbt_supabase_auth_token') || ''; },
         isConfigured: function () {
             return !!(this.API_URL && this.ANON_KEY);

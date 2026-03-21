@@ -32,7 +32,6 @@
         return base + '/auth/v1' + path;
     }
 
-    /* --- Sign in with email + password. Stores JWT in localStorage on success. --- */
     async function signIn(email, password) {
         var res = await fetch(getAuthUrl('/token?grant_type=password'), {
             method: 'POST',
@@ -44,11 +43,71 @@
             console.warn('[mBTSync] Auth error:', data.error_description || data.message);
             throw new Error('Sign-in failed. Check your email and password.');
         }
+        _handleAuthResponse(data, email);
+        return data;
+    }
+
+    /* --- Sign up with email + password. --- */
+    async function signUp(username, email, password) {
+        var res = await fetch(getAuthUrl('/signup'), {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ 
+                email: email, 
+                password: password,
+                data: { display_name: username }
+            })
+        });
+        var data = await res.json();
+        if (!res.ok) {
+            console.warn('[mBTSync] Sign-up error:', data.message);
+            throw new Error(data.message || 'Sign-up failed.');
+        }
+
+        // If auto-confirm is on in Supabase, we might get a session immediately.
+        if (data.access_token) {
+            _handleAuthResponse(data, email);
+        }
+        return data;
+    }
+
+    /* --- Password Recovery: sends reset email. --- */
+    async function forgotPassword(email) {
+        var res = await fetch(getAuthUrl('/recover'), {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ email: email })
+        });
+        if (!res.ok) {
+            var data = await res.json();
+            throw new Error(data.message || 'Recovery request failed.');
+        }
+        return true;
+    }
+
+    /* --- Update user data (e.g. password). --- */
+    async function updatePassword(newPassword) {
+        var res = await fetch(getAuthUrl('/user'), {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ password: newPassword })
+        });
+        var data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.message || 'Password update failed.');
+        }
+        return data;
+    }
+
+    /* --- Helper to save auth state --- */
+    function _handleAuthResponse(data, email) {
         localStorage.setItem('mbt_supabase_auth_token', data.access_token);
         localStorage.setItem('mbt_supabase_refresh_token', data.refresh_token || '');
         localStorage.setItem('mbt_supabase_user_email', data.user ? data.user.email : email);
         localStorage.setItem('mbt_supabase_user_id', data.user ? data.user.id : '');
-        return data;
+        if (data.user && data.user.user_metadata && data.user.user_metadata.display_name) {
+            localStorage.setItem('mbt_profile_display_name', data.user.user_metadata.display_name);
+        }
     }
 
     /* --- Sign in with Google — opens the OAuth provider page in a new tab. --- */
@@ -362,6 +421,9 @@
         sbUpsert:      sbUpsert,
         sbDelete:      sbDelete,
         signIn:        signIn,
+        signUp:        signUp,
+        forgotPassword: forgotPassword,
+        updatePassword: updatePassword,
         signInWithGoogle: signInWithGoogle,
         signOut:       signOut,
         getSession:    getSession,
