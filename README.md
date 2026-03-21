@@ -1,4 +1,4 @@
-# mBT — Moo Budget Tool
+# mBT — Moo Budget Tool 
 
 **Offline-first film production budget management. No server. No account. Just open and work.**
 
