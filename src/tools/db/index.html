@@ -2177,33 +2177,53 @@
     if (!budget || !budget.sections) return;
     var sections = budget.sections;
     var found = { director: '', producers: '', upm: '', firstAd: '', secondAd: '' };
+
     Object.keys(sections).forEach(function (k) {
       var sec = sections[k];
-      var secId = (sec.id || '').toLowerCase();
-      var secName = (sec.name || '').toLowerCase();
-      // Fuzzy match for Above the Line / ATL
-      if (secId !== 'atl' && secName.indexOf('atl') < 0 && secName.indexOf('above the line') < 0) return;
-      
       (sec.items || []).forEach(function (item) {
         var d = (item.description || '').toLowerCase();
-        // Director (exclude Art Director)
-        if (!found.director  && d.indexOf('director') > -1 && d.indexOf('art') < 0) found.director = item.description;
-        // Producers (match Producer, Exec Producer, etc.)
-        if (!found.producers && (d.indexOf('producer') > -1 || d.indexOf('prod') > -1))  found.producers = item.description;
-        // UPM
-        if (!found.upm       && (d.indexOf('upm') > -1 || d.indexOf('unit production') > -1 || d.indexOf('unit manager') > -1)) found.upm = item.description;
+        var personName = (item.crew && item.crew.name) || ''; // Pull actual contact name
+        if (!personName) return; 
+
+        // Director
+        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) {
+            found.director = personName;
+        }
+        // Producers
+        else if ((d.indexOf('producer') > -1 && d.indexOf('line') < 0) || d === 'prod') {
+            if (found.producers) {
+                if (found.producers.indexOf(personName) < 0) found.producers += ', ' + personName;
+            } else {
+                found.producers = personName;
+            }
+        }
+        // UPM / Line Producer
+        else if (!found.upm && (d.indexOf('upm') > -1 || d.indexOf('unit production') > -1 || d.indexOf('line producer') > -1)) {
+            found.upm = personName;
+        }
         // 1st AD
-        if (!found.firstAd   && (d.indexOf('1st ad') > -1 || d.indexOf('first ad') > -1 || d.indexOf('1ad') > -1))     found.firstAd = item.description;
+        else if (!found.firstAd && (d.indexOf('1st ad') > -1 || d.indexOf('first ad') > -1 || d.indexOf('1ad') > -1 || d.indexOf('first assistant') > -1)) {
+            found.firstAd = personName;
+        }
         // 2nd AD
-        if (!found.secondAd  && (d.indexOf('2nd ad') > -1 || d.indexOf('second ad') > -1 || d.indexOf('2ad') > -1))    found.secondAd = item.description;
+        else if (!found.secondAd && (d.indexOf('2nd ad') > -1 || d.indexOf('second ad') > -1 || d.indexOf('2ad') > -1 || d.indexOf('second assistant') > -1)) {
+            found.secondAd = personName;
+        }
       });
     });
+
     var changed = false;
     ['director','producers','upm','firstAd','secondAd'].forEach(function (k) {
       if (found[k] && !editorData[k]) { editorData[k] = found[k]; changed = true; }
     });
     if (!editorData.productionTitle && budget.projectName) { editorData.productionTitle = budget.projectName; changed = true; }
-    if (changed) { saveEditorData(); buildEditor('callSheet'); }
+    
+    if (changed) { 
+        saveEditorData(); 
+        buildEditor('callSheet'); 
+    } else {
+        alert("No additional crew contacts found to populate or fields already filled.");
+    }
   }
 
   /* Fetch weather (3-day, all shooting locations) + nearest hospitals (first location) */
