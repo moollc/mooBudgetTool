@@ -194,6 +194,7 @@
                     var row = rows[j];
                     if (!existing[row.description.toLowerCase()]) {
                         self.rates.push({
+                            id: row.id,
                             description: row.description,
                             unit: row.unit || 'Day',
                             rate: parseFloat(row.rate) || 0,
@@ -237,6 +238,33 @@
                     region: region || self.settings.location,
                     currency: 'JMD',
                     source: 'community'
+                })
+            }).then(function (res) { return res.ok; }).catch(function () { return false; });
+        },
+
+        /*
+         * upsertVote() — Phase 48 voting mechanism
+         * Requires auth token. Resolves to true if vote was recorded successfully.
+         */
+        upsertVote: function (rateId, voteType) {
+            var authToken = localStorage.getItem('mbt_supabase_auth_token');
+            if (!authToken) return Promise.resolve(false); // Must be signed in to vote
+
+            var userId = localStorage.getItem('mbt_supabase_user_id');
+            if (!userId) return Promise.resolve(false);
+
+            return fetch(OG_CLOUD_URL + '/rest/v1/og_votes', {
+                method: 'POST',
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + authToken,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates,return=minimal'
+                },
+                body: JSON.stringify({
+                    rate_id: rateId,
+                    user_id: userId,
+                    vote_type: voteType
                 })
             }).then(function (res) { return res.ok; }).catch(function () { return false; });
         },

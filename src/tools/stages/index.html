@@ -43,7 +43,7 @@
     <!-- Top Navigation Bar -->
     <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0 z-50">
         <div class="flex items-center gap-4">
-            <button id="btn-back" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
+            <button id="btn-back" aria-label="Back to dashboard" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
                 Back
             </button>
@@ -81,7 +81,7 @@
         <div id="panel-setup" class="studio-card min-w-[320px] w-[320px] bg-slate-900 text-white snap-start shrink-0">
             <div class="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Configuration</span>
-                <button onclick="mBTStageStudio.syncFromDb()" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">
+                <button onclick="mBTStageStudio.syncFromDb()" aria-label="Sync from budget database" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     Sync
                 </button>
@@ -91,11 +91,11 @@
                 <div class="space-y-4">
                     <div>
                         <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Start Date</label>
-                        <input type="date" id="start-date" onchange="mBTStageStudio.updateDate('start', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors">
+                        <input type="date" id="start-date" aria-label="Project start date" onchange="mBTStageStudio.updateDate('start', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors">
                     </div>
                     <div>
                         <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Target</label>
-                        <input type="date" id="delivery-date" onchange="mBTStageStudio.updateDate('delivery', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors" id="delivery-date-input">
+                        <input type="date" id="delivery-date" aria-label="Project delivery target date" onchange="mBTStageStudio.updateDate('delivery', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors" id="delivery-date-input">
                     </div>
                 </div>
                 <!-- Cap -->
@@ -103,7 +103,7 @@
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Total Cap Limit</label>
                     <div class="flex items-center gap-2 border-b-2 border-slate-700 pb-1">
                         <span class="text-slate-600 text-xl font-black">$</span>
-                        <input type="number" id="total-cap" placeholder="0.00" oninput="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-white outline-none placeholder-slate-800">
+                        <input type="number" id="total-cap" aria-label="Total cap limit" placeholder="0.00" oninput="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-white outline-none placeholder-slate-800">
                     </div>
                 </div>
                 <!-- Sliders -->
@@ -111,7 +111,7 @@
                 <!-- Industry Preset -->
                 <div class="pt-4 border-t border-slate-800">
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Distribution Model</label>
-                    <select onchange="mBTStageStudio.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
+                    <select aria-label="Distribution model preset" onchange="mBTStageStudio.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
                         <option value="" disabled selected>Load Industry Preset...</option>
                         <option value="TVC">TVC</option>
                         <option value="Music Video">Music Video</option>
@@ -123,15 +123,15 @@
                 <div class="pt-4 border-t border-slate-800">
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Bulk Operations</label>
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick="mBTStageStudio.bulkAction('lockAll')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Lock All</button>
-                        <button onclick="mBTStageStudio.bulkAction('unlockAll')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Unlock All</button>
-                        <button onclick="mBTStageStudio.bulkAction('syncDays')" class="bg-slate-800 hover:bg-amber-600 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Sync Days</button>
-                        <button onclick="mBTStageStudio.bulkAction('dedupe')" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Dedupe</button>
-                        <button onclick="mBTStageStudio.autoFillAll()" class="col-span-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+                        <button onclick="mBTStageStudio.bulkAction('lockAll')" aria-label="Lock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Lock All</button>
+                        <button onclick="mBTStageStudio.bulkAction('unlockAll')" aria-label="Unlock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Unlock All</button>
+                        <button onclick="mBTStageStudio.bulkAction('syncDays')" aria-label="Sync stage days to max item days" class="bg-slate-800 hover:bg-amber-600 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Sync Days</button>
+                        <button onclick="mBTStageStudio.bulkAction('dedupe')" aria-label="Remove duplicate items across stages" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Dedupe</button>
+                        <button onclick="mBTStageStudio.autoFillAll()" aria-label="Neural fill stage assignments" class="col-span-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                             Neural Fill
                         </button>
-                        <button onclick="mBTStageStudio.clearAll()" class="col-span-2 bg-slate-800 hover:bg-rose-800 text-slate-400 hover:text-rose-300 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear All Stages</button>
+                        <button onclick="mBTStageStudio.clearAll()" aria-label="Clear all stage assignments" class="col-span-2 bg-slate-800 hover:bg-rose-800 text-slate-400 hover:text-rose-300 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear All Stages</button>
                     </div>
                 </div>
             </div>
@@ -150,7 +150,7 @@
                         <circle id="burn-meter" cx="50" cy="50" r="44" stroke="#2563eb" stroke-width="12" fill="none" stroke-dasharray="276.46" stroke-dashoffset="276.46" class="burn-ring" stroke-linecap="round"/>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
-                        <span id="burn-pct" class="text-4xl font-black text-slate-900 leading-none tracking-tighter">0%</span>
+                        <span id="burn-pct" class="text-4xl font-black text-slate-900 leading-none tracking-tighter truncate w-full px-2 block">0%</span>
                         <span id="burn-label" class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Burn</span>
                     </div>
                 </div>
@@ -195,12 +195,12 @@
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col" style="max-height:85vh">
             <div class="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                 <span id="modal-title" class="text-[10px] font-black uppercase tracking-widest text-slate-800">Add to Stage</span>
-                <button onclick="mBTStageStudio.closeAddModal()" class="text-slate-300 hover:text-slate-600 transition-colors">
+                <button onclick="mBTStageStudio.closeAddModal()" aria-label="Close add item modal" class="text-slate-300 hover:text-slate-600 transition-colors">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
             <div class="p-4 border-b border-slate-50 shrink-0">
-                <input type="text" id="modal-search" placeholder="Search items..." oninput="mBTStageStudio.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
+                <input type="text" id="modal-search" aria-label="Search items" placeholder="Search items..." oninput="mBTStageStudio.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
             </div>
             <div id="modal-list" class="flex-grow overflow-y-auto"></div>
             <!-- Custom Item Form -->
@@ -224,6 +224,8 @@
 
     <script>
         /* ========= Stages Studio v24 ========= */
+        var dom = document.currentScript ? document.currentScript.getRootNode() : document;
+        if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
         /* --- XSS Escape --- */
         function esc(str) {
@@ -394,7 +396,7 @@
                 self.state.projectId   = params.get('projectId') || null;
 
                 /* Back button */
-                document.getElementById('btn-back').addEventListener('click', function() {
+                dom.getElementById('btn-back').addEventListener('click', function() {
                     if (window.mBTBridge) window.mBTBridge.send('navigate', { route: 'home' });
                     else if (window.parent !== window) window.parent.postMessage({ type: 'mbt:tool-action', action: 'navigate', payload: { route: 'home' } }, '*');
                 });
@@ -458,11 +460,11 @@
                 if (!b) return;
 
                 /* Header */
-                document.getElementById('active-project-name').textContent = (b.company && b.company.productionTitle) ? b.company.productionTitle : 'UNTITLED';
-                document.getElementById('project-tag').textContent = b.id ? b.id.slice(-6).toUpperCase() : 'PROJECT';
-                document.getElementById('start-date').value    = b.startDate || '';
-                document.getElementById('delivery-date').value = b.deliveryDate || '';
-                document.getElementById('total-cap').value     = b.targetLock ? (b.targetLock.totalCap || '') : '';
+                dom.getElementById('active-project-name').textContent = (b.company && b.company.productionTitle) ? b.company.productionTitle : 'UNTITLED';
+                dom.getElementById('project-tag').textContent = b.id ? b.id.slice(-6).toUpperCase() : 'PROJECT';
+                dom.getElementById('start-date').value    = b.startDate || '';
+                dom.getElementById('delivery-date').value = b.deliveryDate || '';
+                dom.getElementById('total-cap').value     = b.targetLock ? (b.targetLock.totalCap || '') : '';
 
                 /* Panels */
                 this.renderSliders();
@@ -491,7 +493,7 @@
                         '</div>' +
                     '</div>';
                 }).join('');
-                document.getElementById('preset-sliders').innerHTML = html;
+                dom.getElementById('preset-sliders').innerHTML = html;
             },
 
             /* --- Vitals Panel (burn ring + stats + timeline) --- */
@@ -504,43 +506,43 @@
 
                 /* Risk overrides burn display */
                 var ringText  = Math.round(burn.pct) + '%';
-                var ringClass = 'text-4xl font-black leading-none tracking-tighter ' + burn.color;
+                var ringClass = 'text-4xl font-black leading-none tracking-tighter truncate w-full px-2 block ' + burn.color;
                 var labelText = 'Burn';
-                var labelClass = 'text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1';
+                var labelClass = 'text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 truncate w-full px-1 block';
 
                 if (risk) {
                     if (risk.status === 'CRITICAL') {
                         burn.stroke = '#f43f5e';
                         ringText   = 'CRITICAL';
-                        ringClass  = 'text-xl font-black leading-none tracking-tight text-rose-600';
+                        ringClass  = 'text-xl font-black leading-none tracking-tight text-rose-600 truncate w-full px-2 block';
                         labelText  = risk.subMessage;
-                        labelClass = 'text-[8px] font-black text-rose-500 uppercase tracking-widest mt-1 animate-pulse';
+                        labelClass = 'text-[8px] font-black text-rose-500 uppercase tracking-widest mt-1 animate-pulse truncate w-full px-1 block';
                     } else {
                         burn.stroke = '#f59e0b';
                         ringText   = 'DELAY';
-                        ringClass  = 'text-2xl font-black leading-none tracking-tight text-amber-500';
+                        ringClass  = 'text-2xl font-black leading-none tracking-tight text-amber-500 truncate w-full px-2 block';
                         labelText  = risk.subMessage;
-                        labelClass = 'text-[8px] font-black text-amber-500 uppercase tracking-widest mt-1';
+                        labelClass = 'text-[8px] font-black text-amber-500 uppercase tracking-widest mt-1 truncate w-full px-1 block';
                     }
                 }
 
                 /* Burn ring */
                 var offset = 276.46 - (Math.min(burn.pct, 100) / 100 * 276.46);
-                var meter  = document.getElementById('burn-meter');
+                var meter  = dom.getElementById('burn-meter');
                 meter.style.strokeDashoffset = offset;
                 meter.setAttribute('stroke', burn.stroke);
-                document.getElementById('burn-pct').textContent  = ringText;
-                document.getElementById('burn-pct').className    = ringClass;
-                document.getElementById('burn-label').textContent = labelText;
-                document.getElementById('burn-label').className   = labelClass;
+                dom.getElementById('burn-pct').textContent  = ringText;
+                dom.getElementById('burn-pct').className    = ringClass;
+                dom.getElementById('burn-label').textContent = labelText;
+                dom.getElementById('burn-label').className   = labelClass;
 
                 /* Stats */
-                document.getElementById('stat-grand-total').textContent = fmt(metrics.grandTotal);
-                document.getElementById('stat-total-cap').textContent   = fmt(metrics.totalCap);
-                document.getElementById('stat-daily-burn').textContent  = fmt(metrics.dailyBurn) + '/day';
-                document.getElementById('stat-runway').textContent      = Math.round(metrics.runwayDays) + ' Days';
+                dom.getElementById('stat-grand-total').textContent = fmt(metrics.grandTotal);
+                dom.getElementById('stat-total-cap').textContent   = fmt(metrics.totalCap);
+                dom.getElementById('stat-daily-burn').textContent  = fmt(metrics.dailyBurn) + '/day';
+                dom.getElementById('stat-runway').textContent      = Math.round(metrics.runwayDays) + ' Days';
 
-                var riskEl = document.getElementById('stat-risk');
+                var riskEl = dom.getElementById('stat-risk');
                 if (risk && risk.status === 'CRITICAL') {
                     riskEl.textContent = 'CRITICAL'; riskEl.className = 'text-[10px] font-black text-rose-600 uppercase tracking-widest';
                 } else if (risk && risk.status === 'WARNING') {
@@ -567,10 +569,10 @@
                         '<span class="text-slate-800">' + esc(t.label) + statusHtml + '</span>' +
                     '</div>';
                 }).join('');
-                document.getElementById('timeline-audit').innerHTML = tHtml;
+                dom.getElementById('timeline-audit').innerHTML = tHtml;
 
                 /* Delivery date input border color */
-                var deliveryInput = document.getElementById('delivery-date');
+                var deliveryInput = dom.getElementById('delivery-date');
                 if (timeline._analysis) {
                     deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
                     if (timeline._analysis.status === 'OVERDUE') deliveryInput.classList.add('border-rose-500');
@@ -585,7 +587,7 @@
                 var self     = this;
                 var metrics  = calculateMetrics(b);
                 var timeline = calculateTimeline(b);
-                var container = document.getElementById('stage-cards-container');
+                var container = dom.getElementById('stage-cards-container');
 
                 var html = this.state.KEYS.map(function(k) {
                     var s         = b.targetLock.stages[k];
@@ -880,15 +882,15 @@
             openAddModal: function(stageKey) {
                 this.state._modalStage = stageKey;
                 var stageTitle = this.state.TITLES[stageKey] || stageKey.toUpperCase();
-                document.getElementById('modal-title').textContent = 'Add to ' + stageTitle;
-                document.getElementById('modal-search').value = '';
-                document.getElementById('custom-form').classList.add('hidden');
+                dom.getElementById('modal-title').textContent = 'Add to ' + stageTitle;
+                dom.getElementById('modal-search').value = '';
+                dom.getElementById('custom-form').classList.add('hidden');
                 this._buildModalList('');
-                document.getElementById('add-item-modal').classList.add('open');
+                dom.getElementById('add-item-modal').classList.add('open');
             },
 
             closeAddModal: function() {
-                document.getElementById('add-item-modal').classList.remove('open');
+                dom.getElementById('add-item-modal').classList.remove('open');
                 this.state._modalStage = null;
             },
 
@@ -897,7 +899,7 @@
             },
 
             toggleCustomForm: function() {
-                document.getElementById('custom-form').classList.toggle('hidden');
+                dom.getElementById('custom-form').classList.toggle('hidden');
             },
 
             _buildModalList: function(term) {
@@ -926,11 +928,11 @@
                 var all = existing.slice(0, 15).concat(ogFiltered);
 
                 if (!all.length) {
-                    document.getElementById('modal-list').innerHTML = '<div class="p-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-widest">No matches</div>';
+                    dom.getElementById('modal-list').innerHTML = '<div class="p-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-widest">No matches</div>';
                     return;
                 }
 
-                document.getElementById('modal-list').innerHTML = all.map(function(item) {
+                dom.getElementById('modal-list').innerHTML = all.map(function(item) {
                     var badge = item.isExisting
                         ? '<span class="text-[7px] font-black text-emerald-600 uppercase tracking-widest">From Budget · ' + esc(item.secName) + '</span>'
                         : '<span class="text-[7px] font-black text-blue-400 uppercase tracking-widest">Rate DB</span>';
@@ -991,10 +993,10 @@
             addCustomItem: function() {
                 var sk   = this.state._modalStage;
                 var b    = this.state.project;
-                var desc = (document.getElementById('custom-desc').value || '').trim();
-                var rate = parseFloat(document.getElementById('custom-rate').value) || 0;
-                var unit = document.getElementById('custom-unit').value;
-                if (!desc) { document.getElementById('custom-desc').focus(); return; }
+                var desc = (dom.getElementById('custom-desc').value || '').trim();
+                var rate = parseFloat(dom.getElementById('custom-rate').value) || 0;
+                var unit = dom.getElementById('custom-unit').value;
+                if (!desc) { dom.getElementById('custom-desc').focus(); return; }
 
                 var secNames  = Object.keys(b.sections || {});
                 var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
@@ -1011,8 +1013,8 @@
                 b.sections[targetSec].items.push(newItem);
 
                 /* Reset form */
-                document.getElementById('custom-desc').value = '';
-                document.getElementById('custom-rate').value = '';
+                dom.getElementById('custom-desc').value = '';
+                dom.getElementById('custom-rate').value = '';
                 this.closeAddModal();
                 this.renderVitals();
                 this.renderStageCards();
@@ -1063,7 +1065,7 @@
 
             initDragAndDrop: function() {
                 var self = this;
-                document.querySelectorAll('.stage-drop-zone').forEach(function(zone) {
+                dom.querySelectorAll('.stage-drop-zone').forEach(function(zone) {
                     new Sortable(zone, {
                         group: 'stages',
                         animation: 150,
@@ -1100,7 +1102,7 @@
             /* ========= Carousel Grab-Scroll ========= */
 
             _initCarouselScroll: function() {
-                var slider = document.getElementById('studio-layout');
+                var slider = dom.getElementById('studio-layout');
                 var isDown = false, startX, scrollLeft;
                 slider.addEventListener('mousedown', function(e) {
                     if (['INPUT', 'BUTTON', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
@@ -1123,14 +1125,14 @@
 
             _initTabNavigation: function() {
                 var self = this;
-                var tabs = document.querySelectorAll('.tab-btn');
+                var tabs = dom.querySelectorAll('.tab-btn');
                 self._tabBtns = tabs;
 
                 /* Tab click handler — looks up panel lazily at click time */
                 tabs.forEach(function(tab) {
                     tab.addEventListener('click', function() {
                         var targetPanelId = this.dataset.tab;
-                        var targetPanel = document.getElementById(targetPanelId);
+                        var targetPanel = dom.getElementById(targetPanelId);
                         if (!targetPanel) return;
                         targetPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         tabs.forEach(function(t) { t.classList.remove('active'); });
@@ -1145,11 +1147,11 @@
                         var panelId = entry.target.id;
                         if (!panelId) return;
                         self._tabBtns.forEach(function(t) { t.classList.remove('active'); });
-                        var tab = document.querySelector('.tab-btn[data-tab="' + panelId + '"]');
+                        var tab = dom.querySelector('.tab-btn[data-tab="' + panelId + '"]');
                         if (tab) tab.classList.add('active');
                     });
                 }, {
-                    root: document.getElementById('studio-layout'),
+                    root: dom.getElementById('studio-layout'),
                     rootMargin: '0px',
                     threshold: 0.4
                 });
@@ -1162,7 +1164,7 @@
                 this._tabObserver.disconnect();
                 var obs = this._tabObserver;
                 panels.forEach(function(id) {
-                    var el = document.getElementById(id);
+                    var el = dom.getElementById(id);
                     if (el) obs.observe(el);
                 });
             },
@@ -1181,7 +1183,7 @@
             },
 
             _showError: function(msg) {
-                document.getElementById('studio-layout').innerHTML =
+                dom.getElementById('studio-layout').innerHTML =
                     '<div class="flex-grow flex items-center justify-center">' +
                         '<div class="text-center">' +
                             '<p class="text-4xl font-black text-slate-200 uppercase tracking-tighter mb-2">Not Connected</p>' +

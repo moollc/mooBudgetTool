@@ -829,23 +829,23 @@
 
             <!-- ROUTE: Health & Telemetry -->
             <div class="route-panel" id="panel-rsi" style="height:calc(100vh - var(--header-h) - 64px);">
-                <iframe src="../tools/rsi/index.html"
-                    style="width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
-                    title="Health &amp; Telemetry"></iframe>
+                <mbt-tool data-src="../tools/rsi/index.html"
+                    style="display:block;width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
+                    title="Health &amp; Telemetry"></mbt-tool>
             </div>
 
             <!-- ROUTE: Templates -->
             <div class="route-panel" id="panel-template" style="height:calc(100vh - var(--header-h) - 64px);">
-                <iframe src="../tools/template/index.html"
-                    style="width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
-                    title="Templates"></iframe>
+                <mbt-tool data-src="../tools/template/index.html"
+                    style="display:block;width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
+                    title="Templates"></mbt-tool>
             </div>
 
             <!-- ROUTE: AI Assistant -->
             <div class="route-panel" id="panel-ai" style="height:calc(100vh - var(--header-h) - 64px);">
-                <iframe src="../tools/ai/index.html"
-                    style="width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
-                    title="AI Assistant"></iframe>
+                <mbt-tool data-src="../tools/ai/index.html"
+                    style="display:block;width:100%;height:100%;border:none;border-radius:var(--radius-2xl);"
+                    title="AI Assistant"></mbt-tool>
             </div>
 
             <!-- ROUTE: Settings -->
@@ -865,6 +865,7 @@
     <script src="../scripts/storage.js"></script>
     <script src="../config/supabase.js"></script>
     <script src="../services/supabase-sync.js"></script>
+    <script src="./mBT.component.js"></script>
     <script src="./mBT.core.js"></script>
     <script src="./services/OpenGate.js"></script>
     <script src="./services/Contacts.js"></script>

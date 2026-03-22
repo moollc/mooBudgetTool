@@ -80,10 +80,13 @@
   <script src="../../scripts/engine/mbtle.js"></script>
 
   <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
     /* ========= My Tool Controller ========= */
 
     function setOutput(msg) {
-        document.getElementById('output').textContent = msg;
+        dom.getElementById('output').textContent = msg;
     }
 
     /* --- Example action --- */

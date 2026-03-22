@@ -108,15 +108,18 @@
   <script src="../../config/supabase.js"></script>
   <script src="../../services/supabase-sync.js"></script>
   <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
     /* ========= v1.0 Supabase Tool Controller v2.0 ========= */
 
     var syncCount = parseInt(localStorage.getItem('mbt_sync_count') || '0', 10);
 
     /* --- Config persistence using localStorage per security protocol --- */
     function saveConfig() {
-        var url = document.getElementById('supabaseUrl').value.trim();
-        var key = document.getElementById('supabaseKey').value.trim();
-        var enabled = document.getElementById('syncEnabled').checked;
+        var url = dom.getElementById('supabaseUrl').value.trim();
+        var key = dom.getElementById('supabaseKey').value.trim();
+        var enabled = dom.getElementById('syncEnabled').checked;
 
         localStorage.setItem('mbt_supabase_url', url);
         localStorage.setItem('mbt_supabase_key', key);
@@ -129,7 +132,7 @@
     function updateSyncStatus() {
         var url  = localStorage.getItem('mbt_supabase_url') || '';
         var key  = localStorage.getItem('mbt_supabase_key') || '';
-        var el   = document.getElementById('syncStatus');
+        var el   = dom.getElementById('syncStatus');
 
         if (!url || !key) {
             el.textContent = 'Not Configured';
@@ -173,9 +176,9 @@
             var result = await window.mBTSync.pushAll();
             syncCount++;
             localStorage.setItem('mbt_sync_count', syncCount);
-            document.getElementById('syncCount').textContent = syncCount;
-            document.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
-            document.getElementById('cloudStatus').textContent = 'Synced';
+            dom.getElementById('syncCount').textContent = syncCount;
+            dom.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
+            dom.getElementById('cloudStatus').textContent = 'Synced';
             addLog('Push complete: ' + result.synced + ' records, ' + result.errors + ' errors.');
         } catch (e) {
             addLog('Push failed: ' + e.message);
@@ -190,8 +193,8 @@
         addLog('Pulling data from Supabase...');
         try {
             var result = await window.mBTSync.pullAll();
-            document.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
-            document.getElementById('cloudStatus').textContent = 'Pulled';
+            dom.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
+            dom.getElementById('cloudStatus').textContent = 'Pulled';
             addLog('Pull complete: ' + result.pulled + ' new records, ' + result.errors + ' errors.');
             await refreshLocalCount();
         } catch (e) {
@@ -220,11 +223,11 @@
 
     async function refreshLocalCount() {
         var count = await countLocalRecords();
-        document.getElementById('localRecords').textContent = count.toLocaleString();
+        dom.getElementById('localRecords').textContent = count.toLocaleString();
     }
 
     function addLog(message) {
-        var el        = document.getElementById('logs');
+        var el        = dom.getElementById('logs');
         var timestamp = new Date().toLocaleTimeString();
         var line      = document.createElement('div');
         line.textContent = '[' + timestamp + '] ' + message;
@@ -242,10 +245,10 @@
         var savedKey = localStorage.getItem('mbt_supabase_key') || '';
         var savedSync = localStorage.getItem('mbt_supabase_sync_enabled') !== 'false';
 
-        document.getElementById('supabaseUrl').value   = savedUrl;
-        document.getElementById('supabaseKey').value   = savedKey;
-        document.getElementById('syncEnabled').checked = savedSync;
-        document.getElementById('syncCount').textContent = syncCount;
+        dom.getElementById('supabaseUrl').value   = savedUrl;
+        dom.getElementById('supabaseKey').value   = savedKey;
+        dom.getElementById('syncEnabled').checked = savedSync;
+        dom.getElementById('syncCount').textContent = syncCount;
 
         updateSyncStatus();
         await refreshLocalCount();

@@ -3182,9 +3182,9 @@ _renderTalent: function(docId, d) {
                 else if(burnRate > 80) burnColor = 'text-amber-500';
 
                 const burnWidget = `
-                    <div class="col-span-1 md:col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full flex flex-col justify-center items-center text-center">
+                    <div class="col-span-1 md:col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full flex flex-col justify-center items-center text-center overflow-hidden">
                         <div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">Burn Rate</div>
-                        <span class="text-3xl font-black ${burnColor} tracking-tighter">${burnRate.toFixed(1)}%</span>
+                        <span class="text-3xl font-black ${burnColor} tracking-tighter truncate w-full px-2 block" title="${burnRate.toFixed(1)}%">${burnRate.toFixed(1)}%</span>
                         <span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">of budget</span>
                     </div>`;
 

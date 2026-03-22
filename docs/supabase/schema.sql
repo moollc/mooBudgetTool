@@ -220,17 +220,47 @@ CREATE POLICY "profiles: owner read"   ON profiles FOR SELECT USING (auth.uid() 
 CREATE POLICY "profiles: owner insert" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles: owner update" ON profiles FOR UPDATE USING (auth.uid() = id);
 
+/* --- 9. og_votes (Voting system for community rates - Phase 48) --- */
+CREATE TABLE IF NOT EXISTS og_votes (
+    id          BIGSERIAL   PRIMARY KEY,
+    rate_id     BIGINT      NOT NULL REFERENCES og_community_rates(id) ON DELETE CASCADE,
+    user_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    vote_type   INT         NOT NULL CHECK (vote_type IN (1, -1)), -- 1 = Approve, -1 = Disapprove
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(rate_id, user_id)
+);
+
+ALTER TABLE og_votes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "og_votes: owner read"   ON og_votes FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "og_votes: auth insert"  ON og_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "og_votes: owner update" ON og_votes FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "og_votes: owner delete" ON og_votes FOR DELETE USING (auth.uid() = user_id);
+
 /* --- og_rate_averages view (community average rates by description + region) --- */
-/* Used by 46.3 to show "Community average: $X (N contributors)" in OpenGate tab. */
+/* Updated for Phase 48: Incorporates og_votes. Excludes individual contributions with net score < -2 */
 CREATE OR REPLACE VIEW og_rate_averages AS
+    WITH rate_scores AS (
+        SELECT
+            r.id,
+            r.description,
+            r.region,
+            r.rate,
+            r.currency,
+            COALESCE(SUM(v.vote_type), 0) as net_score
+        FROM og_community_rates r
+        LEFT JOIN og_votes v ON r.id = v.rate_id
+        WHERE r.source = 'community'
+        GROUP BY r.id
+    )
     SELECT
         description,
         region,
-        ROUND(AVG(rate)::numeric, 0)            AS avg_rate,
-        COUNT(*)                                 AS contributor_count,
+        ROUND(AVG(rate)::numeric, 0) AS avg_rate,
+        COUNT(id) AS contributor_count,
         currency
-    FROM og_community_rates
-    WHERE source = 'community'
+    FROM rate_scores
+    WHERE net_score >= -2
     GROUP BY description, region, currency;
 
 /* Public read — same policy as og_community_rates. */
