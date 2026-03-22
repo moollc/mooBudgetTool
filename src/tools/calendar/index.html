@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>mBT — Production Calendar</title>
     <script src="../../lib/tailwind.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
@@ -14,9 +14,23 @@
         .gantt-bar:hover { filter: brightness(1.1); }
         .milestone-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
         .milestone-row:last-child { border-bottom: none; }
+        .gantt-milestone { position: absolute; top: -4px; width: 12px; height: 12px; background: #f59e0b; transform: rotate(45deg); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 10; cursor: pointer; }
+        .gantt-milestone:hover { background: #d97706; transform: rotate(45deg) scale(1.2); }
+        .gantt-milestone-tooltip { position: absolute; top: -24px; left: 50%; transform: translateX(-50%) rotate(-45deg); background: #1e293b; color: #fff; font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .2s; }
+        .gantt-milestone:hover .gantt-milestone-tooltip { opacity: 1; }
         @media (max-width: 480px) {
             .gantt-label { display: none; }
             .milestone-row { grid-template-columns: 100px 1fr auto; }
+        }
+        @media print {
+            body { background: #fff !important; overflow: visible !important; height: auto !important; }
+            .no-scrollbar { overflow: visible !important; }
+            #btn-back, #btn-export-ics, #btn-add-milestone, .milestone-row button { display: none !important; }
+            .gantt-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .gantt-milestone { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            #gantt-section, #milestones-section, #stage-table-section, #date-summary { break-inside: avoid; page-break-inside: avoid; }
+            .bg-slate-50 { background: #fff !important; }
+            .bg-white { box-shadow: none !important; }
         }
     </style>
 </head>
@@ -25,15 +39,23 @@
     <!-- Header -->
     <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
         <div class="flex items-center gap-4">
-            <button id="btn-back" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                Back
+            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
             <div class="h-4 w-px bg-slate-700"></div>
             <span class="text-white text-[11px] font-black uppercase tracking-tight">Production Calendar</span>
             <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading…</span>
         </div>
         <div class="flex items-center gap-2">
+            <select id="sel-work-week" onchange="mBTCalendar.setWorkWeek(this.value)" class="bg-slate-800 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border-none outline-none cursor-pointer" aria-label="Work week type">
+                <option value="5">5-Day</option>
+                <option value="6">6-Day</option>
+                <option value="7">7-Day</option>
+            </select>
+            <div class="flex bg-slate-800 rounded-lg overflow-hidden">
+                <button id="btn-view-timeline" onclick="mBTCalendar.setView('timeline')" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors bg-blue-600 text-white">Timeline</button>
+                <button id="btn-view-calendar" onclick="mBTCalendar.setView('calendar')" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-white/60 hover:text-white">Calendar</button>
+            </div>
             <button id="btn-export-ics" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export .ics
@@ -62,25 +84,62 @@
             </div>
         </div>
 
-        <!-- Gantt Chart -->
-        <div id="gantt-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+        <!-- Skeleton loader — dismissed on first render -->
+        <div id="calendar-skeleton" class="space-y-4">
+            <div class="animate-pulse bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
+                <div class="h-3 bg-slate-200 rounded w-1/4"></div>
+                <div class="h-8 bg-slate-100 rounded-lg"></div>
+                <div class="h-8 bg-slate-100 rounded-lg w-4/5"></div>
+                <div class="h-8 bg-slate-100 rounded-lg w-3/5"></div>
+            </div>
+            <div class="animate-pulse bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
+                <div class="h-3 bg-slate-200 rounded w-1/3"></div>
+                <div class="h-6 bg-slate-100 rounded w-full"></div>
+                <div class="h-6 bg-slate-100 rounded w-full"></div>
+            </div>
+        </div>
+
+        <!-- Gantt Chart (Timeline View) -->
+        <div id="gantt-section" class="bg-white rounded-xl border border-slate-200 p-4">
             <div class="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-4">Stage Timeline</div>
             <div id="gantt-chart" class="space-y-2.5"></div>
             <!-- Date axis -->
             <div id="gantt-axis" class="mt-3 relative" style="height:20px;"></div>
         </div>
 
+        <!-- Calendar Grid (Calendar View) -->
+        <div id="calendar-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Monthly Schedule</span>
+                <div class="flex items-center gap-3">
+                    <span class="flex items-center gap-1 text-[8px] text-slate-400"><span class="inline-block w-3 h-3 rounded bg-violet-200"></span>Blackout</span>
+                    <span class="flex items-center gap-1 text-[8px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-amber-500"></span>Milestone</span>
+                </div>
+            </div>
+            <div id="calendar-grid" class="space-y-6"></div>
+        </div>
+
         <!-- Milestones -->
         <div id="milestones-section" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
             <div class="flex items-center justify-between mb-4">
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Milestones &amp; Notes</span>
-                <button id="btn-add-milestone" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="btn-add-milestone" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Fixed
+                    </button>
+                    <button onclick="mBTCalendar.addRelativeMilestone()" class="text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-800 transition-colors flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Relative
+                    </button>
+                </div>
             </div>
             <div id="milestones-list" class="space-y-0"></div>
-            <div id="no-milestones" class="text-[10px] text-slate-400 italic hidden">No milestones yet. Click Add to create one.</div>
+            <div id="no-milestones" class="hidden flex flex-col items-center py-6 gap-2">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <p class="text-[9px] font-black text-slate-300 uppercase tracking-widest">No milestones yet</p>
+                <p class="text-[8px] font-bold text-slate-400">Click Add above to create one</p>
+            </div>
         </div>
 
         <!-- Stage Date Table -->
@@ -91,6 +150,8 @@
                     <tr class="border-b border-slate-100">
                         <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Stage</th>
                         <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Days</th>
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Working</th>
+                        <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Offset</th>
                         <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">Start</th>
                         <th class="text-left pb-2 font-black uppercase tracking-widest text-slate-400 text-[8px]">End</th>
                     </tr>
@@ -144,22 +205,60 @@ var mBTCalendar = (function () {
         return y + m + day;
     }
 
+    /* --- Compute payable working days within a date range --- */
+    function computeWorkingDays(grossDays, startDate, workWeek, blackouts) {
+        if (!workWeek || workWeek >= 7) return grossDays;
+        var working = 0;
+        var cursor = new Date(startDate);
+        for (var i = 0; i < grossDays; i++) {
+            var dow = cursor.getDay();
+            var dateStr = cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0') + '-' + String(cursor.getDate()).padStart(2, '0');
+            var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) ||
+                            (workWeek === 6 && dow === 0);
+            var isBlackout = blackouts && blackouts.indexOf(dateStr) > -1;
+            if (!isWeekend && !isBlackout) working++;
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return working;
+    }
+
+    /* --- Build timeline with overlapping stage support --- */
     function calcTimeline(budget) {
         if (!budget || !budget.startDate) return null;
         var cursor = parseDate(budget.startDate);
         var result = [];
+        var workWeek = (budget.settings && budget.settings.workWeek) || 5;
+        var blackouts = budget.blackoutDays || [];
+        var prevStart = null;
+
         STAGE_CONFIG.forEach(function (sc) {
             var days = 0;
+            var stageData = null;
             if (budget.targetLock && budget.targetLock.stages && budget.targetLock.stages[sc.key]) {
-                days = parseFloat(budget.targetLock.stages[sc.key].days) || 0;
+                stageData = budget.targetLock.stages[sc.key];
+                days = parseFloat(stageData.days) || 0;
             }
+
+            /* --- Overlapping stage offset: start relative to previous stage's start --- */
+            var offset = stageData && stageData.offsetDays;
+            if (typeof offset === 'number' && prevStart) {
+                cursor = new Date(prevStart);
+                cursor.setDate(cursor.getDate() + offset);
+            }
+
             var start = new Date(cursor);
+            prevStart = new Date(start);
             cursor.setDate(cursor.getDate() + days);
             var end = new Date(cursor);
-            result.push({ key: sc.key, label: sc.label, color: sc.color, text: sc.text, start: start, end: end, days: days });
+            var workingDays = computeWorkingDays(days, start, workWeek, blackouts);
+
+            result.push({ key: sc.key, label: sc.label, color: sc.color, text: sc.text, start: start, end: end, days: days, workingDays: workingDays });
         });
         return result;
     }
+
+    /* --- Gantt 2.0: Date-scaled pixel-per-day rendering --- */
+    var GANTT_PPD = 8; /* pixels per day — minimum readable scale */
 
     function renderGantt(timeline) {
         var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
@@ -167,34 +266,258 @@ var mBTCalendar = (function () {
             dom.getElementById('gantt-chart').innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the timeline.</p>';
             return;
         }
+
+        /* Calculate project date range for axis */
+        var projectStart = timeline[0].start;
+        var projectEnd = timeline[timeline.length - 1].end;
+        var totalSpanDays = Math.ceil((projectEnd - projectStart) / 86400000);
+        if (totalSpanDays < 1) totalSpanDays = totalDays;
+        var chartWidth = totalSpanDays * GANTT_PPD;
+
         var html = '';
         timeline.forEach(function (t) {
             if (t.days === 0) return;
-            var pct = Math.max(4, (t.days / totalDays) * 100);
+            var barWidth = Math.max(GANTT_PPD, t.days * GANTT_PPD);
+            var offsetDays = Math.ceil((t.start - projectStart) / 86400000);
+            var barLeft = offsetDays * GANTT_PPD;
+
             html += '<div class="flex items-center gap-2">' +
                 '<div class="gantt-label w-24 text-[8px] font-black text-slate-500 uppercase tracking-widest text-right shrink-0">' + esc(t.label.split('-')[0].trim()) + '</div>' +
-                '<div class="flex-1 relative" style="min-width:0;">' +
-                    '<div class="gantt-bar" style="width:' + pct.toFixed(1) + '%;background:' + t.color + ';color:' + t.text + ';">' +
-                        t.days + 'd' +
+                '<div class="flex-1 relative" style="min-width:0;overflow-x:auto;overflow-y:hidden;">' +
+                    '<div style="position:relative;width:' + chartWidth + 'px;min-width:100%;height:36px;">' +
+                        '<div class="gantt-bar" style="position:absolute;left:' + barLeft + 'px;width:' + barWidth + 'px;background:' + t.color + ';color:' + t.text + ';">' +
+                            t.days + 'd' +
+                        '</div>' +
+                        _renderMilestoneMarkers(t.start, t.end, projectStart, timeline) +
                     '</div>' +
                 '</div>' +
                 '<div class="text-[8px] text-slate-400 shrink-0 w-20 text-right">' + fmtDate(t.start) + '</div>' +
             '</div>';
         });
         dom.getElementById('gantt-chart').innerHTML = html;
+
+        renderAxis(projectStart, projectEnd, chartWidth);
+    }
+
+    /* --- Render milestone diamond markers within a stage's horizontal span --- */
+    function _renderMilestoneMarkers(stageStart, stageEnd, projectStart, timeline) {
+        var markers = '';
+        var resolved = resolveMilestones(timeline);
+        resolved.forEach(function (m) {
+            if (!m.date) return;
+            var mDate = parseDate(m.date);
+            if (mDate >= stageStart && mDate <= stageEnd) {
+                var offsetDays = Math.ceil((mDate - projectStart) / 86400000);
+                var left = offsetDays * GANTT_PPD;
+                markers += '<div class="gantt-milestone" style="left:' + left + 'px;" title="' + esc(m.title || 'Milestone') + '">' +
+                    '<div class="gantt-milestone-tooltip">' + esc(m.title || '') + '</div>' +
+                '</div>';
+            }
+        });
+        return markers;
+    }
+
+    /* --- Render month/week tick marks along the date axis --- */
+    function renderAxis(start, end, chartWidth) {
+        var axisEl = dom.getElementById('gantt-axis');
+        if (!start || !end || chartWidth <= 0) { axisEl.innerHTML = ''; return; }
+
+        var html = '<div style="position:relative;width:' + chartWidth + 'px;min-width:100%;height:20px;">';
+        var cursor = new Date(start);
+        cursor.setDate(1); /* align to month start */
+        if (cursor < start) cursor.setMonth(cursor.getMonth() + 1);
+
+        while (cursor <= end) {
+            var offsetDays = Math.ceil((cursor - start) / 86400000);
+            var left = offsetDays * GANTT_PPD;
+            var label = cursor.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+            html += '<div style="position:absolute;left:' + left + 'px;top:0;height:100%;border-left:1px solid #cbd5e1;">' +
+                '<span style="position:absolute;top:2px;left:4px;font-size:8px;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;white-space:nowrap;">' + label + '</span>' +
+            '</div>';
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+        html += '</div>';
+        axisEl.innerHTML = html;
+    }
+
+    /* ========= G21: Monthly Grid View ========= */
+
+    var currentView = 'timeline';
+
+    function setView(view) {
+        currentView = view;
+        var ganttSection = dom.getElementById('gantt-section');
+        var calendarSection = dom.getElementById('calendar-section');
+        var btnTimeline = dom.getElementById('btn-view-timeline');
+        var btnCalendar = dom.getElementById('btn-view-calendar');
+
+        if (view === 'calendar') {
+            ganttSection.classList.add('hidden');
+            calendarSection.classList.remove('hidden');
+            btnTimeline.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-white/60 hover:text-white';
+            btnCalendar.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors bg-blue-600 text-white';
+            renderCalendarGrid();
+        } else {
+            ganttSection.classList.remove('hidden');
+            calendarSection.classList.add('hidden');
+            btnTimeline.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors bg-blue-600 text-white';
+            btnCalendar.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-white/60 hover:text-white';
+        }
+    }
+
+    function renderCalendarGrid() {
+        var budget = state.budget;
+        if (!budget || !budget.startDate) return;
+        var timeline = calcTimeline(budget);
+        if (!timeline) return;
+
+        var gridEl = dom.getElementById('calendar-grid');
+        var projectStart = parseDate(budget.startDate);
+        var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
+        if (totalDays === 0) { gridEl.innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the calendar.</p>'; return; }
+
+        var projectEnd = timeline[timeline.length - 1].end;
+        var blackouts = budget.blackoutDays || [];
+
+        /* Build stage lookup: date string -> stage config */
+        var stageMap = {};
+        timeline.forEach(function (t) {
+            if (t.days === 0) return;
+            var d = new Date(t.start);
+            while (d < t.end) {
+                var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                stageMap[key] = t;
+                d.setDate(d.getDate() + 1);
+            }
+        });
+
+        /* Build milestone lookup: date string -> milestone title (resolved) */
+        var milestoneMap = {};
+        var resolved = resolveMilestones(timeline);
+        resolved.forEach(function (m) {
+            if (m.date) milestoneMap[m.date] = m.title || 'Milestone';
+        });
+
+        /* Group days by month */
+        var months = [];
+        var cursor = new Date(projectStart);
+        cursor.setDate(1);
+        while (cursor <= projectEnd) {
+            months.push(new Date(cursor));
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+
+        var html = '';
+        months.forEach(function (monthStart) {
+            var year = monthStart.getFullYear();
+            var month = monthStart.getMonth();
+            var monthName = monthStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+            var firstDay = new Date(year, month, 1).getDay(); /* 0=Sun */
+            var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            html += '<div class="mb-6">' +
+                '<div class="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2">' + esc(monthName) + '</div>' +
+                '<div class="grid grid-cols-7 gap-px bg-slate-200 rounded-lg overflow-hidden">' +
+                    /* Day headers */
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Sun</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Mon</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Tue</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Wed</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Thu</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Fri</div>' +
+                    '<div class="bg-slate-100 text-center text-[8px] font-black text-slate-400 uppercase tracking-widest py-1">Sat</div>';
+
+            /* Empty cells before first day */
+            for (var e = 0; e < firstDay; e++) {
+                html += '<div class="bg-slate-50 min-h-[48px]"></div>';
+            }
+
+            /* Day cells */
+            for (var d = 1; d <= daysInMonth; d++) {
+                var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+                var stage = stageMap[dateStr];
+                var isBlackout = blackouts.indexOf(dateStr) > -1;
+                var milestone = milestoneMap[dateStr];
+                var isToday = dateStr === new Date().toISOString().slice(0, 10);
+
+                var cellBg = 'bg-white';
+                var cellStyle = '';
+                if (isBlackout) {
+                    cellBg = 'bg-violet-100';
+                } else if (stage) {
+                    cellStyle = 'background:' + stage.color + '18;';
+                }
+
+                var todayRing = isToday ? 'ring-2 ring-blue-500 ring-inset' : '';
+                var dayNum = '<span class="text-[9px] font-bold ' + (isToday ? 'text-blue-600' : 'text-slate-600') + '">' + d + '</span>';
+                var msDot = milestone ? '<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mt-0.5" title="' + esc(milestone) + '"></span>' : '';
+                var stageLabel = stage ? '<span class="text-[6px] font-black uppercase tracking-widest truncate block mt-0.5" style="color:' + stage.color + ';">' + esc(stage.label.split('-')[0].trim()) + '</span>' : '';
+                var blackoutLabel = isBlackout ? '<span class="text-[6px] font-black text-violet-500 uppercase">OFF</span>' : '';
+
+                html += '<div onclick="mBTCalendar.toggleBlackout(\'' + dateStr + '\')" class="' + cellBg + ' ' + todayRing + ' min-h-[48px] p-1 cursor-pointer hover:brightness-95 transition-all flex flex-col items-center" style="' + cellStyle + '">' +
+                    dayNum +
+                    msDot +
+                    stageLabel +
+                    blackoutLabel +
+                '</div>';
+            }
+
+            html += '</div></div>';
+        });
+
+        gridEl.innerHTML = html;
+    }
+
+    function toggleBlackout(dateStr) {
+        if (!state.budget) return;
+        if (!state.budget.blackoutDays) state.budget.blackoutDays = [];
+        var idx = state.budget.blackoutDays.indexOf(dateStr);
+        if (idx > -1) {
+            state.budget.blackoutDays.splice(idx, 1);
+        } else {
+            state.budget.blackoutDays.push(dateStr);
+        }
+        renderCalendarGrid();
+        save();
     }
 
     function renderStageTable(timeline) {
         var html = '';
-        timeline.forEach(function (t) {
+        timeline.forEach(function (t, idx) {
+            var offsetVal = '';
+            if (state.budget && state.budget.targetLock && state.budget.targetLock.stages && state.budget.targetLock.stages[t.key]) {
+                var ov = state.budget.targetLock.stages[t.key].offsetDays;
+                if (typeof ov === 'number') offsetVal = ov;
+            }
             html += '<tr class="border-b border-slate-50">' +
                 '<td class="py-2 pr-3"><span class="inline-block w-2 h-2 rounded-full mr-2" style="background:' + t.color + ';"></span>' + esc(t.label) + '</td>' +
-                '<td class="py-2 pr-3 font-bold">' + t.days + '</td>' +
+                '<td class="py-2 pr-1"><input type="number" min="0" value="' + t.days + '" data-stage="' + t.key + '" onchange="mBTCalendar.updateStageDays(this.dataset.stage, this.value)" class="w-14 px-1 py-0.5 border border-slate-200 rounded text-[10px] font-bold text-center outline-none focus:border-blue-400"></td>' +
+                '<td class="py-2 pr-3 text-slate-400">' + t.workingDays + '</td>' +
+                '<td class="py-2 pr-1">' + (idx > 0 ? '<input type="number" value="' + offsetVal + '" data-stage="' + t.key + '" onchange="mBTCalendar.updateStageOffset(this.dataset.stage, this.value)" placeholder="—" class="w-14 px-1 py-0.5 border border-slate-200 rounded text-[10px] text-center outline-none focus:border-blue-400">' : '<span class="text-slate-300">—</span>') + '</td>' +
                 '<td class="py-2 pr-3 text-slate-500">' + (t.days > 0 ? fmtDate(t.start) : '—') + '</td>' +
                 '<td class="py-2 text-slate-500">' + (t.days > 0 ? fmtDate(t.end) : '—') + '</td>' +
             '</tr>';
         });
         dom.getElementById('stage-table-body').innerHTML = html;
+    }
+
+    /* --- Resolve relative milestones to absolute dates using timeline --- */
+    function resolveMilestones(timeline) {
+        var stageStartMap = {};
+        if (timeline) {
+            timeline.forEach(function (t) { stageStartMap[t.key] = t.start; });
+        }
+        return state.milestones.map(function (m) {
+            if (m.type === 'relative' && m.stageKey && stageStartMap[m.stageKey]) {
+                var resolved = new Date(stageStartMap[m.stageKey]);
+                resolved.setDate(resolved.getDate() + (parseInt(m.offsetDays) || 0));
+                var y = resolved.getFullYear();
+                var mo = String(resolved.getMonth() + 1).padStart(2, '0');
+                var dy = String(resolved.getDate()).padStart(2, '0');
+                return { id: m.id, title: m.title, date: y + '-' + mo + '-' + dy, type: 'relative', stageKey: m.stageKey, offsetDays: m.offsetDays, _resolved: true };
+            }
+            return m;
+        });
     }
 
     function renderMilestones() {
@@ -206,16 +529,47 @@ var mBTCalendar = (function () {
             return;
         }
         empty.classList.add('hidden');
-        var sorted = state.milestones.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+
+        /* --- Build stage options for relative milestone dropdown --- */
+        var stageOpts = '';
+        STAGE_CONFIG.forEach(function (sc) {
+            stageOpts += '<option value="' + sc.key + '">' + esc(sc.label) + '</option>';
+        });
+
+        var timeline = state.budget ? calcTimeline(state.budget) : null;
+        var resolved = resolveMilestones(timeline);
+        var sorted = resolved.slice().sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
+
         var html = '';
         sorted.forEach(function (m) {
-            html += '<div class="milestone-row">' +
-                '<input type="date" value="' + esc(m.date) + '" data-id="' + esc(m.id) + '" data-field="date" onchange="mBTCalendar.updateMilestone(this)" class="text-[10px] font-bold text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
-                '<input type="text" value="' + esc(m.title) + '" data-id="' + esc(m.id) + '" data-field="title" onchange="mBTCalendar.updateMilestone(this)" placeholder="Milestone name…" class="text-[10px] text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
-                '<button data-id="' + esc(m.id) + '" onclick="mBTCalendar.deleteMilestone(this.dataset.id)" class="text-slate-300 hover:text-red-500 transition-colors ml-1" aria-label="Delete milestone">' +
-                    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
-                '</button>' +
-            '</div>';
+            var isRel = m.type === 'relative';
+            var origM = state.milestones.find(function (x) { return x.id === m.id; }) || m;
+
+            if (isRel) {
+                html += '<div class="milestone-row" style="grid-template-columns:auto 1fr auto;">' +
+                    '<div class="flex items-center gap-1">' +
+                        '<select data-id="' + esc(m.id) + '" data-field="stageKey" onchange="mBTCalendar.updateMilestone(this)" class="text-[9px] border border-slate-200 rounded px-1 py-0.5 outline-none focus:border-blue-400">' +
+                            STAGE_CONFIG.map(function (sc) { return '<option value="' + sc.key + '"' + (origM.stageKey === sc.key ? ' selected' : '') + '>' + sc.label.split('-')[0].trim() + '</option>'; }).join('') +
+                        '</select>' +
+                        '<span class="text-[8px] text-slate-400">+</span>' +
+                        '<input type="number" min="0" value="' + (origM.offsetDays || 0) + '" data-id="' + esc(m.id) + '" data-field="offsetDays" onchange="mBTCalendar.updateMilestone(this)" class="w-10 text-[10px] border border-slate-200 rounded px-1 py-0.5 text-center outline-none focus:border-blue-400">' +
+                        '<span class="text-[8px] text-slate-400">d</span>' +
+                        '<span class="text-[8px] text-blue-500 ml-1">' + (m.date ? fmtDate(parseDate(m.date)) : '—') + '</span>' +
+                    '</div>' +
+                    '<input type="text" value="' + esc(m.title) + '" data-id="' + esc(m.id) + '" data-field="title" onchange="mBTCalendar.updateMilestone(this)" placeholder="Milestone name…" class="text-[10px] text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
+                    '<button data-id="' + esc(m.id) + '" onclick="mBTCalendar.deleteMilestone(this.dataset.id)" class="text-slate-300 hover:text-red-500 transition-colors ml-1" aria-label="Delete milestone">' +
+                        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                    '</button>' +
+                '</div>';
+            } else {
+                html += '<div class="milestone-row">' +
+                    '<input type="date" value="' + esc(m.date) + '" data-id="' + esc(m.id) + '" data-field="date" onchange="mBTCalendar.updateMilestone(this)" class="text-[10px] font-bold text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
+                    '<input type="text" value="' + esc(m.title) + '" data-id="' + esc(m.id) + '" data-field="title" onchange="mBTCalendar.updateMilestone(this)" placeholder="Milestone name…" class="text-[10px] text-slate-700 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-400 w-full">' +
+                    '<button data-id="' + esc(m.id) + '" onclick="mBTCalendar.deleteMilestone(this.dataset.id)" class="text-slate-300 hover:text-red-500 transition-colors ml-1" aria-label="Delete milestone">' +
+                        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                    '</button>' +
+                '</div>';
+            }
         });
         list.innerHTML = html;
     }
@@ -223,7 +577,12 @@ var mBTCalendar = (function () {
     function save() {
         if (!state.projectKey || !state.budget) return;
         state.budget.calendarNotes = state.milestones;
-        localforage.setItem(state.projectKey, state.budget).catch(function (e) { console.error('[CAL] save failed', e); });
+        localforage.setItem(state.projectKey, state.budget).then(function () {
+            /* --- Notify parent to reload calendar data --- */
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, '*');
+            }
+        }).catch(function (e) { console.error('[CAL] save failed', e); });
     }
 
     function load() {
@@ -245,6 +604,13 @@ var mBTCalendar = (function () {
             state.budget = budget;
             state.milestones = budget.calendarNotes || [];
 
+            /* --- Initialize work week selector --- */
+            var ww = (budget.settings && budget.settings.workWeek) || 5;
+            dom.getElementById('sel-work-week').value = String(ww);
+
+            /* Dismiss skeleton */
+            var sk = dom.getElementById('calendar-skeleton');
+            if (sk) sk.classList.add('hidden');
             dom.getElementById('project-tag').textContent = budget.projectName || '—';
             dom.getElementById('label-project').textContent = budget.projectName || '—';
             dom.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
@@ -252,7 +618,8 @@ var mBTCalendar = (function () {
 
             var timeline = calcTimeline(budget);
             var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
-            dom.getElementById('total-days-label').textContent = totalDays + ' total days';
+            var totalWorking = timeline ? timeline.reduce(function (s, t) { return s + t.workingDays; }, 0) : 0;
+            dom.getElementById('total-days-label').textContent = totalDays + ' days (' + totalWorking + ' working)';
 
             ['date-summary','gantt-section','milestones-section','stage-table-section'].forEach(function (id) {
                 dom.getElementById(id).classList.remove('hidden');
@@ -267,9 +634,33 @@ var mBTCalendar = (function () {
         }).catch(function (e) { console.error('[CAL] load failed', e); });
     }
 
+    /* --- Re-render all views after data change --- */
+    function refreshAll() {
+        if (!state.budget) return;
+        var timeline = calcTimeline(state.budget);
+        var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
+        var totalWorking = timeline ? timeline.reduce(function (s, t) { return s + t.workingDays; }, 0) : 0;
+        dom.getElementById('total-days-label').textContent = totalDays + ' days (' + totalWorking + ' working)';
+        if (timeline) {
+            renderGantt(timeline);
+            renderStageTable(timeline);
+        }
+        renderMilestones();
+        if (currentView === 'calendar') renderCalendarGrid();
+    }
+
     return {
         init: function () {
             load();
+
+            /* --- Phase 50C.8: Dispatch tool focus to parent presence channel --- */
+            function dispatchFocus() {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'calendar' } }, '*');
+                }
+            }
+            dispatchFocus();
+            window.addEventListener('focus', dispatchFocus);
 
             dom.getElementById('btn-back').addEventListener('click', function () {
                 if (window.parent && window.parent !== window) {
@@ -291,13 +682,61 @@ var mBTCalendar = (function () {
             });
         },
 
+        setView: setView,
+        toggleBlackout: toggleBlackout,
+
+        /* --- 50C.1: Set work week type --- */
+        setWorkWeek: function (val) {
+            if (!state.budget) return;
+            if (!state.budget.settings) state.budget.settings = {};
+            state.budget.settings.workWeek = parseInt(val) || 5;
+            save();
+            refreshAll();
+        },
+
+        /* --- 50C.5: Bi-directional stage day editing from calendar --- */
+        updateStageDays: function (stageKey, val) {
+            if (!state.budget || !state.budget.targetLock || !state.budget.targetLock.stages) return;
+            if (!state.budget.targetLock.stages[stageKey]) return;
+            state.budget.targetLock.stages[stageKey].days = parseFloat(val) || 0;
+            save();
+            refreshAll();
+        },
+
+        /* --- 50C.3: Set stage offset days --- */
+        updateStageOffset: function (stageKey, val) {
+            if (!state.budget || !state.budget.targetLock || !state.budget.targetLock.stages) return;
+            if (!state.budget.targetLock.stages[stageKey]) return;
+            var parsed = val === '' ? undefined : (parseFloat(val) || 0);
+            if (parsed === undefined) {
+                delete state.budget.targetLock.stages[stageKey].offsetDays;
+            } else {
+                state.budget.targetLock.stages[stageKey].offsetDays = parsed;
+            }
+            save();
+            refreshAll();
+        },
+
+        /* --- 50C.4: Add a relative milestone --- */
+        addRelativeMilestone: function () {
+            var id = 'ms_' + Date.now();
+            state.milestones.push({ id: id, type: 'relative', stageKey: 'prod', offsetDays: 0, title: '' });
+            renderMilestones();
+            save();
+        },
+
         updateMilestone: function (input) {
             var id = input.dataset.id;
             var field = input.dataset.field;
             var m = state.milestones.find(function (x) { return x.id === id; });
             if (m) {
-                m[field] = input.value;
+                if (field === 'offsetDays') {
+                    m[field] = parseInt(input.value) || 0;
+                } else {
+                    m[field] = input.value;
+                }
                 save();
+                refreshAll();
             }
         },
 
@@ -305,6 +744,7 @@ var mBTCalendar = (function () {
             state.milestones = state.milestones.filter(function (m) { return m.id !== id; });
             renderMilestones();
             save();
+            refreshAll();
         }
     };
 

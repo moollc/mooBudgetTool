@@ -142,6 +142,125 @@
                     console.error('Bundle Error:', e);
                     notify('Export Error', 'Failed to generate bundle.');
                 });
+            },
+
+            /* --- Phase 50C.7: Master "Wrap" Production Package Export --- */
+            /* Compiles Budget PDF, Contacts CSV, and .moo JSON into Production_Package.zip */
+            wrapExport: function (budgetData, currency, globalContacts) {
+                if (typeof JSZip === 'undefined') return notify('Error', 'Bundler module (JSZip) missing.');
+                if (typeof window.jspdf === 'undefined') return notify('Error', 'PDF Engine missing.');
+
+                var io       = window.mBTPublisher.io;
+                var format   = window.mBTPublisher.format;
+                var zip      = new JSZip();
+                var cleanName = slugify(budgetData.projectName || 'production');
+                var exported  = new Date().toLocaleString();
+
+                /* 1. Budget JSON (.moo) */
+                zip.file(cleanName + '.moo', JSON.stringify(budgetData, null, 2));
+
+                /* 2. Budget Top Sheet PDF — capture as blob instead of triggering download */
+                var jsPDF   = window.jspdf.jsPDF;
+                var doc     = new jsPDF(window.mBTPublisher.config.pdf.jsPDF);
+                currency    = currency || 'JMD';
+                var fmt     = function (val) { return fmtCurrency(val, currency); };
+                var version = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '20.0';
+
+                doc.setFontSize(18);
+                doc.setFont('helvetica', 'bold');
+                doc.text((budgetData.projectName || 'Untitled Production').toUpperCase(), 105, 15, { align: 'center' });
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text((budgetData.company || 'Independent') + ' | Date: ' + new Date().toLocaleDateString(), 105, 22, { align: 'center' });
+
+                var summaryData = [
+                    ['Subtotal', fmt(budgetData.subtotal)],
+                    ['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))],
+                    ['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))],
+                    ['Discount (' + (budgetData.discountPercentage || 0) + '%)', '-' + fmt((budgetData.subtotal || 0) * ((budgetData.discountPercentage || 0) / 100))],
+                    [{ content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }, { content: fmt(budgetData.grandTotal), styles: { fontStyle: 'bold', textColor: [21, 128, 61] } }]
+                ];
+                doc.autoTable({ startY: 30, head: [['Financial Summary', 'Amount']], body: summaryData, theme: 'grid', headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' }, columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 'auto', halign: 'right' } }, margin: { left: 14, right: 14 } });
+
+                var finalY   = doc.lastAutoTable.finalY + 10;
+                var bodyRows = [];
+                if (budgetData.sections) {
+                    Object.keys(budgetData.sections).forEach(function (secName) {
+                        var sec = budgetData.sections[secName];
+                        bodyRows.push([{ content: secName.toUpperCase(), colSpan: 5, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [71, 85, 105] } }]);
+                        (sec.items || []).forEach(function (item) {
+                            bodyRows.push([item.description, parseFloat(item.quantity) || 0, item.unit, fmt(parseFloat(item.rate) || 0), fmt(parseFloat(item.total) || 0)]);
+                        });
+                        bodyRows.push([{ content: 'Total ' + secName + ': ' + fmt(sec.total), colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } }]);
+                    });
+                }
+                doc.autoTable({
+                    startY: finalY, head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']], body: bodyRows, theme: 'plain',
+                    styles: { fontSize: 9, cellPadding: 2 }, headStyles: { fillColor: [51, 65, 85], textColor: 255 },
+                    columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 15, halign: 'center' }, 2: { cellWidth: 20, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right' } },
+                    margin: { left: 14, right: 14 },
+                    didDrawPage: function (data) {
+                        var str = 'Page ' + doc.internal.getNumberOfPages();
+                        doc.setFontSize(8); doc.setTextColor(150);
+                        var pageSize = doc.internal.pageSize;
+                        var pageHeight = pageSize.height || pageSize.getHeight();
+                        doc.text(str, data.settings.margin.left, pageHeight - 10);
+                        doc.text('Generated by mooBudget v' + version, pageSize.width - 14, pageHeight - 10, { align: 'right' });
+                    }
+                });
+                zip.file(cleanName + '_budget.pdf', doc.output('blob'));
+
+                /* 3. Contacts Directory CSV */
+                /* Merge global OpenGate crew + budget line-item crew, dedup by name */
+                var seen    = {};
+                var csvRows = [['Name', 'Role', 'Department', 'Phone', 'Email', 'Rate', 'Source']];
+
+                var addContact = function (name, role, dept, phone, email, rate, source) {
+                    var key = (name || '').toLowerCase().trim();
+                    if (!key || seen[key]) return;
+                    seen[key] = true;
+                    csvRows.push([name || '', role || '', dept || '', phone || '', email || '', rate || '', source]);
+                };
+
+                /* Global OpenGate contacts */
+                (globalContacts || []).forEach(function (c) {
+                    addContact(c.name, c.role || c.title, c.department || c.dept, c.phone, c.email, c.rate, 'Global DB');
+                });
+
+                /* Budget line-item crew */
+                (budgetData.globalItems || []).forEach(function (item) {
+                    addContact(item.contact_name || item.description, item.unit || 'Crew', '', item.contact_phone, item.contact_email, item.rate, 'Budget');
+                });
+
+                var csvContent = csvRows.map(function (row) {
+                    return row.map(function (cell) {
+                        var s = String(cell == null ? '' : cell).replace(/"/g, '""');
+                        return /[,"\n\r]/.test(s) ? '"' + s + '"' : s;
+                    }).join(',');
+                }).join('\r\n');
+
+                zip.file(cleanName + '_contacts.csv', csvContent);
+
+                /* 4. README */
+                zip.file('README.txt', [
+                    'Production Package: ' + (budgetData.projectName || 'Untitled'),
+                    'Exported: ' + exported,
+                    '',
+                    'Contents:',
+                    '  ' + cleanName + '.moo            — Full project data (import into mooBudget)',
+                    '  ' + cleanName + '_budget.pdf     — Professional budget top sheet',
+                    '  ' + cleanName + '_contacts.csv  — Crew & contacts directory',
+                    '',
+                    'Generated by mooBudget v' + version
+                ].join('\n'));
+
+                /* 5. Generate & download zip */
+                zip.generateAsync({ type: 'blob' }).then(function (zipBlob) {
+                    io.forceDownload(zipBlob, 'Production_Package_' + cleanName + '.zip');
+                }).catch(function (e) {
+                    console.error('[mBTPublisher] Wrap export error:', e);
+                    notify('Export Error', 'Failed to generate Production Package.');
+                });
             }
         },
 

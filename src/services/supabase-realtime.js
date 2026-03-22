@@ -395,6 +395,19 @@
         }]);
     }
 
+    /* --- Phase 50C.8: Tool Focus Broadcast --- */
+
+    function broadcastFocus(toolName) {
+        if (!_activeProjectId || !_connected) return;
+        var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
+        var userId      = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
+        _send([null, _nextRef(), presenceTopic, 'broadcast', {
+            event:   'tool_focus',
+            payload: { tool: toolName, user_id: userId, display_name: displayName }
+        }]);
+    }
+
     /* --- Query helpers --- */
 
     function isFieldLocked(fieldId) {
@@ -433,6 +446,7 @@
         unsubscribeFromProject:   unsubscribeFromProject,
         broadcastTypingLock:      broadcastTypingLock,
         broadcastTypingRelease:   broadcastTypingRelease,
+        broadcastFocus:           broadcastFocus,
         isFieldLocked:            isFieldLocked,
         getLockedBy:              getLockedBy,
         getPresencePeers:         getPresencePeers,

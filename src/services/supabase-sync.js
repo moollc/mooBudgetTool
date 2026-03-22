@@ -233,39 +233,35 @@
         return token ? { token: token, email: email, id: id } : null;
     }
 
-    /* --- Save / fetch user profile (profiles table). --- */
+    /* --- Save / fetch user profile (proxied to mbt_generic). --- */
     async function saveProfile(displayName, region, role) {
         var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         if (!userId) throw new Error('Not signed in');
-        var record = { id: userId, display_name: displayName || '', region: region || 'Jamaica', role: role || '', updated_at: new Date().toISOString() };
-        var res = await fetchWithRetry(getBaseUrl('profiles'), {
-            method: 'POST',
-            headers: Object.assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
-            body: JSON.stringify(record)
-        });
-        if (!res.ok) throw new Error('Profile save failed: ' + res.statusText);
-        var data = await res.json();
-        var profile = Array.isArray(data) ? data[0] : data;
-        localStorage.setItem('mbt_profile_display_name', profile.display_name || '');
-        localStorage.setItem('mbt_profile_region', profile.region || 'Jamaica');
-        localStorage.setItem('mbt_profile_role', profile.role || '');
-        return profile;
+        
+        localStorage.setItem('mbt_profile_display_name', displayName || '');
+        localStorage.setItem('mbt_profile_region', region || 'Jamaica');
+        localStorage.setItem('mbt_profile_role', role || '');
+        
+        try { await pushPreferences(); } catch (e) {
+            console.warn('[mBTSync] Proxy profile push failed', e);
+        }
+        
+        return { display_name: displayName, region: region, role: role };
     }
 
     async function fetchProfile() {
         var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         if (!userId) return null;
-        var res = await fetchWithRetry(getBaseUrl('profiles') + '?id=eq.' + encodeURIComponent(userId) + '&select=*', {
-            headers: getHeaders()
-        });
-        if (!res.ok) return null;
-        var rows = await res.json();
-        if (!rows || !rows.length) return null;
-        var p = rows[0];
-        localStorage.setItem('mbt_profile_display_name', p.display_name || '');
-        localStorage.setItem('mbt_profile_region', p.region || 'Jamaica');
-        localStorage.setItem('mbt_profile_role', p.role || '');
-        return p;
+        
+        try { await pullPreferences(); } catch (e) {
+            console.warn('[mBTSync] Proxy profile pull failed', e);
+        }
+        
+        return {
+            display_name: localStorage.getItem('mbt_profile_display_name') || '',
+            region: localStorage.getItem('mbt_profile_region') || 'Jamaica',
+            role: localStorage.getItem('mbt_profile_role') || ''
+        };
     }
 
     function getBaseUrl(table) {
@@ -461,14 +457,9 @@
                             }
                         }
                         
-                        // Phase 46 Security: Privacy Filter
-                        // Strip local contact information when pushing rate references to the OpenGate community pool
-                        if (storeName === 'og_ref') {
-                            payload = Object.assign({}, payload);
-                            delete payload.contact_id;
-                            delete payload.contact_name;
-                            delete payload.contact_phone;
-                            delete payload.contact_email;
+                        /* --- Phase 46 Security: Privacy filter via centralized config --- */
+                        if (window.mBTSupabaseConfig && mBTSupabaseConfig.SYNC.applyPrivacyFilter) {
+                            payload = mBTSupabaseConfig.SYNC.applyPrivacyFilter(storeName, payload);
                         }
 
                         await sbUpsert(tableName, payload);
@@ -663,6 +654,21 @@
                 console.error('[mBTSync] Pull error ' + tableName + ':', e);
                 totalErrors++;
             }
+        }
+
+        /* --- Sub-Phase 51.4: Monolith LocalForage Bridge ---
+               Extrapolate pulled IndexedDB mbt_projects records back into
+               the active localforage environment so the UI can physically mount them. */
+        try {
+            var lfBridgeRecords = await getLocalRecords('mbt_projects');
+            for (var lb = 0; lb < lfBridgeRecords.length; lb++) {
+                var br = lfBridgeRecords[lb];
+                if (br && br.id && br.data && typeof localforage !== 'undefined') {
+                    await localforage.setItem('prodBudget_v5_' + br.id, br.data);
+                }
+            }
+        } catch(e) {
+            console.error('[mBTSync] Monolith localforage bridge error:', e);
         }
 
         await (window.mBTStorage || window.mBT.storage).setItem(

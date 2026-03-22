@@ -29,14 +29,14 @@
             // in the actual sync service's pushAll function.
             // It's placed here to indicate the intended change location and logic.
             applyPrivacyFilter: function(storeName, payload) {
-                // Privacy Filter: Strip contact info from og_ref push (Phase 46 Security)
+                /* --- Privacy Filter: Strip PII from outbound sync payloads (Phase 46 Security) --- */
                 if (storeName === 'og_ref') {
-                    const filteredPayload = Object.assign({}, payload);
-                    delete filteredPayload.contact_id;
-                    delete filteredPayload.contact_name;
-                    delete filteredPayload.contact_phone;
-                    delete filteredPayload.contact_email;
-                    return filteredPayload;
+                    var filtered = Object.assign({}, payload);
+                    delete filtered.contact_id;
+                    delete filtered.contact_name;
+                    delete filtered.contact_phone;
+                    delete filtered.contact_email;
+                    return filtered;
                 }
                 return payload;
             }
