@@ -1,4 +1,5 @@
 window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
+            function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             if (tabName === 'general') {
                 const currentDateFormat = getProjectDateFormat();
                 const currentSeparator = getProjectNameSeparator();
