@@ -6,7 +6,7 @@
 
     async function getCurrentProjectContext() {
         var s = window.mBT.storage;
-        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: null };
+        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: null, schedule: null };
 
         var projects = await s.getAllProjects();
         if (projects.length > 0) {
@@ -23,6 +23,19 @@
 
         context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
         context.timeline = buildTimeline(context.allocations);
+
+        /* --- Phase 50C.6: Inject schedule summary from Budget Editor localforage --- */
+        if (typeof localforage !== 'undefined' && context.projectName) {
+            try {
+                var budgetKey = 'prodBudget_v5_' + context.projectName;
+                var budgetData = await localforage.getItem(budgetKey);
+                if (budgetData) {
+                    context.schedule = buildScheduleSummary(budgetData);
+                }
+            } catch (e) {
+                /* localforage unavailable or key not found — schedule summary skipped */
+            }
+        }
 
         return context;
     }
@@ -119,6 +132,61 @@
         };
     }
 
+    /* --- 4b. SCHEDULE SUMMARY (Phase 50C.6) --- */
+
+    function buildScheduleSummary(budget) {
+        if (!budget || !budget.startDate) {
+            return 'Schedule: Not defined';
+        }
+
+        var parts = [];
+
+        /* Timeline dates */
+        var startDate = new Date(budget.startDate);
+        var endDate = budget.deliveryDate ? new Date(budget.deliveryDate) : null;
+        var fmtDate = function(d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+
+        var dateRange = 'Schedule: ' + fmtDate(startDate);
+        if (endDate) dateRange += ' – ' + fmtDate(endDate);
+        parts.push(dateRange);
+
+        /* Work week type */
+        var workWeek = (budget.settings && budget.settings.workWeek) || 5;
+        var workWeekLabel = workWeek === 5 ? '5-day (Mon-Fri)' : (workWeek === 6 ? '6-day (Mon-Sat)' : '7-day (Full Week)');
+        parts.push('Work Week: ' + workWeekLabel);
+
+        /* Stages summary */
+        if (budget.targetLock && budget.targetLock.stages) {
+            var stageNames = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
+            var stages = [];
+            ['dev', 'pre', 'prod', 'post', 'dist'].forEach(function(k) {
+                var stageInfo = budget.targetLock.stages[k];
+                if (stageInfo && stageInfo.days) {
+                    var days = parseFloat(stageInfo.days);
+                    stages.push(stageNames[k] + ' (' + days + ' days)');
+                }
+            });
+            if (stages.length > 0) {
+                parts.push('Stages: ' + stages.join(', '));
+            }
+        }
+
+        /* Blackout days */
+        var blackouts = budget.blackoutDays || [];
+        if (blackouts.length > 0) {
+            parts.push('Blackout Days: ' + blackouts.length);
+        }
+
+        /* Milestones */
+        var milestones = budget.calendarNotes || [];
+        if (milestones.length > 0) {
+            var mnames = milestones.map(function(m) { return m.title || 'Unnamed'; }).join(', ');
+            parts.push('Milestones: ' + mnames);
+        }
+
+        return parts.join('. ');
+    }
+
     /* --- 5. INSIGHTS --- */
 
     function generateInsights(context) {
@@ -153,6 +221,7 @@
         analyzeBudgetPatterns:    analyzeBudgetPatterns,
         analyzeBudgetRisks:       analyzeBudgetRisks,
         buildTimeline:            buildTimeline,
+        buildScheduleSummary:     buildScheduleSummary,
         generateInsights:         generateInsights,
         getIndustryBenchmarks:    getIndustryBenchmarks
     };

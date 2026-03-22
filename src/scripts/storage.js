@@ -652,6 +652,50 @@ var mBTStorage = {
     });
   },
 
+  // === CONTACTS STORE ===
+
+  getAllContacts: function () {
+    return this._getDb().then(function (db) {
+      var store = db.transaction(STORE_NAMES.CONTACTS, 'readonly').objectStore(STORE_NAMES.CONTACTS);
+      return new Promise(function (resolve, reject) {
+        var request = store.getAll();
+        request.onsuccess = function () { resolve(request.result || []); };
+        request.onerror = function () { reject(request.error); };
+      });
+    });
+  },
+
+  saveContact: function (contact) {
+    return this._getDb().then(function (db) {
+      if (!contact.id) {
+        contact.id = 'contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      }
+      contact.updated_at = new Date().toISOString();
+      var store = db.transaction([STORE_NAMES.CONTACTS], 'readwrite').objectStore(STORE_NAMES.CONTACTS);
+      return new Promise(function (resolve, reject) {
+        var request = store.put(contact);
+        request.onsuccess = function () { resolve(contact); };
+        request.onerror = function () { reject(request.error); };
+      });
+    });
+  },
+
+  deleteContact: function (id, skipTombstone) {
+    return this._getDb().then(function (db) {
+      var txStores = skipTombstone ? [STORE_NAMES.CONTACTS] : [STORE_NAMES.CONTACTS, STORE_NAMES.TOMBSTONES];
+      var tx = db.transaction(txStores, 'readwrite');
+      tx.objectStore(STORE_NAMES.CONTACTS).delete(id);
+      if (!skipTombstone) {
+        var now = new Date().toISOString();
+        tx.objectStore(STORE_NAMES.TOMBSTONES).put({ id: id, store: 'contacts', deleted_at: now });
+      }
+      return new Promise(function (resolve, reject) {
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  },
+
   // === UTILITY ===
 
   getTotalBudget: function (projectId) {

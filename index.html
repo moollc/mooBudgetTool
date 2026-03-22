@@ -2034,6 +2034,28 @@
             }, 50);
         },
 
+        /* --- Phase 58.2: Quick-Access Persona & Constraints Modal --- */
+        openPersonaModal: function() {
+            var current = this.getSystemPrompt();
+            var provider = this.getSelectedProvider();
+            var self = this;
+            var content = `
+                <div class="p-5 space-y-4">
+                    <div class="bg-slate-900 rounded-xl p-4 space-y-3">
+                        <div>
+                            <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Persona & Behavioral Rules</label>
+                            <textarea id="personaPromptInput" class="w-full bg-slate-800 text-white border-none rounded-lg p-3 text-[10px] outline-none focus:ring-1 focus:ring-indigo-500 resize-none h-28 placeholder-slate-600" placeholder="e.g. You are a Jamaican film producer. Focus only on Below The Line costs. Always use JMD. Be concise.">${mBT.ui.render.esc(current)}</textarea>
+                        </div>
+                        <p class="text-[8px] text-slate-500 font-bold">These rules are prepended to every AI request as system-level constraints. Leave blank for default behavior.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="mBT.features.ai.saveSystemPrompt(document.getElementById('personaPromptInput').value); mBTME.close('personaModal'); mBTME.alert('Saved', 'Persona rules updated.');" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-indigo-500 transition-all">Save Rules</button>
+                        <button onclick="document.getElementById('personaPromptInput').value=''; mBT.features.ai.saveSystemPrompt(''); mBTME.close('personaModal'); mBTME.alert('Cleared', 'AI persona reset to default.');" class="px-4 bg-slate-100 text-slate-500 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-slate-200 transition-all">Reset</button>
+                    </div>
+                </div>`;
+            mBTME.open('persona', 'AI Persona', content, 'max-w-sm');
+        },
+
         // Logic Resolution: Restored UI Menu for the Dashboard Button
         openTools: function() {
              const provider = this.getSelectedProvider();
@@ -2060,7 +2082,17 @@
                     </button>
                 </div>
                 
-                <div class="px-4 pb-4">
+                <div class="px-4 pb-4 space-y-2">
+                    <button onclick="mBT.features.ai.openPersonaModal(); mBTME.close('aiToolsModal');" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-between hover:border-indigo-500 transition-all group">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-indigo-900/50 rounded-full flex items-center justify-center text-indigo-400">${mBTAssets.wand}</div>
+                            <div class="text-left">
+                                <h4 class="font-black text-[9px] uppercase tracking-widest text-white">Persona & Rules</h4>
+                                <p class="text-[8px] font-bold text-slate-500 mt-0.5">Customize AI behavior &amp; constraints</p>
+                            </div>
+                        </div>
+                        <span class="text-slate-600 group-hover:text-indigo-400">→</span>
+                    </button>
                     <button onclick="showSettingsModal('ai'); mBTME.close('aiToolsModal');" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between hover:bg-white transition-all group">
                         <div class="flex items-center gap-3">
                             <div class="w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center text-slate-400">${mBTAssets.gear}</div>
@@ -2072,7 +2104,7 @@
                         <span class="text-slate-300 group-hover:text-blue-500">→</span>
                     </button>
                 </div>`;
-            
+
             mBTME.open('aiTools', 'Assistant', content, 'max-w-sm');
         }
     };
@@ -2201,6 +2233,9 @@
             <button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">
                 ${mBTAssets.wand}
             </button>
+            <select id="currencyPill" data-action="set-currency" title="Base Currency" class="bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border-none outline-none cursor-pointer shadow-lg shrink-0">
+                ${FILM_CURRENCIES.map(function(c) { return '<option value="' + c.code + '"' + (c.code === displayCurrency ? ' selected' : '') + '>' + c.label + '</option>'; }).join('')}
+            </select>
             <div id="statusBar" class="flex-grow py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
         </div>
 
@@ -7320,6 +7355,17 @@ _renderTalent: function(docId, d) {
                     <p class="text-[10px] text-slate-400 font-bold mt-1">Spreadsheet (.xlsx)</p>
                 </div>
             </button>
+
+            <!-- Production Package (Wrap Export) -->
+            <button data-action="export" data-type="wrap" class="flex items-center gap-4 p-4 bg-slate-900 border border-slate-700 rounded-2xl hover:border-amber-400 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-amber-400/10 text-amber-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-amber-400">Production Package</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Budget PDF + Contacts CSV + .moo — Zipped</p>
+                </div>
+            </button>
         </div>`;
         mBTME.open('publish', 'Publish & Export', content, 'max-w-sm');
     };
@@ -9019,7 +9065,7 @@ window.updateAllHeaders = () => {
             displayCurrency = el.value;
             localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
             if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
-            if(typeof render === 'function') render();
+            if(typeof renderStatusBar === 'function') renderStatusBar();
         });
 
         mBT.core.action('backup-env', () => { if(typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
@@ -9097,6 +9143,7 @@ window.updateAllHeaders = () => {
             else if (type === 'bundle') mBTPublisher.io.saveBundle(budget, function(key) { return mBT.data.storage.loadBlob(key); });
             else if (type === 'html') mBTPublisher.format.htmlStandalone('budget-sections', budget.projectName);
             else if (type === 'xlsx') mBTPublisher.format.professionalXlsx(budget);
+            else if (type === 'wrap') mBTPublisher.io.wrapExport(budget, displayCurrency, mBTOG ? mBTOG.contacts : []);
         });
 
         // 2. Navigation
@@ -9228,7 +9275,7 @@ window.updateAllHeaders = () => {
                 // Phase 16: Footer Nav uses hybrid openTool() loader
                 if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
-                else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html');
+                else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'templateFooterBtn') openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
@@ -9240,18 +9287,93 @@ window.updateAllHeaders = () => {
         window.addEventListener('online', resolveConnectivityStatus);
         window.addEventListener('offline', resolveConnectivityStatus);
 
-        /* Tool bridge: reload budget from storage when a tool (e.g. Stages) saves changes */
+        /* ========= Tool Bridge: unified event bus for cross-tool integration ========= */
         window.addEventListener('message', function(e) {
             if (!e.data || e.data.type !== 'mbt:tool-action') return;
-            if (e.data.action === 'reconcile' && currentProjectName) {
+            var action = e.data.action;
+            var payload = e.data.payload || {};
+
+            /* --- reconcile: reload budget from storage (Stages, Calendar, etc.) --- */
+            if (action === 'reconcile' && currentProjectName) {
                 mBT.data.load(currentProjectName);
-            } else if (e.data.action === 'close-tool') {
+
+            /* --- close-tool: dismiss tool modal and lifecycle sync --- */
+            } else if (action === 'close-tool') {
                 if (typeof mBTME !== 'undefined' && mBTME.close) mBTME.close('tool-window');
                 /* Lifecycle sync: push any changes made inside the tool back to cloud.
                    Sub-Phase 51.2 Task 8: Skip if realtime is live (changes already propagated). */
                 var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
                 if (!_rtLiveClose && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
-                    mBTSync.pushAll().catch(function(e) { console.warn('[mBT] Lifecycle push on tool close failed:', e); });
+                    mBTSync.pushAll().catch(function(e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
+                }
+
+            /* --- inject-contact: push a contact as a crew line item into the budget --- */
+            } else if (action === 'inject-contact' && currentProjectName) {
+                if (payload.name && budget) {
+                    var crewItem = {
+                        id: 'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        description: payload.name,
+                        rate: payload.rate || 0,
+                        qty: 1,
+                        unit: 'day',
+                        contact_id: payload.email || null,
+                        contact_name: payload.name,
+                        contact_phone: payload.phone || null,
+                        contact_email: payload.email || null
+                    };
+                    if (!budget.globalItems) budget.globalItems = [];
+                    budget.globalItems.push(crewItem);
+                    saveBudget();
+                    if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    console.log('[mBT] Injected contact:', payload.name);
+                }
+
+            /* --- calendar-updated: reload milestones from localforage --- */
+            } else if (action === 'calendar-updated' && currentProjectName) {
+                mBT.data.load(currentProjectName);
+
+            /* --- update-contact-rate: sync edited CRM rate to matching budget line items --- */
+            } else if (action === 'update-contact-rate' && budget) {
+                var crName = (payload.name || '').toLowerCase();
+                var crRate = parseFloat(payload.rate);
+                if (crName && crRate && budget.globalItems) {
+                    var crUpdated = false;
+                    for (var ci = 0; ci < budget.globalItems.length; ci++) {
+                        if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
+                            budget.globalItems[ci].rate = crRate;
+                            crUpdated = true;
+                        }
+                    }
+                    if (crUpdated) {
+                        saveBudget();
+                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                        console.log('[mBT] Contact rate synced:', payload.name, crRate);
+                    }
+                }
+
+            /* --- user-focus-changed: peripheral tool reports active focus — relay to presence channel --- */
+            } else if (action === 'user-focus-changed') {
+                if (window.mBTRealtime && mBTRealtime.isConnected()) {
+                    mBTRealtime.broadcastFocus(payload.tool || 'unknown');
+                }
+
+            /* --- og-rate-changed: update matching line items with new rate --- */
+            } else if (action === 'og-rate-changed' && budget) {
+                var desc = (payload.description || '').toLowerCase();
+                var newRate = payload.rate;
+                if (desc && newRate && budget.globalItems) {
+                    var updated = false;
+                    for (var ri = 0; ri < budget.globalItems.length; ri++) {
+                        if ((budget.globalItems[ri].description || '').toLowerCase() === desc) {
+                            budget.globalItems[ri].rate = newRate;
+                            updated = true;
+                        }
+                    }
+                    if (updated) {
+                        saveBudget();
+                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                        console.log('[mBT] Rate updated for:', payload.description);
+                    }
                 }
             }
         });

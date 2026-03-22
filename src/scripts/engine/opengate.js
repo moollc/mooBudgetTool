@@ -144,6 +144,17 @@
             return _lfSet('prodBudget_v5_globalItems', this.rates);
         },
 
+        /* --- Notify parent window that a rate was added or changed --- */
+        notifyRateChanged: function (description, rate, region) {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'mbt:tool-action',
+                    action: 'og-rate-changed',
+                    payload: { description: description, rate: rate, region: region || this.settings.location }
+                }, '*');
+            }
+        },
+
         /* --- CONTACTS --- */
 
         loadContacts: function () {

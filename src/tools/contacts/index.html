@@ -1,558 +1,684 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MBT Contacts - Department Management</title>
-  <script src="../../scripts/storage.js"></script>
-  <script src="../../scripts/engine/mbtle.js"></script>
-  <script src="../../lib/localforage.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>mBT — Contacts CRM</title>
   <script src="../../lib/tailwind.min.js"></script>
-  <script src="../../core/components/EmbeddedMode.js"></script>
-  <style type="text/tailwindcss">
-    /* mBT-Contacts Module */
-:root {
-  --mBT-theme-primary: #1e88e5;
-  --mBT-theme-danger: #e53935;
-}
-
-.contact-card { @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4; }
-.department-section { @apply mb-6; }
-/* --- Tap targets: 44px minimum for all buttons and links --- */
-button, a { min-height: 44px; }
-</style>
+  <script src="../../lib/localforage.min.js"></script>
+  <script src="../../scripts/storage.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .glass-card {
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.9);
+      box-shadow: 0 4px 24px rgba(15,23,42,0.08), 0 1px 4px rgba(15,23,42,0.06);
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .glass-card:hover {
+      box-shadow: 0 8px 32px rgba(15,23,42,0.13), 0 2px 8px rgba(15,23,42,0.08);
+      transform: translateY(-1px);
+    }
+    .dept-pill { background: rgba(241,245,249,0.9); color: #64748b; transition: background 0.15s; }
+    .dept-pill:hover { background: #e2e8f0; }
+    .dept-pill.active { background: #2563eb; color: #fff; }
+    @keyframes slideUp { from { opacity:0; transform: translateY(20px) translateX(-50%); } to { opacity:1; transform: translateY(0) translateX(-50%); } }
+    .snack-in { animation: slideUp 0.25s ease-out forwards; }
+    @media print {
+      body { background: #fff !important; }
+      #header-bar, #tab-bar, #search-bar, .card-footer { display: none !important; }
+    }
+  </style>
 </head>
+<body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
 
-<body class="bg-gray-50 font-sans">
+  <!-- Header -->
+  <div id="header-bar" class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
+    <div class="flex items-center gap-4">
+      <button id="btn-back" class="flex items-center gap-2 text-white/60 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+      <div class="h-4 w-px bg-slate-700"></div>
+      <span class="text-white text-[11px] font-black uppercase tracking-tight">Contacts CRM</span>
+      <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest hidden">—</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="btn-catering" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        Catering
+      </button>
+      <button id="btn-print" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Directory
+      </button>
+      <button id="btn-save-all" class="hidden items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save All
+      </button>
+      <button id="btn-add-contact" class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Contact
+      </button>
+    </div>
+  </div>
 
-  <div class="min-h-screen pb-8">
+  <!-- View Tabs: DB vs Budget Crew -->
+  <div id="tab-bar" class="shrink-0 bg-slate-900 border-b border-slate-800 px-4 flex items-end">
+    <button id="tab-db" onclick="mBTContacts.setTab('db')" class="text-[9px] font-black uppercase tracking-widest px-4 py-2.5 border-b-2 border-blue-500 text-white transition-colors">
+      DB Contacts
+    </button>
+    <button id="tab-budget" onclick="mBTContacts.setTab('budget')" class="text-[9px] font-black uppercase tracking-widest px-4 py-2.5 border-b-2 border-transparent text-white/40 hover:text-white/70 transition-colors">
+      Budget Crew
+    </button>
+  </div>
 
-    <!-- Header -->
-    <div class="flex justify-between items-center">
-      <div>
-        <h1 class="text-xl font-bold text-gray-800">MBT Contacts</h1>
-        <p class="text-sm text-gray-500 mt-1">Department Contacts & Rate Lookup</p>
-      </div>
-      <div class="flex gap-2">
-        <button id="catering-summary-btn"
-          class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm flex items-center gap-2" aria-label="View and print catering summary for crew with dietary restrictions">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Catering Summary
-        </button>
-        <button id="print-contacts-btn"
-          class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm flex items-center gap-2" aria-label="Print contacts directory">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print Directory
-        </button>
-      </div>
+  <!-- Search + Dept filter bar -->
+  <div id="search-bar" class="shrink-0 bg-white border-b border-slate-200 px-4 py-3 space-y-2">
+    <div class="relative">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="contact-search" placeholder="Search contacts…"
+        class="w-full pl-9 pr-4 py-2 text-[11px] bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-colors">
+    </div>
+    <div id="dept-bar" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5"></div>
+  </div>
+
+  <!-- Body -->
+  <div class="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6">
+
+    <!-- Skeleton loader -->
+    <div id="skeleton" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="animate-pulse bg-white rounded-2xl border border-slate-100 h-44"></div>
+      <div class="animate-pulse bg-white rounded-2xl border border-slate-100 h-44 hidden sm:block"></div>
+      <div class="animate-pulse bg-white rounded-2xl border border-slate-100 h-44 hidden lg:block"></div>
     </div>
 
-    <!-- Main Layout -->
-    <main class="px-6 py-6">
+    <!-- Contact card grid -->
+    <div id="contacts-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 hidden"></div>
 
-      <!-- Search Bar -->
-      <div class="search-container mb-4">
-        <div class="relative">
-          <input type="text" id="contact-search"
-            class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Search contacts...">
-          <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" width="20" height="20"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-        </div>
-      </div>
-
-      <!-- Project Filter -->
-      <section class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Project</label>
-        <select id="project-filter" class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg">
-          <option value="">All Projects</option>
-        </select>
-      </section>
-
-      <!-- Department Tabs -->
-      <section class="mb-6">
-        <div class="flex flex-wrap gap-2">
-          <button data-dept=""
-            class="dept-tab px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium" aria-label="Show all departments">All</button>
-          <button data-dept="Production"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Production department">Production</button>
-          <button data-dept="Art"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Art department">Art</button>
-          <button data-dept="Camera"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Camera department">Camera</button>
-          <button data-dept="Sound"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Sound department">Sound</button>
-          <button data-dept="Electrical"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Electrical department">Electrical</button>
-          <button data-dept="Editing"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Editing department">Editing</button>
-          <button data-dept="Post"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Post department">Post</button>
-          <button data-dept="Transport"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Transport department">Transport</button>
-          <button data-dept="Craft Services"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Craft Services department">Craft
-            Services</button>
-          <button data-dept="Miscellaneous"
-            class="dept-tab px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm" aria-label="Show Miscellaneous department">Miscellaneous</button>
-        </div>
-      </section>
-
-      <!-- Contacts List -->
-      <section>
-        <div id="contacts-list" class="space-y-3">
-          <!-- Contacts will be inserted here by JavaScript -->
-        </div>
-        <div id="empty-state" class="hidden text-center py-12">
-          <p class="text-gray-500">No contacts found.</p>
-        </div>
-      </section>
-
-    </main>
+    <!-- Empty state -->
+    <div id="empty-state" class="hidden flex-col items-center justify-center py-20 text-center">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" class="mb-4 opacity-25">
+        <circle cx="32" cy="22" r="12" stroke="#94a3b8" stroke-width="3"/>
+        <path d="M10 54c0-12.15 9.85-22 22-22s22 9.85 22 22" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+        <line x1="44" y1="12" x2="56" y2="12" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+        <line x1="50" y1="6" x2="50" y2="18" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p class="text-[13px] font-black text-slate-400 uppercase tracking-widest mb-1">No Contacts Found</p>
+      <p id="empty-hint" class="text-[11px] text-slate-400 mb-5">Add your first contact to the database.</p>
+      <button onclick="mBTContacts.showAddContactModal()" class="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Contact
+      </button>
+    </div>
 
   </div>
 
-  <script>
-var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
-if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+  <!-- Undo snackbar -->
+  <div id="snackbar" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-bold px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50 whitespace-nowrap">
+    <span>Contact deleted</span>
+    <button id="snackbar-undo" class="text-blue-400 hover:text-blue-300 font-black uppercase tracking-widest text-[9px] transition-colors">Undo</button>
+  </div>
 
-    (function () {
-      var STORAGE = window.mBT.storage;
-      var CONTACTS_STORE = 'mbt_contacts';
-      var PROJECTS_STORE = 'mbt_projects';
-      var currentProjectId = '';
-      var currentDept = '';
-      var allContactsData = []; // Outer scope for search
-
-      // Departments with standard daily rates
-      var STANDARD_RATES = {
-        'Production': 450,
-        'Art': 350,
-        'Camera': 400,
-        'Sound': 380,
-        'Electrical': 370,
-        'Editing': 420,
-        'Post': 400,
-        'Transport': 300,
-        'Craft Services': 200,
-        'Miscellaneous': 150
-      };
-
-      // Render contacts for current filter
-      function renderContacts() {
-        var list = dom.getElementById('contacts-list');
-        var empty = dom.getElementById('empty-state');
-
-        list.innerHTML = '';
-
-        STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          allContactsData = contacts || [];
-          var filtered = allContactsData;
-
-          // Filter by project if selected
-          if (currentProjectId) {
-            filtered = filtered.filter(c => c.projectId === currentProjectId);
-          }
-
-          // Filter by department if selected
-          if (currentDept) {
-            filtered = filtered.filter(c => c.department === currentDept);
-          }
-
-          if (filtered.length === 0) {
-            empty.classList.remove('hidden');
-            return;
-          }
-          empty.classList.add('hidden');
-
-          filtered.forEach(contact => {
-            var el = createContactCard(contact);
-            list.appendChild(el);
-          });
-
-          updateEmptyState(filtered.length === 0);
-        }).catch(() => {
-          list.innerHTML = '<p class="text-center text-gray-500 py-8">Error loading contacts</p>';
-        });
-      }
-
-      function createContactCard(contact) {
-        var card = document.createElement('div');
-        card.className = 'contact-card';
-
-        var name = contact.name || 'Unnamed';
-        var email = contact.email || 'N/A';
-        var phone = contact.phone || 'N/A';
-        var dept = contact.department || 'General';
-        var rate = contact.rate || STANDARD_RATES[dept] || '?';
-        var rateFormatted = typeof rate === 'number' ? '$' + rate.toLocaleString('en-US', { minimumFractionDigits: 2 }) : rate;
-        var project = contact.projectName || contact.projectId || 'N/A';
-        var dietary = contact.dietaryRestrictions || null;
-        var allergies = contact.allergies || null;
-
-        card.innerHTML = `
-      <div class="flex items-start justify-between">
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(name)}</span>
-            <span class="dept-badge text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">${escapeHtml(dept)}</span>
-          </div>
-          ${project !== 'N/A' ? `<p class="text-xs text-gray-500">Project: ${escapeHtml(project)}</p>` : ''}
-          
-          <div class="mt-2 space-y-1 text-sm">
-            ${email !== 'N/A' ? `
-              <div class="flex items-center gap-2 text-gray-600">
-                <span class="text-gray-400"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
-                <a href="mailto:${email}" class="hover:text-blue-600 truncate">${escapeHtml(email)}</a>
-              </div>
-            ` : ''}
-            ${phone !== 'N/A' ? `
-              <div class="flex items-center gap-2 text-gray-600">
-                <span class="text-gray-400"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
-                <a href="tel:${phone}" class="hover:text-blue-600">${escapeHtml(phone)}</a>
-              </div>
-            ` : ''}
-          </div>
-          ${(dietary || allergies) ? `
-            <div class="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1">
-              ${dietary ? `<span class="text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium" title="Dietary Restrictions">🥗 ${escapeHtml(dietary)}</span>` : ''}
-              ${allergies ? `<span class="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-medium" title="Allergies">⚠️ ${escapeHtml(allergies)}</span>` : ''}
-            </div>
-          ` : ''}
-        </div>
-        <div class="text-right" style="min-width:min(120px,30vw);">
-          <p class="text-xs text-gray-500 uppercase">Daily Rate</p>
-          <p class="text-lg font-bold text-gray-800">${rateFormatted}</p>
-        </div>
-      </div>
-    `;
-
-        return card;
-      }
-
-      // Load projects for filter dropdown
-      function loadProjectsForFilter() {
-        STORAGE.getItem(PROJECTS_STORE).then(projects => {
-          var filter = dom.getElementById('project-filter');
-          var projectMap = {};
-          (projects || []).forEach(p => {
-            if (!p.name) {
-              projectMap[p.id] = 'Untitled';
-            } else {
-              projectMap[p.id] = p.name;
-            }
-          });
-
-          var options = Object.entries(projectMap)
-            .map(([id, name]) => `<option value="${id}">${escapeHtml(name)}</option>`)
-            .join('');
-
-          filter.innerHTML = '<option value="">All Projects</option>' + options;
-        }).catch(() => {
-          dom.getElementById('project-filter').innerHTML = '<option value="">All Projects</option>';
-        });
-      }
-
-      // Tab switching
-      dom.querySelectorAll('.dept-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          // Update active state
-          dom.querySelectorAll('.dept-tab').forEach(t => {
-            t.classList.remove('bg-blue-600', 'text-white');
-            t.classList.add('bg-gray-200', 'text-gray-700');
-          });
-          tab.classList.remove('bg-gray-200', 'text-gray-700');
-          tab.classList.add('bg-blue-600', 'text-white');
-
-          currentDept = tab.dataset.dept;
-          renderContacts();
-        });
-      });
-
-      // Project filter change
-      dom.getElementById('project-filter').addEventListener('change', (e) => {
-        currentProjectId = e.target.value;
-        renderContacts();
-      });
-
-      // Add contact modal
-      function showAddContactModal() {
-        var modal = document.createElement('div');
-        modal.id = 'add-contact-modal';
-        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-        modal.innerHTML = `
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 class="text-lg font-semibold">Add Contact</h2>
-          <button class="text-gray-500 hover:text-gray-700 text-2xl" aria-label="Close add contact modal">&times;</button>
-        </div>
-        <div class="p-6 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input type="text" id="contact-name" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="John Doe" aria-label="Contact name">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Department *</label>
-            <select id="contact-dept" class="w-full px-3 py-2 border border-gray-300 rounded" aria-label="Contact department">
-              <option value="Production">Production</option>
-              <option value="Art">Art</option>
-              <option value="Camera">Camera</option>
-              <option value="Sound">Sound</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Editing">Editing</option>
-              <option value="Post">Post</option>
-              <option value="Transport">Transport</option>
-              <option value="Craft Services">Craft Services</option>
-              <option value="Miscellaneous">Miscellaneous</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input type="email" id="contact-email" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="john@example.com" aria-label="Contact email">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <input type="tel" id="contact-phone" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="+1 (555) 123-4567" aria-label="Contact phone">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Custom Daily Rate ($)</label>
-            <input type="number" step="0.01" id="contact-rate" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Leave empty for standard rate" aria-label="Contact daily rate">
-            <p class="text-xs text-gray-500 mt-1">Leave empty to use department standard rate</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Project (Optional)</label>
-            <input type="text" id="contact-project" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="Project name or ID" aria-label="Contact project">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Dietary Restrictions</label>
-            <input type="text" id="contact-dietary" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Vegetarian, Vegan, Halal" aria-label="Contact dietary restrictions">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
-            <input type="text" id="contact-allergies" class="w-full px-3 py-2 border border-gray-300 rounded" placeholder="e.g. Nuts, Shellfish, Gluten" aria-label="Contact allergies">
-          </div>
-        </div>
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded" aria-label="Cancel add contact">Cancel</button>
-          <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded" id="save-contact" aria-label="Save contact">Save</button>
-        </div>
-      </div>
-    `;
-
-        document.body.appendChild(modal);
-
-        modal.querySelector('button.close').addEventListener('click', closeModal);
-        modal.querySelector('button').addEventListener('click', function(e) {
-            if (e.target.classList.contains('bg-gray-200') || e.target.textContent.includes('Cancel')) {
-                closeModal();
-            }
-        });
-        modal.querySelector('#save-contact').addEventListener('click', saveContact);
-      }
-
-      function closeModal() {
-        var modal = dom.getElementById('add-contact-modal');
-        if (modal) modal.remove();
-      }
-
-      function saveContact() {
-        var name = dom.getElementById('contact-name').value;
-        var dept = dom.getElementById('contact-dept').value;
-        var email = dom.getElementById('contact-email').value;
-        var phone = dom.getElementById('contact-phone').value;
-        var customRateStr = dom.getElementById('contact-rate').value;
-        var rate = customRateStr ? parseFloat(customRateStr) : STANDARD_RATES[dept];
-        var project = dom.getElementById('contact-project').value;
-        var dietary = dom.getElementById('contact-dietary').value.trim();
-        var allergies = dom.getElementById('contact-allergies').value.trim();
-
-        if (!name) {
-          alert('Name is required');
-          return;
-        }
-
-        var contact = {
-          name,
-          department: dept,
-          email: email || null,
-          phone: phone || null,
-          rate: rate || null,
-          projectId: currentProjectId || null,
-          projectName: project || null,
-          dietaryRestrictions: dietary || null,
-          allergies: allergies || null,
-          lastModified: new Date().toISOString()
-        };
-
-        STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          STORAGE.setItem(CONTACTS_STORE, [...(contacts || []), contact]).then(() => {
-            alert('Contact added!');
-            closeModal();
-            renderContacts();
-          });
-        });
-      }
-
-      // Delete contact
-      function confirmDeleteContact(id) {
-        if (!confirm('Delete this contact?')) return;
-
-        STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          var filtered = contacts.filter(c => c.id !== id);
-          STORAGE.setItem(CONTACTS_STORE, filtered).then(() => {
-            renderContacts();
-          });
-        });
-      }
-
-      function escapeHtml(str) {
-        return String(str || '')
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;');
-      }
-
-      // Print handler
-      dom.getElementById('print-contacts-btn').addEventListener('click', () => {
-        var query = dom.getElementById('contact-search').value.toLowerCase();
-        var contactsToPrint = allContactsData;
-        if (query) {
-          contactsToPrint = allContactsData.filter(c => {
-            var name = (c.name || '').toLowerCase();
-            var email = (c.email || '').toLowerCase();
-            var dept = (c.department || '').toLowerCase();
-            return name.includes(query) || email.includes(query) || dept.includes(query);
-          });
-        }
-
-        var printHTML = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <title>MBT Contacts Directory</title>
-            <style>
-              body { font-family: sans-serif; padding: 20px; color: #333; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background: #f9fafb; font-size: 12px; text-transform: uppercase; color: #6b7280; }
-              .text-right { text-align: right; }
-              .header { border-bottom: 2px solid #10b981; padding-bottom: 10px; margin-bottom: 20px; }
-              @media print { .no-print { display: none; } }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>MBT Contacts Directory</h1>
-              <p>Generated on: ${new Date().toLocaleString()}</p>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Department</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th class="text-right">Daily Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${contactsToPrint.map(c => `
-                  <tr>
-                    <td>${escapeHtml(c.name)}</td>
-                    <td>${escapeHtml(c.department)}</td>
-                    <td>${escapeHtml(c.email || 'N/A')}</td>
-                    <td>${escapeHtml(c.phone || 'N/A')}</td>
-                    <td class="text-right">$${(c.rate || 0).toLocaleString()}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            <scr' + 'ipt>window.onload = () => { window.print(); window.close(); };</scr' + 'ipt>
-          </body>
-          </html>
-        `;
-
-        var printWindow = window.open('', '_blank');
-        printWindow.document.write(printHTML);
-        printWindow.document.close();
-      });
-
-      // Search handler
-      var searchTimeout = null;
-      dom.getElementById('contact-search').addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-          var query = e.target.value.toLowerCase();
-          if (query) {
-            // Filter contacts by name or email
-            var filteredContacts = allContactsData.filter(c => {
-              var name = (c.name || '').toLowerCase();
-              var email = (c.email || '').toLowerCase();
-              var dept = (c.department || '').toLowerCase();
-              return name.includes(query) || email.includes(query) || dept.includes(query);
-            });
-            renderContacts();
-          }
-        }, 300);
-      });
-
-
-      // Catering Summary handler
-      dom.getElementById('catering-summary-btn').addEventListener('click', () => {
-        STORAGE.getItem(CONTACTS_STORE).then(contacts => {
-          var all = contacts || [];
-          var withDietary = all.filter(c => c.dietaryRestrictions || c.allergies);
-
-          var rows = withDietary.length > 0
-            ? withDietary.map(c => `
-                <tr>
-                  <td>${escapeHtml(c.name)}</td>
-                  <td>${escapeHtml(c.department || '')}</td>
-                  <td>${escapeHtml(c.dietaryRestrictions || '—')}</td>
-                  <td>${escapeHtml(c.allergies || '—')}</td>
-                </tr>
-              `).join('')
-            : '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:20px">No dietary/allergy info on file.</td></tr>';
-
-          var printHTML = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Catering Summary</title>
-<style>
-  body { font-family: sans-serif; padding: 20px; color: #333; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; font-size: 13px; }
-  th { background: #f9fafb; font-weight: 700; text-transform: uppercase; font-size: 11px; color: #6b7280; }
-  tr:nth-child(even) { background: #f9fafb; }
-  .allergy { color: #dc2626; font-weight: 600; }
-</style></head><body>
-<h1>Catering Summary — Dietary & Allergy Report</h1>
-<p class="sub">Generated: ${new Date().toLocaleString()} · ${withDietary.length} of ${all.length} crew with restrictions</p>
-<table>
-  <thead><tr><th>Name</th><th>Department</th><th>Dietary Restrictions</th><th>Allergies</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
 <script>
 var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
 if (dom === document && window.shadowRoot) dom = window.shadowRoot;
-window.onload=()=>{window.print();window.close();}<\/script>
-</body></html>`;
 
-          var win = window.open('', '_blank');
-          win.document.write(printHTML);
-          win.document.close();
+/* ========= mBTContacts — Phase 56: Premium CRM ========= */
+var mBTContacts = (function () {
+
+    /* --- State --- */
+    var state = {
+        projectKey: null,
+        currentTab: 'db',
+        currentDept: '',
+        dbContacts: [],
+        budgetCrew: [],
+        budget: null,
+        editingId: null,
+        pendingDelete: null,
+        highlightId: null
+    };
+
+    var DEPTS = ['All', 'Production', 'Art', 'Camera', 'Sound', 'Electrical', 'Editing', 'Post', 'Transport', 'Craft Services', 'Miscellaneous'];
+
+    var STANDARD_RATES = {
+        'Production': 450, 'Art': 350, 'Camera': 400, 'Sound': 380,
+        'Electrical': 370, 'Editing': 420, 'Post': 400, 'Transport': 300,
+        'Craft Services': 200, 'Miscellaneous': 150
+    };
+
+    var DEPT_COLORS = {
+        'Production': '#6366f1', 'Camera': '#3b82f6', 'Sound': '#10b981',
+        'Art': '#f59e0b', 'Electrical': '#ec4899', 'Editing': '#8b5cf6',
+        'Post': '#06b6d4', 'Transport': '#84cc16', 'Craft Services': '#f97316',
+        'Miscellaneous': '#94a3b8'
+    };
+
+    var STORAGE = window.mBTStorage;
+
+    /* --- Helpers --- */
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fmt(n) {
+        return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    /* --- Department pill bar --- */
+    function renderDeptBar() {
+        var bar = dom.getElementById('dept-bar');
+        var html = '';
+        DEPTS.forEach(function (d) {
+            var isActive = (d === 'All' && state.currentDept === '') || d === state.currentDept;
+            html += '<button onclick="mBTContacts.setDept(\'' + esc(d) + '\')" class="dept-pill' + (isActive ? ' active' : '') + ' shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">' + esc(d) + '</button>';
         });
-      });
+        bar.innerHTML = html;
+    }
 
-      // Initialize
-      loadProjectsForFilter();
-      renderContacts();
-    })();
-  </script>
+    /* --- Tab switching --- */
+    function setTab(tab) {
+        state.currentTab = tab;
+        dom.getElementById('tab-db').className = 'text-[9px] font-black uppercase tracking-widest px-4 py-2.5 border-b-2 ' +
+            (tab === 'db' ? 'border-blue-500 text-white' : 'border-transparent text-white/40 hover:text-white/70') + ' transition-colors';
+        dom.getElementById('tab-budget').className = 'text-[9px] font-black uppercase tracking-widest px-4 py-2.5 border-b-2 ' +
+            (tab === 'budget' ? 'border-blue-500 text-white' : 'border-transparent text-white/40 hover:text-white/70') + ' transition-colors';
+        dom.getElementById('empty-hint').textContent = tab === 'db'
+            ? 'Add your first contact to the database.'
+            : 'No crew found in the active budget.';
+        render();
+    }
+
+    function setDept(d) {
+        state.currentDept = (d === 'All') ? '' : d;
+        renderDeptBar();
+        render();
+    }
+
+    /* --- Data load --- */
+    function load() {
+        var params = new URLSearchParams(window.location.search);
+        state.projectKey = params.get('projectKey') || null;
+        state.highlightId = params.get('highlightId') || null;
+
+        if (state.projectKey) {
+            var label = decodeURIComponent(state.projectKey).replace('prodBudget_v5_', '');
+            dom.getElementById('project-tag').textContent = label;
+            dom.getElementById('project-tag').classList.remove('hidden');
+        }
+
+        renderDeptBar();
+
+        var budgetPromise = state.projectKey
+            ? localforage.getItem(state.projectKey)
+            : (STORAGE.getMonolithBudget ? STORAGE.getMonolithBudget() : Promise.resolve(null));
+
+        Promise.all([STORAGE.getAllContacts(), budgetPromise]).then(function (results) {
+            state.dbContacts = results[0] || [];
+            state.budget = results[1] || null;
+            state.budgetCrew = extractBudgetCrew(state.budget);
+
+            dom.getElementById('skeleton').classList.add('hidden');
+            dom.getElementById('contacts-grid').classList.remove('hidden');
+            updateSaveAllBtn();
+            render();
+
+            if (state.highlightId) {
+                setTimeout(function () {
+                    var el = dom.getElementById('card-' + state.highlightId);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.style.outline = '2px solid #3b82f6';
+                        setTimeout(function () { el.style.outline = ''; }, 2500);
+                    }
+                }, 300);
+            }
+        }).catch(function (e) {
+            console.error('[mBTContacts] Load error:', e);
+            dom.getElementById('skeleton').classList.add('hidden');
+        });
+    }
+
+    /* --- Extract crew from monolith budget --- */
+    function extractBudgetCrew(budget) {
+        if (!budget) return [];
+        var crew = [];
+        var patterns = ['director', 'producer', 'writer', 'd.p.', 'camera', 'sound', 'electrical', 'grip', 'art', 'set', 'wardrobe', 'makeup', 'cast', 'stunt', 'editor', 'post', 'composer', 'ad', 'pa', 'production assistant', 'coordinator'];
+        var addedIds = {};
+
+        function checkItem(item) {
+            var desc = (item.description || '').toLowerCase();
+            if (!desc) return;
+            var isCrew = false;
+            var dept = 'Production';
+            for (var i = 0; i < patterns.length; i++) {
+                if (desc.indexOf(patterns[i]) > -1) {
+                    isCrew = true;
+                    if (patterns[i] === 'camera' || patterns[i] === 'd.p.') dept = 'Camera';
+                    else if (patterns[i] === 'sound') dept = 'Sound';
+                    else if (patterns[i] === 'electrical' || patterns[i] === 'grip') dept = 'Electrical';
+                    else if (patterns[i] === 'art' || patterns[i] === 'set' || patterns[i] === 'wardrobe' || patterns[i] === 'makeup') dept = 'Art';
+                    else if (patterns[i] === 'editor' || patterns[i] === 'post' || patterns[i] === 'composer') dept = 'Post';
+                    else if (patterns[i] === 'transport') dept = 'Transport';
+                    break;
+                }
+            }
+            if (!isCrew && item.contact_id) isCrew = true;
+            var cid = item.id || desc;
+            if (isCrew && !addedIds[cid]) {
+                addedIds[cid] = true;
+                crew.push({
+                    id: 'budget_' + cid,
+                    name: item.description,
+                    department: dept,
+                    rate: item.rate || STANDARD_RATES[dept],
+                    projectName: budget.projectName || 'Active Budget',
+                    isBudgetExtraction: true
+                });
+            }
+        }
+
+        if (budget.globalItems) budget.globalItems.forEach(checkItem);
+        if (budget.sections) {
+            Object.values(budget.sections).forEach(function (sec) {
+                (sec.items || []).forEach(checkItem);
+            });
+        }
+        return crew;
+    }
+
+    /* --- Save All button visibility --- */
+    function updateSaveAllBtn() {
+        var btn = dom.getElementById('btn-save-all');
+        var dbNames = {};
+        state.dbContacts.forEach(function (c) { dbNames[(c.name || '').toLowerCase()] = true; });
+        var unsaved = state.budgetCrew.filter(function (c) { return !dbNames[(c.name || '').toLowerCase()]; });
+        if (unsaved.length > 0) {
+            btn.classList.remove('hidden');
+            btn.classList.add('flex');
+        } else {
+            btn.classList.add('hidden');
+            btn.classList.remove('flex');
+        }
+    }
+
+    /* --- Render grid --- */
+    function render() {
+        var grid = dom.getElementById('contacts-grid');
+        var empty = dom.getElementById('empty-state');
+        var query = (dom.getElementById('contact-search').value || '').toLowerCase().trim();
+
+        /* Source is scoped to active tab — search doesn't bleed across tabs */
+        var source = state.currentTab === 'db' ? state.dbContacts : state.budgetCrew;
+
+        var filtered = state.currentDept
+            ? source.filter(function (c) { return c.department === state.currentDept; })
+            : source;
+
+        if (query) {
+            filtered = filtered.filter(function (c) {
+                return (c.name || '').toLowerCase().indexOf(query) > -1 ||
+                    (c.email || '').toLowerCase().indexOf(query) > -1 ||
+                    (c.department || '').toLowerCase().indexOf(query) > -1;
+            });
+        }
+
+        if (filtered.length === 0) {
+            grid.classList.add('hidden');
+            empty.classList.remove('hidden');
+            empty.classList.add('flex');
+            return;
+        }
+
+        empty.classList.add('hidden');
+        empty.classList.remove('flex');
+        grid.classList.remove('hidden');
+        grid.innerHTML = '';
+        filtered.forEach(function (c) { grid.appendChild(buildCard(c)); });
+    }
+
+    /* --- Build glassmorphic card --- */
+    function buildCard(c) {
+        var card = document.createElement('div');
+        card.id = 'card-' + (c.id || '');
+        card.className = 'glass-card rounded-2xl p-5 flex flex-col gap-3';
+
+        var name = c.name || 'Unnamed';
+        var dept = c.department || 'General';
+        var rate = c.rate || STANDARD_RATES[dept] || 0;
+        var isBudget = c.isBudgetExtraction;
+        var accent = DEPT_COLORS[dept] || '#64748b';
+
+        var html =
+            '<div class="flex items-start justify-between gap-3">' +
+                '<div class="min-w-0 flex-1">' +
+                    '<div class="flex items-center gap-2 flex-wrap mb-2">' +
+                        '<span class="text-[13px] font-black text-slate-900 truncate">' + esc(name) + '</span>' +
+                        (isBudget ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-widest">Budget</span>' : '') +
+                    '</div>' +
+                    '<span class="inline-block text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full text-white" style="background:' + accent + ';">' + esc(dept) + '</span>' +
+                '</div>' +
+                '<div class="text-right shrink-0">' +
+                    '<div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Daily Rate</div>' +
+                    '<div class="text-[17px] font-black text-slate-900 leading-none">' + fmt(rate) + '</div>' +
+                '</div>' +
+            '</div>';
+
+        var details = '';
+        if (c.email) {
+            details += '<a href="mailto:' + esc(c.email) + '" class="flex items-center gap-2 text-[10px] text-slate-500 hover:text-blue-600 transition-colors truncate">' +
+                '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
+                esc(c.email) + '</a>';
+        }
+        if (c.phone) {
+            details += '<a href="tel:' + esc(c.phone) + '" class="flex items-center gap-2 text-[10px] text-slate-500 hover:text-blue-600 transition-colors">' +
+                '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>' +
+                esc(c.phone) + '</a>';
+        }
+        if (c.dietaryRestrictions || c.allergies) {
+            details += '<div class="flex flex-wrap gap-1">';
+            if (c.dietaryRestrictions) details += '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-widest">Diet: ' + esc(c.dietaryRestrictions) + '</span>';
+            if (c.allergies) details += '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 uppercase tracking-widest">Allergy: ' + esc(c.allergies) + '</span>';
+            details += '</div>';
+        }
+        if (details) html += '<div class="space-y-1">' + details + '</div>';
+
+        /* Action buttons */
+        html += '<div class="card-footer flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">';
+        if (isBudget) {
+            html += '<button data-action="save-db" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors">Save to DB</button>';
+        } else {
+            html += '<button data-action="edit" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">Edit</button>';
+            html += '<button data-action="delete" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors">Delete</button>';
+        }
+        html += '<button data-action="push" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors ml-auto">Push to Budget</button>';
+        html += '</div>';
+
+        card.innerHTML = html;
+
+        card.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-action]');
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
+            if (action === 'edit') editContact(c.id);
+            if (action === 'delete') initiateDelete(c);
+            if (action === 'save-db') saveBudgetContactToDB(c);
+            if (action === 'push') pushContactToBudget(c);
+        });
+
+        return card;
+    }
+
+    /* --- Soft delete with undo snackbar --- */
+    function initiateDelete(contact) {
+        /* Commit any previous pending delete before starting a new one */
+        if (state.pendingDelete) {
+            clearTimeout(state.pendingDelete.timer);
+            commitDelete(state.pendingDelete.contact);
+            state.pendingDelete = null;
+        }
+
+        state.dbContacts = state.dbContacts.filter(function (c) { return c.id !== contact.id; });
+        render();
+
+        var snack = dom.getElementById('snackbar');
+        snack.classList.remove('hidden');
+        snack.classList.add('flex', 'snack-in');
+
+        var timer = setTimeout(function () {
+            commitDelete(contact);
+            state.pendingDelete = null;
+            hideSnackbar();
+        }, 5000);
+
+        state.pendingDelete = { contact: contact, timer: timer };
+    }
+
+    function commitDelete(contact) {
+        STORAGE.deleteContact(contact.id).then(function () {
+            updateSaveAllBtn();
+        }).catch(function (e) { console.error('[mBTContacts] Delete error:', e); });
+    }
+
+    function undoDelete() {
+        if (!state.pendingDelete) return;
+        clearTimeout(state.pendingDelete.timer);
+        state.dbContacts.push(state.pendingDelete.contact);
+        state.pendingDelete = null;
+        hideSnackbar();
+        render();
+    }
+
+    function hideSnackbar() {
+        var snack = dom.getElementById('snackbar');
+        snack.classList.add('hidden');
+        snack.classList.remove('flex', 'snack-in');
+    }
+
+    /* --- Save budget-extracted contact to DB --- */
+    function saveBudgetContactToDB(c) {
+        STORAGE.saveContact({
+            name: c.name, department: c.department, email: c.email || null,
+            phone: c.phone || null, rate: c.rate || null, role: c.department,
+            category: c.department, projectId: c.projectId || null, projectName: c.projectName || null
+        }).then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
+            state.dbContacts = all || [];
+            updateSaveAllBtn();
+            render();
+        });
+    }
+
+    /* --- Save all unsaved budget contacts --- */
+    function saveAllBudgetContacts() {
+        var dbNames = {};
+        state.dbContacts.forEach(function (c) { dbNames[(c.name || '').toLowerCase()] = true; });
+        var unsaved = state.budgetCrew.filter(function (c) { return !dbNames[(c.name || '').toLowerCase()]; });
+        if (unsaved.length === 0) return;
+        var chain = Promise.resolve();
+        unsaved.forEach(function (c) {
+            chain = chain.then(function () {
+                return STORAGE.saveContact({
+                    name: c.name, department: c.department, email: c.email || null,
+                    phone: c.phone || null, rate: c.rate || null, role: c.department,
+                    category: c.department, projectId: c.projectId || null, projectName: c.projectName || null
+                });
+            });
+        });
+        chain.then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
+            state.dbContacts = all || [];
+            updateSaveAllBtn();
+            render();
+        });
+    }
+
+    /* --- Push contact to budget --- */
+    function pushContactToBudget(c) {
+        if (window.parent === window) { alert('Open this tool from the Budget Editor to push contacts.'); return; }
+        window.parent.postMessage({
+            type: 'mbt:tool-action',
+            action: 'inject-contact',
+            payload: { name: c.name, department: c.department, rate: c.rate, email: c.email || null, phone: c.phone || null }
+        }, '*');
+    }
+
+    /* --- Add/Edit modal --- */
+    function showAddContactModal(prefill) {
+        var isEdit = !!(prefill && prefill.id && !prefill.isBudgetExtraction);
+        state.editingId = isEdit ? prefill.id : null;
+
+        var DEPT_LIST = ['Production', 'Art', 'Camera', 'Sound', 'Electrical', 'Editing', 'Post', 'Transport', 'Craft Services', 'Miscellaneous'];
+        var deptOpts = DEPT_LIST.map(function (d) {
+            return '<option value="' + esc(d) + '"' + (d === ((prefill && prefill.department) || 'Production') ? ' selected' : '') + '>' + esc(d) + '</option>';
+        }).join('');
+
+        var modal = document.createElement('div');
+        modal.id = 'contact-modal';
+        modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4';
+        modal.innerHTML =
+            '<div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style="max-height:90vh;">' +
+                '<div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">' +
+                    '<span class="text-[11px] font-black uppercase tracking-widest text-white">' + (isEdit ? 'Edit Contact' : 'New Contact') + '</span>' +
+                    '<button class="modal-close text-slate-500 hover:text-white transition-colors" aria-label="Close">' +
+                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                    '</button>' +
+                '</div>' +
+                '<div class="overflow-y-auto flex-1 px-6 py-5 space-y-4">' +
+                    field('Name *', 'text', 'm-name', 'Full name', (prefill && prefill.name) || '') +
+                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Department *</label>' +
+                    '<select id="m-dept" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' + deptOpts + '</select></div>' +
+                    field('Daily Rate ($)', 'number', 'm-rate', 'Dept standard if blank', (prefill && prefill.rate) || '') +
+                    field('Email', 'email', 'm-email', 'email@example.com', (prefill && prefill.email) || '') +
+                    field('Phone', 'tel', 'm-phone', '+1 (555) 123-4567', (prefill && prefill.phone) || '') +
+                    field('Dietary Restrictions', 'text', 'm-dietary', 'e.g. Vegetarian, Halal', (prefill && prefill.dietaryRestrictions) || '') +
+                    field('Allergies', 'text', 'm-allergies', 'e.g. Nuts, Shellfish', (prefill && prefill.allergies) || '') +
+                '</div>' +
+                '<div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2 shrink-0">' +
+                    '<button class="modal-cancel text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">Cancel</button>' +
+                    '<button class="modal-save text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors">' + (isEdit ? 'Update' : 'Save') + '</button>' +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(modal);
+        modal.querySelector('.modal-close').addEventListener('click', closeModal);
+        modal.querySelector('.modal-cancel').addEventListener('click', closeModal);
+        modal.querySelector('.modal-save').addEventListener('click', saveContact);
+        modal.addEventListener('click', function (ev) { if (ev.target === modal) closeModal(); });
+    }
+
+    function field(label, type, id, placeholder, value) {
+        return '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">' + esc(label) + '</label>' +
+            '<input type="' + type + '" id="' + id + '" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors" placeholder="' + esc(placeholder) + '" value="' + esc(value) + '"></div>';
+    }
+
+    function closeModal() {
+        var m = document.getElementById('contact-modal');
+        if (m) m.remove();
+        state.editingId = null;
+    }
+
+    function saveContact() {
+        var name = document.getElementById('m-name').value.trim();
+        var dept = document.getElementById('m-dept').value;
+        var rateStr = document.getElementById('m-rate').value;
+        var rate = rateStr ? parseFloat(rateStr) : STANDARD_RATES[dept];
+        var email = document.getElementById('m-email').value.trim();
+        var phone = document.getElementById('m-phone').value.trim();
+        var dietary = document.getElementById('m-dietary').value.trim();
+        var allergies = document.getElementById('m-allergies').value.trim();
+
+        if (!name) { alert('Name is required'); return; }
+
+        var contact = {
+            name: name, department: dept, email: email || null, phone: phone || null,
+            rate: rate || null, role: dept, category: dept,
+            dietaryRestrictions: dietary || null, allergies: allergies || null
+        };
+        if (state.editingId) contact.id = state.editingId;
+
+        STORAGE.saveContact(contact).then(function () {
+            /* Rate sync: dispatch to Budget Editor if editing an existing contact */
+            if (state.editingId && contact.rate && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'mbt:tool-action',
+                    action: 'update-contact-rate',
+                    payload: { name: contact.name, rate: contact.rate }
+                }, '*');
+            }
+            return STORAGE.getAllContacts();
+        }).then(function (all) {
+            state.dbContacts = all || [];
+            closeModal();
+            render();
+        }).catch(function (e) {
+            console.error('[mBTContacts] Save error:', e);
+            alert('Error saving contact');
+        });
+    }
+
+    function editContact(id) {
+        var found = null;
+        for (var i = 0; i < state.dbContacts.length; i++) {
+            if (state.dbContacts[i].id === id) { found = state.dbContacts[i]; break; }
+        }
+        if (found) showAddContactModal(found);
+    }
+
+    /* --- Catering summary print --- */
+    function openCateringSummary() {
+        var withDietary = state.dbContacts.filter(function (c) { return c.dietaryRestrictions || c.allergies; });
+        var rows = withDietary.length > 0
+            ? withDietary.map(function (c) {
+                return '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.department || '') + '</td><td>' + esc(c.dietaryRestrictions || '—') + '</td><td>' + esc(c.allergies || '—') + '</td></tr>';
+            }).join('')
+            : '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:20px">No dietary or allergy info on file.</td></tr>';
+
+        var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Catering Summary</title>' +
+            '<style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left;font-size:12px;}th{background:#f9fafb;font-weight:700;text-transform:uppercase;font-size:10px;color:#6b7280;}</style>' +
+            '</head><body><h2>Catering Summary</h2><p style="color:#6b7280;font-size:12px;margin-bottom:16px">' + withDietary.length + ' crew with restrictions</p>' +
+            '<table><thead><tr><th>Name</th><th>Dept</th><th>Dietary</th><th>Allergies</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+            '<scr' + 'ipt>window.onload=function(){window.print();window.close();}<\/scr' + 'ipt></body></html>';
+        var w = window.open('', '_blank');
+        if (w) { w.document.write(html); w.document.close(); }
+    }
+
+    /* --- Print directory --- */
+    function printDirectory() {
+        var source = state.currentTab === 'db' ? state.dbContacts : state.budgetCrew;
+        var query = (dom.getElementById('contact-search').value || '').toLowerCase();
+        var contacts = query ? source.filter(function (c) {
+            return (c.name || '').toLowerCase().indexOf(query) > -1 || (c.department || '').toLowerCase().indexOf(query) > -1;
+        }) : source;
+
+        var rows = contacts.map(function (c) {
+            return '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.department || '') + '</td><td>' + esc(c.email || 'N/A') + '</td><td>' + esc(c.phone || 'N/A') + '</td><td style="text-align:right">$' + (c.rate || 0).toLocaleString() + '</td></tr>';
+        }).join('');
+
+        var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Contacts Directory</title>' +
+            '<style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left;font-size:12px;}th{background:#f9fafb;font-weight:700;text-transform:uppercase;font-size:10px;color:#6b7280;}</style>' +
+            '</head><body><h2>mBT Contacts Directory</h2><p style="color:#6b7280;font-size:12px;margin-bottom:16px">Generated ' + new Date().toLocaleString() + '</p>' +
+            '<table><thead><tr><th>Name</th><th>Dept</th><th>Email</th><th>Phone</th><th style="text-align:right">Daily Rate</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+            '<scr' + 'ipt>window.onload=function(){window.print();window.close();}<\/scr' + 'ipt></body></html>';
+        var w = window.open('', '_blank');
+        if (w) { w.document.write(html); w.document.close(); }
+    }
+
+    /* ========= Init ========= */
+    dom.getElementById('btn-back').addEventListener('click', function () {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+        } else {
+            history.back();
+        }
+    });
+
+    dom.getElementById('btn-add-contact').addEventListener('click', function () { showAddContactModal(); });
+    dom.getElementById('btn-save-all').addEventListener('click', saveAllBudgetContacts);
+    dom.getElementById('btn-catering').addEventListener('click', openCateringSummary);
+    dom.getElementById('btn-print').addEventListener('click', printDirectory);
+    dom.getElementById('snackbar-undo').addEventListener('click', undoDelete);
+
+    var searchTimeout = null;
+    dom.getElementById('contact-search').addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(render, 250);
+    });
+
+    load();
+
+    /* --- Public API --- */
+    return {
+        setTab: setTab,
+        setDept: setDept,
+        showAddContactModal: showAddContactModal,
+        editContact: editContact,
+        render: render
+    };
+})();
+</script>
 </body>
-
 </html>
