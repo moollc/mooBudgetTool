@@ -267,6 +267,34 @@ CREATE OR REPLACE VIEW og_rate_averages AS
 GRANT SELECT ON og_rate_averages TO anon;
 GRANT SELECT ON og_rate_averages TO authenticated;
 
+/* =========================================================================
+   Sub-Phase 51.1 Group C Migrations
+   Run these in the Supabase SQL editor against an existing database.
+   ========================================================================= */
+
+/* --- Migration 1: Soft-delete support — add deleted_at to all user tables --- */
+ALTER TABLE projects   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE stages     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE contacts   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE sessions   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE og_ref     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+
+/* --- Migration 2: Generic key-value store for settings & preferences sync --- */
+CREATE TABLE IF NOT EXISTS mbt_generic (
+    key         TEXT        PRIMARY KEY,
+    user_id     UUID        NOT NULL DEFAULT auth.uid(),
+    value       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE mbt_generic ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "mbt_generic: owner read"   ON mbt_generic FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "mbt_generic: owner insert" ON mbt_generic FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "mbt_generic: owner update" ON mbt_generic FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "mbt_generic: owner delete" ON mbt_generic FOR DELETE USING (auth.uid() = user_id);
+
 /* --- Indexes for common query patterns --- */
 CREATE INDEX IF NOT EXISTS idx_stages_project      ON stages(project_id);
 CREATE INDEX IF NOT EXISTS idx_executions_project  ON executions(project_id);
@@ -274,3 +302,26 @@ CREATE INDEX IF NOT EXISTS idx_projects_user       ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_stages_user         ON stages(user_id);
 CREATE INDEX IF NOT EXISTS idx_executions_user     ON executions(user_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_user       ON contacts(user_id);
+
+/* =========================================================================
+   Sub-Phase 51.2 Realtime Configuration
+   Run in the Supabase SQL editor to enable Postgres CDC for live sync.
+   ========================================================================= */
+
+/* Enable Realtime replication on the projects table so UPDATE events are
+   broadcast to connected WebSocket clients. Only the projects table is needed
+   because that is what mBTRealtime subscribes to for live budget reconciliation.
+
+   Run: SELECT supabase_realtime.enable_table_realtime('public', 'projects');
+   OR via the Supabase Dashboard → Table Editor → projects → Enable Realtime.
+
+   The RLS policies on projects already scope delivery to the record owner,
+   so no additional Realtime-specific policies are required (Task 9). */
+
+/* Optional: Reduce Realtime publication to only UPDATE events for projects.
+   This prevents INSERT and DELETE CDC events from generating extra WebSocket
+   traffic for clients that only care about live edits. */
+-- ALTER PUBLICATION supabase_realtime ADD TABLE projects;
+
+/* Note: Presence channels (realtime:presence:budget:*) are ephemeral and
+   in-memory only — no database table or migration is needed for them. */

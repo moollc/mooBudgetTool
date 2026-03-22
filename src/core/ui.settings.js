@@ -120,7 +120,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                             <div class="space-y-3">
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Active Provider</label>
-                                    <select id="aiProviderSelect" onchange="const link=document.getElementById('apiKeyLink'); const map=${JSON.stringify(keyLinks).replace(/"/g, "'")}; link.href=map[this.value];" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                    <select id="aiProviderSelect" onchange="var link=document.getElementById('apiKeyLink'); var map=${JSON.stringify(keyLinks).replace(/"/g, "'")}; link.href=map[this.value];" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
                                         <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini API</option>
                                         <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI API</option>
                                         <option value="deepseek" ${provider === 'deepseek' ? 'selected' : ''}>DeepSeek API</option>
@@ -163,6 +163,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                 var profileRole = localStorage.getItem('mbt_profile_role') || '';
                 var authView = localStorage.getItem('mbt_auth_view') || 'login'; // 'login', 'signup', 'forgot'
                 var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+                var contSync = localStorage.getItem('mbt_supabase_sync_mode') === 'continuous';
 
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
@@ -259,7 +260,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                             
                             <!-- Security Expansion -->
                             <div class="pt-4 border-t border-slate-50">
-                                <button onclick="const el=document.getElementById('passwordChangeSect'); el.classList.toggle('hidden');" class="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors">Change Password?</button>
+                                <button onclick="var el=document.getElementById('passwordChangeSect'); el.classList.toggle('hidden');" class="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors">Change Password?</button>
                                 <div id="passwordChangeSect" class="hidden space-y-2 animate-in slide-in-from-top-2 duration-300">
                                     <input type="password" id="newPasswordInput" placeholder="New Secret Password" class="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                     <button onclick="mBT.features.settings.cloudChangePassword()" class="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Update Security</button>
@@ -292,6 +293,14 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" id="syncOnReconnectToggle" ${syncOnReconnect ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');" class="sr-only peer">
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            <!-- Hidden: continuous auto-save toggle — unhide when Supabase subscription is in place -->
+                            <div class="hidden flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Continuous Auto-Save</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" ${contSync ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_mode', this.checked ? 'continuous' : 'lifecycle');" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                                 </label>
                             </div>
                             <button onclick="if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>
@@ -342,7 +351,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                                     </div>
                                     <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
                                 </div>
-                                <button id="saveApiKeyBtn" onclick="const p=document.getElementById('aiProviderSelect').value; const k=document.getElementById('apiKeyInput').value; const s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
+                                <button id="saveApiKeyBtn" onclick="var p=document.getElementById('aiProviderSelect').value; var k=document.getElementById('apiKeyInput').value; var s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-2">Synchronize Link</button>
                             </div>
                         </div>
                     </div>`;
@@ -358,6 +367,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                 var profileRole = localStorage.getItem('mbt_profile_role') || '';
                 var authView = localStorage.getItem('mbt_auth_view') || 'login'; // 'login', 'signup', 'forgot'
                 var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+                var contSync = localStorage.getItem('mbt_supabase_sync_mode') === 'continuous';
 
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-6 space-y-4 animate-in fade-in duration-300">
@@ -487,6 +497,14 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" id="syncOnReconnectToggle" ${syncOnReconnect ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');" class="sr-only peer">
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            <!-- Hidden: continuous auto-save toggle — unhide when Supabase subscription is in place -->
+                            <div class="hidden flex items-center justify-between mb-4">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Continuous Auto-Save</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" ${contSync ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_mode', this.checked ? 'continuous' : 'lifecycle');" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                                 </label>
                             </div>
                             <button onclick="if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>

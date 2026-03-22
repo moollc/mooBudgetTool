@@ -8,7 +8,7 @@
 // === DB CONSTANTS ===
 
 var DB_NAME = 'mBT_DB';
-var DB_VERSION = 2;
+var DB_VERSION = 3;
 
 var STORE_NAMES = {
   PROJECTS: 'mbt_projects',
@@ -18,6 +18,7 @@ var STORE_NAMES = {
   GENERIC: 'mbt_generic',
   CONTACTS: 'contacts',
   SESSIONS: 'sessions',
+  TOMBSTONES: 'mbt_tombstones',
 };
 
 // === STORAGE CLASS ===
@@ -129,6 +130,11 @@ var mBTStorage = {
         if (!db.objectStoreNames.contains(STORE_NAMES.SESSIONS)) {
           db.createObjectStore(STORE_NAMES.SESSIONS, { keyPath: 'id' });
         }
+
+        /* Sub-Phase 51.1 Group C: Tombstone store for soft-delete propagation */
+        if (!db.objectStoreNames.contains(STORE_NAMES.TOMBSTONES)) {
+          db.createObjectStore(STORE_NAMES.TOMBSTONES, { keyPath: 'id' });
+        }
       };
     });
   },
@@ -154,6 +160,7 @@ var mBTStorage = {
         status: project.status,
         id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         created: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       var request = store.add(newProject);
       return new Promise(function (resolve, reject) {
@@ -191,6 +198,7 @@ var mBTStorage = {
     var self = this;
     return this._getDb().then(function (db) {
       var store = db.transaction([STORE_NAMES.PROJECTS], 'readwrite').objectStore(STORE_NAMES.PROJECTS);
+      project.updated_at = new Date().toISOString();
       var request = store.put(project);
       return new Promise(function (resolve, reject) {
         request.onsuccess = function () {
@@ -203,10 +211,12 @@ var mBTStorage = {
     });
   },
 
-  deleteProject: function (id) {
+  deleteProject: function (id, skipTombstone) {
     var self = this;
     return this.getDb().then(function (db) {
-      var tx = db.transaction([STORE_NAMES.PROJECTS, STORE_NAMES.STAGES, STORE_NAMES.EXECUTIONS], 'readwrite');
+      var txStores = [STORE_NAMES.PROJECTS, STORE_NAMES.STAGES, STORE_NAMES.EXECUTIONS];
+      if (!skipTombstone) txStores.push(STORE_NAMES.TOMBSTONES);
+      var tx = db.transaction(txStores, 'readwrite');
       tx.objectStore(STORE_NAMES.PROJECTS).delete(id);
 
       return new Promise(function (resolve, reject) {
@@ -226,6 +236,18 @@ var mBTStorage = {
             var execs = execReq.result || [];
             for (var j = 0; j < execs.length; j++) {
               execStore.delete(execs[j].id);
+            }
+            /* Write tombstones for project and all its cascaded children */
+            if (!skipTombstone) {
+              var now = new Date().toISOString();
+              var tombStore = tx.objectStore(STORE_NAMES.TOMBSTONES);
+              tombStore.put({ id: id, store: 'mbt_projects', deleted_at: now });
+              for (var k = 0; k < stages.length; k++) {
+                tombStore.put({ id: stages[k].id, store: 'mbt_stages', deleted_at: now });
+              }
+              for (var m = 0; m < execs.length; m++) {
+                tombStore.put({ id: execs[m].id, store: 'mbt_executions', deleted_at: now });
+              }
             }
           };
         };
@@ -273,6 +295,7 @@ var mBTStorage = {
         projectId: stage.projectId,
         id: 's_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         createdAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       var request = store.add(newStage);
       return new Promise(function (resolve, reject) {
@@ -310,6 +333,7 @@ var mBTStorage = {
     var self = this;
     return this._getDb().then(function (db) {
       var store = db.transaction([STORE_NAMES.STAGES], 'readwrite').objectStore(STORE_NAMES.STAGES);
+      stage.updated_at = new Date().toISOString();
       var request = store.put(stage);
       return new Promise(function (resolve, reject) {
         request.onsuccess = function () {
@@ -322,10 +346,12 @@ var mBTStorage = {
     });
   },
 
-  deleteStage: function (id) {
+  deleteStage: function (id, skipTombstone) {
     var self = this;
     return this.getDb().then(function (db) {
-      var tx = db.transaction([STORE_NAMES.STAGES, STORE_NAMES.EXECUTIONS], 'readwrite');
+      var txStores = [STORE_NAMES.STAGES, STORE_NAMES.EXECUTIONS];
+      if (!skipTombstone) txStores.push(STORE_NAMES.TOMBSTONES);
+      var tx = db.transaction(txStores, 'readwrite');
       tx.objectStore(STORE_NAMES.STAGES).delete(id);
 
       return new Promise(function (resolve, reject) {
@@ -336,6 +362,14 @@ var mBTStorage = {
           var execs = execReq.result || [];
           for (var i = 0; i < execs.length; i++) {
             execStore.delete(execs[i].id);
+          }
+          if (!skipTombstone) {
+            var now = new Date().toISOString();
+            var tombStore = tx.objectStore(STORE_NAMES.TOMBSTONES);
+            tombStore.put({ id: id, store: 'mbt_stages', deleted_at: now });
+            for (var j = 0; j < execs.length; j++) {
+              tombStore.put({ id: execs[j].id, store: 'mbt_executions', deleted_at: now });
+            }
           }
         };
 
@@ -426,6 +460,7 @@ var mBTStorage = {
         description: exec.description,
         id: 'e_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         createdAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       var request = store.add(newExec);
       return new Promise(function (resolve, reject) {
@@ -463,6 +498,7 @@ var mBTStorage = {
     var self = this;
     return this._getDb().then(function (db) {
       var store = db.transaction([STORE_NAMES.EXECUTIONS], 'readwrite').objectStore(STORE_NAMES.EXECUTIONS);
+      exec.updated_at = new Date().toISOString();
       var request = store.put(exec);
       return new Promise(function (resolve, reject) {
         request.onsuccess = function () {
@@ -475,18 +511,18 @@ var mBTStorage = {
     });
   },
 
-  deleteExecution: function (id) {
+  deleteExecution: function (id, skipTombstone) {
     var self = this;
     return this._getDb().then(function (db) {
-      var store = db.transaction(STORE_NAMES.EXECUTIONS, 'readwrite').objectStore(STORE_NAMES.EXECUTIONS);
+      var txStores = skipTombstone ? [STORE_NAMES.EXECUTIONS] : [STORE_NAMES.EXECUTIONS, STORE_NAMES.TOMBSTONES];
+      var tx = db.transaction(txStores, 'readwrite');
+      var request = tx.objectStore(STORE_NAMES.EXECUTIONS).delete(id);
+      if (!skipTombstone) {
+        tx.objectStore(STORE_NAMES.TOMBSTONES).put({ id: id, store: 'mbt_executions', deleted_at: new Date().toISOString() });
+      }
       return new Promise(function (resolve, reject) {
-        var request = store.delete(id);
-        request.onsuccess = function () {
-          resolve();
-        };
-        request.onerror = function () {
-          reject(request.error);
-        };
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
       });
     });
   },
@@ -537,6 +573,7 @@ var mBTStorage = {
         value: item.value,
         currency: item.currency,
         id: 'og_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        updated_at: new Date().toISOString(),
       };
       var request = store.add(newItem);
       return new Promise(function (resolve, reject) {
@@ -570,6 +607,7 @@ var mBTStorage = {
     var self = this;
     return this._getDb().then(function (db) {
       var store = db.transaction([STORE_NAMES.OG_REF], 'readwrite').objectStore(STORE_NAMES.OG_REF);
+      item.updated_at = new Date().toISOString();
       var request = store.put(item);
       return new Promise(function (resolve, reject) {
         request.onsuccess = function () {
@@ -660,7 +698,7 @@ var mBTStorage = {
   setItem: function (key, value) {
     return this._getDb().then(function (db) {
       var store = db.transaction([STORE_NAMES.GENERIC], 'readwrite').objectStore(STORE_NAMES.GENERIC);
-      var request = store.put({ key: key, value: value });
+      var request = store.put({ key: key, value: value, updated_at: new Date().toISOString() });
       return new Promise(function (resolve, reject) {
         request.onsuccess = function () {
           resolve();
@@ -683,6 +721,30 @@ var mBTStorage = {
         request.onerror = function () {
           reject(request.error);
         };
+      });
+    });
+  },
+
+  // === TOMBSTONE STORE ===
+
+  getAllTombstones: function () {
+    return this._getDb().then(function (db) {
+      var store = db.transaction(STORE_NAMES.TOMBSTONES, 'readonly').objectStore(STORE_NAMES.TOMBSTONES);
+      return new Promise(function (resolve, reject) {
+        var request = store.getAll();
+        request.onsuccess = function () { resolve(request.result || []); };
+        request.onerror = function () { reject(request.error); };
+      });
+    });
+  },
+
+  clearTombstones: function () {
+    return this._getDb().then(function (db) {
+      var store = db.transaction([STORE_NAMES.TOMBSTONES], 'readwrite').objectStore(STORE_NAMES.TOMBSTONES);
+      return new Promise(function (resolve, reject) {
+        var request = store.clear();
+        request.onsuccess = function () { resolve(); };
+        request.onerror = function () { reject(request.error); };
       });
     });
   },

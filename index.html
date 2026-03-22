@@ -64,6 +64,7 @@
     <script src="./src/core/finance.engine.js"></script>
     <script src="./src/config/supabase.js"></script>
     <script src="./src/services/supabase-sync.js"></script>
+    <script src="./src/services/supabase-realtime.js"></script>
 </head>
 
 <body class="bg-gray-100 pb-16">
@@ -625,8 +626,10 @@
             // This ensures strict serialization for the database while keeping the app reactive.
             try {
                 const cleanData = JSON.parse(JSON.stringify(budget));
+                cleanData.updated_at = new Date().toISOString();
                 await this.storage.save(projectKey, cleanData);
                 localStorage.setItem(`${storageKeyPrefix}lastLoaded`, budget.projectName);
+                if (window.mBTSync && window.mBTSync.scheduleAutoSync) window.mBTSync.scheduleAutoSync();
             } catch (e) {
                 console.error("Save Failed:", e);
                 // Fallback: If JSON fails (e.g. circular refs), try basic object copy
@@ -656,6 +659,11 @@
                 currentProjectName = budget.projectName;
                 if(typeof render === 'function') render();
                 if(typeof renderProjectManagement === 'function') renderProjectManagement();
+                /* Sub-Phase 51.2: Subscribe to realtime when project loads */
+                if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
+                    var rtProjectId = data.id || data.projectName;
+                    if (rtProjectId) mBTRealtime.subscribeToProject(rtProjectId);
+                }
             }
         },
 
@@ -850,8 +858,18 @@
                     const trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
                     trashed.push(data);
                     localStorage.setItem(trashKey, JSON.stringify(trashed));
+                    /* Write tombstone so cloud sync can propagate the delete */
+                    var projectId = data.id || data.projectName || name;
+                    if (window.mBTStorage && typeof window.mBTStorage._getDb === 'function') {
+                        window.mBTStorage._getDb().then(function(db) {
+                            if (db.objectStoreNames.contains('mbt_tombstones')) {
+                                var tx = db.transaction(['mbt_tombstones'], 'readwrite');
+                                tx.objectStore('mbt_tombstones').put({ id: projectId, store: 'mbt_projects', deleted_at: new Date().toISOString() });
+                            }
+                        }).catch(function(e) { console.warn('[mBT] Tombstone write failed', e); });
+                    }
                 }
-                
+
                 await this.storage.remove(storageKeyPrefix + name);
                 localStorage.removeItem(storageKeyPrefix + name); // Clean legacy
 
@@ -1069,7 +1087,204 @@
     // --- 5. Global Aliases for Migrated Globals ---
     /* window.mBTOG is set by src/scripts/engine/opengate.js — mBT.opengate points to the same object */
     window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
-    
+
+    /* Sub-Phase 51.1 Group C: Wire budget.settings hooks so supabase-sync can push/pull preferences
+       without directly accessing the Budget Editor's IIFE-scoped budget variable. */
+    if (window.mBTSync) {
+        window.mBTSync._getBudgetSettings = function () {
+            return (typeof budget !== 'undefined' && budget && budget.settings)
+                ? JSON.parse(JSON.stringify(budget.settings))
+                : null;
+        };
+        window.mBTSync._setBudgetSettings = function (s) {
+            if (typeof budget !== 'undefined' && budget) {
+                budget.settings = Object.assign(budget.settings || {}, s);
+                if (typeof saveBudget === 'function') saveBudget();
+            }
+        };
+    }
+
+    /* ========= Sub-Phase 51.2: Real-time Multiplayer Wiring ========= */
+
+    /* --- Task 2: Presence bar renderer --- */
+    function _rtHashColor(str) {
+        var colors = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
+        var hash = 0;
+        for (var i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) & 0xffffffff;
+        return colors[Math.abs(hash) % colors.length];
+    }
+
+    function renderPresenceBar(peers) {
+        var bar = document.getElementById('presence-bar');
+        if (!bar) return;
+        if (!peers || !peers.length) { bar.innerHTML = ''; return; }
+        bar.innerHTML = peers.map(function(p) {
+            var initials = (p.display_name || '?').substring(0, 2).toUpperCase();
+            var color    = _rtHashColor(p.user_id || p.display_name || '');
+            return '<div title="' + esc(p.display_name || 'Collaborator') + ' — live" ' +
+                'class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shadow-md flex-shrink-0 ring-2 ring-white transition-all" ' +
+                'style="background:' + color + '">' + esc(initials) + '</div>';
+        }).join('');
+    }
+
+    /* --- Task 2 & 3: Remote project update event → granular reconcile --- */
+    window.addEventListener('mbt:remote-project-update', function(evt) {
+        var record = evt.detail && evt.detail.record;
+        if (!record || !record.data) return;
+        var remoteBudget = record.data;
+        if (typeof budget === 'undefined' || !budget) return;
+
+        /* Only reconcile if this update is for the currently open project */
+        var localId  = budget.id || budget.projectName;
+        var remoteId = remoteBudget.id || remoteBudget.projectName;
+        if (!localId || !remoteId || localId !== remoteId) return;
+
+        /* Only apply if remote is strictly newer */
+        var remoteTime = remoteBudget.updated_at ? new Date(remoteBudget.updated_at).getTime() : 0;
+        var localTime  = budget.updated_at ? new Date(budget.updated_at).getTime() : 0;
+        if (remoteTime <= localTime) return;
+
+        /* --- Task 7: Offline Divergence Fork ---
+               If local has edits and remote jumped significantly ahead (> 5 min gap),
+               preserve local as an offline divergence copy before overwriting. */
+        var DIVERGE_THRESHOLD = 5 * 60 * 1000;
+        if (localTime > 0 && (remoteTime - localTime) > DIVERGE_THRESHOLD) {
+            var forkName = (budget.projectName || 'Budget') + ' (Offline Divergence)';
+            var forkKey  = storageKeyPrefix + forkName;
+            try {
+                var forkData = JSON.parse(JSON.stringify(budget));
+                forkData.projectName = forkName;
+                forkData.id = forkData.id ? forkData.id + '_fork' : forkName;
+                if (typeof localforage !== 'undefined') {
+                    localforage.setItem(forkKey, forkData).catch(function(e) {
+                        console.warn('[mBTRealtime] Divergence fork save failed', e);
+                    });
+                }
+                console.log('[mBTRealtime] Forked local budget as:', forkName);
+            } catch (e) {
+                console.warn('[mBTRealtime] Divergence fork failed', e);
+            }
+        }
+
+        /* Apply remote data into budget — granular diff to preserve cursor focus */
+        _applyRemoteDiff(remoteBudget);
+    });
+
+    /* --- Task 5: Granular DOM reconciliation — update only non-focused inputs --- */
+    function _applyRemoteDiff(remoteBudget) {
+        var changed = false;
+        /* Merge scalar top-level fields */
+        var scalars = ['projectName', 'currency', 'contingency', 'discount', 'taxRate', 'updated_at'];
+        for (var si = 0; si < scalars.length; si++) {
+            var f = scalars[si];
+            if (remoteBudget[f] !== undefined && remoteBudget[f] !== budget[f]) {
+                budget[f] = remoteBudget[f];
+                changed = true;
+            }
+        }
+        /* Replace categories array (line items live here) */
+        if (remoteBudget.categories) {
+            budget.categories = remoteBudget.categories;
+            changed = true;
+        }
+        /* Replace funding sources if present */
+        if (remoteBudget.fundingSources) {
+            budget.fundingSources = remoteBudget.fundingSources;
+            changed = true;
+        }
+        if (!changed) return;
+
+        /* Patch visible inputs that are NOT currently focused — avoids wiping active cursor */
+        var focusedEl = document.activeElement;
+        var inputs = document.querySelectorAll('input[data-id][data-field], input[data-id][data-section]');
+        for (var ii = 0; ii < inputs.length; ii++) {
+            var inp = inputs[ii];
+            if (inp === focusedEl) continue;
+            /* Find the corresponding value in the updated budget */
+            var itemId  = inp.getAttribute('data-id');
+            var field   = inp.getAttribute('data-field');
+            var section = inp.getAttribute('data-section');
+            if (!itemId || !field) continue;
+            var newVal = _findItemFieldValue(itemId, section, field);
+            if (newVal !== null && String(inp.value) !== String(newVal)) {
+                inp.value = newVal;
+            }
+        }
+
+        /* Trigger logic reconciliation to refresh totals and summaries */
+        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+        /* Persist the merged state locally */
+        if (typeof saveBudget === 'function') saveBudget();
+    }
+
+    function _findItemFieldValue(itemId, section, field) {
+        if (!budget || !budget.categories) return null;
+        var cats = budget.categories;
+        for (var ci = 0; ci < cats.length; ci++) {
+            var cat = cats[ci];
+            var items = cat.items || cat.lineItems || [];
+            for (var li = 0; li < items.length; li++) {
+                var item = items[li];
+                if (String(item.id) === String(itemId)) {
+                    return item[field] !== undefined ? item[field] : null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /* --- Task 2: Re-render presence bar when peers change --- */
+    window.addEventListener('mbt:presence-update', function(evt) {
+        var peers = evt.detail && evt.detail.peers;
+        renderPresenceBar(peers || []);
+    });
+
+    /* --- Task 4: Typing lock — visually disable rows locked by peers --- */
+    window.addEventListener('mbt:peer-typing', function(evt) {
+        var fieldId     = evt.detail && evt.detail.fieldId;
+        var displayName = (evt.detail && evt.detail.displayName) || 'Peer';
+        if (!fieldId) return;
+        var inp = document.querySelector('[data-id="' + CSS.escape(fieldId.split('_')[0]) + '"][data-field="' + CSS.escape(fieldId.split('_').slice(1).join('_')) + '"]');
+        if (!inp) return;
+        inp.style.backgroundColor = 'rgba(253, 186, 116, 0.35)';
+        inp.style.pointerEvents   = 'none';
+        inp.title = displayName + ' is editing this field';
+    });
+
+    window.addEventListener('mbt:peer-release', function(evt) {
+        var fieldId = evt.detail && evt.detail.fieldId;
+        if (!fieldId) return;
+        var inp = document.querySelector('[data-id="' + CSS.escape(fieldId.split('_')[0]) + '"][data-field="' + CSS.escape(fieldId.split('_').slice(1).join('_')) + '"]');
+        if (!inp) return;
+        inp.style.backgroundColor = '';
+        inp.style.pointerEvents   = '';
+        inp.title = '';
+    });
+
+    /* --- Task 4: Broadcast typing lock/release via event delegation on budget rows ---
+           Uses data-id + data-field as the composite field identifier. --- */
+    document.addEventListener('focusin', function(e) {
+        var inp = e.target;
+        if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
+            !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
+        var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
+        if (mBTRealtime.isFieldLocked(fieldId)) {
+            inp.blur(); /* Prevent editing a peer-locked field */
+            return;
+        }
+        mBTRealtime.broadcastTypingLock(fieldId);
+    });
+
+    document.addEventListener('focusout', function(e) {
+        var inp = e.target;
+        if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
+            !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
+        var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
+        mBTRealtime.broadcastTypingRelease(fieldId);
+    });
+
     /* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
     // ... (Keep fetchExchangeRates and Mathematical Utilities) ...
@@ -1973,6 +2188,8 @@
             <div class="flex items-center gap-4 w-full md:w-auto flex-grow">
                 <input type="text" id="projectName" value="${budget.projectName}" class="text-2xl sm:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter" />
                 <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>
+                <!-- Sub-Phase 51.2: Live presence avatars — populated by mbt:presence-update -->
+                <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>
             </div>
             <div id="project-management-container" class="w-full md:w-auto flex-shrink-0"></div>
         </header>
@@ -6593,6 +6810,14 @@ _renderTalent: function(docId, d) {
                         .catch(function(e){ console.warn('[mBT] Sync post-login error', e); });
                 }
             }).then(function () {
+                /* Sub-Phase 51.2: Connect realtime and subscribe to current project */
+                if (window.mBTRealtime) {
+                    mBTRealtime.connect();
+                    if (typeof budget !== 'undefined' && budget) {
+                        var rtId = budget.id || budget.projectName;
+                        if (rtId) mBTRealtime.subscribeToProject(rtId);
+                    }
+                }
                 mBT.features.settings.open('cloud');
             }).catch(function (e) {
                 if (errEl) { errEl.textContent = e.message || 'Sign-in failed.'; errEl.classList.remove('hidden'); }
@@ -6624,6 +6849,14 @@ _renderTalent: function(docId, d) {
                     mBTME.alert('Verification Required', 'Please check your email to confirm your account before signing in.');
                 }
             }).then(function () {
+                /* Sub-Phase 51.2: Connect realtime on new account with session */
+                if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
+                    mBTRealtime.connect();
+                    if (typeof budget !== 'undefined' && budget) {
+                        var rtId = budget.id || budget.projectName;
+                        if (rtId) mBTRealtime.subscribeToProject(rtId);
+                    }
+                }
                 localStorage.setItem('mbt_auth_view', 'login');
                 mBT.features.settings.open('cloud');
             }).catch(function (e) {
@@ -6674,6 +6907,8 @@ _renderTalent: function(docId, d) {
 
         cloudSignOut: function() {
             if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+            /* Sub-Phase 51.2: Disconnect realtime before clearing auth tokens */
+            if (window.mBTRealtime) mBTRealtime.disconnect();
             mBTSync.signOut().then(function () {
                 mBT.features.settings.open('cloud');
             }).catch(function (e) {
@@ -8968,6 +9203,13 @@ window.updateAllHeaders = () => {
 
         // Phase 16: Hybrid Tool Loader — opens sub-PWAs in internal modal or new tab
         window.openTool = function(url) {
+            /* Lifecycle sync: push local changes before handing off to a tool.
+               Sub-Phase 51.2 Task 8: Skip REST push when realtime is live — it
+               propagates changes in real-time, so an immediate REST push is redundant. */
+            var _rtLive = window.mBTRealtime && mBTRealtime.isConnected();
+            if (!_rtLive && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
+                mBTSync.pushAll().catch(function(e) { console.warn('[mBT] Lifecycle push on tool open failed:', e); });
+            }
             var isInternal = localStorage.getItem('mBT_openToolsInternal');
             // Default true if not set
             if (isInternal === null) isInternal = 'true';
@@ -9005,6 +9247,12 @@ window.updateAllHeaders = () => {
                 mBT.data.load(currentProjectName);
             } else if (e.data.action === 'close-tool') {
                 if (typeof mBTME !== 'undefined' && mBTME.close) mBTME.close('tool-window');
+                /* Lifecycle sync: push any changes made inside the tool back to cloud.
+                   Sub-Phase 51.2 Task 8: Skip if realtime is live (changes already propagated). */
+                var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
+                if (!_rtLiveClose && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
+                    mBTSync.pushAll().catch(function(e) { console.warn('[mBT] Lifecycle push on tool close failed:', e); });
+                }
             }
         });
     }
