@@ -254,12 +254,14 @@
             return d.innerHTML;
         }
 
-        /* --- Currency Format (uses mBTLE if loaded, else USD fallback) --- */
+        /* --- Currency Format (reads currency from URL param passed by parent budget) --- */
         function fmt(n) {
-            if (window.mBTLE && typeof window.mBTLE.formatCurrency === 'function') {
-                return window.mBTLE.formatCurrency(n);
+            var code = (mBTStageStudio && mBTStageStudio.state && mBTStageStudio.state._currency) ? mBTStageStudio.state._currency : 'JMD';
+            try {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+            } catch(e) {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
             }
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
         }
 
         /* ========= STAGE_PRESETS (from mBT-Old.html L739) ========= */
@@ -488,6 +490,7 @@
                 /* Prefer localforage key (shell bridge) over mBT_DB projectId */
                 self.state._projectKey = params.get('projectKey') || null;
                 self.state.projectId   = params.get('projectId') || null;
+                self.state._currency   = params.get('currency') || 'JMD';
 
                 /* Phase 50C.8: Dispatch tool focus to parent presence channel */
                 function dispatchFocus() {
@@ -502,9 +505,10 @@
                 dom.getElementById('btn-back').addEventListener('click', function() {
                     if (window.parent && window.parent !== window) {
                         window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
-                    } else {
-                        window.history.back();
-                    }
+    } else {
+      /* Fallback for standalone direct-launch */
+      window.location.href = '../../../index.html';
+    }
                 });
 
                 /* Carousel grab-scroll */

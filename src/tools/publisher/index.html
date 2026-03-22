@@ -214,13 +214,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       setTimeout(function () { el.classList.add('hidden'); }, 4000);
     }
 
+    // ─── Phase 50C.8: Peripheral Focus Presence ──────────────────────────────────
+    function dispatchFocus() {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'publisher' } }, '*');
+      }
+    }
+    dispatchFocus();
+    window.addEventListener('focus', dispatchFocus);
+
     // ─── Back button ─────────────────────────────────────────────────────────────
     dom.getElementById('btn-back').addEventListener('click', function () {
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
-      } else {
-        window.history.back();
-      }
+    } else {
+      /* Fallback for standalone direct-launch */
+      window.location.href = '../../../index.html';
+    }
     });
 
     // ─── 1. Boot: read URL params, load project ──────────────────────────────────

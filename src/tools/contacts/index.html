@@ -647,13 +647,23 @@ var mBTContacts = (function () {
         if (w) { w.document.write(html); w.document.close(); }
     }
 
+    /* ========= Phase 50C.8: Peripheral Focus Presence ========= */
+    function dispatchFocus() {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'contacts' } }, '*');
+        }
+    }
+    dispatchFocus();
+    window.addEventListener('focus', dispatchFocus);
+
     /* ========= Init ========= */
     dom.getElementById('btn-back').addEventListener('click', function () {
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
-        } else {
-            history.back();
-        }
+    } else {
+      /* Fallback for standalone direct-launch */
+      window.location.href = '../../../index.html';
+    }
     });
 
     dom.getElementById('btn-add-contact').addEventListener('click', function () { showAddContactModal(); });
