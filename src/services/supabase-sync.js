@@ -355,10 +355,32 @@
             var storeName = storeNames[i];
             var tableName = schema[storeName];
             try {
+                // Phase 51: Fetch remote projects to handle offline name collisions before push
+                let remoteNames = null;
+                if (storeName === 'mbt_projects') {
+                    try {
+                        let remoteProj = await sbFetchAll(tableName);
+                        remoteNames = {};
+                        for (let r of remoteProj) { if (r.data && r.data.name) remoteNames[r.data.name.toLowerCase()] = r.id; }
+                    } catch (e) {
+                        console.warn('[mBTSync] Could not pre-fetch remote projects for collision check', e);
+                    }
+                }
+
                 var records = await getLocalRecords(storeName);
                 for (var j = 0; j < records.length; j++) {
                     try {
                         let payload = records[j];
+                        
+                        // Phase 51: Name conflict resolution
+                        if (storeName === 'mbt_projects' && remoteNames && payload.name) {
+                            let lname = String(payload.name).toLowerCase();
+                            // If remote has this name but under a different ID, rename local to avoid user confusion
+                            if (remoteNames[lname] && remoteNames[lname] !== payload.id) {
+                                payload.name = payload.name + ' (Offline Sync)';
+                                await writeLocalRecord(storeName, payload);
+                            }
+                        }
                         
                         // Phase 46 Security: Privacy Filter
                         // Strip local contact information when pushing rate references to the OpenGate community pool
