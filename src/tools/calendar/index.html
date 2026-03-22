@@ -102,6 +102,9 @@
     </div>
 
 <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
 /* ========= mBT Production Calendar ========= */
 
 var mBTCalendar = (function () {
@@ -161,7 +164,7 @@ var mBTCalendar = (function () {
     function renderGantt(timeline) {
         var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
         if (totalDays === 0) {
-            document.getElementById('gantt-chart').innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the timeline.</p>';
+            dom.getElementById('gantt-chart').innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the timeline.</p>';
             return;
         }
         var html = '';
@@ -178,7 +181,7 @@ var mBTCalendar = (function () {
                 '<div class="text-[8px] text-slate-400 shrink-0 w-20 text-right">' + fmtDate(t.start) + '</div>' +
             '</div>';
         });
-        document.getElementById('gantt-chart').innerHTML = html;
+        dom.getElementById('gantt-chart').innerHTML = html;
     }
 
     function renderStageTable(timeline) {
@@ -191,12 +194,12 @@ var mBTCalendar = (function () {
                 '<td class="py-2 text-slate-500">' + (t.days > 0 ? fmtDate(t.end) : '—') + '</td>' +
             '</tr>';
         });
-        document.getElementById('stage-table-body').innerHTML = html;
+        dom.getElementById('stage-table-body').innerHTML = html;
     }
 
     function renderMilestones() {
-        var list = document.getElementById('milestones-list');
-        var empty = document.getElementById('no-milestones');
+        var list = dom.getElementById('milestones-list');
+        var empty = dom.getElementById('no-milestones');
         if (!state.milestones.length) {
             list.innerHTML = '';
             empty.classList.remove('hidden');
@@ -228,31 +231,31 @@ var mBTCalendar = (function () {
         state.projectKey = params.get('projectKey') || null;
 
         if (!state.projectKey) {
-            document.getElementById('no-project-msg').classList.remove('hidden');
-            document.getElementById('project-tag').textContent = 'No Project';
+            dom.getElementById('no-project-msg').classList.remove('hidden');
+            dom.getElementById('project-tag').textContent = 'No Project';
             return;
         }
 
         localforage.getItem(state.projectKey).then(function (budget) {
             if (!budget) {
-                document.getElementById('no-project-msg').classList.remove('hidden');
-                document.getElementById('project-tag').textContent = 'Not Found';
+                dom.getElementById('no-project-msg').classList.remove('hidden');
+                dom.getElementById('project-tag').textContent = 'Not Found';
                 return;
             }
             state.budget = budget;
             state.milestones = budget.calendarNotes || [];
 
-            document.getElementById('project-tag').textContent = budget.projectName || '—';
-            document.getElementById('label-project').textContent = budget.projectName || '—';
-            document.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
-            document.getElementById('label-delivery').textContent = budget.deliveryDate ? fmtDate(parseDate(budget.deliveryDate)) : 'Not set';
+            dom.getElementById('project-tag').textContent = budget.projectName || '—';
+            dom.getElementById('label-project').textContent = budget.projectName || '—';
+            dom.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
+            dom.getElementById('label-delivery').textContent = budget.deliveryDate ? fmtDate(parseDate(budget.deliveryDate)) : 'Not set';
 
             var timeline = calcTimeline(budget);
             var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
-            document.getElementById('total-days-label').textContent = totalDays + ' total days';
+            dom.getElementById('total-days-label').textContent = totalDays + ' total days';
 
             ['date-summary','gantt-section','milestones-section','stage-table-section'].forEach(function (id) {
-                document.getElementById(id).classList.remove('hidden');
+                dom.getElementById(id).classList.remove('hidden');
             });
 
             if (timeline) {
@@ -268,7 +271,7 @@ var mBTCalendar = (function () {
         init: function () {
             load();
 
-            document.getElementById('btn-back').addEventListener('click', function () {
+            dom.getElementById('btn-back').addEventListener('click', function () {
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
                 } else {
@@ -276,14 +279,14 @@ var mBTCalendar = (function () {
                 }
             });
 
-            document.getElementById('btn-add-milestone').addEventListener('click', function () {
+            dom.getElementById('btn-add-milestone').addEventListener('click', function () {
                 var id = 'ms_' + Date.now();
                 state.milestones.push({ id: id, date: new Date().toISOString().slice(0, 10), title: '' });
                 renderMilestones();
                 save();
             });
 
-            document.getElementById('btn-export-ics').addEventListener('click', function () {
+            dom.getElementById('btn-export-ics').addEventListener('click', function () {
                 exportICS();
             });
         },

@@ -377,6 +377,9 @@
 </div>
 
 <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
 (function () {
   'use strict';
 
@@ -461,7 +464,7 @@
   var urlCurrency = params.get('currency');
   if (urlCurrency) {
     currency = urlCurrency;
-    var sel = document.getElementById('opt-currency');
+    var sel = dom.getElementById('opt-currency');
     if (sel) sel.value = urlCurrency;
   }
   conversionRate = getRate(currency);
@@ -475,16 +478,16 @@
   }
 
   /* ======== Back Button ======== */
-  document.getElementById('btn-back').addEventListener('click', function () {
+  dom.getElementById('btn-back').addEventListener('click', function () {
     if (window.mBTEmbedded && window.mBTBridge) window.mBTBridge.send('close-tool', {});
     else window.location.href = '../../index.html';
   });
 
   /* ======== Rate UI ======== */
   function updateRateUI() {
-    var wrap = document.getElementById('rate-wrap');
-    var rateInput = document.getElementById('opt-rate');
-    var hint = document.getElementById('rate-hint');
+    var wrap = dom.getElementById('rate-wrap');
+    var rateInput = dom.getElementById('opt-rate');
+    var hint = dom.getElementById('rate-hint');
     if (currency === BASE_CURRENCY) {
       wrap.style.display = 'none';
     } else {
@@ -494,17 +497,17 @@
     }
   }
 
-  document.getElementById('opt-rate').addEventListener('input', function () {
+  dom.getElementById('opt-rate').addEventListener('input', function () {
     var v = parseFloat(this.value);
     if (!v || v <= 0) return;
     conversionRate = v;
     saveRate(currency, v);
-    document.getElementById('rate-hint').textContent = '1 ' + BASE_CURRENCY + ' = ' + v + ' ' + currency;
+    dom.getElementById('rate-hint').textContent = '1 ' + BASE_CURRENCY + ' = ' + v + ' ' + currency;
     if (activeTab === 'preview' && activeTemplateId) renderPreview();
   });
 
   /* ======== Currency ======== */
-  document.getElementById('opt-currency').addEventListener('change', function () {
+  dom.getElementById('opt-currency').addEventListener('change', function () {
     currency = this.value;
     conversionRate = getRate(currency);
     updateRateUI();
@@ -512,7 +515,7 @@
   });
 
   /* ======== Tab Switching ======== */
-  document.getElementById('tab-bar').addEventListener('click', function (e) {
+  dom.getElementById('tab-bar').addEventListener('click', function (e) {
     var btn = e.target.closest('.tab-btn');
     if (!btn) return;
     var tab = btn.getAttribute('data-tab');
@@ -521,11 +524,11 @@
 
   function setActiveTab(tab) {
     activeTab = tab;
-    document.querySelectorAll('#tab-bar .tab-btn').forEach(function (b) {
+    dom.querySelectorAll('#tab-bar .tab-btn').forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-tab') === tab);
     });
-    var editor = document.getElementById('editor-panel');
-    var preview = document.getElementById('preview-frame-wrap');
+    var editor = dom.getElementById('editor-panel');
+    var preview = dom.getElementById('preview-frame-wrap');
     if (tab === 'edit') {
       editor.style.display = 'block';
       preview.style.display = 'none';
@@ -560,7 +563,7 @@
   function loadLogo(cb) {
     localforage.getItem(logoKey()).then(function (val) {
       logoData = val || null;
-      var preview = document.getElementById('brand-logo-preview');
+      var preview = dom.getElementById('brand-logo-preview');
       if (preview) {
         if (logoData) { preview.src = logoData; preview.style.display = 'block'; }
         else { preview.src = ''; preview.style.display = 'none'; }
@@ -575,9 +578,9 @@
   function clearLogo(cb) {
     logoData = null;
     localforage.removeItem(logoKey()).then(function () {
-      var preview = document.getElementById('brand-logo-preview');
+      var preview = dom.getElementById('brand-logo-preview');
       if (preview) { preview.src = ''; preview.style.display = 'none'; }
-      var fileInput = document.getElementById('brand-logo-input');
+      var fileInput = dom.getElementById('brand-logo-input');
       if (fileInput) fileInput.value = '';
       if (cb) cb();
     }).catch(function () { if (cb) cb(); });
@@ -587,7 +590,7 @@
   function themeKey() { return 'mbtdb_theme_' + (projectKey || 'default'); }
   function loadTheme() {
     docTheme = localStorage.getItem(themeKey()) || '';
-    var sel = document.getElementById('theme-select');
+    var sel = dom.getElementById('theme-select');
     if (sel) sel.value = docTheme;
   }
   function saveTheme(val) {
@@ -645,11 +648,11 @@
     if (docs.length > 50) docs.length = 50;
     setSavedDocs(docs);
     buildSavedDocsList();
-    var btn = document.getElementById('btn-save-doc');
+    var btn = dom.getElementById('btn-save-doc');
     if (btn) { var orig = btn.innerHTML; btn.innerHTML = orig.replace('Save', 'Saved ✓'); setTimeout(function () { btn.innerHTML = orig; }, 1200); }
   }
   function buildSavedDocsList() {
-    var savedList = document.getElementById('saved-list');
+    var savedList = dom.getElementById('saved-list');
     if (!savedList) return;
     var docs = getSavedDocs();
     if (docs.length === 0) {
@@ -675,16 +678,16 @@
         if (!tmplMeta) return;
         activeTemplateId = d.templateId;
         editorData = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
-        document.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
-        var matchCard = document.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
+        dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
+        var matchCard = dom.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
         if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
-        var titleEl = document.getElementById('preview-toolbar-title');
+        var titleEl = dom.getElementById('preview-toolbar-title');
         if (titleEl) titleEl.textContent = tmplMeta.name;
         /* 45.2 — Dynamic topbar title shows saved doc title */
-        var topTitle = document.getElementById('topbar-title');
+        var topTitle = dom.getElementById('topbar-title');
         if (topTitle) topTitle.textContent = d.title || tmplMeta.name;
         buildEditor(activeTemplateId);
-        var tabBar = document.getElementById('tab-bar');
+        var tabBar = dom.getElementById('tab-bar');
         if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
         setActiveTab('edit');
         switchPickerView('templates');
@@ -721,11 +724,11 @@
 
   /* ======== Picker View Toggle ======== */
   function switchPickerView(view) {
-    var tmplList = document.getElementById('tmpl-list');
-    var savedList = document.getElementById('saved-list');
-    var searchWrap = document.getElementById('picker-search-wrap');
-    var mobileSelect = document.getElementById('picker-mobile-select');
-    document.querySelectorAll('.picker-tab').forEach(function (btn) {
+    var tmplList = dom.getElementById('tmpl-list');
+    var savedList = dom.getElementById('saved-list');
+    var searchWrap = dom.getElementById('picker-search-wrap');
+    var mobileSelect = dom.getElementById('picker-mobile-select');
+    dom.querySelectorAll('.picker-tab').forEach(function (btn) {
       btn.classList.toggle('active', btn.getAttribute('data-view') === view);
     });
     if (view === 'saved') {
@@ -750,7 +753,7 @@
 
   /* ======== Preflight Check ======== */
   function updatePreflight() {
-    var badge = document.getElementById('preflight-badge');
+    var badge = dom.getElementById('preflight-badge');
     if (!badge) return;
     var required = PREFLIGHT_FIELDS[activeTemplateId];
     if (!required || !editorData) { badge.style.display = 'none'; return; }
@@ -768,7 +771,7 @@
   }
 
   /* ======== CSV Export ======== */
-  document.getElementById('btn-csv').addEventListener('click', function () {
+  dom.getElementById('btn-csv').addEventListener('click', function () {
     if (!editorData || !activeTemplateId) return;
     var rows, filename;
     if (activeTemplateId === 'crewList') {
@@ -809,7 +812,7 @@
   });
 
   /* ======== XLSX Export ======== */
-  document.getElementById('btn-xlsx').addEventListener('click', function () {
+  dom.getElementById('btn-xlsx').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
     if (!window.XLSX) { alert('XLSX library not loaded.'); return; }
     var XL = window.XLSX;
@@ -885,7 +888,7 @@
   });
 
   /* ======== Snapshot Button ======== */
-  document.getElementById('btn-snapshot').addEventListener('click', function () {
+  dom.getElementById('btn-snapshot').addEventListener('click', function () {
     if (!budget) return;
     var name = prompt('Snapshot name (e.g. "Original", "Revised v2"):');
     if (!name || !name.trim()) return;
@@ -898,7 +901,7 @@
   });
 
   /* ======== Export Package Button ======== */
-  document.getElementById('btn-package').addEventListener('click', function () {
+  dom.getElementById('btn-package').addEventListener('click', function () {
     if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -912,7 +915,7 @@
   });
 
   /* ======== Export All Financial Button ======== */
-  document.getElementById('btn-all-financial').addEventListener('click', function () {
+  dom.getElementById('btn-all-financial').addEventListener('click', function () {
     if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -926,7 +929,7 @@
   });
 
   /* ======== PDF (Alt) — jsPDF autoTable ======== */
-  document.getElementById('btn-pdf-jspdf').addEventListener('click', function () {
+  dom.getElementById('btn-pdf-jspdf').addEventListener('click', function () {
     if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -955,7 +958,7 @@
     var byId = {};
     templates.forEach(function (t) { byId[t.id] = t; });
     var recent = getRecentTemplates();
-    var list = document.getElementById('tmpl-list');
+    var list = dom.getElementById('tmpl-list');
     list.innerHTML = '';
     list.setAttribute('role', 'listbox');
 
@@ -981,7 +984,7 @@
     });
 
     /* Search filter */
-    var searchInput = document.getElementById('picker-search');
+    var searchInput = dom.getElementById('picker-search');
     if (searchInput) {
       searchInput.addEventListener('input', function () {
         var q = this.value.trim().toLowerCase();
@@ -1002,17 +1005,17 @@
     }
 
     /* Picker tab wiring */
-    document.getElementById('picker-tabs').addEventListener('click', function (e) {
+    dom.getElementById('picker-tabs').addEventListener('click', function (e) {
       var btn = e.target.closest('.picker-tab');
       if (!btn) return;
       switchPickerView(btn.getAttribute('data-view'));
     });
 
     /* Brand panel wiring */
-    var brandToggle = document.getElementById('brand-toggle');
-    var brandPanel = document.getElementById('brand-panel');
-    var brandNameInput = document.getElementById('brand-name-input');
-    var brandAddrInput = document.getElementById('brand-addr-input');
+    var brandToggle = dom.getElementById('brand-toggle');
+    var brandPanel = dom.getElementById('brand-panel');
+    var brandNameInput = dom.getElementById('brand-name-input');
+    var brandAddrInput = dom.getElementById('brand-addr-input');
     var brand = loadBrandSettings();
     brandSettings = brand;
     if (brandNameInput) brandNameInput.value = brand.name || '';
@@ -1032,7 +1035,7 @@
     /* Watermark wiring */
     var wmKey = 'mbtdb_wm_' + (projectKey || 'default');
     watermark = localStorage.getItem(wmKey) || '';
-    var wmSel = document.getElementById('watermark-select');
+    var wmSel = dom.getElementById('watermark-select');
     if (wmSel) {
       wmSel.value = watermark;
       wmSel.addEventListener('change', function () {
@@ -1044,7 +1047,7 @@
 
     /* Theme selector wiring */
     loadTheme();
-    var themeSel = document.getElementById('theme-select');
+    var themeSel = dom.getElementById('theme-select');
     if (themeSel) {
       themeSel.addEventListener('change', function () {
         saveTheme(this.value);
@@ -1056,7 +1059,7 @@
     loadLogo(function () {
       if (activeTab === 'preview' && activeTemplateId) renderPreview();
     });
-    var logoInput = document.getElementById('brand-logo-input');
+    var logoInput = dom.getElementById('brand-logo-input');
     if (logoInput) {
       logoInput.addEventListener('change', function () {
         var file = this.files && this.files[0];
@@ -1064,7 +1067,7 @@
         var reader = new FileReader();
         reader.onload = function (ev) {
           var dataUrl = ev.target.result;
-          var preview = document.getElementById('brand-logo-preview');
+          var preview = dom.getElementById('brand-logo-preview');
           if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
           saveLogo(dataUrl, function () {
             if (activeTab === 'preview' && activeTemplateId) renderPreview();
@@ -1073,7 +1076,7 @@
         reader.readAsDataURL(file);
       });
     }
-    var logoClear = document.getElementById('brand-logo-clear');
+    var logoClear = dom.getElementById('brand-logo-clear');
     if (logoClear) {
       logoClear.addEventListener('click', function () {
         clearLogo(function () {
@@ -1083,10 +1086,10 @@
     }
 
     /* Save doc button wiring */
-    document.getElementById('btn-save-doc').addEventListener('click', saveDocument);
+    dom.getElementById('btn-save-doc').addEventListener('click', saveDocument);
 
     /* 45.1 — Build mobile template select (shown on mobile, hidden on desktop) */
-    var mobileSelect = document.getElementById('picker-mobile-select');
+    var mobileSelect = dom.getElementById('picker-mobile-select');
     if (mobileSelect) {
       mobileSelect.innerHTML = '';
       var blankOpt = document.createElement('option');
@@ -1111,16 +1114,16 @@
       mobileSelect.addEventListener('change', function () {
         var t = byId[this.value];
         if (!t) return;
-        document.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
-        var matchCard = document.querySelector('.tmpl-card[data-id="' + t.id + '"]');
+        dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
+        var matchCard = dom.querySelector('.tmpl-card[data-id="' + t.id + '"]');
         if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
         selectTemplate(t);
       });
     }
 
     /* 45.3 — Wire More overflow button */
-    var moreBtn = document.getElementById('btn-more-overflow');
-    var overflowPanel = document.getElementById('overflow-btns');
+    var moreBtn = dom.getElementById('btn-more-overflow');
+    var overflowPanel = dom.getElementById('overflow-btns');
     if (moreBtn && overflowPanel) {
       moreBtn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -1152,7 +1155,7 @@
       '<div class="tmpl-card-desc">' + esc(t.description) + '</div>' +
       '<div class="tmpl-card-formats">' + badges + '</div>';
     card.addEventListener('click', function () {
-      document.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
+      dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
       card.classList.add('active');
       card.setAttribute('aria-selected', 'true');
       selectTemplate(t);
@@ -1170,7 +1173,7 @@
     loadPromise.then(function (data) {
       if (!data) { return; } /* Project key given but not found — keep empty state */
       budget = data;
-      var nameEl = document.getElementById('topbar-project');
+      var nameEl = dom.getElementById('topbar-project');
       if (nameEl) nameEl.textContent = data.projectName || 'Untitled';
       /* Re-render active template now that budget is available */
       if (activeTemplateId && activeTab === 'preview') renderPreview();
@@ -1184,40 +1187,40 @@
     activeTemplateId = tmplMeta.id;
     /* Clear unsaved state on template switch */
     hasUnsaved = false;
-    var dot = document.getElementById('unsaved-dot');
-    var ind = document.getElementById('save-indicator');
+    var dot = dom.getElementById('unsaved-dot');
+    var ind = dom.getElementById('save-indicator');
     if (dot) dot.style.display = 'none';
     if (ind) ind.style.display = 'none';
-    var titleEl = document.getElementById('preview-toolbar-title');
+    var titleEl = dom.getElementById('preview-toolbar-title');
     if (titleEl) titleEl.textContent = tmplMeta.name;
 
     /* 45.2 — Dynamic topbar title */
-    var topTitle = document.getElementById('topbar-title');
+    var topTitle = dom.getElementById('topbar-title');
     if (topTitle) topTitle.textContent = tmplMeta.name;
 
     /* 45.1 — Sync mobile select */
-    var mSel = document.getElementById('picker-mobile-select');
+    var mSel = dom.getElementById('picker-mobile-select');
     if (mSel) mSel.value = tmplMeta.id;
 
     /* 45.3 — Close overflow panel on template switch */
-    var ob = document.getElementById('overflow-btns');
+    var ob = dom.getElementById('overflow-btns');
     if (ob) ob.classList.remove('open');
 
     /* Track recently used + toggle Save/CSV/XLSX buttons */
     addRecentTemplate(tmplMeta.id);
-    var btnSave     = document.getElementById('btn-save-doc');
-    var btnCsv      = document.getElementById('btn-csv');
-    var btnXlsx     = document.getElementById('btn-xlsx');
-    var btnSnapshot = document.getElementById('btn-snapshot');
-    var btnPackage  = document.getElementById('btn-package');
+    var btnSave     = dom.getElementById('btn-save-doc');
+    var btnCsv      = dom.getElementById('btn-csv');
+    var btnXlsx     = dom.getElementById('btn-xlsx');
+    var btnSnapshot = dom.getElementById('btn-snapshot');
+    var btnPackage  = dom.getElementById('btn-package');
     if (btnSave)     btnSave.style.display     = tmplMeta.hasEditor ? 'inline-flex' : 'none';
     if (btnCsv)      btnCsv.style.display      = (CSV_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
     if (btnXlsx)     btnXlsx.style.display     = (XLSX_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
     if (btnSnapshot) btnSnapshot.style.display = budget ? 'inline-flex' : 'none';
     if (btnPackage)  btnPackage.style.display  = budget ? 'inline-flex' : 'none';
 
-    var tabBar = document.getElementById('tab-bar');
-    var editor = document.getElementById('editor-panel');
+    var tabBar = dom.getElementById('tab-bar');
+    var editor = dom.getElementById('editor-panel');
 
     if (tmplMeta.hasEditor) {
       tabBar.style.display = 'inline-flex';
@@ -1230,7 +1233,7 @@
       tabBar.style.display = 'none';
       editorData = null;
       editor.style.display = 'none';
-      document.getElementById('preview-frame-wrap').style.display = 'flex';
+      dom.getElementById('preview-frame-wrap').style.display = 'flex';
       activeTab = 'preview';
       updatePreflight();
       renderPreview();
@@ -1245,8 +1248,8 @@
       return;
     }
     var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
-    var frame = document.getElementById('preview-frame');
-    var empty = document.getElementById('empty-state');
+    var frame = dom.getElementById('preview-frame');
+    var empty = dom.getElementById('empty-state');
     if (empty) empty.style.display = 'none';
     frame.style.display = 'block';
     /* onload fires after doc.close() — more reliable than a fixed timeout */
@@ -1266,7 +1269,7 @@
     return o;
   }
 
-  document.getElementById('btn-pdf').addEventListener('click', function () {
+  dom.getElementById('btn-pdf').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -1278,7 +1281,7 @@
     else { setTimeout(done, 4000); }
   });
 
-  document.getElementById('btn-print').addEventListener('click', function () {
+  dom.getElementById('btn-print').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -1293,7 +1296,7 @@
     setTimeout(function () { win.print(); btn.disabled = false; btn.innerHTML = origHtml; }, 400);
   });
 
-  document.getElementById('btn-html').addEventListener('click', function () {
+  dom.getElementById('btn-html').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
@@ -1333,8 +1336,8 @@
 
   function markUnsaved() {
     hasUnsaved = true;
-    var dot = document.getElementById('unsaved-dot');
-    var ind = document.getElementById('save-indicator');
+    var dot = dom.getElementById('unsaved-dot');
+    var ind = dom.getElementById('save-indicator');
     if (dot) dot.style.display = 'inline-block';
     if (ind) { ind.style.display = 'inline-flex'; ind.title = 'Unsaved changes'; }
   }
@@ -1347,8 +1350,8 @@
       var key = storageKey(activeTemplateId);
       localforage.setItem(key, editorData).then(function () {
         hasUnsaved = false;
-        var dot = document.getElementById('unsaved-dot');
-        var ind = document.getElementById('save-indicator');
+        var dot = dom.getElementById('unsaved-dot');
+        var ind = dom.getElementById('save-indicator');
         if (dot) dot.style.display = 'none';
         if (ind) { ind.style.display = 'inline-flex'; ind.title = ''; }
         setTimeout(function () { if (!hasUnsaved && ind) ind.style.display = 'none'; }, 1200);
@@ -1374,7 +1377,7 @@
 
   /* ======== Build Editor (dispatcher) ======== */
   function buildEditor(templateId) {
-    var panel = document.getElementById('editor-panel');
+    var panel = dom.getElementById('editor-panel');
     var d = editorData;
     var html;
     if (templateId === 'callSheet') {
@@ -2160,8 +2163,8 @@
 
   /* ======== Empty State ======== */
   function showEmpty(msg) {
-    var empty = document.getElementById('empty-state');
-    var frame = document.getElementById('preview-frame');
+    var empty = dom.getElementById('empty-state');
+    var frame = dom.getElementById('preview-frame');
     if (frame) frame.style.display = 'none';
     if (empty) {
       empty.style.display = 'flex';
@@ -2232,14 +2235,14 @@
     var locations = (editorData && editorData.shootingLocations || [])
       .map(function (loc) { return (loc.address || '').trim(); }).filter(Boolean);
     if (locations.length === 0) {
-      var locInput = document.querySelector('[data-arr="shootingLocations"][data-f="address"]');
+      var locInput = dom.querySelector('[data-arr="shootingLocations"][data-f="address"]');
       var fallback = locInput ? locInput.value.trim() : '';
       if (fallback) locations = [fallback];
     }
     if (locations.length === 0) { alert('Enter a shooting location address first.'); return; }
 
-    var statusEl = document.getElementById('weather-status');
-    var hospPicker = document.getElementById('hospital-picker');
+    var statusEl = dom.getElementById('weather-status');
+    var hospPicker = dom.getElementById('hospital-picker');
     statusEl.textContent = 'Geocoding ' + locations.length + ' location(s)\u2026';
     hospPicker.style.display = 'none';
 

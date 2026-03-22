@@ -115,6 +115,9 @@ button, a { min-height: 44px; }
   </div>
 
   <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
     (function () {
       var STORAGE = window.mBT.storage;
       var CONTACTS_STORE = 'mbt_contacts';
@@ -139,8 +142,8 @@ button, a { min-height: 44px; }
 
       // Render contacts for current filter
       function renderContacts() {
-        var list = document.getElementById('contacts-list');
-        var empty = document.getElementById('empty-state');
+        var list = dom.getElementById('contacts-list');
+        var empty = dom.getElementById('empty-state');
 
         list.innerHTML = '';
 
@@ -232,7 +235,7 @@ button, a { min-height: 44px; }
       // Load projects for filter dropdown
       function loadProjectsForFilter() {
         STORAGE.getItem(PROJECTS_STORE).then(projects => {
-          var filter = document.getElementById('project-filter');
+          var filter = dom.getElementById('project-filter');
           var projectMap = {};
           (projects || []).forEach(p => {
             if (!p.name) {
@@ -248,15 +251,15 @@ button, a { min-height: 44px; }
 
           filter.innerHTML = '<option value="">All Projects</option>' + options;
         }).catch(() => {
-          document.getElementById('project-filter').innerHTML = '<option value="">All Projects</option>';
+          dom.getElementById('project-filter').innerHTML = '<option value="">All Projects</option>';
         });
       }
 
       // Tab switching
-      document.querySelectorAll('.dept-tab').forEach(tab => {
+      dom.querySelectorAll('.dept-tab').forEach(tab => {
         tab.addEventListener('click', () => {
           // Update active state
-          document.querySelectorAll('.dept-tab').forEach(t => {
+          dom.querySelectorAll('.dept-tab').forEach(t => {
             t.classList.remove('bg-blue-600', 'text-white');
             t.classList.add('bg-gray-200', 'text-gray-700');
           });
@@ -269,7 +272,7 @@ button, a { min-height: 44px; }
       });
 
       // Project filter change
-      document.getElementById('project-filter').addEventListener('change', (e) => {
+      dom.getElementById('project-filter').addEventListener('change', (e) => {
         currentProjectId = e.target.value;
         renderContacts();
       });
@@ -350,20 +353,20 @@ button, a { min-height: 44px; }
       }
 
       function closeModal() {
-        var modal = document.getElementById('add-contact-modal');
+        var modal = dom.getElementById('add-contact-modal');
         if (modal) modal.remove();
       }
 
       function saveContact() {
-        var name = document.getElementById('contact-name').value;
-        var dept = document.getElementById('contact-dept').value;
-        var email = document.getElementById('contact-email').value;
-        var phone = document.getElementById('contact-phone').value;
-        var customRateStr = document.getElementById('contact-rate').value;
+        var name = dom.getElementById('contact-name').value;
+        var dept = dom.getElementById('contact-dept').value;
+        var email = dom.getElementById('contact-email').value;
+        var phone = dom.getElementById('contact-phone').value;
+        var customRateStr = dom.getElementById('contact-rate').value;
         var rate = customRateStr ? parseFloat(customRateStr) : STANDARD_RATES[dept];
-        var project = document.getElementById('contact-project').value;
-        var dietary = document.getElementById('contact-dietary').value.trim();
-        var allergies = document.getElementById('contact-allergies').value.trim();
+        var project = dom.getElementById('contact-project').value;
+        var dietary = dom.getElementById('contact-dietary').value.trim();
+        var allergies = dom.getElementById('contact-allergies').value.trim();
 
         if (!name) {
           alert('Name is required');
@@ -413,8 +416,8 @@ button, a { min-height: 44px; }
       }
 
       // Print handler
-      document.getElementById('print-contacts-btn').addEventListener('click', () => {
-        var query = document.getElementById('contact-search').value.toLowerCase();
+      dom.getElementById('print-contacts-btn').addEventListener('click', () => {
+        var query = dom.getElementById('contact-search').value.toLowerCase();
         var contactsToPrint = allContactsData;
         if (query) {
           contactsToPrint = allContactsData.filter(c => {
@@ -480,7 +483,7 @@ button, a { min-height: 44px; }
 
       // Search handler
       var searchTimeout = null;
-      document.getElementById('contact-search').addEventListener('input', (e) => {
+      dom.getElementById('contact-search').addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
           var query = e.target.value.toLowerCase();
@@ -499,7 +502,7 @@ button, a { min-height: 44px; }
 
 
       // Catering Summary handler
-      document.getElementById('catering-summary-btn').addEventListener('click', () => {
+      dom.getElementById('catering-summary-btn').addEventListener('click', () => {
         STORAGE.getItem(CONTACTS_STORE).then(contacts => {
           var all = contacts || [];
           var withDietary = all.filter(c => c.dietaryRestrictions || c.allergies);
@@ -533,7 +536,10 @@ button, a { min-height: 44px; }
   <thead><tr><th>Name</th><th>Department</th><th>Dietary Restrictions</th><th>Allergies</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
-<script>window.onload=()=>{window.print();window.close();}<\/script>
+<script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+window.onload=()=>{window.print();window.close();}<\/script>
 </body></html>`;
 
           var win = window.open('', '_blank');

@@ -9,29 +9,7 @@
   <script src="../../scripts/engine/mbtle.js"></script>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
-  <style type="text/tailwindcss">
-    /* mBT RSI Technical Debt Dashboard */
-:root {
-  --mBT-theme-primary: #1e88e5;
-  --mBT-theme-danger: #e53935;
-}
-
-.debt-item {
-  @apply bg-yellow-50 border border-yellow-200 rounded-lg p-4;
-}
-
-.debt-item.critical {
-  @apply bg-red-50 border border-red-200;
-}
-
-.debt-item.performance {
-  @apply bg-purple-50 border border-purple-200;
-}
-
-.debt-item.security {
-  @apply bg-orange-50 border border-orange-200;
-}
-</style>
+  <style type="text/tailwindcss">/* mBT RSI Technical Debt Dashboard */:root{--mBT-theme-primary:#1e88e5;--mBT-theme-danger:#e53935}.debt-item{@apply bg-yellow-50 border border-yellow-200 rounded-lg p-4}.debt-item.critical{@apply bg-red-50 border border-red-200}.debt-item.performance{@apply bg-purple-50 border border-purple-200}.debt-item.security{@apply bg-orange-50 border border-orange-200}</style>
 </head>
 
 <body class="bg-gray-50 font-sans">
@@ -195,6 +173,8 @@
 
   <script>
     (function () {
+      var dom = document.currentScript ? document.currentScript.getRootNode() : document;
+      if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var DEFAULT_DEBT_FILE = './DEBT.json';
       var DEBT_STORE = 'rsi_debt';
 
@@ -252,8 +232,8 @@
 
       // Render debt items
       function renderDebt(debt, filter = '') {
-        var list = document.getElementById('debt-list');
-        var empty = document.getElementById('empty-state');
+        var list = dom.getElementById('debt-list');
+        var empty = dom.getElementById('empty-state');
         list.innerHTML = '';
 
         var filtered = debt || [];
@@ -313,16 +293,16 @@
         var warning = total.filter(d => d.priority === 'warning').length;
         var resolved = total.filter(d => d.status === 'resolved').length;
 
-        document.getElementById('total-debt').textContent = total.length;
-        document.getElementById('critical-debt').textContent = critical;
-        document.getElementById('warning-debt').textContent = warning;
-        document.getElementById('resolved-debt').textContent = resolved;
+        dom.getElementById('total-debt').textContent = total.length;
+        dom.getElementById('critical-debt').textContent = critical;
+        dom.getElementById('warning-debt').textContent = warning;
+        dom.getElementById('resolved-debt').textContent = resolved;
       }
 
       // Filter tabs
-      document.querySelectorAll('.dept-tab').forEach(tab => {
+      dom.querySelectorAll('.dept-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-          document.querySelectorAll('.dept-tab').forEach(t => {
+          dom.querySelectorAll('.dept-tab').forEach(t => {
             t.classList.remove('bg-blue-600', 'text-white');
             t.classList.add('bg-gray-200', 'text-gray-700');
           });
@@ -335,29 +315,29 @@
       });
 
       // Add debt button
-      document.getElementById('btn-new-debt').addEventListener('click', () => {
-        document.getElementById('new-debt-modal').classList.remove('hidden');
+      dom.getElementById('btn-new-debt').addEventListener('click', () => {
+        dom.getElementById('new-debt-modal').classList.remove('hidden');
       });
 
       // Close modal
-      document.querySelector('#new-debt-modal button.close').addEventListener('click', () => {
-        document.getElementById('new-debt-modal').classList.add('hidden');
+      dom.querySelector('#new-debt-modal button.close').addEventListener('click', () => {
+        dom.getElementById('new-debt-modal').classList.add('hidden');
       });
 
-      document.querySelector('#new-debt-modal .px-4.py-2.bg-gray-200').addEventListener('click', () => {
-        document.getElementById('new-debt-modal').classList.add('hidden');
+      dom.querySelector('#new-debt-modal .px-4.py-2.bg-gray-200').addEventListener('click', () => {
+        dom.getElementById('new-debt-modal').classList.add('hidden');
       });
 
       // Create new debt item
-      document.getElementById('btn-create-debt').addEventListener('click', createNewDebt);
+      dom.getElementById('btn-create-debt').addEventListener('click', createNewDebt);
 
       // === NEW DEBT CREATION ===
       function createNewDebt() {
-        var title = document.getElementById('new-debt-title').value;
-        var category = document.getElementById('new-debt-category').value;
-        var priority = document.getElementById('new-debt-priority').value;
-        var description = document.getElementById('new-debt-description').value;
-        var estimatedHours = document.getElementById('new-debt-hours').value;
+        var title = dom.getElementById('new-debt-title').value;
+        var category = dom.getElementById('new-debt-category').value;
+        var priority = dom.getElementById('new-debt-priority').value;
+        var description = dom.getElementById('new-debt-description').value;
+        var estimatedHours = dom.getElementById('new-debt-hours').value;
 
         if (!title || !category || !priority) {
           alert('Title, category, and priority are required');
@@ -378,10 +358,10 @@
         STORAGE.getItem(DEBT_STORE).then(function (debt) {
           var updated = (debt || []).concat([debtItem]);
           STORAGE.setItem(DEBT_STORE, updated).then(function () {
-            document.getElementById('new-debt-modal').classList.add('hidden');
-            document.getElementById('new-debt-title').value = '';
-            document.getElementById('new-debt-description').value = '';
-            document.getElementById('new-debt-hours').value = '';
+            dom.getElementById('new-debt-modal').classList.add('hidden');
+            dom.getElementById('new-debt-title').value = '';
+            dom.getElementById('new-debt-description').value = '';
+            dom.getElementById('new-debt-hours').value = '';
             allDebtData = updated;
             renderDebt(updated, currentFilter);
             updateStats(updated);
@@ -451,7 +431,7 @@
       }
 
       function closeEditorModal() {
-        var modal = document.getElementById('edit-debt-modal');
+        var modal = dom.getElementById('edit-debt-modal');
         if (modal) modal.remove();
         currentDebt = null;
       }
@@ -459,11 +439,11 @@
       function saveDebtEditor() {
         if (!currentDebt) return;
 
-        var title = document.getElementById('edit-debt-title').value;
-        var category = document.getElementById('edit-debt-category').value;
-        var priority = document.getElementById('edit-debt-priority').value;
-        var description = document.getElementById('edit-debt-description').value;
-        var estimatedHours = document.getElementById('edit-debt-hours').value;
+        var title = dom.getElementById('edit-debt-title').value;
+        var category = dom.getElementById('edit-debt-category').value;
+        var priority = dom.getElementById('edit-debt-priority').value;
+        var description = dom.getElementById('edit-debt-description').value;
+        var estimatedHours = dom.getElementById('edit-debt-hours').value;
 
         var updated = {
           ...currentDebt,
@@ -536,6 +516,8 @@
   <script>
     /* ========= mBTRSI — Telemetry Consent UI ========= */
     window.mBTRSI = (function () {
+      var dom = document.currentScript ? document.currentScript.getRootNode() : document;
+      if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var CONSENT_KEY = 'mbt_telemetry_consent';
       var LOG_KEY = 'mbt_telemetry_log';
       var OG_SHARING_KEY = 'moo_og_sharing';
@@ -559,12 +541,12 @@
       /* --- Render consent section state from localStorage --- */
       function refreshConsentUI() {
         var isOn = localStorage.getItem(CONSENT_KEY) === '1';
-        var toggle = document.getElementById('telemetry-toggle');
-        var statusLabel = document.getElementById('telemetry-status-label');
-        var logPanel = document.getElementById('telemetry-log-panel');
-        var countEl = document.getElementById('telemetry-count');
-        var logList = document.getElementById('telemetry-log-list');
-        var ogBtn = document.getElementById('og-sharing-btn');
+        var toggle = dom.getElementById('telemetry-toggle');
+        var statusLabel = dom.getElementById('telemetry-status-label');
+        var logPanel = dom.getElementById('telemetry-log-panel');
+        var countEl = dom.getElementById('telemetry-count');
+        var logList = dom.getElementById('telemetry-log-list');
+        var ogBtn = dom.getElementById('og-sharing-btn');
 
         if (toggle) toggle.checked = isOn;
         if (statusLabel) statusLabel.textContent = isOn ? 'On' : 'Off';

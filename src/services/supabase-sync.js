@@ -101,13 +101,63 @@
 
     /* --- Helper to save auth state --- */
     function _handleAuthResponse(data, email) {
-        localStorage.setItem('mbt_supabase_auth_token', data.access_token);
-        localStorage.setItem('mbt_supabase_refresh_token', data.refresh_token || '');
-        localStorage.setItem('mbt_supabase_user_email', data.user ? data.user.email : email);
-        localStorage.setItem('mbt_supabase_user_id', data.user ? data.user.id : '');
-        if (data.user && data.user.user_metadata && data.user.user_metadata.display_name) {
-            localStorage.setItem('mbt_profile_display_name', data.user.user_metadata.display_name);
+        if (data.access_token) localStorage.setItem('mbt_supabase_auth_token', data.access_token);
+        if (data.refresh_token) localStorage.setItem('mbt_supabase_refresh_token', data.refresh_token);
+        if (email) localStorage.setItem('mbt_supabase_user_email', email);
+        if (data.user) {
+            localStorage.setItem('mbt_supabase_user_email', data.user.email);
+            localStorage.setItem('mbt_supabase_user_id', data.user.id);
+            if (data.user.user_metadata && data.user.user_metadata.display_name) {
+                localStorage.setItem('mbt_profile_display_name', data.user.user_metadata.display_name);
+            }
         }
+    }
+
+    /* --- Process URL Hash for OAuth Redirects --- */
+    function processAuthHash(hash) {
+        if (!hash) return false;
+        var hashStr = hash.indexOf('#') === 0 ? hash.substring(1) : hash;
+        var params = new URLSearchParams(hashStr);
+        var accessToken = params.get('access_token');
+        var refreshToken = params.get('refresh_token');
+        
+        if (accessToken) {
+            _handleAuthResponse({
+                access_token: accessToken,
+                refresh_token: refreshToken
+            }, null);
+            return true;
+        }
+        return false;
+    }
+
+    async function refreshAccessToken() {
+        var refreshTok = localStorage.getItem('mbt_supabase_refresh_token');
+        if (!refreshTok) throw new Error('No refresh token available');
+        var res = await fetch(getAuthUrl('/token?grant_type=refresh_token'), {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ refresh_token: refreshTok })
+        });
+        if (!res.ok) {
+            signOut();
+            throw new Error('Session expired. Please sign in again.');
+        }
+        var data = await res.json();
+        _handleAuthResponse(data, null);
+        return data;
+    }
+
+    async function fetchWithRetry(url, opts) {
+        var res = await fetch(url, opts);
+        if (res.status === 401) {
+            console.warn('[mBTSync] Token expired, attempting refresh...');
+            await refreshAccessToken();
+            // Rebuild headers because access token changed
+            opts.headers = Object.assign({}, opts.headers, getHeaders());
+            res = await fetch(url, opts);
+        }
+        return res;
     }
 
     /* --- Sign in with Google — opens the OAuth provider page in a new tab. --- */
@@ -152,7 +202,7 @@
         var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         if (!userId) throw new Error('Not signed in');
         var record = { id: userId, display_name: displayName || '', region: region || 'Jamaica', role: role || '', updated_at: new Date().toISOString() };
-        var res = await fetch(getBaseUrl('profiles'), {
+        var res = await fetchWithRetry(getBaseUrl('profiles'), {
             method: 'POST',
             headers: Object.assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
             body: JSON.stringify(record)
@@ -169,7 +219,7 @@
     async function fetchProfile() {
         var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         if (!userId) return null;
-        var res = await fetch(getBaseUrl('profiles') + '?id=eq.' + encodeURIComponent(userId) + '&select=*', {
+        var res = await fetchWithRetry(getBaseUrl('profiles') + '?id=eq.' + encodeURIComponent(userId) + '&select=*', {
             headers: getHeaders()
         });
         if (!res.ok) return null;
@@ -189,7 +239,7 @@
 
     /* --- Fetch all rows from a Supabase table --- */
     async function sbFetchAll(table) {
-        var res = await fetch(getBaseUrl(table) + '?select=*', {
+        var res = await fetchWithRetry(getBaseUrl(table) + '?select=*', {
             method: 'GET',
             headers: getHeaders()
         });
@@ -199,7 +249,7 @@
 
     /* --- Upsert a record (insert or update by id) --- */
     async function sbUpsert(table, record) {
-        var res = await fetch(getBaseUrl(table), {
+        var res = await fetchWithRetry(getBaseUrl(table), {
             method: 'POST',
             headers: Object.assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
             body: JSON.stringify(record)
@@ -210,7 +260,7 @@
 
     /* --- Delete a record by id --- */
     async function sbDelete(table, id) {
-        var res = await fetch(getBaseUrl(table) + '?id=eq.' + encodeURIComponent(id), {
+        var res = await fetchWithRetry(getBaseUrl(table) + '?id=eq.' + encodeURIComponent(id), {
             method: 'DELETE',
             headers: getHeaders()
         });
@@ -284,12 +334,17 @@
     }
 
     /* --- 3. SYNC OPERATIONS --- */
+    
+    var _isSyncing = false;
 
     /* --- Push all local IndexedDB data to Supabase --- */
     async function syncPushAll() {
+        if (_isSyncing) return { synced: 0, errors: 0, reason: 'sync_in_progress' };
         if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isConfigured()) {
             return { synced: 0, errors: 0, reason: 'not_configured' };
         }
+        _isSyncing = true;
+        try {
 
         var schema = window.mBTSupabaseSchema || {};
         var storeNames = Object.keys(schema);
@@ -334,13 +389,19 @@
         );
 
         return { synced: totalSynced, errors: totalErrors };
+        } finally {
+            _isSyncing = false;
+        }
     }
 
     /* --- Pull Supabase data into IndexedDB (additive — does not overwrite newer local records) --- */
     async function syncPullAll() {
+        if (_isSyncing) return { pulled: 0, errors: 0, reason: 'sync_in_progress' };
         if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isConfigured()) {
             return { pulled: 0, errors: 0, reason: 'not_configured' };
         }
+        _isSyncing = true;
+        try {
 
         var schema = window.mBTSupabaseSchema || {};
         var storeNames = Object.keys(schema);
@@ -353,16 +414,33 @@
             try {
                 var remoteRecords = await sbFetchAll(tableName);
                 var localRecords = await getLocalRecords(storeName);
-                var localIds = new Set(localRecords.map(function (r) { return r.id; }));
+                var localMap = {};
+                for (var r=0; r < localRecords.length; r++) { localMap[localRecords[r].id] = localRecords[r]; }
 
                 for (var j = 0; j < remoteRecords.length; j++) {
-                    if (!localIds.has(remoteRecords[j].id)) {
+                    var remote = remoteRecords[j];
+                    var local = localMap[remote.id];
+
+                    if (!local) {
                         try {
-                            await writeLocalRecord(storeName, remoteRecords[j]);
+                            await writeLocalRecord(storeName, remote);
                             totalPulled++;
                         } catch (e) {
                             console.error('[mBTSync] writeLocalRecord error ' + storeName + ':', e);
                             totalErrors++;
+                        }
+                    } else {
+                        // Conflict resolution checking for updated_at tracking
+                        var remoteTime = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
+                        var localTime = local.updated_at ? new Date(local.updated_at).getTime() : 0;
+                        if (remoteTime > localTime) {
+                            try {
+                                await writeLocalRecord(storeName, remote);
+                                totalPulled++;
+                            } catch (e) {
+                                console.error('[mBTSync] writeLocalRecord overwrite error ' + storeName + ':', e);
+                                totalErrors++;
+                            }
                         }
                     }
                 }
@@ -378,6 +456,9 @@
         );
 
         return { pulled: totalPulled, errors: totalErrors };
+        } finally {
+            _isSyncing = false;
+        }
     }
 
     /* --- 4. EXPORT / IMPORT --- */
@@ -403,13 +484,27 @@
                window.mBTSupabaseConfig.isSignedIn();
     }
 
+    var _reconnectTimeout = null;
     window.addEventListener('online', function () {
         if (_shouldAutoSync()) {
-            syncPushAll().catch(function (e) {
-                console.warn('[mBTSync] Auto-push on reconnect failed:', e);
-            });
+            clearTimeout(_reconnectTimeout);
+            _reconnectTimeout = setTimeout(function() {
+                syncPushAll().catch(function (e) {
+                    console.warn('[mBTSync] Auto-push on reconnect failed:', e);
+                });
+            }, 5000); // 5s debounce to allow network to stabilize
         }
     });
+
+    // Sub-Phase 50.2 Blind Spot: Periodic Token Refresh
+    // Active sessions should proactively refresh the token to avoid unexpected expiration.
+    setInterval(function() {
+        if (localStorage.getItem('mbt_supabase_refresh_token')) {
+            refreshAccessToken().catch(function(e) {
+                console.warn('[mBTSync] Background token refresh failed', e);
+            });
+        }
+    }, 45 * 60 * 1000); // Runs every 45 minutes
 
     /* --- 6. GLOBAL EXPOSURE --- */
 
@@ -417,18 +512,16 @@
         pushAll:       syncPushAll,
         pullAll:       syncPullAll,
         exportData:    exportAllData,
-        sbFetchAll:    sbFetchAll,
-        sbUpsert:      sbUpsert,
-        sbDelete:      sbDelete,
         signIn:        signIn,
         signUp:        signUp,
         forgotPassword: forgotPassword,
         updatePassword: updatePassword,
         signInWithGoogle: signInWithGoogle,
         signOut:       signOut,
-        getSession:    getSession,
         saveProfile:   saveProfile,
-        fetchProfile:  fetchProfile
+        fetchProfile:  fetchProfile,
+        refreshAccessToken: refreshAccessToken,
+        processAuthHash: processAuthHash
     };
 
     console.log('[mBT] Supabase sync service initialized ✓');

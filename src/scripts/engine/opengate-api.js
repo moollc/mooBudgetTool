@@ -10,10 +10,26 @@ var mBTOGAPI = (function() {
             return Promise.resolve(mBTOG.search ? mBTOG.search(query) : []);
         },
         
-        submitVote: function(rateId, voteType) {
-            // Placeholder for rate voting logic
-            console.log("OpenGate: Voting", voteType, "on rate", rateId);
-            return Promise.resolve({ success: true, message: "Vote registered." });
+        submitVote: function(rateId, typeStr) {
+            if (typeof mBTOG === 'undefined' || !mBTOG.upsertVote) return Promise.reject("OpenGate Engine not loaded");
+            
+            if (typeof rateId === 'string' && isNaN(parseInt(rateId, 10))) {
+                if (typeof mBTME !== 'undefined' && mBTME.alert) mBTME.alert("OpenGate", "Cannot vote on local or legacy rate. Ensure community rates are synced.");
+                return Promise.resolve({ success: false, message: "Invalid ID for voting." });
+            }
+
+            var voteVal = typeStr === 'approve' ? 1 : -1;
+            console.log("OpenGate: Voting", voteVal, "on rate", rateId);
+
+            return mBTOG.upsertVote(parseInt(rateId, 10), voteVal).then(function(success) {
+                if(success) {
+                    if (typeof mBTME !== 'undefined' && mBTME.alert) mBTME.alert("OpenGate", "Vote recorded. Thank you for calibrating the database.");
+                    return { success: true, message: "Vote registered." };
+                } else {
+                    if (typeof mBTME !== 'undefined' && mBTME.alert) mBTME.alert("OpenGate", "Vote failed. Please ensure you are signed in via the Cloud tab.");
+                    return { success: false, message: "Sign-in required or network error." };
+                }
+            });
         },
         
         validateRate: function(rateData) {

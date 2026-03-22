@@ -66,7 +66,23 @@
     // =========================================
 
     function getCurrentRoute() {
-        var hash = window.location.hash.replace(/^#\/?/, '');
+        var hashStr = window.location.hash;
+        
+        // 1.1 OAUTH INTERCEPTOR
+        // If the URL hash contains Supabase Auth tokens, process them and strip to avoid routing errors.
+        if (window.mBTSync && window.mBTSync.processAuthHash && window.mBTSync.processAuthHash(hashStr)) {
+            window.location.hash = DEFAULT_ROUTE;
+            // Force a profile fetch shortly after to hydrate user ID correctly
+            setTimeout(function() { 
+                if (mBTSync.fetchProfile) mBTSync.fetchProfile().catch(function(){}); 
+                if (typeof mBT !== 'undefined' && mBT.features && mBT.features.settings && mBT.features.settings.open) {
+                    mBT.features.settings.open('cloud'); 
+                }
+            }, 500);
+            return DEFAULT_ROUTE;
+        }
+
+        var hash = hashStr.replace(/^#\/?/, '');
         return hash || DEFAULT_ROUTE;
     }
 
@@ -482,10 +498,33 @@
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-    } else {
+    window.mBT.core.init = async function() {
+        console.log('[mBT] Initialize requested...');
+        
+        // Asynchronously wait for WASM Blob Payload (Phase 49)
+        if (typeof init_WASM === 'function') {
+            try {
+                // Initialize WASM instance
+                await init_WASM();
+                console.log('[mBT] Rust WASM module loaded and bridged successfully.');
+                
+                // Expose rust-accelerated functions to mBTLE if it exists
+                if (window.mBT.le && typeof wasm_bindgen !== 'undefined') {
+                    window.mBT.le.wasmActive = true;
+                    // Replace heavy loops directly or flag to use wasm_bindgen.calculate_totals()
+                }
+            } catch (err) {
+                console.warn('[mBT] WASM module failed to initialize. Falling back to native JS engines.', err);
+            }
+        } else {
+            console.log('[mBT] No WASM module detected, running native JS engine.');
+        }
+
+        // Proceed to core boot
         boot();
-    }
+    };
+
+    // Note: index.html has a DOMContentLoaded listener that calls mBT.core.init().
+    // We intentionally removed the direct `boot()` call to prevent double-initialization.
 
 })();

@@ -87,4 +87,3 @@ window.mBT_Finance_Engine = {
             }
         }
     };
-};

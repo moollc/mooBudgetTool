@@ -37,6 +37,7 @@
   <!-- Top Bar -->
   <div class="bg-slate-900 text-white px-4 py-2 flex items-center gap-3 text-xs font-bold sticky top-0 z-50">
       <button id="btn-back"
+      aria-label="Back to dashboard"
       class="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full transition-colors">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> Back
     </button>
@@ -52,6 +53,7 @@
         No project loaded. Open Publisher from inside MooBudget Studio.
       </p>
       <a href="../../index.html"
+        aria-label="Open MooBudget Studio"
         class="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition-colors">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> Open MooBudget Studio
       </a>
@@ -80,7 +82,7 @@
 
       <!-- ═══ 1. PROJECT SUMMARY CARD ═══ -->
       <div class="section-card">
-        <div class="section-header">Project Summary</div>
+        <div class="section-header" aria-label="Project Summary">Project Summary</div>
         <div class="section-body">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="pub-summary-grid">
             <!-- populated by JS -->
@@ -90,26 +92,26 @@
 
       <!-- ═══ 2. EXPORT OPTIONS ═══ -->
       <div class="section-card">
-        <div class="section-header">Export Options</div>
+        <div class="section-header" aria-label="Export Options">Export Options</div>
         <div class="section-body space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 
-            <button id="btn-pdf" class="btn-action bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 flex-col h-24 justify-center">
+            <button id="btn-pdf" aria-label="Export professional PDF" class="btn-action bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 flex-col h-24 justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <span>Professional PDF</span>
             </button>
 
-            <button id="btn-xlsx" class="btn-action bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-500 flex-col h-24 justify-center">
+            <button id="btn-xlsx" aria-label="Export Excel XLSX" class="btn-action bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-500 flex-col h-24 justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <span>Excel / XLSX</span>
             </button>
 
-            <button id="btn-html" class="btn-action bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 flex-col h-24 justify-center">
+            <button id="btn-html" aria-label="Export standalone HTML" class="btn-action bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 flex-col h-24 justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
               <span>Standalone HTML</span>
             </button>
 
-            <button id="btn-moo" class="btn-action bg-slate-600 hover:bg-slate-700 text-white focus:ring-slate-500 flex-col h-24 justify-center">
+            <button id="btn-moo" aria-label="Save .moo file" class="btn-action bg-slate-600 hover:bg-slate-700 text-white focus:ring-slate-500 flex-col h-24 justify-center">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               <span>Save .moo</span>
             </button>
@@ -117,16 +119,16 @@
           </div>
 
           <!-- Status message area -->
-          <div id="export-status" class="hidden text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2"></div>
+          <div id="export-status" aria-live="polite" class="hidden text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2"></div>
         </div>
       </div>
 
       <!-- ═══ 3. COMMUNICATIONS HUB ═══ -->
       <div class="section-card">
-        <div class="section-header">Communications Hub</div>
+        <div class="section-header" aria-label="Communications Hub">Communications Hub</div>
         <div class="section-body space-y-4">
           <p class="text-xs text-slate-500">Share a formatted project summary via your preferred channel.</p>
-          <div class="flex flex-wrap gap-3" id="pub-comm-buttons">
+          <div class="flex flex-wrap gap-3" id="pub-comm-buttons" aria-label="Communication actions">
             <!-- populated by JS -->
           </div>
         </div>
@@ -134,7 +136,7 @@
 
       <!-- ═══ 4. BUDGET PREVIEW TABLE ═══ -->
       <div class="section-card">
-        <div class="section-header flex items-center justify-between">
+        <div class="section-header flex items-center justify-between" aria-label="Budget Preview">
           <span>Budget Preview</span>
           <span class="text-slate-400 text-[10px] font-normal normal-case tracking-normal" id="pub-item-count"></span>
         </div>
@@ -143,13 +145,13 @@
             <table class="min-w-full text-sm" id="budget-preview-table">
               <thead>
                 <tr class="bg-slate-800 text-white text-xs uppercase tracking-wider">
-                  <th class="px-4 py-3 text-left font-bold">Description</th>
-                  <th class="px-3 py-3 text-center font-bold w-16">Qty</th>
-                  <th class="px-3 py-3 text-center font-bold w-20">Unit</th>
-                  <th class="px-3 py-3 text-right font-bold w-28">Rate</th>
-                  <th class="px-3 py-3 text-right font-bold w-28">Estimated</th>
-                  <th class="px-3 py-3 text-right font-bold w-28">Actual</th>
-                  <th class="px-3 py-3 text-right font-bold w-28">Variance</th>
+                  <th class="px-4 py-3 text-left font-bold" scope="col">Description</th>
+                  <th class="px-3 py-3 text-center font-bold w-16" scope="col">Qty</th>
+                  <th class="px-3 py-3 text-center font-bold w-20" scope="col">Unit</th>
+                  <th class="px-3 py-3 text-right font-bold w-28" scope="col">Rate</th>
+                  <th class="px-3 py-3 text-right font-bold w-28" scope="col">Estimated</th>
+                  <th class="px-3 py-3 text-right font-bold w-28" scope="col">Actual</th>
+                  <th class="px-3 py-3 text-right font-bold w-28" scope="col">Variance</th>
                 </tr>
               </thead>
               <tbody id="budget-preview-body"></tbody>
@@ -163,6 +165,9 @@
   </div><!-- /main-ui -->
 
   <script>
+var dom = (document && document.currentScript && document.currentScript.getRootNode) ? document.currentScript.getRootNode() : document;
+if (dom === document && window.shadowRoot) dom = window.shadowRoot;
+
   (function () {
     'use strict';
 
@@ -185,7 +190,7 @@
     }
 
     function showStatus(msg, type) {
-      var el = document.getElementById('export-status');
+      var el = dom.getElementById('export-status');
       el.textContent = msg;
       el.className = type === 'error'
         ? 'text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2'
@@ -195,7 +200,7 @@
     }
 
     // ─── Back button ─────────────────────────────────────────────────────────────
-    document.getElementById('btn-back').addEventListener('click', function () {
+    dom.getElementById('btn-back').addEventListener('click', function () {
       if (window.mBTEmbedded && window.mBTBridge) {
         window.mBTBridge.send('close-tool', {});
       } else {
@@ -231,7 +236,7 @@
         budget = data;
         if (budget.currency) currency = budget.currency;
         renderAll();
-        document.getElementById('main-ui').classList.remove('hidden');
+        dom.getElementById('main-ui').classList.remove('hidden');
       }).catch(function (err) {
         console.error('[Publisher] Load error:', err);
         showFallback('Failed to load project data. See console for details.');
@@ -239,15 +244,15 @@
     }
 
     function showFallback(msg) {
-      document.getElementById('fallback-message').textContent = msg;
-      document.getElementById('fallback-ui').classList.remove('hidden');
+      dom.getElementById('fallback-message').textContent = msg;
+      dom.getElementById('fallback-ui').classList.remove('hidden');
     }
 
     // ─── 2. Render ───────────────────────────────────────────────────────────────
     function renderAll() {
-      document.getElementById('pub-project-title').textContent = budget.projectName || 'Untitled Production';
-      document.getElementById('pub-grand-total').textContent   = fmt(budget.grandTotal || 0);
-      document.getElementById('pub-currency-label').textContent = currency;
+      dom.getElementById('pub-project-title').textContent = budget.projectName || 'Untitled Production';
+      dom.getElementById('pub-grand-total').textContent   = fmt(budget.grandTotal || 0);
+      dom.getElementById('pub-currency-label').textContent = currency;
 
       renderSummaryCard();
       renderCommHub();
@@ -271,7 +276,7 @@
         { label: 'Grand Total', value: fmt(budget.grandTotal || 0), highlight: true },
       ];
 
-      document.getElementById('pub-summary-grid').innerHTML = items.map(function (item) {
+      dom.getElementById('pub-summary-grid').innerHTML = items.map(function (item) {
         return '<div class="bg-slate-50 rounded-lg p-3 border border-slate-100">' +
           '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">' + esc(item.label) + '</div>' +
           '<div class="text-sm font-bold ' + (item.highlight ? 'text-emerald-600 text-base' : 'text-slate-800') + ' font-mono truncate">' + esc(item.value) + '</div>' +
@@ -294,7 +299,7 @@
         ? pub.comm.whatsapp(contactPhone, shareText)
         : 'https://wa.me/?text=' + encodeURIComponent(shareText);
 
-      buttons.push('<a href="' + esc(waLink) + '" target="_blank" rel="noopener" class="btn-action bg-green-500 hover:bg-green-600 text-white focus:ring-green-400 no-underline">' +
+      buttons.push('<a href="' + esc(waLink) + '" rel="noopener noreferrer" class="btn-action bg-green-500 hover:bg-green-600 text-white focus:ring-green-400 no-underline">' +
         '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>' +
         'WhatsApp Share</a>');
 
@@ -310,13 +315,13 @@
           'Call ' + esc(contactPhone) + '</a>');
       }
 
-      document.getElementById('pub-comm-buttons').innerHTML = buttons.join('');
+      dom.getElementById('pub-comm-buttons').innerHTML = buttons.join('');
     }
 
     // ─── 5. Budget Preview Table ─────────────────────────────────────────────────
     function renderBudgetPreview() {
-      var tbody = document.getElementById('budget-preview-body');
-      var tfoot = document.getElementById('budget-preview-foot');
+      var tbody = dom.getElementById('budget-preview-body');
+      var tfoot = dom.getElementById('budget-preview-foot');
       var sections    = budget.sections || {};
       var sectionKeys = Object.keys(sections);
 
@@ -364,7 +369,7 @@
       });
 
       tbody.innerHTML = rows.join('');
-      document.getElementById('pub-item-count').textContent = totalItemCount + ' line items across ' + sectionKeys.length + ' sections';
+      dom.getElementById('pub-item-count').textContent = totalItemCount + ' line items across ' + sectionKeys.length + ' sections';
 
       var gtClass = (grandAct - grandEst) > 0 ? 'text-red-300' : 'text-emerald-300';
       tfoot.innerHTML = '<tr class="bg-slate-900 text-white">' +
@@ -379,7 +384,7 @@
     function bindExportButtons() {
       var pub = window.mBTPublisher;
 
-      document.getElementById('btn-pdf').addEventListener('click', function () {
+      dom.getElementById('btn-pdf').addEventListener('click', function () {
         if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
         showStatus('Generating PDF…', 'info');
         try {
@@ -390,7 +395,7 @@
         }
       });
 
-      document.getElementById('btn-xlsx').addEventListener('click', function () {
+      dom.getElementById('btn-xlsx').addEventListener('click', function () {
         if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
         showStatus('Generating Excel file…', 'info');
         try {
@@ -401,7 +406,7 @@
         }
       });
 
-      document.getElementById('btn-html').addEventListener('click', function () {
+      dom.getElementById('btn-html').addEventListener('click', function () {
         if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
         showStatus('Generating standalone HTML…', 'info');
         try {
@@ -414,7 +419,7 @@
         }
       });
 
-      document.getElementById('btn-moo').addEventListener('click', function () {
+      dom.getElementById('btn-moo').addEventListener('click', function () {
         if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
         showStatus('Saving .moo file…', 'info');
         try {

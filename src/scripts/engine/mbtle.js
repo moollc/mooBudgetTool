@@ -95,6 +95,13 @@ var lerp = function(a, b, t) {
 // === STAGE RECONCILIATION ===
 
 var reconcileStage = function(stage) {
+  if (typeof window !== 'undefined' && window.wasm_reconcile_stage) {
+    try {
+      var result = window.wasm_reconcile_stage(JSON.stringify(stage));
+      return JSON.parse(result);
+    } catch(e) { console.warn("[WASM fallback]", e); }
+  }
+
   var totalBudget = stage.budget || 0;
   var totalAllocated = sum(stage.allocated || []);
   var totalCompleted = sum(stage.completed || []);
@@ -123,6 +130,13 @@ var getReconciliationStatus = function(variance, percentUsed) {
 };
 
 var aggregateReconciliations = function(stages) {
+  if (typeof window !== 'undefined' && window.wasm_aggregate_reconciliations) {
+    try {
+      var result = window.wasm_aggregate_reconciliations(JSON.stringify(stages));
+      return JSON.parse(result);
+    } catch(e) { console.warn("[WASM fallback]", e); }
+  }
+
   var totalBudget = sum(stages.map(function(s) { return s.budget; }));
   var totalCost = sum(stages.map(function(s) { return s.cost; }));
   var totalVariance = sum(stages.map(function(s) { return s.variance; }));
