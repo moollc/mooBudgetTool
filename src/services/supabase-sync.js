@@ -187,6 +187,42 @@
         localStorage.removeItem('mbt_supabase_refresh_token');
         localStorage.removeItem('mbt_supabase_user_email');
         localStorage.removeItem('mbt_supabase_user_id');
+        
+        // G15: Privacy Wipe on Sign-Out — aggressively clear local cache
+        try {
+            var s = window.mBTStorage || window.mBT.storage;
+            // Clear all projects
+            var projects = await s.getAllProjects();
+            for (var i = 0; i < projects.length; i++) {
+                await s.deleteProject(projects[i].id, true);
+            }
+            // Clear all stages
+            var stages = await s.getAllStages();
+            for (var j = 0; j < stages.length; j++) {
+                await s.deleteStage(stages[j].id, true);
+            }
+            // Clear localforage keys starting with prodBudget_v5_
+            if (typeof localforage !== 'undefined') {
+                var lfKeys = await localforage.keys();
+                var budgetPrefix = 'prodBudget_v5_';
+                for (var k = 0; k < lfKeys.length; k++) {
+                    if (lfKeys[k].indexOf(budgetPrefix) === 0) {
+                        await localforage.removeItem(lfKeys[k]);
+                    }
+                }
+            }
+            // Clear contacts and sessions via IDB transactions
+            var db = await s.getDb();
+            var tx = db.transaction(['contacts', 'sessions'], 'readwrite');
+            tx.objectStore('contacts').clear();
+            tx.objectStore('sessions').clear();
+            await new Promise(function (resolve, reject) {
+                tx.oncomplete = function () { resolve(); };
+                tx.onerror = function () { reject(tx.error); };
+            });
+        } catch (e) {
+            console.warn('[mBTSync] Privacy wipe on sign-out partially failed:', e);
+        }
     }
 
     /* --- Get current session state from localStorage (no network call). --- */
@@ -307,6 +343,28 @@
         }
     }
 
+    /* --- Delete a local record by storeName and id (used during pull soft-delete propagation).
+           skipTombstone=true prevents re-tombstoning a record that was already deleted remotely. --- */
+    async function deleteLocalRecord(storeName, id) {
+        var s = window.mBTStorage || window.mBT.storage;
+        switch (storeName) {
+            case 'mbt_projects':   return s.deleteProject(id, true);
+            case 'mbt_stages':     return s.deleteStage(id, true);
+            case 'mbt_executions': return s.deleteExecution(id, true);
+            case 'og_ref':         return s.deleteOGItem(id);
+            case 'contacts':
+            case 'sessions': {
+                var db = await s._getDb();
+                return new Promise(function (resolve, reject) {
+                    var store = db.transaction([storeName], 'readwrite').objectStore(storeName);
+                    var req = store.delete(id);
+                    req.onsuccess = function () { resolve(); };
+                    req.onerror = function () { reject(req.error); };
+                });
+            }
+        }
+    }
+
     /* --- Write a pulled Supabase record into IndexedDB (additive — skips existing ids) --- */
     async function writeLocalRecord(storeName, record) {
         var s = window.mBTStorage || window.mBT.storage;
@@ -334,7 +392,26 @@
     }
 
     /* --- 3. SYNC OPERATIONS --- */
-    
+
+    /* --- Strip base64 attachment blobs from a budget before pushing to cloud.
+           Prevents Supabase 50MB payload limit crashes from embedded file data.
+           Attachment metadata (title, filename) is preserved so the cloud record
+           knows what files exist; only the binary content is stripped. --- */
+    function _stripBase64Attachments(data) {
+        if (!data || !data.fundingSources || !data.fundingSources.length) return data;
+        var clone = JSON.parse(JSON.stringify(data));
+        for (var i = 0; i < clone.fundingSources.length; i++) {
+            var src = clone.fundingSources[i];
+            if (!src.attachments || !src.attachments.length) continue;
+            for (var j = 0; j < src.attachments.length; j++) {
+                if (src.attachments[j].data && src.attachments[j].data.length > 1024) {
+                    src.attachments[j].data = '[stripped_for_sync]';
+                }
+            }
+        }
+        return clone;
+    }
+
     var _isSyncing = false;
 
     /* --- Push all local IndexedDB data to Supabase --- */
@@ -350,6 +427,8 @@
         var storeNames = Object.keys(schema);
         var totalSynced = 0;
         var totalErrors = 0;
+        var pushedProjectIds = {}; /* Track IDs already pushed to avoid double-pushing monolith */
+        var conflicts = []; /* G16: Track conflict messages */
 
         for (var i = 0; i < storeNames.length; i++) {
             var storeName = storeNames[i];
@@ -394,6 +473,9 @@
 
                         await sbUpsert(tableName, payload);
                         totalSynced++;
+                        if (storeName === 'mbt_projects' && payload.id) {
+                            pushedProjectIds[payload.id] = true;
+                        }
                     } catch (e) {
                         console.error('[mBTSync] Upsert error ' + tableName + ':', e);
                         totalErrors++;
@@ -405,12 +487,91 @@
             }
         }
 
+        /* --- Sub-Phase 51.1 Group B: Monolith Budget Push
+               Enumerate all prodBudget_v5_* localforage keys and push any budget not
+               already covered by the IndexedDB mbt_projects loop above. --- */
+        try {
+            var lfKeys = (typeof localforage !== 'undefined') ? await localforage.keys() : [];
+            var budgetPrefix = 'prodBudget_v5_';
+            var excludeSuffixes = ['trash', 'globalItems', 'templates', 'currency', 'rates',
+                'lastLoaded', 'ApiKey', 'selectedAiProvider', 'dateFormat',
+                'projectNameSeparator', 'projectStorageProtocol', 'aiSystemPrompt'];
+            var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+
+            for (var lfi = 0; lfi < lfKeys.length; lfi++) {
+                var lfKey = lfKeys[lfi];
+                if (lfKey.indexOf(budgetPrefix) !== 0) continue;
+                var skipKey = false;
+                for (var ex = 0; ex < excludeSuffixes.length; ex++) {
+                    if (lfKey.indexOf(excludeSuffixes[ex]) !== -1) { skipKey = true; break; }
+                }
+                if (skipKey) continue;
+
+                try {
+                    var budgetData = await localforage.getItem(lfKey);
+                    if (!budgetData) continue;
+                    var budgetId = budgetData.id || budgetData.projectName || lfKey.replace(budgetPrefix, '');
+                    if (pushedProjectIds[budgetId]) continue; /* Already pushed via IndexedDB loop */
+
+                    var cleanBudget = _stripBase64Attachments(budgetData);
+                    var monolithPayload = {
+                        id: budgetId,
+                        user_id: userId,
+                        data: cleanBudget,
+                        updated_at: cleanBudget.updated_at || new Date().toISOString()
+                    };
+                    await sbUpsert('projects', monolithPayload);
+                    totalSynced++;
+                    pushedProjectIds[budgetId] = true;
+                } catch (e) {
+                    console.error('[mBTSync] Monolith push error for ' + lfKey + ':', e);
+                    totalErrors++;
+                }
+            }
+        } catch (e) {
+            console.error('[mBTSync] Monolith enumeration error:', e);
+        }
+
+        /* --- Sub-Phase 51.1 Group C: Tombstone push — propagate local deletions to Supabase --- */
+        try {
+            var s = window.mBTStorage || window.mBT.storage;
+            var tombstones = await s.getAllTombstones();
+            if (tombstones.length) {
+                var storeToTable = window.mBTSupabaseSchema || {};
+                var tombUserId = localStorage.getItem('mbt_supabase_user_id') || '';
+                for (var t = 0; t < tombstones.length; t++) {
+                    var tomb = tombstones[t];
+                    var targetTable = storeToTable[tomb.store];
+                    if (!targetTable) continue;
+                    try {
+                        await sbUpsert(targetTable, {
+                            id: tomb.id,
+                            user_id: tombUserId,
+                            deleted_at: tomb.deleted_at,
+                            updated_at: tomb.deleted_at
+                        });
+                        totalSynced++;
+                        conflicts.push('Deleted remote ' + tomb.store + ' id ' + tomb.id);
+                    } catch (e) {
+                        console.error('[mBTSync] Tombstone push error for ' + tomb.store + '/' + tomb.id + ':', e);
+                        totalErrors++;
+                    }
+                }
+                /* Clear tombstones only after all have been pushed successfully enough */
+                await s.clearTombstones();
+            }
+        } catch (e) {
+            console.error('[mBTSync] Tombstone propagation error:', e);
+        }
+
         await (window.mBTStorage || window.mBT.storage).setItem(
             window.mBTSupabaseConfig.SYNC.LAST_SYNC_KEY,
             Date.now()
         );
 
-        return { synced: totalSynced, errors: totalErrors };
+        try { await pushPreferences(); } catch (e) { console.warn('[mBTSync] Preferences push failed:', e); }
+
+        return { synced: totalSynced, errors: totalErrors, conflicts: conflicts };
         } finally {
             _isSyncing = false;
         }
@@ -429,6 +590,7 @@
         var storeNames = Object.keys(schema);
         var totalPulled = 0;
         var totalErrors = 0;
+        var conflicts = []; /* G16: Track conflict messages */
 
         for (var i = 0; i < storeNames.length; i++) {
             var storeName = storeNames[i];
@@ -443,6 +605,20 @@
                     var remote = remoteRecords[j];
                     var local = localMap[remote.id];
 
+                    /* Sub-Phase 51.1 Group C: Soft-delete propagation — remove local copy if remote was deleted */
+                    if (remote.deleted_at) {
+                        if (local) {
+                            try {
+                                await deleteLocalRecord(storeName, remote.id);
+                                totalPulled++;
+                            } catch (e) {
+                                console.error('[mBTSync] Pull delete error ' + storeName + ':', e);
+                                totalErrors++;
+                            }
+                        }
+                        continue;
+                    }
+
                     if (!local) {
                         try {
                             await writeLocalRecord(storeName, remote);
@@ -456,9 +632,26 @@
                         var remoteTime = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
                         var localTime = local.updated_at ? new Date(local.updated_at).getTime() : 0;
                         if (remoteTime > localTime) {
+                            // G14: Base64 Sync Loophole — restore stripped attachments from local before write
+                            if (storeName === 'mbt_projects' && remote.data && remote.data.fundingSources) {
+                                if (local && local.data && local.data.fundingSources) {
+                                    for (var k = 0; k < remote.data.fundingSources.length; k++) {
+                                        var rSrc = remote.data.fundingSources[k];
+                                        var lSrc = local.data.fundingSources[k];
+                                        if (rSrc && lSrc && rSrc.attachments && lSrc.attachments) {
+                                            for (var a = 0; a < rSrc.attachments.length; a++) {
+                                                if (rSrc.attachments[a].data === '[stripped_for_sync]' && lSrc.attachments[a] && lSrc.attachments[a].data) {
+                                                    rSrc.attachments[a].data = lSrc.attachments[a].data;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             try {
                                 await writeLocalRecord(storeName, remote);
                                 totalPulled++;
+                                conflicts.push('Overwrote local ' + storeName + ' with newer cloud copy.');
                             } catch (e) {
                                 console.error('[mBTSync] writeLocalRecord overwrite error ' + storeName + ':', e);
                                 totalErrors++;
@@ -477,7 +670,9 @@
             Date.now()
         );
 
-        return { pulled: totalPulled, errors: totalErrors };
+        try { await pullPreferences(); } catch (e) { console.warn('[mBTSync] Preferences pull failed:', e); }
+
+        return { pulled: totalPulled, errors: totalErrors, conflicts: conflicts };
         } finally {
             _isSyncing = false;
         }
@@ -495,6 +690,69 @@
         return JSON.stringify(exportObj, null, 2);
     }
 
+    /* --- Sub-Phase 51.1 Group C: Settings & Preferences Sync
+           Whitelisted localStorage keys + budget.settings pushed to Supabase mbt_generic table.
+           API keys, auth tokens, and sensitive keys are explicitly excluded.
+           budget.settings is bridged via _getBudgetSettings / _setBudgetSettings hooks
+           wired in index.html after the sync service loads. --- */
+
+    var SYNCABLE_PREFS = [
+        'prodBudget_v5_currency',
+        'prodBudget_v5_rates',
+        'prodBudget_v5_dateFormat',
+        'prodBudget_v5_projectNameSeparator',
+        'moo_og_loc',
+        'moo_og_share',
+        'mBT_openToolsInternal',
+        'mbt_supabase_sync_on_reconnect',
+        'mbt_supabase_sync_mode',
+        'mbt_profile_display_name',
+        'mbt_profile_region',
+        'mbt_profile_role'
+    ];
+
+    async function pushPreferences() {
+        if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isSignedIn()) return;
+        var prefs = {};
+        for (var i = 0; i < SYNCABLE_PREFS.length; i++) {
+            var val = localStorage.getItem(SYNCABLE_PREFS[i]);
+            if (val !== null) prefs[SYNCABLE_PREFS[i]] = val;
+        }
+        if (typeof window.mBTSync._getBudgetSettings === 'function') {
+            var bs = window.mBTSync._getBudgetSettings();
+            if (bs) prefs._budgetSettings = bs;
+        }
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        await sbUpsert('mbt_generic', {
+            key: 'user_preferences',
+            user_id: userId,
+            value: prefs,
+            updated_at: new Date().toISOString()
+        });
+    }
+
+    async function pullPreferences() {
+        if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isSignedIn()) return;
+        var res = await fetchWithRetry(
+            getBaseUrl('mbt_generic') + '?key=eq.user_preferences&select=*',
+            { method: 'GET', headers: getHeaders() }
+        );
+        if (!res.ok) return;
+        var rows = await res.json();
+        if (!rows || !rows.length) return;
+        var prefs = rows[0].value;
+        if (!prefs || typeof prefs !== 'object') return;
+        for (var i = 0; i < SYNCABLE_PREFS.length; i++) {
+            var key = SYNCABLE_PREFS[i];
+            if (prefs[key] !== undefined && prefs[key] !== null) {
+                localStorage.setItem(key, prefs[key]);
+            }
+        }
+        if (prefs._budgetSettings && typeof window.mBTSync._setBudgetSettings === 'function') {
+            window.mBTSync._setBudgetSettings(prefs._budgetSettings);
+        }
+    }
+
     /* --- 5. OFFLINE PUSH QUEUE --- */
     /* When the app comes back online and "Sync budgets to cloud" is enabled,
        automatically push any local changes that accumulated while offline. */
@@ -504,6 +762,26 @@
                window.mBTSupabaseConfig &&
                window.mBTSupabaseConfig.isConfigured() &&
                window.mBTSupabaseConfig.isSignedIn();
+    }
+
+    /* --- Sub-Phase 51.1 Group B: Continuous Auto-Save to Cloud
+           Called by mBT.data.save() after every local write. Debounces 30 seconds
+           so rapid edits batch into a single push once the user pauses typing. --- */
+    var _autoSaveTimeout = null;
+    var AUTO_SAVE_DEBOUNCE_MS = 30000;
+
+    function scheduleAutoSync() {
+        if (!_shouldAutoSync()) return;
+        if (localStorage.getItem('mbt_supabase_sync_mode') !== 'continuous') return;
+        if (_isSyncing) return;
+        clearTimeout(_autoSaveTimeout);
+        _autoSaveTimeout = setTimeout(function () {
+            if (_shouldAutoSync() && !_isSyncing) {
+                syncPushAll().catch(function (e) {
+                    console.warn('[mBTSync] Auto-save push failed:', e);
+                });
+            }
+        }, AUTO_SAVE_DEBOUNCE_MS);
     }
 
     var _reconnectTimeout = null;
@@ -531,19 +809,25 @@
     /* --- 6. GLOBAL EXPOSURE --- */
 
     window.mBTSync = {
-        pushAll:       syncPushAll,
-        pullAll:       syncPullAll,
-        exportData:    exportAllData,
-        signIn:        signIn,
-        signUp:        signUp,
-        forgotPassword: forgotPassword,
-        updatePassword: updatePassword,
-        signInWithGoogle: signInWithGoogle,
-        signOut:       signOut,
-        saveProfile:   saveProfile,
-        fetchProfile:  fetchProfile,
+        pushAll:           syncPushAll,
+        pullAll:           syncPullAll,
+        exportData:        exportAllData,
+        signIn:            signIn,
+        signUp:            signUp,
+        forgotPassword:    forgotPassword,
+        updatePassword:    updatePassword,
+        signInWithGoogle:  signInWithGoogle,
+        signOut:           signOut,
+        saveProfile:       saveProfile,
+        fetchProfile:      fetchProfile,
         refreshAccessToken: refreshAccessToken,
-        processAuthHash: processAuthHash
+        processAuthHash:   processAuthHash,
+        scheduleAutoSync:  scheduleAutoSync,
+        pushPreferences:   pushPreferences,
+        pullPreferences:   pullPreferences,
+        /* Hooks wired by index.html to bridge budget.settings across module boundary */
+        _getBudgetSettings: null,
+        _setBudgetSettings: null
     };
 
     console.log('[mBT] Supabase sync service initialized ✓');
