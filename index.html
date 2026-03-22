@@ -71,46 +71,50 @@
     <div id="app" class="max-w-7xl mx-auto px-4 py-4"></div>
     <div id="global-modal-container"></div>
 
-    <footer class="fixed bottom-0 left-0 right-0 z-[100] p-2 pointer-events-none mb-safe">
-        <div class="max-w-2xl mx-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-[28px] shadow-2xl p-1.5 px-4 flex justify-between items-center pointer-events-auto ring-1 ring-black/20">
-            
-            <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-stages"></div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400">Stages</span>
-            </button>
+    <footer id="footer-hud" class="fixed bottom-0 left-0 right-0 z-[100] p-2 pointer-events-none" style="margin-bottom:env(safe-area-inset-bottom,0)">
+        <!-- The pill collapses horizontally into the center button when auto-hide is active -->
+        <div id="footer-nav" class="mx-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl flex justify-center items-center pointer-events-auto ring-1 ring-black/20 overflow-hidden" style="padding:6px 16px;border-radius:28px;width:fit-content;transition:width 0.35s cubic-bezier(0.4,0,0.2,1),padding 0.35s ease,border-radius 0.35s ease;">
 
-            <button id="docsFooterBtn" aria-label="mBTDB Document Builder" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-blue-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-docs"></div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Docs</span>
-            </button>
+            <!-- Left button group — clips as pill shrinks left -->
+            <div id="nav-left" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
+                <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-stages"></div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400 whitespace-nowrap">Stages</span>
+                </button>
+                <button id="docsFooterBtn" aria-label="mBTDB Document Builder" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-blue-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-docs"></div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400 whitespace-nowrap">Docs</span>
+                </button>
+                <button id="contactsFooterBtn" aria-label="Crew Contacts" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap">Crew</span>
+                </button>
+            </div>
 
-            <button id="contactsFooterBtn" aria-label="Crew Contacts" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400">Crew</span>
-            </button>
-
-            <button id="mainActionBtn" aria-label="Main Menu" class="w-12 h-12 bg-blue-600 rounded-[18px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
+            <!-- Center anchor — always visible, sets the collapsed pill size -->
+            <button id="mainActionBtn" aria-label="Main Menu" class="w-12 h-12 flex-shrink-0 bg-blue-600 rounded-[18px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">
                 <div id="icon-main-action" class="[&>svg]:w-6 [&>svg]:h-6"></div>
             </button>
 
-            <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                </div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400">Cal</span>
-            </button>
-
-            <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-secondary-action"></div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400">Publish</span>
-            </button>
-
-            <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center w-10 h-10 sm:w-auto sm:h-auto">
-                <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-coffee"></div>
-                <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400">Support</span>
-            </button>
+            <!-- Right button group — clips as pill shrinks right -->
+            <div id="nav-right" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
+                <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400 whitespace-nowrap">Cal</span>
+                </button>
+                <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-secondary-action"></div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 whitespace-nowrap">Publish</span>
+                </button>
+                <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-coffee"></div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap">Support</span>
+                </button>
+            </div>
         </div>
     </footer>
 </body>
@@ -145,12 +149,18 @@
     };
 
     const FILM_CURRENCIES = [
-        { code: 'JMD', label: 'JMD' }, { code: 'USD', label: 'USD' },
-        { code: 'GBP', label: 'GBP' }, { code: 'CAD', label: 'CAD' },
-        { code: 'EUR', label: 'EUR' }, { code: 'AUD', label: 'AUD' },
-        { code: 'NZD', label: 'NZD' }, { code: 'ZAR', label: 'ZAR' },
-        { code: 'INR', label: 'INR' }, { code: 'CNY', label: 'CNY' },
-        { code: 'JPY', label: 'JPY' }
+        // bg=button color, c1=first letter, c2=second letter
+        { code: 'JMD', cc: 'JM', bg: '#0b0b0b', c1: '#009b3a', c2: '#ffd700' }, // Jamaica: black btn, green J, gold M
+        { code: 'USD', cc: 'US', bg: '#b22234', c1: '#ffffff', c2: '#3c3b6e' },  // USA: red btn, white U, navy S
+        { code: 'GBP', cc: 'GB', bg: '#012169', c1: '#ffffff', c2: '#c8102e' },  // UK: navy btn, white G, red B
+        { code: 'CAD', cc: 'CA', bg: '#d52b1e', c1: '#ffffff', c2: '#ffffff' },  // Canada: red btn, white C, white A
+        { code: 'EUR', cc: 'EU', bg: '#003399', c1: '#ffcc00', c2: '#ffcc00' },  // EU: navy btn, gold E, gold U
+        { code: 'AUD', cc: 'AU', bg: '#00008b', c1: '#ffcc00', c2: '#ffffff' },  // Australia: navy btn, gold A, white U
+        { code: 'NZD', cc: 'NZ', bg: '#00247d', c1: '#ffffff', c2: '#cc142b' },  // NZ: navy btn, white N, red Z
+        { code: 'ZAR', cc: 'ZA', bg: '#007a4d', c1: '#ffb612', c2: '#de3831' },  // S.Africa: green btn, gold Z, red A
+        { code: 'INR', cc: 'IN', bg: '#ff9933', c1: '#ffffff', c2: '#138808' },  // India: saffron btn, white I, green N
+        { code: 'CNY', cc: 'CN', bg: '#de2910', c1: '#ffde00', c2: '#ffde00' },  // China: red btn, yellow C, yellow N
+        { code: 'JPY', cc: 'JP', bg: '#bc002d', c1: '#ffffff', c2: '#ffffff' },  // Japan: crimson btn, white J, white P
     ];
 
     
@@ -248,7 +258,7 @@
             }
 
             // 4. Brain Handshake
-            if (typeof fetchExchangeRates === 'function') fetchExchangeRates();
+            if (typeof fetchExchangeRates === 'function' && localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false') fetchExchangeRates();
             if (typeof injectFooterIcons === 'function') injectFooterIcons();
             
             // 5. Persistence Recovery (ASYNC UPGRADE)
@@ -1287,7 +1297,26 @@
 
     /* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
-    // ... (Keep fetchExchangeRates and Mathematical Utilities) ...
+    /* --- fetchExchangeRates: live rates from frankfurter.app (no API key required) --- */
+    function fetchExchangeRates() {
+        if (!navigator.onLine) return;
+        fetch('https://api.frankfurter.app/latest?from=USD')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.rates) return;
+                exchangeRates = Object.assign({ USD: 1.0 }, data.rates);
+                localStorage.setItem(storageKeyPrefix + 'rates', JSON.stringify(exchangeRates));
+                Object.keys(exchangeRates).forEach(function(code) {
+                    if (mBT.logic.math.config.currencies[code]) {
+                        mBT.logic.math.config.currencies[code].rate = exchangeRates[code];
+                    }
+                });
+                console.log('[mBT] Exchange rates refreshed from frankfurter.app');
+            })
+            .catch(function(e) {
+                console.warn('[mBT] Rate fetch failed, using cached/default rates:', e);
+            });
+    }
 
     /* --- 3. Core Calculation Utilities (Restored) --- */
     // Logic Resolution: Essential math helpers required by the UI Render Engine.
@@ -1318,19 +1347,27 @@
         math: {
             config: {
                 currencies: {
-                    'JMD': { locale: 'en-JM', symbol: 'JMD$', rate: 1 },
-                    'USD': { locale: 'en-US', symbol: '$', rate: 1 },
-                    'GBP': { locale: 'en-GB', symbol: '£', rate: 1 },
-                    'CAD': { locale: 'en-CA', symbol: 'CA$', rate: 1 },
-                    'EUR': { locale: 'de-DE', symbol: '€', rate: 1 }
+                    'JMD': { locale: 'en-JM', symbol: 'JMD$', rate: 157.50 },
+                    'USD': { locale: 'en-US', symbol: '$', rate: 1.0 },
+                    'GBP': { locale: 'en-GB', symbol: '£', rate: 0.79 },
+                    'CAD': { locale: 'en-CA', symbol: 'CA$', rate: 1.36 },
+                    'EUR': { locale: 'de-DE', symbol: '€', rate: 0.92 },
+                    'AUD': { locale: 'en-AU', symbol: 'A$', rate: 1.52 },
+                    'NZD': { locale: 'en-NZ', symbol: 'NZ$', rate: 1.63 },
+                    'ZAR': { locale: 'en-ZA', symbol: 'R', rate: 18.50 },
+                    'INR': { locale: 'en-IN', symbol: '₹', rate: 83.00 },
+                    'CNY': { locale: 'zh-CN', symbol: '¥', rate: 7.20 },
+                    'JPY': { locale: 'ja-JP', symbol: '¥', rate: 150.00 }
                 }
             },
             format: {
                 currency: function(value, code) {
                     const currencyCode = code || displayCurrency || 'JMD';
                     const cfg = mBT.logic.math.config.currencies[currencyCode] || mBT.logic.math.config.currencies['USD'];
+                    const dp = (budget && budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
                     return new Intl.NumberFormat(cfg.locale, {
-                        style: 'currency', currency: currencyCode, currencyDisplay: 'narrowSymbol'
+                        style: 'currency', currency: currencyCode, currencyDisplay: 'narrowSymbol',
+                        minimumFractionDigits: dp, maximumFractionDigits: dp
                     }).format(value);
                 }
             },
@@ -2196,7 +2233,8 @@
         // B. Auxiliary Interface Updates (Top Level)
         if (typeof renderProjectManagement === 'function') renderProjectManagement();
         if (typeof renderStatusBar === 'function') renderStatusBar();
-        if (typeof updateOnlineStatus === 'function') updateOnlineStatus(); 
+        if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+        if (typeof updateOnlineStatus === 'function') updateOnlineStatus();
         
         // C. Focus Restoration (Legacy support for structural updates)
         // Note: Paint() handles this natively, but we keep this for the list-rebuild path.
@@ -2227,15 +2265,18 @@
         </header>
 
         <div class="flex gap-2 items-center mb-3">
-            <button id="templateFooterBtn" title="View Templates" class="p-2.5 bg-slate-800 text-white rounded-xl shadow-lg transition-all hover:bg-slate-700 active:scale-95 flex items-center justify-center">
-                ${mBTAssets.grid || '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>'}
-            </button>
+            <div class="relative shrink-0" id="currencyContainer">
+                <button id="currencyBtn" title="Base Currency"
+                    class="rounded-xl shadow-lg active:scale-95 flex items-center justify-center min-w-[46px] h-[38px] px-3 transition-all">
+                    <span id="currencyBtnCode" class="text-[18px] font-black uppercase leading-none tracking-tight"></span>
+                </button>
+                <div id="currencyPopover"
+                    class="hidden absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 min-w-[130px]">
+                </div>
+            </div>
             <button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">
                 ${mBTAssets.wand}
             </button>
-            <select id="currencyPill" data-action="set-currency" title="Base Currency" class="bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border-none outline-none cursor-pointer shadow-lg shrink-0">
-                ${FILM_CURRENCIES.map(function(c) { return '<option value="' + c.code + '"' + (c.code === displayCurrency ? ' selected' : '') + '>' + c.label + '</option>'; }).join('')}
-            </select>
             <div id="statusBar" class="flex-grow py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
         </div>
 
@@ -6674,7 +6715,7 @@ _renderTalent: function(docId, d) {
             }
 
             const fullContent = `
-                <div class="flex flex-col min-h-[600px] max-h-[90vh] bg-slate-50/50">
+                <div class="flex flex-col h-[80vh] max-h-[700px] bg-slate-50/50">
                     <div id="settingsTabNav" class="shrink-0 bg-white">
                         ${tabNavHTML}
                     </div>
@@ -8835,6 +8876,8 @@ window.updateAllHeaders = () => {
             { label: 'New Budget', icon: mBTAssets.plus, color: 'text-emerald-600', bg: 'hover:bg-emerald-50', action: 'project-new' },
             { label: 'Duplicate Budget', icon: mBTAssets.copy, color: 'text-blue-600', bg: 'hover:bg-blue-50', action: 'project-duplicate' },
             { label: 'Save as Blueprint', icon: mBTAssets.save, color: 'text-indigo-600', bg: 'hover:bg-indigo-50', action: 'blueprint-save' },
+            { label: 'Template Manager', icon: mBTAssets.grid, color: 'text-violet-600', bg: 'hover:bg-violet-50', action: 'template-manager' },
+            { label: 'Sync Rates', icon: mBTAssets.cloud, color: 'text-sky-600', bg: 'hover:bg-sky-50', action: 'project-sync' },
             { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
             { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
             { divider: true },
@@ -8918,6 +8961,34 @@ window.updateAllHeaders = () => {
                     </div>
                 </button>
             </div>`;
+    }
+
+    function renderCurrencyBtn() {
+        var cur = FILM_CURRENCIES.find(function(c) { return c.code === displayCurrency; }) || FILM_CURRENCIES[0];
+        var btn = document.getElementById('currencyBtn');
+        var codeEl = document.getElementById('currencyBtnCode');
+        if (btn) btn.style.background = cur.bg;
+        if (codeEl) codeEl.innerHTML =
+            '<span style="color:' + cur.c1 + '">' + cur.cc[0] + '</span>' +
+            '<span style="color:' + cur.c2 + '">' + cur.cc[1] + '</span>';
+
+        var pop = document.getElementById('currencyPopover');
+        if (!pop) return;
+        pop.innerHTML = FILM_CURRENCIES.map(function(c) {
+            var isActive = c.code === displayCurrency;
+            var badge =
+                '<span class="inline-flex items-center justify-center w-9 h-6 rounded text-[15px] font-black tracking-tight shrink-0" ' +
+                    'style="background:' + c.bg + '">' +
+                    '<span style="color:' + c.c1 + '">' + c.cc[0] + '</span>' +
+                    '<span style="color:' + c.c2 + '">' + c.cc[1] + '</span>' +
+                '</span>';
+            return '<button data-currency-code="' + c.code + '" ' +
+                'style="background:' + (isActive ? 'rgba(255,255,255,0.08)' : 'transparent') + '" ' +
+                'class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-all text-left hover:bg-white/10">' +
+                badge +
+                '<span class="text-[10px] font-black uppercase tracking-widest ' + (isActive ? 'text-white' : 'text-slate-400') + '">' + c.code + '</span>' +
+                '</button>';
+        }).join('');
     }
 
     function handleUndo() {
@@ -9055,18 +9126,13 @@ window.updateAllHeaders = () => {
         
         // New File Menu Actions
         mBT.core.action('project-recycle', () => { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
-        mBT.core.action('project-sync', () => { fetchExchangeRates(); mBTME.alert("Coming Soon", "Cloud Sync infrastructure is currently in development. Local exchange rates have been refreshed."); });
+        mBT.core.action('project-sync', () => { fetchExchangeRates(); mBTME.alert('Rates Updated', 'Exchange rates refreshed from network.'); });
+        mBT.core.action('template-manager', () => { openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
 
         mBT.core.action('project-import-trigger', () => { const input = document.getElementById('importFile'); if(input) input.click(); });
         mBT.core.action('project-import-file', (e, el) => { if(e.type === 'change') mBT.data.importFile(el); });
 
         // B. Global Utilities
-        mBT.core.action('set-currency', (e, el) => {
-            displayCurrency = el.value;
-            localStorage.setItem(`${storageKeyPrefix}currency`, displayCurrency);
-            if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
-            if(typeof renderStatusBar === 'function') renderStatusBar();
-        });
 
         mBT.core.action('backup-env', () => { if(typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
         mBT.core.action('export-all-data', async () => {
@@ -9273,10 +9339,9 @@ window.updateAllHeaders = () => {
                 const btn = e.target.closest('button');
                 if (!btn) return;
                 // Phase 16: Footer Nav uses hybrid openTool() loader
-                if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+                if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
-                else if (btn.id === 'templateFooterBtn') openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
@@ -9284,8 +9349,176 @@ window.updateAllHeaders = () => {
             });
         }
 
-        window.addEventListener('online', resolveConnectivityStatus);
+        /* --- Currency Popover: toggle, select, outside-click dismiss --- */
+        document.addEventListener('click', function(e) {
+            var container = document.getElementById('currencyContainer');
+            var popover = document.getElementById('currencyPopover');
+            var btn = e.target.closest('#currencyBtn');
+            var choice = e.target.closest('[data-currency-code]');
+
+            if (choice) {
+                displayCurrency = choice.dataset.currencyCode;
+                localStorage.setItem(storageKeyPrefix + 'currency', displayCurrency);
+                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                render();
+                renderCurrencyBtn();
+                if (popover) popover.classList.add('hidden');
+                return;
+            }
+
+            if (btn) {
+                if (popover) {
+                    renderCurrencyBtn();
+                    popover.classList.toggle('hidden');
+                }
+                return;
+            }
+
+            if (popover && container && !container.contains(e.target)) {
+                popover.classList.add('hidden');
+            }
+        });
+
+        window.addEventListener('online', function() { resolveConnectivityStatus(); fetchExchangeRates(); });
         window.addEventListener('offline', resolveConnectivityStatus);
+        /* Phase 50C.8 Step C: Broadcast editor focus when the main window regains focus */
+        window.addEventListener('focus', function() {
+            if (window.mBTRealtime && mBTRealtime.isConnected()) {
+                mBTRealtime.broadcastFocus('Budget Editor');
+            }
+        });
+
+        /* ========= Phase 59: Auto-Hide Navigation HUD ========= */
+        window.mBTNavHUD = (function() {
+            var hideTimer = null;
+            var _left = null, _right = null, _nav = null;
+            var _expandedW = 0;
+            var _collapsed = false;
+            var _active = false;
+
+            function els() {
+                _left  = _left  || document.getElementById('nav-left');
+                _right = _right || document.getElementById('nav-right');
+                _nav   = _nav   || document.getElementById('footer-nav');
+            }
+
+            /* Measure natural expanded width with all buttons visible */
+            function measure() {
+                els();
+                if (!_nav) return;
+                var prevTransition = _nav.style.transition;
+                var prevLT = _left.style.transition;
+                var prevRT = _right.style.transition;
+                _nav.style.transition   = 'none';
+                _left.style.transition  = 'none';
+                _right.style.transition = 'none';
+                _left.style.maxWidth    = '400px';
+                _left.style.opacity     = '1';
+                _right.style.maxWidth   = '400px';
+                _right.style.opacity    = '1';
+                _nav.style.width        = 'fit-content';
+                _nav.offsetHeight; /* force reflow */
+                _expandedW = _nav.scrollWidth;
+                _nav.style.transition   = prevTransition;
+                _left.style.transition  = prevLT;
+                _right.style.transition = prevRT;
+            }
+
+            /* Collapse pill to exact settings button footprint */
+            function hide() {
+                els();
+                if (!_nav || _collapsed) return;
+                _collapsed = true;
+                _left.style.maxWidth      = '0';
+                _left.style.opacity       = '0';
+                _left.style.pointerEvents = 'none';
+                _right.style.maxWidth     = '0';
+                _right.style.opacity      = '0';
+                _right.style.pointerEvents = 'none';
+                /* 48px btn + 4px padding each side = 56px; match button's border-radius */
+                _nav.style.width        = '56px';
+                _nav.style.padding      = '4px';
+                _nav.style.borderRadius = '18px';
+            }
+
+            /* Expand pill to full nav width */
+            function show() {
+                els();
+                if (!_nav) return;
+                clearTimeout(hideTimer);
+                _collapsed = false;
+                _left.style.maxWidth      = '400px';
+                _left.style.opacity       = '1';
+                _left.style.pointerEvents = '';
+                _right.style.maxWidth     = '400px';
+                _right.style.opacity      = '1';
+                _right.style.pointerEvents = '';
+                _nav.style.width        = _expandedW + 'px';
+                _nav.style.padding      = '6px 16px';
+                _nav.style.borderRadius = '28px';
+                if (_active) {
+                    hideTimer = setTimeout(hide, 3000);
+                }
+            }
+
+            /* Capture-phase click: if collapsed, first tap expands — don't open settings */
+            function onNavClick(e) {
+                if (_collapsed) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    show();
+                }
+            }
+
+            /* Tap outside pill collapses it (mobile) */
+            function onDocClick(e) {
+                if (!_collapsed && _nav && !_nav.contains(e.target)) {
+                    hide();
+                }
+            }
+
+            function onLeave() {
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(hide, 400);
+            }
+
+            function apply() {
+                els();
+                if (!_nav) return;
+                _active = localStorage.getItem('mBT_autoHideNav') === 'true';
+                if (_active) {
+                    measure();
+                    show();
+                    _nav.addEventListener('mouseenter', show);
+                    _nav.addEventListener('mouseleave', onLeave);
+                    _nav.addEventListener('click', onNavClick, true);
+                    document.addEventListener('click', onDocClick);
+                } else {
+                    clearTimeout(hideTimer);
+                    _collapsed = false;
+                    _nav.style.width        = '';
+                    _nav.style.padding      = '';
+                    _nav.style.borderRadius = '';
+                    _left.style.maxWidth      = '';
+                    _left.style.opacity       = '';
+                    _left.style.pointerEvents = '';
+                    _right.style.maxWidth     = '';
+                    _right.style.opacity      = '';
+                    _right.style.pointerEvents = '';
+                    _nav.removeEventListener('mouseenter', show);
+                    _nav.removeEventListener('mouseleave', onLeave);
+                    _nav.removeEventListener('click', onNavClick, true);
+                    document.removeEventListener('click', onDocClick);
+                }
+            }
+
+            window.addEventListener('resize', function() {
+                if (_active && !_collapsed) measure();
+            });
+
+            return { apply: apply, show: show, hide: hide };
+        })();
+        mBTNavHUD.apply();
 
         /* ========= Tool Bridge: unified event bus for cross-tool integration ========= */
         window.addEventListener('message', function(e) {
@@ -9300,6 +9533,10 @@ window.updateAllHeaders = () => {
             /* --- close-tool: dismiss tool modal and lifecycle sync --- */
             } else if (action === 'close-tool') {
                 if (typeof mBTME !== 'undefined' && mBTME.close) mBTME.close('tool-window');
+                /* Phase 50C.8 Step C: Re-broadcast editor focus when tool is dismissed */
+                if (window.mBTRealtime && mBTRealtime.isConnected()) {
+                    mBTRealtime.broadcastFocus('Budget Editor');
+                }
                 /* Lifecycle sync: push any changes made inside the tool back to cloud.
                    Sub-Phase 51.2 Task 8: Skip if realtime is live (changes already propagated). */
                 var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();

@@ -63,7 +63,7 @@
     #preview-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     /* ---- Toolbar ---- */
-    #preview-toolbar { height: 42px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; padding: 0 10px; flex-shrink: 0; }
+    #preview-toolbar { min-height: 42px; height: auto; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-shrink: 0; flex-wrap: wrap; }
     #preview-toolbar-title { font-weight: 700; font-size: 12px; margin-right: 8px; }
     .tab-bar { display: inline-flex; background: #f1f5f9; border-radius: 5px; padding: 2px; margin-right: auto; }
     .tab-btn { padding: 3px 12px; font-size: 11px; font-weight: 600; border: none; background: transparent; cursor: pointer; border-radius: 4px; color: var(--muted); }
@@ -82,7 +82,7 @@
     #reset-btn:hover { background: #fef2f2; border-color: #fca5a5; color: #dc2626; }
 
     /* ---- Options Bar ---- */
-    #options-bar { height: 34px; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; padding: 0 12px; flex-shrink: 0; }
+    #options-bar { min-height: 34px; height: auto; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; padding: 6px 12px; flex-shrink: 0; flex-wrap: wrap; }
     #options-bar label { font-size: 10px; color: var(--muted); font-weight: 600; }
     #options-bar select { font-size: 11px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
 
@@ -475,12 +475,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return 'mbtdb_' + templateId + '_' + (projectKey || projectId || 'default');
   }
 
+  /* ======== Phase 50C.8: Peripheral Focus Presence ======== */
+  function dispatchFocus() {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'db' } }, '*');
+    }
+  }
+  dispatchFocus();
+  window.addEventListener('focus', dispatchFocus);
+
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
     } else {
-      window.history.back();
+      /* Fallback for standalone direct-launch */
+      window.location.href = '../../../index.html';
     }
   });
 

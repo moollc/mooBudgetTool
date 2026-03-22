@@ -474,9 +474,10 @@ var mBTCalendar = (function () {
         var idx = state.budget.blackoutDays.indexOf(dateStr);
         if (idx > -1) {
             state.budget.blackoutDays.splice(idx, 1);
-        } else {
-            state.budget.blackoutDays.push(dateStr);
-        }
+    } else {
+      /* Fallback for standalone direct-launch */
+      window.location.href = '../../../index.html';
+    }
         renderCalendarGrid();
         save();
     }
