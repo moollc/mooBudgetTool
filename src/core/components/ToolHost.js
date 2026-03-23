@@ -210,5 +210,4 @@
     window.mBT.components = window.mBT.components || {};
     window.mBT.components.ToolHost = ToolHost;
 
-    console.log('[mBT] ToolHost v22 — Shadow DOM + Bridge initialized ✓');
 })();

@@ -277,6 +277,16 @@
             window.dispatchEvent(new CustomEvent('mbt:peer-release', {
                 detail: { fieldId: data.field_id }
             }));
+
+        /* --- Phase 62: RBAC — admin broadcasts a role change for a specific user --- */
+        } else if (event === 'auth_changed') {
+            var myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
+            /* Only act on messages addressed to this user */
+            if (data.target_user_id && data.target_user_id === myUserId) {
+                window.dispatchEvent(new CustomEvent('mbt:auth-changed', {
+                    detail: { role: data.role || 'viewer', changed_by: data.changed_by || '' }
+                }));
+            }
         }
     }
 
@@ -395,6 +405,24 @@
         }]);
     }
 
+    /* --- Phase 62: RBAC — Admin sends a role change to a specific peer --- */
+
+    function broadcastRoleChange(targetUserId, newRole) {
+        if (!_activeProjectId || !_connected) return;
+        var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
+        var myUserId    = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Admin';
+        _send([null, _nextRef(), presenceTopic, 'broadcast', {
+            event:   'auth_changed',
+            payload: {
+                target_user_id: targetUserId,
+                role:           newRole,
+                changed_by:     displayName,
+                changed_by_id:  myUserId
+            }
+        }]);
+    }
+
     /* --- Phase 50C.8: Tool Focus Broadcast --- */
 
     function broadcastFocus(toolName) {
@@ -447,11 +475,11 @@
         broadcastTypingLock:      broadcastTypingLock,
         broadcastTypingRelease:   broadcastTypingRelease,
         broadcastFocus:           broadcastFocus,
+        broadcastRoleChange:      broadcastRoleChange,
         isFieldLocked:            isFieldLocked,
         getLockedBy:              getLockedBy,
         getPresencePeers:         getPresencePeers,
         isConnected:              isConnected
     };
 
-    console.log('[mBT] Supabase Realtime service initialized ✓');
 })();

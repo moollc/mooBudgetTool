@@ -226,5 +226,4 @@
         getIndustryBenchmarks:    getIndustryBenchmarks
     };
 
-    console.log('[mBT] AI context service initialized ✓');
 })();

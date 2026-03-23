@@ -269,4 +269,3 @@ var MigrationHelper = {
 window.mBT = window.mBT || {};
 window.mBT.migration = MigrationHelper;
 
-console.log('[mBT] Migration utility initialized ✓');

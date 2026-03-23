@@ -142,5 +142,4 @@
         findOptimizationOpportunities:   findOptimizationOpportunities
     };
 
-    console.log('[mBT] AI pattern recognition initialized ✓');
 })();

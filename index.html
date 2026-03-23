@@ -73,7 +73,7 @@
 
     <footer id="footer-hud" class="fixed bottom-0 left-0 right-0 z-[100] p-2 pointer-events-none" style="margin-bottom:env(safe-area-inset-bottom,0)">
         <!-- The pill collapses horizontally into the center button when auto-hide is active -->
-        <div id="footer-nav" class="mx-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl flex justify-center items-center pointer-events-auto ring-1 ring-black/20 overflow-hidden" style="padding:6px 16px;border-radius:28px;width:fit-content;transition:width 0.35s cubic-bezier(0.4,0,0.2,1),padding 0.35s ease,border-radius 0.35s ease;">
+        <div id="footer-nav" class="mx-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-[28px] p-1.5 px-4 flex justify-center items-center pointer-events-auto ring-1 ring-black/20 overflow-hidden w-fit" style="transition:width 0.35s cubic-bezier(0.4,0,0.2,1),padding 0.35s ease,border-radius 0.35s ease;">
 
             <!-- Left button group — clips as pill shrinks left -->
             <div id="nav-left" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
@@ -524,54 +524,122 @@
         
           // --- C. Template Manager (Formerly mBTDBM) ---
         // Logic Resolution: Manages custom user budget templates.
+        /* --- Phase 61: Advanced Template Registry (IndexedDB-backed) --- */
         templates: {
-             getTemplates: function() {
-                const defaults = {
-                    'Commercial': { items: [{ description: 'Director', rate: 1500, unit: 'Day' }, { description: 'DOP', rate: 1200, unit: 'Day' }] },
-                    'Music Video': { items: [{ description: 'Director', rate: 800, unit: 'Day' }, { description: 'Editor', rate: 600, unit: 'Flat' }] }
-                };
-                const stored = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
-                return { ...defaults, ...stored };
+            /* Current schema version — bump this when the .moo structure changes */
+            SCHEMA_VERSION: 1,
+            /* localforage key for the custom blueprint registry */
+            STORE_KEY: 'mbt_custom_templates',
+
+            /* Load all custom blueprints from IndexedDB. Returns plain object keyed by name. */
+            load: async function() {
+                try {
+                    var raw = await mBT.data.storage.load(this.STORE_KEY);
+                    return (raw && typeof raw === 'object') ? raw : {};
+                } catch(e) {
+                    /* Graceful fallback to legacy localStorage key */
+                    try { return JSON.parse(localStorage.getItem('mBT_templates') || '{}'); } catch(_) { return {}; }
+                }
             },
-            saveFromProject: function(projectData) {
-                const structure = [];
-                const sections = projectData.sections || {};
-                
-                Object.entries(sections).forEach(([key, sec]) => {
-                    const items = (sec.items || []).map(i => {
-                        const item = JSON.parse(JSON.stringify(i));
-                        item.actual = 0;
-                        item.crew = { name: '', phone: '', email: '' };
-                        if (['Day', 'Week'].includes(item.unit)) item.quantity = 1;
-                        if (item.stageData) Object.keys(item.stageData).forEach(k => item.stageData[k].days = 1);
+
+            /* Persist the full custom registry to IndexedDB. */
+            _save: async function(registry) {
+                await mBT.data.storage.save(this.STORE_KEY, registry);
+            },
+
+            /* Validate a stored template against the current schema version.
+               Returns the template unchanged if valid, or null if incompatible. */
+            _validate: function(tmpl, name) {
+                if (!tmpl || typeof tmpl !== 'object') return null;
+                /* Schema v1 requires a structure array or items array */
+                var hasStructure = Array.isArray(tmpl.structure) || Array.isArray(tmpl.items);
+                if (!hasStructure) return null;
+                /* Reject templates from a future schema the current engine can't parse */
+                if (tmpl.schema_version && tmpl.schema_version > this.SCHEMA_VERSION) {
+                    console.warn('[mBT] Template "' + name + '" schema v' + tmpl.schema_version + ' is newer than engine v' + this.SCHEMA_VERSION + ' — skipped.');
+                    return null;
+                }
+                return tmpl;
+            },
+
+            /* Save current budget as a custom blueprint. Sanitizes rates/actuals. */
+            saveFromProject: async function(projectData, customName, customDesc) {
+                var structure = [];
+                var sections  = projectData.sections || {};
+                Object.keys(sections).forEach(function(key) {
+                    var sec   = sections[key];
+                    var items = (sec.items || []).map(function(i) {
+                        var item      = JSON.parse(JSON.stringify(i));
+                        item.actual   = 0;
+                        item.crew     = {};
+                        if (item.unit === 'Day' || item.unit === 'Week') item.quantity = 1;
+                        if (item.stageData) Object.keys(item.stageData).forEach(function(k) { item.stageData[k].days = 1; });
                         return item;
                     });
                     structure.push({ id: sec.id, name: key, items: items });
                 });
+                var name    = (customName  || (projectData.projectName + ' (Blueprint)')).trim();
+                var registry = await this.load();
+                registry[name] = {
+                    schema_version: this.SCHEMA_VERSION,
+                    label:          name,
+                    desc:           customDesc || 'Saved from "' + projectData.projectName + '"',
+                    icon:           'file',
+                    structure:      structure,
+                    saved_at:       new Date().toISOString()
+                };
+                await this._save(registry);
+                return name;
+            },
 
-                const name = projectData.projectName + " (Blueprint)";
-                this.saveTemplate(name, { 
-                    structure: structure, 
-                    label: name, 
-                    desc: 'Sanitized Project Clone', 
-                    icon: 'file' 
-                });
+            /* Upsert a raw template record (used by template tool postMessage). */
+            saveTemplate: async function(name, data) {
+                var registry = await this.load();
+                registry[name] = Object.assign({ schema_version: this.SCHEMA_VERSION }, data);
+                await this._save(registry);
             },
-            saveTemplate: function(name, items) {
-                const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');                custom[name] = { items: items };
-                localStorage.setItem('mBT_templates', JSON.stringify(custom));
-            },
-            deleteTemplate: function(name) {
-                if(['Commercial', 'Music Video'].includes(name)) return mBTME.alert("System Error", "Cannot delete default templates.");
-                const custom = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
-                delete custom[name];
-                localStorage.setItem('mBT_templates', JSON.stringify(custom));
+
+            /* Delete a custom template by name. System keys are protected. */
+            deleteTemplate: async function(name) {
+                var systemKeys = Object.keys(typeof BUDGET_TEMPLATES !== 'undefined' ? BUDGET_TEMPLATES : {});
+                if (systemKeys.includes(name)) {
+                    mBTME.alert('System Error', 'Cannot delete built-in templates.');
+                    return false;
+                }
+                var registry = await this.load();
+                if (!registry[name]) return false;
+                delete registry[name];
+                await this._save(registry);
                 return true;
             },
+
+            /* Rename a custom template. */
+            renameTemplate: async function(oldName, newName) {
+                newName = newName.trim();
+                if (!newName || oldName === newName) return false;
+                var registry = await this.load();
+                if (!registry[oldName]) return false;
+                registry[newName] = Object.assign({}, registry[oldName], { label: newName });
+                delete registry[oldName];
+                await this._save(registry);
+                return true;
+            },
+
+            /* Synchronous read of legacy localStorage key (for modal renders that haven't
+               migrated to async yet — kept for backward compat with template tool). */
+            getTemplates: function() {
+                var defaults = {
+                    'Commercial': { items: [{ description: 'Director', rate: 1500, unit: 'Day' }, { description: 'DOP', rate: 1200, unit: 'Day' }] },
+                    'Music Video': { items: [{ description: 'Director', rate: 800, unit: 'Day' }, { description: 'Editor', rate: 600, unit: 'Flat' }] }
+                };
+                try { var stored = JSON.parse(localStorage.getItem('mBT_templates') || '{}'); return Object.assign({}, defaults, stored); }
+                catch(_) { return defaults; }
+            },
+
             renderTemplateOptions: function(selected) {
-                return Object.keys(this.getTemplates()).map(k => 
-                    `<option value="${k}" ${k === selected ? 'selected' : ''}>${k}</option>`
-                ).join('');
+                return Object.keys(this.getTemplates()).map(function(k) {
+                    return '<option value="' + k + '" ' + (k === selected ? 'selected' : '') + '>' + k + '</option>';
+                }).join('');
             }
         },
         
@@ -1139,6 +1207,11 @@
 
     /* --- Task 2 & 3: Remote project update event → granular reconcile --- */
     window.addEventListener('mbt:remote-project-update', function(evt) {
+        /* Phase 63: Realtime renderer is sealed while diff modal is resolving a conflict */
+        if (window._mbtDiffSealActive) {
+            console.log('[mBT] Realtime update suppressed — diff resolution in progress');
+            return;
+        }
         var record = evt.detail && evt.detail.record;
         if (!record || !record.data) return;
         var remoteBudget = record.data;
@@ -1277,6 +1350,11 @@
         var inp = e.target;
         if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
             !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        /* Phase 62: Block focus entirely for view-only users */
+        if (typeof mBTRBAC !== 'undefined' && mBTRBAC.getRole() === 'viewer') {
+            inp.blur();
+            return;
+        }
         if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
         var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
         if (mBTRealtime.isFieldLocked(fieldId)) {
@@ -1294,6 +1372,275 @@
         var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
         mBTRealtime.broadcastTypingRelease(fieldId);
     });
+
+    /* ========= Phase 63: Offline Sync Conflict Resolution =========
+       When supabase-sync.js detects that the remote project was updated since our
+       last sync AND we also have local edits, it fires `mbt:diff-conflict` and
+       halts the sync queue. This handler:
+         1. Unbinds the realtime incoming-render listener to seal the workspace
+         2. Opens the diff iframe as a sterile microservice via openTool()
+         3. Waits for 'resolve-diff' or 'abort-diff' postMessage from the iframe
+         4. On resolve: applies merged sections, saves, re-enables realtime, force-pushes
+         5. On abort: discards unmerged deltas, re-enables realtime
+
+       Phase 62 kill-switch: if mbt:auth-changed fires while diff modal is open,
+       the RBAC eviction is relayed into the iframe AND the monolith aborts immediately.
+    ========= */
+
+    /* --- Diff state --- */
+    var _diffActive          = false;   /* True while diff modal is open */
+    var _diffPendingRecord   = null;    /* The halted localRecord from conflict event */
+    var _rtMessageHandler    = null;    /* Saved realtime message handler ref for unbind */
+
+    /* --- Seal/unseal realtime incoming updates (prevents recursive state bleeding) --- */
+    function _sealRealtimeRenderer() {
+        /* Realtime dispatches mbt:remote-project-update which calls _applyRemoteDiff.
+           We disable it by flagging — the existing handler checks this flag. */
+        window._mbtDiffSealActive = true;
+    }
+    function _unsealRealtimeRenderer() {
+        window._mbtDiffSealActive = false;
+    }
+
+
+    /* --- mbt:diff-conflict: sync halted, open diff modal --- */
+    window.addEventListener('mbt:diff-conflict', function(evt) {
+        if (_diffActive) return; /* Already handling a conflict */
+        var detail = evt.detail || {};
+        _diffPendingRecord = detail.localRecord || null;
+        _diffActive = true;
+        _sealRealtimeRenderer();
+
+        /* Fetch remote sections to pass to the iframe */
+        var remoteTime    = detail.remoteTime || '';
+        var localSections = (budget && budget.sections) ? budget.sections : {};
+
+        /* Try to fetch the current remote sections from Supabase */
+        var projectId  = detail.projectId || '';
+        var apiUrl     = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        var anonKey    = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.ANON_KEY : '';
+        var jwt        = localStorage.getItem('mbt_supabase_auth_token') || '';
+
+        function _openDiffTool(remoteSections) {
+            /* Build WASM diff payload */
+            var wasmPayload = JSON.stringify({ local: localSections, remote: remoteSections });
+            var conflictsJson = '[]';
+            try {
+                /* mbt_wasm.js exposes diff_sections via the browser ES module import */
+                if (window.mBTWasm && typeof window.mBTWasm.diff_sections === 'function') {
+                    conflictsJson = window.mBTWasm.diff_sections(wasmPayload);
+                } else {
+                    /* JS fallback: compare section names only */
+                    var fallbackConflicts = [];
+                    Object.keys(localSections).forEach(function(name) {
+                        var lItems = (localSections[name] && localSections[name].items) ? localSections[name].items.length : 0;
+                        var rItems = (remoteSections[name] && remoteSections[name].items) ? remoteSections[name].items.length : 0;
+                        if (!remoteSections[name] || lItems !== rItems) {
+                            fallbackConflicts.push({
+                                section_id: (localSections[name] && localSections[name].id) || name,
+                                section_name: name,
+                                conflict_type: !remoteSections[name] ? 'section_missing' : (lItems > rItems ? 'item_added' : 'item_removed'),
+                                local_item_count: lItems,
+                                remote_item_count: rItems
+                            });
+                        }
+                    });
+                    conflictsJson = JSON.stringify(fallbackConflicts);
+                }
+            } catch (e) {
+                console.warn('[mBT] WASM diff failed, using empty conflict list:', e);
+            }
+
+            var conflicts = [];
+            try { conflicts = JSON.parse(conflictsJson); } catch(_) {}
+
+            /* Open diff iframe */
+            openTool('./src/tools/diff/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+
+            /* Send conflict payload to iframe once it signals ready via postMessage */
+            var diffPayload = {
+                conflicts:      conflicts,
+                localSections:  localSections,
+                remoteSections: remoteSections,
+                projectKey:     storageKeyPrefix + (budget ? budget.projectName : '')
+            };
+
+            /* Wait for iframe to load then push payload */
+            var _attempts = 0;
+            var _diffSendInterval = setInterval(function() {
+                _attempts++;
+                var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (modal && modal.contentWindow) {
+                    modal.contentWindow.postMessage({ type: 'mbt:diff-init', payload: diffPayload }, '*');
+                    clearInterval(_diffSendInterval);
+                }
+                if (_attempts > 20) clearInterval(_diffSendInterval); /* Give up after 2s */
+            }, 100);
+        }
+
+        if (projectId && apiUrl) {
+            fetch(apiUrl + '/rest/v1/projects?id=eq.' + encodeURIComponent(projectId) + '&select=data', {
+                headers: { 'apikey': anonKey, 'Authorization': 'Bearer ' + (jwt || anonKey) }
+            })
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(rows) {
+                var remoteSections = (rows && rows.length && rows[0].data && rows[0].data.sections) ? rows[0].data.sections : {};
+                _openDiffTool(remoteSections);
+            })
+            .catch(function() { _openDiffTool({}); });
+        } else {
+            _openDiffTool({});
+        }
+    });
+
+    /* ========= Phase 62: mBTRBAC — Role-Based Access Control =========
+       Receives `mbt:auth-changed` events (dispatched by supabase-realtime.js when
+       a peer admin broadcasts an `auth_changed` payload targeting this user's ID).
+       Applies full DOM lockdown for 'viewer' role; lifts lockdown for 'editor'/'admin'.
+
+       localStorage key: `mbt_rbac_role`  — persists role across page reloads.
+       Values: 'admin' | 'editor' | 'viewer'  (default: 'editor' when key absent)
+    ========= */
+    var mBTRBAC = (function() {
+        var ROLE_KEY = 'mbt_rbac_role';
+
+        /* --- Read current role (default: editor) --- */
+        function getRole() {
+            return localStorage.getItem(ROLE_KEY) || 'editor';
+        }
+
+        /* --- Persist role locally --- */
+        function setRole(role) {
+            localStorage.setItem(ROLE_KEY, role);
+        }
+
+        /* --- Apply view-only lockdown: freeze all budget inputs and action buttons --- */
+        function applyViewOnlyLockdown() {
+            /* Mark body so CSS and re-render hooks can respond */
+            document.body.setAttribute('data-rbac-role', 'viewer');
+
+            /* Freeze all budget row inputs */
+            var inputs = document.querySelectorAll(
+                'input[data-field], select[data-field], ' +
+                'input[data-action="stage-update"], input[data-section]'
+            );
+            for (var i = 0; i < inputs.length; i++) {
+                inputs[i].setAttribute('readonly', 'readonly');
+                inputs[i].setAttribute('disabled', 'disabled');
+                inputs[i].style.opacity = '0.55';
+                inputs[i].style.cursor  = 'not-allowed';
+            }
+
+            /* Hide destructive action buttons (add row, delete row, section controls) */
+            var actionBtns = document.querySelectorAll(
+                '[data-action="row-delete"], [data-action="section-add"], ' +
+                '[data-action="section-delete"], [data-action="section-rename"], ' +
+                '[data-action="row-add"], .stage-remove-btn, [data-action="row-lock"]'
+            );
+            for (var j = 0; j < actionBtns.length; j++) {
+                actionBtns[j].style.display = 'none';
+            }
+
+            /* Inject persistent viewer banner at top of budget sections */
+            var banner = document.getElementById('rbac-viewer-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'rbac-viewer-banner';
+                banner.style.cssText = 'position:sticky;top:0;z-index:100;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 16px;display:flex;align-items:center;gap:8px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#92400e;';
+                banner.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+                    '<span>View Only — You have read-only access to this budget</span>';
+                var sectionsEl = document.getElementById('budget-sections');
+                if (sectionsEl && sectionsEl.parentNode) {
+                    sectionsEl.parentNode.insertBefore(banner, sectionsEl);
+                }
+            }
+        }
+
+        /* --- Lift lockdown when role is upgraded to editor or admin --- */
+        function liftLockdown() {
+            document.body.setAttribute('data-rbac-role', getRole());
+
+            var inputs = document.querySelectorAll(
+                'input[data-field], select[data-field], ' +
+                'input[data-action="stage-update"], input[data-section]'
+            );
+            for (var i = 0; i < inputs.length; i++) {
+                inputs[i].removeAttribute('readonly');
+                inputs[i].removeAttribute('disabled');
+                inputs[i].style.opacity = '';
+                inputs[i].style.cursor  = '';
+            }
+
+            var actionBtns = document.querySelectorAll(
+                '[data-action="row-delete"], [data-action="section-add"], ' +
+                '[data-action="section-delete"], [data-action="section-rename"], ' +
+                '[data-action="row-add"], .stage-remove-btn, [data-action="row-lock"]'
+            );
+            for (var j = 0; j < actionBtns.length; j++) {
+                actionBtns[j].style.display = '';
+            }
+
+            var banner = document.getElementById('rbac-viewer-banner');
+            if (banner) banner.remove();
+        }
+
+        /* --- Apply the appropriate state for the current role --- */
+        function applyCurrentRole() {
+            if (getRole() === 'viewer') applyViewOnlyLockdown();
+            else liftLockdown();
+        }
+
+        /* --- Live eviction: admin downgrades this user while session is active --- */
+        window.addEventListener('mbt:auth-changed', function(evt) {
+            var newRole    = (evt.detail && evt.detail.role) || 'viewer';
+            var changedBy  = (evt.detail && evt.detail.changed_by) || 'Admin';
+            var prevRole   = getRole();
+            setRole(newRole);
+
+            if (newRole === 'viewer' && prevRole !== 'viewer') {
+                /* --- Freeze the DOM immediately --- */
+                applyViewOnlyLockdown();
+
+                /* Blur any active input so no in-flight edits can sneak through */
+                if (document.activeElement && document.activeElement !== document.body) {
+                    document.activeElement.blur();
+                }
+
+                /* Alert the user */
+                if (typeof mBTME !== 'undefined') {
+                    mBTME.alert('Access Changed',
+                        changedBy + ' has changed your role to View Only. ' +
+                        'Your unsaved edits have been preserved locally, but you can no longer make changes to this budget.');
+                }
+            } else if ((newRole === 'editor' || newRole === 'admin') && prevRole === 'viewer') {
+                liftLockdown();
+                if (typeof mBTME !== 'undefined') {
+                    mBTME.alert('Access Restored', changedBy + ' has granted you edit access.');
+                }
+            }
+        });
+
+        /* Public API */
+        return {
+            getRole:             getRole,
+            setRole:             setRole,
+            applyCurrentRole:    applyCurrentRole,
+            applyViewOnlyLockdown: applyViewOnlyLockdown,
+            liftLockdown:        liftLockdown
+        };
+    })();
+
+    /* Apply persisted role on page load (after DOM is ready) */
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof mBTRBAC !== 'undefined') mBTRBAC.applyCurrentRole();
+    });
+
+    /* Re-apply lockdown hook: called by reconcile after sectionContainer is rebuilt */
+    function mBTRBACPostRender() {
+        if (typeof mBTRBAC !== 'undefined' && mBTRBAC.getRole() === 'viewer') {
+            mBTRBAC.applyViewOnlyLockdown();
+        }
+    }
 
     /* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
@@ -1805,6 +2152,9 @@
             openAiModel: "gpt-4o-mini",
             deepSeekModel: "deepseek-chat",
             grokModel: "grok-beta",
+            claudeModel: "claude-sonnet-4-6",
+            lmstudioModel: 'local-model',
+            lmstudioEndpoint: 'http://localhost:1234/v1/chat/completions',
             // Logic Resolution: Extremely strict prompt to eliminate "yapping" and force data-first output.
             systemContext: "ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates."
         },
@@ -1864,6 +2214,31 @@
                     } else if (provider === 'grok') {
                         url = 'https://api.x.ai/v1/chat/completions';
                         model = this.config.grokModel;
+                    } else if (provider === 'lmstudio') {
+                        url   = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || this.config.lmstudioEndpoint;
+                        model = localStorage.getItem(storageKeyPrefix + 'lmstudioModel')    || this.config.lmstudioModel;
+                    } else if (provider === 'anthropic') {
+                        /* Anthropic Messages API — different header/body structure from OpenAI */
+                        const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-api-key': apiKey,
+                                'anthropic-version': '2023-06-01'
+                            },
+                            body: JSON.stringify({
+                                model: this.config.claudeModel,
+                                max_tokens: 4096,
+                                system: systemInstruction,
+                                messages: [{ role: 'user', content: prompt }]
+                            })
+                        });
+                        if (!anthropicResponse.ok) {
+                            const err = await anthropicResponse.json().catch(() => ({}));
+                            throw new Error(`Anthropic Error ${anthropicResponse.status}: ${err.error?.message || anthropicResponse.statusText}`);
+                        }
+                        const anthropicData = await anthropicResponse.json();
+                        return anthropicData.content?.[0]?.text || 'Assistant: No analysis generated.';
                     } else {
                         throw new Error(`Provider '${provider}' not supported.`);
                     }
@@ -1967,6 +2342,7 @@
             }
         },
 
+        /* --- Phase 60: AI Oracle Bridge — generate full budget from natural language prompt --- */
         // Logic Resolution: Restored Chat Interface (Assistant)
         openChat: function() {
             if (!budget.aiContext) budget.aiContext = { chat: [], analysis: "" };
@@ -2117,6 +2493,14 @@
                             <p class="text-[8px] text-slate-400 font-bold">Chat & Consult</p>
                         </div>
                     </button>
+
+                    <button onclick="mBTME.close('aiToolsModal'); openTool('./src/tools/ai/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&mode=generate');" class="col-span-2 p-4 bg-violet-50 border border-violet-200 rounded-2xl flex items-center gap-3 hover:bg-violet-100 transition-all group">
+                        <div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-violet-500 group-hover:scale-110 transition-all">${mBTAssets.wand}</div>
+                        <div class="text-left">
+                            <h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Generate Budget</h4>
+                            <p class="text-[8px] text-slate-400 font-bold">Describe a production — AI builds the full structure</p>
+                        </div>
+                    </button>
                 </div>
                 
                 <div class="px-4 pb-4 space-y-2">
@@ -2221,9 +2605,11 @@
                 // Structural Mismatch: Rebuild only the list container
                 const sectionContainer = document.getElementById('budget-sections');
                 if(sectionContainer) sectionContainer.innerHTML = renderBudgetSections();
-                
+
                 // Re-bind specific list listeners
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                /* Phase 62: Re-apply RBAC lockdown after DOM rebuild */
+                if (typeof mBTRBACPostRender === 'function') mBTRBACPostRender();
             }
 
             // Always Paint values (covers typing, calculations, and the new rows)
@@ -3319,80 +3705,143 @@ function updateOnlineStatus() {
     if(typeof resolveConnectivityStatus === 'function') resolveConnectivityStatus();
 }
 
-// Logic Resolution: Project Template Selector (Visual Bridge)
-window.showNewProjectModal = function() {
-    // 1. Build Cards from Tier 1 Registry (Industry Standards)
-    const standardsHtml = Object.entries(BUDGET_TEMPLATES).map(([key, t]) => `
-        <button onclick="mBT.data.newProject(false, '${key}'); mBTME.close('newProjectModal');"
-            class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full h-full">
-            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">
-                ${mBTAssets[t.icon] || mBTAssets.file}
-            </div>
-            <h3 class="text-xs font-black uppercase tracking-widest text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">${t.label}</h3>
-            <p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80 line-clamp-2">${t.desc}</p>
-        </button>
-    `).join('');
+/* --- Phase 61: Async New Project Modal — preloads IndexedDB blueprints before render --- */
+window.showNewProjectModal = async function() {
+    /* Show modal immediately with loading skeleton, then swap content once blueprints load */
+    var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
+        '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Blueprints\u2026</div></div>';
+    mBTME.open('newProject', '', skeleton, 'max-w-5xl', { hideHeader: true, noPadding: true });
 
-    // 2. Build Cards from User Templates (Custom Blueprints)
-    const allTmpl = mBT.data.templates.getTemplates();
-    const systemKeys = Object.keys(BUDGET_TEMPLATES);
-    
-    const customHtml = Object.entries(allTmpl)
-        .filter(([key]) => !systemKeys.includes(key))
-        .map(([key, t]) => {
-            const label = t.label || key;
-            const icon = (t.icon && mBTAssets[t.icon]) ? mBTAssets[t.icon] : mBTAssets.file;
-            const desc = t.desc || (t.items ? `${t.items.length} Items` : 'Custom Blueprint');
-            
-            return `
-            <button onclick="mBT.data.newProject(false, '${key}'); mBTME.close('newProjectModal');"
-                class="group flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-white hover:shadow-md transition-all text-left w-full h-full">
-                <div class="flex items-center justify-between w-full mb-2">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-700 truncate w-full pr-2 group-hover:text-indigo-600">${label}</div>
-                    <div class="text-slate-300 group-hover:text-indigo-500 scale-75 flex-shrink-0">${icon}</div>
-                </div>
-                <div class="text-[8px] text-slate-400 font-bold truncate">${desc}</div>
-            </button>`;
-        }).join('');
+    /* Await IndexedDB custom blueprint registry */
+    var customRegistry = {};
+    try { customRegistry = await mBT.data.templates.load(); } catch(_) {}
 
-    // 3. Build Modal Layout
-    const content = `
-        <div class="p-8 bg-slate-50 min-h-[500px] flex flex-col">
-            <div class="text-center mb-8 shrink-0">
-                <h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Start Production</h2>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Select a blueprint to initialize budget</p>
-            </div>
-            
-            <div class="flex-grow overflow-y-auto no-scrollbar pr-2">
-                <!-- Industry Standards -->
-                <div class="mb-3 flex items-center gap-3">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>
-                    <div class="h-px bg-slate-200 flex-grow"></div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    ${standardsHtml}
-                </div>
+    /* 1. Industry Standards */
+    var standardsHtml = Object.keys(BUDGET_TEMPLATES).map(function(key) {
+        var t = BUDGET_TEMPLATES[key];
+        return '<button onclick="mBT.data.newProject(false,\'' + key + '\'); mBTME.close(\'newProject\');"' +
+            ' class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full h-full">' +
+            '<div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">' +
+            (mBTAssets[t.icon] || mBTAssets.file) + '</div>' +
+            '<h3 class="text-xs font-black uppercase tracking-widest text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">' + t.label + '</h3>' +
+            '<p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80 line-clamp-2">' + t.desc + '</p>' +
+            '</button>';
+    }).join('');
 
-                <!-- Custom Blueprints (Conditional) -->
-                ${customHtml ? `
-                <div class="mb-3 flex items-center gap-3">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>
-                    <div class="h-px bg-slate-200 flex-grow"></div>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    ${customHtml}
-                </div>` : ''}
-            </div>
+    /* 2. Custom Blueprints — validate schema, skip incompatible versions */
+    var systemKeys = Object.keys(BUDGET_TEMPLATES);
+    var validCustom = {};
+    Object.keys(customRegistry).forEach(function(key) {
+        if (systemKeys.includes(key)) return;
+        var validated = mBT.data.templates._validate(customRegistry[key], key);
+        if (validated) validCustom[key] = validated;
+    });
 
-            <div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4">
-                <button onclick="mBT.data.newProject(false, 'Blank'); mBTME.close('newProjectModal');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">
-                    Skip & Create Blank Budget
-                </button>
-            </div>
-        </div>`;
+    var customHtml = Object.keys(validCustom).map(function(key) {
+        var t     = validCustom[key];
+        var label = t.label || key;
+        var icon  = (t.icon && mBTAssets[t.icon]) ? mBTAssets[t.icon] : mBTAssets.file;
+        var desc  = t.desc || (Array.isArray(t.structure) ? t.structure.length + ' Sections' : 'Custom Blueprint');
+        var safeKey = key.replace(/'/g, "\\'");
+        return '<div class="group relative flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-white hover:shadow-md transition-all">' +
+            '<button onclick="mBT.data.newProject(false,\'' + safeKey + '\'); mBTME.close(\'newProject\');"' +
+            ' class="text-left w-full">' +
+            '<div class="flex items-center justify-between w-full mb-1">' +
+            '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 truncate pr-2 group-hover:text-indigo-600">' + label + '</div>' +
+            '<div class="text-slate-300 group-hover:text-indigo-500 scale-75 flex-shrink-0">' + icon + '</div></div>' +
+            '<div class="text-[8px] text-slate-400 font-bold truncate">' + desc + '</div></button>' +
+            '<div class="absolute top-2 right-2 hidden group-hover:flex gap-1">' +
+            '<button onclick="event.stopPropagation(); mBT_renameBlueprint(\'' + safeKey + '\');" title="Rename"' +
+            ' class="w-5 h-5 bg-white rounded shadow text-slate-400 hover:text-blue-500 flex items-center justify-center text-[9px]">' + mBTAssets.edit + '</button>' +
+            '<button onclick="event.stopPropagation(); mBT_deleteBlueprint(\'' + safeKey + '\');" title="Delete"' +
+            ' class="w-5 h-5 bg-white rounded shadow text-slate-400 hover:text-red-500 flex items-center justify-center text-[9px]">' + mBTAssets.trash + '</button>' +
+            '</div></div>';
+    }).join('');
 
-    // 4. Launch via Tier 5 Modal Engine
-    mBTME.open('newProject', '', content, 'max-w-5xl', { hideHeader: true, noPadding: true });
+    /* 3. Compose final layout */
+    var content =
+        '<div class="p-8 bg-slate-50 min-h-[500px] flex flex-col">' +
+        '<div class="text-center mb-8 shrink-0">' +
+        '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Start Production</h2>' +
+        '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Select a blueprint to initialize budget</p></div>' +
+        '<div class="flex-grow overflow-y-auto no-scrollbar pr-2">' +
+        '<div class="mb-3 flex items-center gap-3">' +
+        '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>' +
+        '<div class="h-px bg-slate-200 flex-grow"></div></div>' +
+        '<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">' + standardsHtml + '</div>' +
+        (customHtml ?
+            '<div class="mb-3 flex items-center gap-3">' +
+            '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>' +
+            '<div class="h-px bg-slate-200 flex-grow"></div>' +
+            '</div>' +
+            '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' + customHtml + '</div>' : '') +
+        '</div>' +
+        '<div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4 flex items-center justify-center gap-4">' +
+        '<button onclick="mBT.data.newProject(false,\'Blank\'); mBTME.close(\'newProject\');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">Skip &amp; Create Blank</button>' +
+        (budget ? '<button onclick="mBT_saveAsBlueprint();" class="text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors hover:bg-indigo-50 px-4 py-2 rounded-lg">Save Current as Blueprint</button>' : '') +
+        '</div></div>';
+
+    /* Swap skeleton content */
+    var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
+    if (modalBody) modalBody.innerHTML = content;
+    else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-5xl', { hideHeader: true, noPadding: true }); }
+};
+
+/* --- Phase 61: Blueprint CRUD helpers (called from modal inline buttons) --- */
+window.mBT_saveAsBlueprint = function() {
+    if (!budget) return;
+    var content =
+        '<div class="p-5 space-y-3">' +
+        '<p class="text-xs text-slate-500 font-bold">Name your blueprint. Rates and actuals will be reset to zero.</p>' +
+        '<input type="text" id="blueprintNameInput" value="' + (budget.projectName || '') + ' Blueprint"' +
+        ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+        '<input type="text" id="blueprintDescInput" placeholder="Optional description\u2026"' +
+        ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+        '<div class="flex gap-2 pt-1">' +
+        '<button onclick="mBTME.close(\'saveBlueprintModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+        '<button onclick="mBT_confirmSaveBlueprint();" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Save Blueprint</button>' +
+        '</div></div>';
+    mBTME.close('newProject');
+    mBTME.open('saveBlueprintModal', 'Save as Blueprint', content, 'max-w-sm');
+};
+
+window.mBT_confirmSaveBlueprint = async function() {
+    var name = (document.getElementById('blueprintNameInput') || {}).value || '';
+    var desc = (document.getElementById('blueprintDescInput') || {}).value || '';
+    name = name.trim();
+    if (!name) return;
+    mBTME.close('saveBlueprintModal');
+    try {
+        var savedName = await mBT.data.templates.saveFromProject(budget, name, desc);
+        mBTME.alert('Blueprint Saved', '\u201c' + savedName + '\u201d added to My Blueprints.');
+    } catch(e) {
+        mBTME.alert('Error', 'Could not save blueprint: ' + (e.message || 'Unknown error'));
+    }
+};
+
+window.mBT_deleteBlueprint = async function(name) {
+    mBTME.close('newProject');
+    var content =
+        '<div class="p-5 space-y-4">' +
+        '<p class="text-sm text-slate-600">Delete blueprint <strong>' + name + '</strong>? This cannot be undone.</p>' +
+        '<div class="flex gap-2">' +
+        '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+        '<button onclick="mBT.data.templates.deleteTemplate(\'' + name.replace(/'/g, "\\'") + '\').then(function(){ mBTME.close(\'deleteBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all">Delete</button>' +
+        '</div></div>';
+    mBTME.open('deleteBlueprintModal', 'Delete Blueprint', content, 'max-w-sm');
+};
+
+window.mBT_renameBlueprint = async function(oldName) {
+    mBTME.close('newProject');
+    var content =
+        '<div class="p-5 space-y-3">' +
+        '<input type="text" id="renameBlueprintInput" value="' + oldName + '"' +
+        ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+        '<div class="flex gap-2">' +
+        '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+        '<button onclick="var n=(document.getElementById(\'renameBlueprintInput\')||{}).value||\'\'; mBT.data.templates.renameTemplate(\'' + oldName.replace(/'/g, "\\'") + '\', n).then(function(){ mBTME.close(\'renameBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Rename</button>' +
+        '</div></div>';
+    mBTME.open('renameBlueprintModal', 'Rename Blueprint', content, 'max-w-sm');
 };
 
 
@@ -9418,7 +9867,7 @@ window.updateAllHeaders = () => {
                 _right.style.opacity    = '1';
                 _nav.style.width        = 'fit-content';
                 _nav.offsetHeight; /* force reflow */
-                _expandedW = _nav.scrollWidth;
+                _expandedW = _nav.offsetWidth; /* offsetWidth includes border under box-sizing:border-box */
                 _nav.style.transition   = prevTransition;
                 _left.style.transition  = prevLT;
                 _right.style.transition = prevRT;
@@ -9612,7 +10061,112 @@ window.updateAllHeaders = () => {
                         console.log('[mBT] Rate updated for:', payload.description);
                     }
                 }
+
+            /* --- load-budget: receive AI-generated .moo payload from Oracle iframe --- */
+            } else if (action === 'load-budget' && payload.budgetData) {
+                /* Defense-in-depth sanitization — iframe already sanitized, monolith sanitizes again */
+                function sanitizeBudgetNode(node) {
+                    if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
+                    if (Array.isArray(node))       return node.map(sanitizeBudgetNode);
+                    if (node && typeof node === 'object') {
+                        var c = {};
+                        Object.keys(node).forEach(function(k) { c[k] = sanitizeBudgetNode(node[k]); });
+                        return c;
+                    }
+                    return node;
+                }
+                var lbSanitized = sanitizeBudgetNode(payload.budgetData);
+
+                if (!lbSanitized.projectName || typeof lbSanitized.sections !== 'object') {
+                    mBTME.alert('Invalid Budget', 'The AI returned an incomplete structure. Try again with more detail.');
+                    return;
+                }
+
+                Object.keys(lbSanitized.sections).forEach(function(sName) {
+                    var sec = lbSanitized.sections[sName];
+                    if (!sec.id)                 sec.id = sName.toLowerCase().replace(/\s+/g,'_').substring(0,20);
+                    if (sec.isOpen === undefined) sec.isOpen = true;
+                    if (!Array.isArray(sec.items)) { sec.items = []; return; }
+                    sec.items = sec.items
+                        .filter(function(it) { return it && typeof it.description === 'string'; })
+                        .map(function(it, idx) {
+                            it.id         = it.id || ('item_' + idx + '_' + Math.random().toString(36).substr(2,4));
+                            it.quantity   = Number(it.quantity)   || 1;
+                            it.rate       = Number(it.rate)       || 0;
+                            it.multiplier = Number(it.multiplier) || 1;
+                            it.actual     = Number(it.actual)     || 0;
+                            it.unit       = it.unit     || 'Flat';
+                            it.rateType   = it.rateType || 'negotiable';
+                            it.crew       = it.crew     || {};
+                            return it;
+                        });
+                });
+
+                lbSanitized.company               = lbSanitized.company               || 'Independent';
+                lbSanitized.startDate             = lbSanitized.startDate             || new Date().toISOString().split('T')[0];
+                lbSanitized.contingencyPercentage = Number(lbSanitized.contingencyPercentage) || 10;
+                lbSanitized.salesTaxPercentage    = Number(lbSanitized.salesTaxPercentage)    || 0;
+                lbSanitized.discountPercentage    = Number(lbSanitized.discountPercentage)    || 0;
+                lbSanitized.documents    = Array.isArray(lbSanitized.documents)    ? lbSanitized.documents    : [];
+                lbSanitized.attachments  = Array.isArray(lbSanitized.attachments)  ? lbSanitized.attachments  : [];
+                lbSanitized.globalItems  = Array.isArray(lbSanitized.globalItems)  ? lbSanitized.globalItems  : [];
+                lbSanitized.aiContext    = lbSanitized.aiContext    || { chat: [], analysis: '' };
+                lbSanitized.activityLog  = lbSanitized.activityLog || [];
+
+                var lbBase = lbSanitized.projectName.replace(/[^a-zA-Z0-9 _-]/g,'').trim() || 'AI Budget';
+                lbSanitized.projectName = lbBase + ' ' + new Date().toISOString().split('T')[0];
+
+                budget = mBT.data.state.wrap(lbSanitized);
+                currentProjectName = lbSanitized.projectName;
+                mBT.data.save().then(function() { mBT.data.load(lbSanitized.projectName); });
+                mBTME.close('tool-window');
+                mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
+
+            /* --- Phase 63: resolve-diff — user resolved conflict in diff iframe --- */
+            } else if (action === 'resolve-diff' && payload.mergedSections) {
+                _diffActive = false;
+                _unsealRealtimeRenderer();
+                mBTME.close('tool-window');
+
+                /* Apply merged sections to the live budget */
+                if (budget) {
+                    budget.sections  = payload.mergedSections;
+                    budget.updated_at = new Date().toISOString();
+                    mBT.data.save().then(function() {
+                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                        /* Force-push the resolved state to Supabase, bypassing conflict check */
+                        if (window.mBTSync && budget) {
+                            var budgetId = budget.id || budget.projectName;
+                            mBTSync.forcePushProject(budgetId, budget).catch(function(e) {
+                                console.warn('[mBT] Force-push after diff resolution failed:', e);
+                            });
+                        }
+                    });
+                    _diffPendingRecord = null;
+                    mBTME.alert('Conflict Resolved', 'Merged budget saved and pushed to cloud.');
+                }
+
+            /* --- Phase 63: abort-diff — user chose to discard and cancel sync --- */
+            } else if (action === 'abort-diff') {
+                _diffActive = false;
+                _diffPendingRecord = null;
+                _unsealRealtimeRenderer();
+                mBTME.close('tool-window');
+                mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
             }
+        });
+
+        /* --- Phase 63 / Phase 62 bridge: relay RBAC eviction into open diff iframe --- */
+        window.addEventListener('mbt:auth-changed', function(evictEvt) {
+            if (!_diffActive) return;
+            var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+            if (modal && modal.contentWindow) {
+                modal.contentWindow.postMessage({ type: 'mbt:rbac-eviction' }, '*');
+            }
+            /* Also immediately abort on the monolith side */
+            _diffActive        = false;
+            _diffPendingRecord = null;
+            _unsealRealtimeRenderer();
         });
     }
 

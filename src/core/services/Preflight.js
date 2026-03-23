@@ -157,11 +157,9 @@
                         if (!tool.path) return;
                         fetch(tool.path)
                             .then(function () {
-                                console.log('[mBT Preflight] Tool OK: ' + tool.id);
-                            })
+                                                })
                             .catch(function () {
-                                console.warn('[mBT Preflight] Tool missing: ' + tool.id + ' at ' + tool.path);
-                                document.dispatchEvent(new CustomEvent('mbt:tool-missing', {
+                                            document.dispatchEvent(new CustomEvent('mbt:tool-missing', {
                                     bubbles: true,
                                     detail: { id: tool.id, path: tool.path }
                                 }));
@@ -169,7 +167,6 @@
                     });
                 })
                 .catch(function () {
-                    console.warn('[mBT Preflight] tools-manifest.json not found');
                 });
         }
     };
@@ -183,13 +180,10 @@
         document.addEventListener('DOMContentLoaded', function () {
             Preflight.check();
             Preflight.checkManifest();
-            console.log('[mBT] Preflight initialized ✓');
         });
     } else {
         Preflight.check();
         Preflight.checkManifest();
-        console.log('[mBT] Preflight initialized ✓');
     }
 
-    console.log('[mBT] Preflight module loaded ✓');
 })();

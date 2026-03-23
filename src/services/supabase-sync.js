@@ -279,6 +279,69 @@
         return res.json();
     }
 
+    /* --- Phase 63: Simple version hash — sha-like fingerprint of updated_at + projectName.
+           Used to detect remote-ahead conflicts without a full schema migration.
+           If the remote record's updated_at differs from our local last-sync marker,
+           a potential conflict is flagged. --- */
+    function _generateVersionHash(record) {
+        var str = (record.updated_at || '') + '|' + (record.id || '') + '|' + (record.data && record.data.projectName ? record.data.projectName : '');
+        var hash = 0;
+        for (var i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+        }
+        return (hash >>> 0).toString(16);
+    }
+
+    /* --- Phase 63: Check remote updated_at before upserting a project.
+           If the remote version is newer than our local last-sync marker AND we have
+           local edits (local.updated_at > last_sync), a conflict is detected.
+           Fires window event 'mbt:diff-conflict' and returns false to halt the sync queue.
+           Returns true if safe to proceed. --- */
+    async function _checkProjectConflict(table, record) {
+        if (table !== 'projects' || !record.id) return true;
+
+        var lastSyncMs = 0;
+        try {
+            var rawSync = window.mBTSupabaseConfig && window.mBTSupabaseConfig.SYNC && window.mBTSupabaseConfig.SYNC.LAST_SYNC_KEY
+                ? await (window.mBTStorage || window.mBT.storage).getItem(window.mBTSupabaseConfig.SYNC.LAST_SYNC_KEY)
+                : null;
+            if (rawSync) lastSyncMs = typeof rawSync === 'number' ? rawSync : new Date(rawSync).getTime();
+        } catch (_) {}
+
+        if (!lastSyncMs) return true; /* First-ever sync — no baseline, safe to push */
+
+        var localUpdated = record.updated_at ? new Date(record.updated_at).getTime() : 0;
+        if (localUpdated <= lastSyncMs) return true; /* Local hasn't changed since last sync — safe */
+
+        /* Fetch current remote updated_at */
+        try {
+            var res = await fetchWithRetry(
+                getBaseUrl(table) + '?id=eq.' + encodeURIComponent(record.id) + '&select=id,updated_at',
+                { method: 'GET', headers: getHeaders() }
+            );
+            if (!res.ok) return true; /* Can't check — proceed optimistically */
+            var rows = await res.json();
+            if (!rows || !rows.length) return true; /* New record — no conflict possible */
+
+            var remoteUpdatedMs = rows[0].updated_at ? new Date(rows[0].updated_at).getTime() : 0;
+
+            /* Conflict: remote was updated after our last sync AND we also have local changes */
+            if (remoteUpdatedMs > lastSyncMs && localUpdated > lastSyncMs) {
+                window.dispatchEvent(new CustomEvent('mbt:diff-conflict', {
+                    detail: {
+                        projectId:    record.id,
+                        localRecord:  record,
+                        remoteTime:   rows[0].updated_at,
+                        localTime:    record.updated_at
+                    }
+                }));
+                return false; /* Halt push for this record */
+            }
+        } catch (_) {}
+
+        return true;
+    }
+
     /* --- Upsert a record (insert or update by id) --- */
     async function sbUpsert(table, record) {
         var res = await fetchWithRetry(getBaseUrl(table), {
@@ -288,6 +351,15 @@
         });
         if (!res.ok) throw new Error('Supabase upsert failed for ' + table + ': ' + res.statusText);
         return res.json();
+    }
+
+    /* --- Phase 63: Conflict-aware project upsert — wraps sbUpsert with version check.
+           Returns { pushed: true } if successful, { conflict: true } if halted. --- */
+    async function sbUpsertProject(record) {
+        var safe = await _checkProjectConflict('projects', record);
+        if (!safe) return { conflict: true };
+        await sbUpsert('projects', record);
+        return { pushed: true };
     }
 
     /* --- Delete a record by id --- */
@@ -509,9 +581,17 @@
                         id: budgetId,
                         user_id: userId,
                         data: cleanBudget,
-                        updated_at: cleanBudget.updated_at || new Date().toISOString()
+                        updated_at: cleanBudget.updated_at || new Date().toISOString(),
+                        version_hash: _generateVersionHash({ id: budgetId, updated_at: cleanBudget.updated_at, data: cleanBudget })
                     };
-                    await sbUpsert('projects', monolithPayload);
+                    /* Phase 63: conflict-aware push — halts and fires mbt:diff-conflict if remote diverged */
+                    var pushResult = await sbUpsertProject(monolithPayload);
+                    if (pushResult.conflict) {
+                        /* Conflict detected — sync queue is halted for this project.
+                           The mbt:diff-conflict event is already dispatched; stop processing. */
+                        _isSyncing = false;
+                        return { synced: totalSynced, errors: totalErrors, conflicts: conflicts, haltedByConflict: true };
+                    }
                     totalSynced++;
                     pushedProjectIds[budgetId] = true;
                 } catch (e) {
@@ -815,18 +895,30 @@
     /* --- 6. GLOBAL EXPOSURE --- */
 
     window.mBTSync = {
-        pushAll:           syncPushAll,
-        pullAll:           syncPullAll,
-        exportData:        exportAllData,
-        signIn:            signIn,
-        signUp:            signUp,
-        forgotPassword:    forgotPassword,
-        updatePassword:    updatePassword,
-        signInWithGoogle:  signInWithGoogle,
-        signOut:           signOut,
-        saveProfile:       saveProfile,
-        fetchProfile:      fetchProfile,
+        pushAll:            syncPushAll,
+        pullAll:            syncPullAll,
+        exportData:         exportAllData,
+        signIn:             signIn,
+        signUp:             signUp,
+        forgotPassword:     forgotPassword,
+        updatePassword:     updatePassword,
+        signInWithGoogle:   signInWithGoogle,
+        signOut:            signOut,
+        saveProfile:        saveProfile,
+        fetchProfile:       fetchProfile,
         refreshAccessToken: refreshAccessToken,
+        /* Phase 63: force-push a resolved project after diff merge, bypassing conflict check */
+        forcePushProject:   function(projectId, data) {
+            var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+            var payload = {
+                id: projectId,
+                user_id: userId,
+                data: _stripBase64Attachments(data),
+                updated_at: new Date().toISOString(),
+                version_hash: _generateVersionHash({ id: projectId, updated_at: new Date().toISOString(), data: data })
+            };
+            return sbUpsert('projects', payload);
+        },
         processAuthHash:   processAuthHash,
         scheduleAutoSync:  scheduleAutoSync,
         pushPreferences:   pushPreferences,
@@ -836,5 +928,4 @@
         _setBudgetSettings: null
     };
 
-    console.log('[mBT] Supabase sync service initialized ✓');
 })();

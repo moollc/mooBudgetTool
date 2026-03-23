@@ -53,5 +53,4 @@
         }
     };
 
-    console.log('[mBT] EmbeddedMode:', embedded ? 'active' : 'standalone');
 })();

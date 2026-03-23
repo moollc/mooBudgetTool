@@ -278,4 +278,3 @@ window.mBT.le = {
   stageCrewDays: stageCrewDays,
 };
 
-console.log('[mBT] Logic Engine initialized ✓');

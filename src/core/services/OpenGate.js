@@ -23,7 +23,6 @@
          */
         init: function () {
             if (!window.mBTOG) {
-                console.warn('[OpenGate Shell] Shared engine (mBTOG) not loaded.');
                 return Promise.resolve();
             }
             return window.mBTOG.init().then(function () {

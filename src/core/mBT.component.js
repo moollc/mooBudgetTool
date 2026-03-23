@@ -10,53 +10,40 @@ class MBTTool extends HTMLElement {
         this.attachShadow({ mode: 'open' });
     }
 
-    async connectedCallback() {
-        const src = this.getAttribute('data-src');
+    connectedCallback: function() {
+        var src = this.getAttribute('data-src');
+        var self = this;
         if (!src) return;
 
-        try {
-            const response = await fetch(src);
-            const html = await response.text();
+        fetch(src).then(function(response) {
+            return response.text();
+        }).then(function(html) {
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(html, 'text/html');
+            var scripts = doc.querySelectorAll('script');
+            var newBody = document.createElement('div');
 
-            // Parse the fetched HTML
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
+            var st = doc.querySelectorAll('style');
+            for (var si = 0; si < st.length; si++) {
+                self.shadowRoot.appendChild(st[si].cloneNode(true));
+            }
 
-            // Find all scripts to execute them
-            const scripts = doc.querySelectorAll('script');
-            const newHead = document.createElement('div');
-            const newBody = document.createElement('div');
-
-            // Move styles and structure into shadow DOM
-            const st = doc.querySelectorAll('style');
-            st.forEach(s => this.shadowRoot.appendChild(s.cloneNode(true)));
-            
-            // Extract body content and place in shadow DOM
             newBody.innerHTML = doc.body.innerHTML;
-            this.shadowRoot.appendChild(newBody);
+            self.shadowRoot.appendChild(newBody);
 
-            // Re-create scripts so they execute inside the Shadow DOM context
-            // Note: Inline scripts run globally, so tools must be refactored to IIFEs
-            // and use `document.currentScript.getRootNode()` or similar to scope.
-            scripts.forEach(script => {
-                const newScript = document.createElement('script');
+            for (var i = 0; i < scripts.length; i++) {
+                var script = scripts[i];
+                var newScript = document.createElement('script');
                 if (script.src) {
                     newScript.src = script.src;
                 } else {
-                    newScript.textContent = `
-                        (function(shadowRoot) {
-                            ${script.textContent}
-                        })(document.currentScript.getRootNode());
-                    `;
+                    newScript.textContent = '(function(shadowRoot) { ' + script.textContent + ' })(document.currentScript.getRootNode());';
                 }
-                this.shadowRoot.appendChild(newScript);
-            });
-
-        } catch (e) {
-            // Logic Resolution: Fallback to classic iframe if fetch is blocked by CORS (e.g. file:/// protocol)
-            console.warn('[mBT.component] Shadow DOM fetch failed, falling back to iframe:', e.message);
-            this.shadowRoot.innerHTML = `<iframe src="${src}" style="width:100%; height:100%; border:none; display:block;"></iframe>`;
-        }
+                self.shadowRoot.appendChild(newScript);
+            }
+        }).catch(function(e) {
+            self.shadowRoot.innerHTML = '<iframe src="' + src + '" style="width:100%; height:100%; border:none; display:block;"></iframe>';
+        });
     }
 }
 

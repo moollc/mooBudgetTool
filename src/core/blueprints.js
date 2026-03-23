@@ -10,7 +10,7 @@
     window.mBT.blueprints = window.mBT.blueprints || {};
 
     // Industry standard budget categories
-    const CATEGORY_DEFINITIONS = {
+    var CATEGORY_DEFINITIONS = {
         labor: {
             name: 'Labor',
             subcategories: ['director', 'cinematographer', 'producer', 'crew', 'above_the_line'],
@@ -50,7 +50,7 @@
     };
 
     // Budget templates for different production types
-    const TEMPLATES = {
+    var TEMPLATES = {
         commercial: {
             name: 'Commercial Production',
             duration: 3, // days
@@ -120,10 +120,10 @@
      * @returns {Object} Budget structure
      */
     function generateBudgetFromTemplate(templateName, totalBudget) {
-        const template = TEMPLATES[templateName] || TEMPLATES.commercial;
-        const categories = Object.entries(template.categories);
+        var template = TEMPLATES[templateName] || TEMPLATES.commercial;
+        var categories = Object.entries(template.categories);
 
-        const budget = {
+        var budget = {
             project_title: 'New Project',
             total_budget: totalBudget,
             duration: template.duration,
@@ -131,11 +131,11 @@
             categories: {}
         };
 
-        categories.forEach(([categoryKey, config]) => {
-            const amount = totalBudget * config.allocation;
-            budget.categories[categoryKey] = {
-                name: config.name,
-                description: config.description,
+        categories.forEach(function(entry) {
+            var amount = totalBudget * entry[1].allocation;
+            budget.categories[entry[0]] = {
+                name: entry[1].name,
+                description: entry[1].description,
                 amount: amount,
                 items: []
             };
@@ -152,15 +152,14 @@
     function hydrateBudget(budget) {
         if (!budget) return {};
 
-        // Get existing categories
-        const existingCategories = new Set(Object.keys(budget.categories || {}));
+        var existingCategories = {};
+        Object.keys(budget.categories || {}).forEach(function(k) { existingCategories[k] = true; });
 
-        // Add missing categories from definitions
-        Object.entries(CATEGORY_DEFINITIONS).forEach(([key, definition]) => {
-            if (!existingCategories.has(key)) {
-                budget.categories[key] = {
-                    name: definition.name,
-                    description: definition.description,
+        Object.entries(CATEGORY_DEFINITIONS).forEach(function(entry) {
+            if (!existingCategories[entry[0]]) {
+                budget.categories[entry[0]] = {
+                    name: entry[1].name,
+                    description: entry[1].description,
                     amount: 0,
                     items: []
                 };
@@ -176,14 +175,10 @@
      * @returns {Object} Complete budget structure
      */
     function generateDefaultBudget(budgetAmount) {
-        // Start with commercial template distribution
-        const templateBudget = generateBudgetFromTemplate('commercial', budgetAmount);
-        
-        // Hydrate with all standard categories
-        const hydrated = hydrateBudget(templateBudget);
+        var templateBudget = generateBudgetFromTemplate('commercial', budgetAmount);
+        var hydrated = hydrateBudget(templateBudget);
 
-        // Ensure all categories have proper structure
-        Object.values(hydrated.categories).forEach(cat => {
+        Object.values(hydrated.categories).forEach(function(cat) {
             cat.subcategories = cat.subcategories || [];
         });
 
@@ -203,9 +198,8 @@
             };
         }
 
-        const errors = [];
+        var errors = [];
 
-        // Check for required fields
         if (!budget.project_title) {
             errors.push('Project title is required');
         }
@@ -214,19 +208,18 @@
             errors.push('Total budget must be a positive number');
         }
 
-        // Validate categories sum to total budget
-        const categoryTotal = Object.entries(budget.categories || {})
-            .reduce((sum, [, cat]) => sum + (cat.amount || 0), 0);
+        var categoryTotal = Object.entries(budget.categories || {})
+            .reduce(function(sum, entry) { return sum + (entry[1].amount || 0); }, 0);
 
-        const variance = Math.abs(budget.total_budget - categoryTotal);
-        if (variance > 10) { // Allow $10 variance due to rounding
-            errors.push(`Category sum ($${categoryTotal.toFixed(2)}) differs from total budget ($${budget.total_budget.toFixed(2)}) by $${variance.toFixed(2)}`);
+        var variance = Math.abs(budget.total_budget - categoryTotal);
+        if (variance > 10) {
+            errors.push('Category sum ($' + categoryTotal.toFixed(2) + ') differs from total budget ($' + budget.total_budget.toFixed(2) + ') by $' + variance.toFixed(2));
         }
 
         return {
             valid: errors.length === 0,
-            errors,
-            budget
+            errors: errors,
+            budget: budget
         };
     }
 
@@ -237,19 +230,21 @@
      * @param {number} factor - Scaling factor (e.g., 1.0, 0.5)
      * @returns {Object} Scaled budget
      */
-    function applyTemplateScaling(budget, templateName, factor = 1.0) {
+    function applyTemplateScaling(budget, templateName, factor) {
+        factor = factor || 1.0;
         if (!budget || !TEMPLATES[templateName]) return budget;
 
-        const template = TEMPLATES[templateName];
-        const scaled = { ...budget };
+        var template = TEMPLATES[templateName];
+        var scaled = Object.assign({}, budget);
 
-        Object.entries(template.categories).forEach(([key, config]) => {
-            const scaledAmount = (budget.total_budget || 0) * config.allocation * factor;
-            scaled.categories[key] = {
-                name: config.name,
-                description: config.description,
+        Object.entries(template.categories).forEach(function(entry) {
+            var scaledAmount = (budget.total_budget || 0) * entry[1].allocation * factor;
+            var existingItems = (budget.categories[entry[0]] && budget.categories[entry[0]].items) ? budget.categories[entry[0]].items : [];
+            scaled.categories[entry[0]] = {
+                name: entry[1].name,
+                description: entry[1].description,
                 amount: scaledAmount,
-                items: budget.categories[key]?.items || []
+                items: existingItems
             };
         });
 
@@ -262,10 +257,13 @@
      * @param {string} productionType - Commercial, Documentary, etc.
      * @returns {number} Estimated headcount
      */
-    function estimateHeadcount(budget, productionType = 'commercial') {
-        const template = TEMPLATES[productionType];
-        const multiplier = budget.total_budget / (template?.typicalDuration || 1) || 1;
-        return Math.round(template?.typicalHeadcount * (multiplier / 1.5) || 15);
+    function estimateHeadcount(budget, productionType) {
+        productionType = productionType || 'commercial';
+        var template = TEMPLATES[productionType];
+        var duration = (template && template.typicalDuration) ? template.typicalDuration : 1;
+        var multiplier = budget.total_budget / duration || 1;
+        var headcount = (template && template.typicalHeadcount) ? template.typicalHeadcount : 15;
+        return Math.round(headcount * (multiplier / 1.5) || 15);
     }
 
     /**
@@ -276,20 +274,21 @@
     function addSampleLineItems(budget) {
         if (!budget) return budget;
 
-        const categories = budget.categories || {};
-        Object.keys(categories).forEach(key => {
-            const cat = categories[key];
-            const subcategories = cat.subcategories || [];
+        var categories = budget.categories || {};
+        Object.keys(categories).forEach(function(key) {
+            var cat = categories[key];
+            var subcategories = cat.subcategories || [];
             
             if (subcategories.length === 0) return;
 
-            // Generate sample items for this category
-            cat.items = subcategories.slice(0, 3).map(subcat => ({
-                name: `${key} - ${subcat.replace('_', ' ')}`,
-                unit_price: 100,
-                quantity: 1,
-                amount: 100
-            }));
+            cat.items = subcategories.slice(0, 3).map(function(subcat) {
+                return {
+                    name: key + ' - ' + subcat.replace('_', ' '),
+                    unit_price: 100,
+                    quantity: 1,
+                    amount: 100
+                };
+            });
         });
 
         return budget;
