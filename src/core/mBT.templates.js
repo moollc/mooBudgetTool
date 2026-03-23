@@ -1,7 +1,7 @@
 /* mBT Phase 47: Extracted Static Presets & Templates */
 
 /* --- 5. Production Presets (Industry standard stage ratios) --- */
-const STAGE_PRESETS = {
+var STAGE_PRESETS = {
     'TVC': { 'dev': 10, 'pre': 25, 'prod': 15, 'post': 35, 'dist': 15 },
     'Music Video': { 'dev': 10, 'pre': 20, 'prod': 15, 'post': 40, 'dist': 15 },
     'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
@@ -9,7 +9,7 @@ const STAGE_PRESETS = {
 };
 
 /* --- 5.1. Payment Methods (Foundations Phase 3) --- */
-const PAYMENT_SERVICES = [
+var PAYMENT_SERVICES = [
     { id: 'cash', label: 'Cash / Petty Cash', icon: mBTAssets.money },
     { id: 'transfer', label: 'Bank Transfer (JMD)', icon: mBTAssets.bank },
     { id: 'wire', label: 'Intl Wire (USD)', icon: mBTAssets.globe },
@@ -20,7 +20,7 @@ const PAYMENT_SERVICES = [
 ];
 
 /* --- 6. Budget Templates (Industry Standard Structures) --- */
-const BUDGET_TEMPLATES = {
+var BUDGET_TEMPLATES = {
     'Commercial': {
         icon: 'film',
         label: 'TV Commercial',

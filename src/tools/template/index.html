@@ -102,7 +102,6 @@
   <!-- Snackbar -->
   <div id="snackbar" class="hidden fixed bottom-6 left-1/2 z-50 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-5 py-3 rounded-2xl shadow-2xl snack-in"></div>
 
-  <script src="../../lib/localforage.min.js"></script>
   <script>
     /* ========= mBTTemplateManager ========= */
 
@@ -162,24 +161,43 @@
             el._t = setTimeout(function() { el.classList.add('hidden'); }, 2800);
         }
 
-        /* --- Get custom templates from localStorage --- */
-        function getCustomTemplates() {
-            try { return JSON.parse(localStorage.getItem('mBT_templates') || '{}'); }
-            catch(e) { return {}; }
+        /* --- IndexedDB store key — must match monolith's mBT.data.templates.STORE_KEY --- */
+        var STORE_KEY = 'mbt_custom_templates';
+
+        /* --- Load all custom blueprints from IndexedDB. Returns promise resolving to plain object. --- */
+        function loadCustomTemplates() {
+            return localforage.getItem(STORE_KEY).then(function(raw) {
+                if (raw && typeof raw === 'object') return raw;
+                /* Fallback: migrate from legacy localStorage key on first load */
+                try {
+                    var legacy = JSON.parse(localStorage.getItem('mBT_templates') || '{}');
+                    if (Object.keys(legacy).length) {
+                        return localforage.setItem(STORE_KEY, legacy).then(function() { return legacy; });
+                    }
+                } catch(_) {}
+                return {};
+            }).catch(function() { return {}; });
+        }
+
+        /* --- Persist the full registry back to IndexedDB --- */
+        function saveRegistryToIDB(registry) {
+            return localforage.setItem(STORE_KEY, registry);
         }
 
         /* --- Save custom template --- */
         function saveCustomTemplate(name, data) {
-            var all = getCustomTemplates();
-            all[name] = data;
-            localStorage.setItem('mBT_templates', JSON.stringify(all));
+            return loadCustomTemplates().then(function(all) {
+                all[name] = Object.assign({ schema_version: 1 }, data);
+                return saveRegistryToIDB(all);
+            });
         }
 
         /* --- Delete custom template --- */
         function deleteCustomTemplate(name) {
-            var all = getCustomTemplates();
-            delete all[name];
-            localStorage.setItem('mBT_templates', JSON.stringify(all));
+            return loadCustomTemplates().then(function(all) {
+                delete all[name];
+                return saveRegistryToIDB(all);
+            });
         }
 
         /* --- Render a single section preview pill list --- */
@@ -217,52 +235,59 @@
             grid.innerHTML = html;
         }
 
-        /* --- Render custom templates --- */
+        /* --- Render custom templates (async — reads from IndexedDB) --- */
         function renderCustom() {
             var grid = document.getElementById('custom-grid');
             var empty = document.getElementById('custom-empty');
             if (!grid) return;
 
-            var custom = getCustomTemplates();
-            var keys = Object.keys(custom);
+            loadCustomTemplates().then(function(custom) {
+                var keys = Object.keys(custom).filter(function(k) {
+                    /* Skip invalid entries: must have a structure array */
+                    var t = custom[k];
+                    var sv = t.schema_version;
+                    if (sv && sv > 1) return false; /* Future schema — skip */
+                    return Array.isArray(t.structure) || Array.isArray(t.items);
+                });
 
-            if (!keys.length) {
-                grid.innerHTML = '';
-                if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
-                return;
-            }
+                if (!keys.length) {
+                    grid.innerHTML = '';
+                    if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
+                    return;
+                }
 
-            if (empty) { empty.classList.add('hidden'); empty.classList.remove('flex'); }
+                if (empty) { empty.classList.add('hidden'); empty.classList.remove('flex'); }
 
-            var html = keys.map(function(key) {
-                var t = custom[key];
-                var desc = t.desc || (t.items ? Object.keys(t.items || {}).length + ' items' : 'Custom Blueprint');
-                var structure = (t.items && t.items.structure) ? t.items.structure : (Array.isArray(t.structure) ? t.structure : null);
-                var sectionCount = structure ? structure.length : '—';
-                return '<div class="tmpl-card rounded-2xl p-4 fade-in">' +
-                    '<div class="flex items-start justify-between mb-3">' +
-                        '<div>' +
-                            '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight pr-2">' + esc(t.label || key) + '</p>' +
-                            '<p class="text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections</p>' +
+                var html = keys.map(function(key) {
+                    var t = custom[key];
+                    var desc = t.desc || 'Custom Blueprint';
+                    var structure = Array.isArray(t.structure) ? t.structure : (Array.isArray(t.items) ? t.items : null);
+                    var sectionCount = structure ? structure.length : '—';
+                    return '<div class="tmpl-card rounded-2xl p-4 fade-in">' +
+                        '<div class="flex items-start justify-between mb-3">' +
+                            '<div>' +
+                                '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight pr-2">' + esc(t.label || key) + '</p>' +
+                                '<p class="text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections</p>' +
+                            '</div>' +
+                            '<span class="bg-violet-100 text-violet-600 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Custom</span>' +
                         '</div>' +
-                        '<span class="bg-violet-100 text-violet-600 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Custom</span>' +
-                    '</div>' +
-                    '<p class="text-[10px] text-slate-500 mb-3 leading-relaxed">' + esc(desc) + '</p>' +
-                    (structure ? '<div class="mb-3">' + renderSectionPills(structure) + '</div>' : '<div class="mb-3"></div>') +
-                    '<div class="flex gap-2">' +
-                        '<button data-apply-key="' + esc(key) + '" data-apply-type="custom" ' +
-                            'class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-colors">' +
-                            'Apply' +
-                        '</button>' +
-                        '<button data-delete-key="' + esc(key) + '" ' +
-                            'class="bg-red-50 hover:bg-red-100 text-red-500 text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-colors">' +
-                            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
-                        '</button>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
+                        '<p class="text-[10px] text-slate-500 mb-3 leading-relaxed">' + esc(desc) + '</p>' +
+                        (structure ? '<div class="mb-3">' + renderSectionPills(structure) + '</div>' : '<div class="mb-3"></div>') +
+                        '<div class="flex gap-2">' +
+                            '<button data-apply-key="' + esc(key) + '" data-apply-type="custom" ' +
+                                'class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-colors">' +
+                                'Apply' +
+                            '</button>' +
+                            '<button data-delete-key="' + esc(key) + '" ' +
+                                'class="bg-red-50 hover:bg-red-100 text-red-500 text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-colors">' +
+                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
 
-            grid.innerHTML = html;
+                grid.innerHTML = html;
+            });
         }
 
         /* --- Apply a built-in template to the current project --- */
@@ -310,33 +335,34 @@
         /* --- Apply a custom template to the current project --- */
         function applyCustomTemplate(key) {
             if (!state.projectKey) { snack('No project loaded.'); return; }
-            var custom = getCustomTemplates();
-            var t = custom[key];
-            if (!t) { snack('Template not found.'); return; }
 
-            localforage.getItem(state.projectKey).then(function(project) {
-                if (!project) { snack('Budget not found in storage.'); return; }
+            loadCustomTemplates().then(function(custom) {
+                var t = custom[key];
+                if (!t) { snack('Template not found.'); return; }
 
-                /* Custom templates stored by saveFromProject have structure array */
-                var structure = (t.items && t.items.structure) ? t.items.structure : (Array.isArray(t.structure) ? t.structure : null);
+                var structure = Array.isArray(t.structure) ? t.structure : (Array.isArray(t.items) ? t.items : null);
                 if (!structure) { snack('Template has no section structure.'); return; }
 
-                var newSections = {};
-                structure.forEach(function(sec) {
-                    newSections[sec.name] = {
-                        id: sec.id,
-                        items: sec.items || [],
-                        collapsed: false
-                    };
-                });
+                return localforage.getItem(state.projectKey).then(function(project) {
+                    if (!project) { snack('Budget not found in storage.'); return; }
 
-                project.sections = newSections;
-                return localforage.setItem(state.projectKey, project);
-            }).then(function() {
-                snack('Template applied. Reload budget to see changes.');
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
-                }
+                    var newSections = {};
+                    structure.forEach(function(sec) {
+                        newSections[sec.name] = {
+                            id: sec.id,
+                            items: sec.items || [],
+                            collapsed: false
+                        };
+                    });
+
+                    project.sections = newSections;
+                    return localforage.setItem(state.projectKey, project);
+                }).then(function() {
+                    snack('Template applied. Reload budget to see changes.');
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+                    }
+                });
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
 
@@ -346,28 +372,32 @@
             localforage.getItem(state.projectKey).then(function(project) {
                 if (!project || !project.sections) { snack('Budget has no sections to save.'); return; }
 
-                var structure = Object.entries(project.sections).map(function(pair) {
-                    var secName = pair[0];
-                    var sec = pair[1];
+                var structure = Object.keys(project.sections).map(function(secName) {
+                    var sec = project.sections[secName];
                     var items = (sec.items || []).map(function(item) {
                         var copy = JSON.parse(JSON.stringify(item));
                         copy.actual = 0;
-                        copy.crew = { name: '', phone: '', email: '' };
-                        if (['Day', 'Week'].includes(copy.unit)) copy.quantity = 1;
+                        copy.crew = {};
+                        if (copy.unit === 'Day' || copy.unit === 'Week') copy.quantity = 1;
                         if (copy.stageData) Object.keys(copy.stageData).forEach(function(k) { copy.stageData[k].days = 1; });
                         return copy;
                     });
                     return { id: sec.id || secName, name: secName, items: items };
                 });
 
-                saveCustomTemplate(name, {
+                return saveCustomTemplate(name, {
                     label: name,
                     desc: desc || 'Saved from: ' + (project.projectName || 'Budget'),
-                    structure: structure
+                    structure: structure,
+                    saved_at: new Date().toISOString()
                 });
-
+            }).then(function() {
                 snack('Template saved: ' + name);
                 renderCustom();
+                /* Notify monolith so New Project modal reflects the new blueprint immediately */
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'blueprint-saved' }, '*');
+                }
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
 
@@ -445,9 +475,10 @@
                 if (delBtn) {
                     var key = delBtn.dataset.deleteKey;
                     if (confirm('Delete template "' + key + '"?')) {
-                        deleteCustomTemplate(key);
-                        snack('Template deleted.');
-                        renderCustom();
+                        deleteCustomTemplate(key).then(function() {
+                            snack('Template deleted.');
+                            renderCustom();
+                        }).catch(function(e) { snack('Error: ' + e.message); });
                     }
                     return;
                 }

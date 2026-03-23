@@ -178,5 +178,4 @@
         }
     };
 
-    console.log('[mBT] Totalizer Engine initialized ✓');
 })();

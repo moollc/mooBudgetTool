@@ -1,14 +1,15 @@
-window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
+window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
+            subTab = subTab || 'lineItems';
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             if (tabName === 'general') {
-                const currentDateFormat = getProjectDateFormat();
-                const currentSeparator = getProjectNameSeparator();
-                const isCompact = budget.settings?.compactMode || false;
-                const isClassic = budget.settings?.classicTheme || false;
-                const allowZoom = budget.settings?.allowZoom || false;
-                const autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false';
-                const autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
-                const decimalPlaces = budget.settings?.decimalPlaces ?? 0;
+                var currentDateFormat = getProjectDateFormat();
+                var currentSeparator = getProjectNameSeparator();
+                var isCompact = (budget.settings && budget.settings.compactMode) || false;
+                var isClassic = (budget.settings && budget.settings.classicTheme) || false;
+                var allowZoom = (budget.settings && budget.settings.allowZoom) || false;
+                var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false';
+                var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
+                var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
 
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
@@ -124,15 +125,19 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                     </div>`;
             }
             if (tabName === 'ai') {
-                const provider = getSelectedProvider();
-                const saveHistory = budget.aiContext?.saveHistory ?? true;
-                const storedPrompt = mBT.features.ai.getSystemPrompt();
-                const keyLinks = {
-                    'gemini': 'https://aistudio.google.com/app/apikey',
-                    'openai': 'https://platform.openai.com/api-keys',
-                    'deepseek': 'https://platform.deepseek.com/api_keys',
-                    'grok': 'https://console.x.ai/'
+                var provider = getSelectedProvider();
+                var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
+                var storedPrompt = mBT.features.ai.getSystemPrompt();
+                var keyLinks = {
+                    'gemini':    'https://aistudio.google.com/app/apikey',
+                    'openai':    'https://platform.openai.com/api-keys',
+                    'deepseek':  'https://platform.deepseek.com/api_keys',
+                    'grok':      'https://console.x.ai/',
+                    'anthropic': 'https://console.anthropic.com/settings/keys',
+                    'lmstudio':  '#'
                 };
+                var storedLmEndpoint = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1/chat/completions';
+                var storedLmModel    = localStorage.getItem(storageKeyPrefix + 'lmstudioModel')    || 'local-model';
 
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
@@ -147,19 +152,36 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                             <div class="space-y-3">
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Active Provider</label>
-                                    <select id="aiProviderSelect" onchange="var link=document.getElementById('apiKeyLink'); var map=${JSON.stringify(keyLinks).replace(/"/g, "'")}; link.href=map[this.value];" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                    <select id="aiProviderSelect" onchange="
+                                        var p=this.value;
+                                        var map=${JSON.stringify(keyLinks).replace(/"/g, "'")};
+                                        var link=document.getElementById('apiKeyLink');
+                                        link.href=map[p]||'#';
+                                        link.style.visibility=(p==='lmstudio')?'hidden':'visible';
+                                        document.getElementById('apiKeyInput').value=getStoredApiKey(p);
+                                        document.getElementById('lmstudioFields').style.display=(p==='lmstudio')?'block':'none';
+                                        document.getElementById('apiCredRow').style.display=(p==='lmstudio')?'none':'block';
+                                    " class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
                                         <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini API</option>
                                         <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI API</option>
                                         <option value="deepseek" ${provider === 'deepseek' ? 'selected' : ''}>DeepSeek API</option>
                                         <option value="grok" ${provider === 'grok' ? 'selected' : ''}>Grok (xAI) API</option>
+                                        <option value="anthropic" ${provider === 'anthropic' ? 'selected' : ''}>Anthropic (Claude)</option>
+                                        <option value="lmstudio" ${provider === 'lmstudio' ? 'selected' : ''}>LM Studio (Local)</option>
                                     </select>
                                 </div>
-                                <div>
+                                <div id="apiCredRow" style="display:${provider === 'lmstudio' ? 'none' : 'block'}">
                                     <div class="flex justify-between items-center mb-1.5">
                                         <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Credentials</label>
                                         <a id="apiKeyLink" href="${keyLinks[provider] || '#'}" target="_blank" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest flex items-center gap-1 transition-colors">Get API Key <span>&rarr;</span></a>
                                     </div>
                                     <input type="password" id="apiKeyInput" value="${getStoredApiKey(provider)}" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="sk-...">
+                                </div>
+                                <div id="lmstudioFields" style="display:${provider === 'lmstudio' ? 'block' : 'none'}">
+                                    <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Local Endpoint URL</label>
+                                    <input type="text" id="lmEndpointInput" value="${storedLmEndpoint}" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500 mb-2" placeholder="http://localhost:1234/v1/chat/completions">
+                                    <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Model ID</label>
+                                    <input type="text" id="lmModelInput" value="${storedLmModel}" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="local-model">
                                 </div>
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Persona &amp; Constraints</label>
@@ -172,7 +194,21 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                                     </div>
                                     <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
                                 </div>
-                                <button id="saveApiKeyBtn" onclick="var p=document.getElementById('aiProviderSelect').value; var k=document.getElementById('apiKeyInput').value; var s=document.getElementById('aiSystemPromptInput').value; saveStoredApiKey(p,k); mBT.features.ai.saveSystemPrompt(s); localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p); mBTME.alert('Success', 'Assistant Linked');" class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>
+                                <button id="saveApiKeyBtn" onclick="
+                                    var p=document.getElementById('aiProviderSelect').value;
+                                    var k=document.getElementById('apiKeyInput') ? document.getElementById('apiKeyInput').value : '';
+                                    var s=document.getElementById('aiSystemPromptInput').value;
+                                    saveStoredApiKey(p,k);
+                                    mBT.features.ai.saveSystemPrompt(s);
+                                    localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p);
+                                    if(p==='lmstudio'){
+                                        var ep=document.getElementById('lmEndpointInput').value.trim();
+                                        var md=document.getElementById('lmModelInput').value.trim();
+                                        if(ep) localStorage.setItem('${storageKeyPrefix}lmstudioEndpoint', ep);
+                                        if(md) localStorage.setItem('${storageKeyPrefix}lmstudioModel', md);
+                                    }
+                                    mBTME.alert('Success', 'Assistant Linked');
+                                " class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>
                             </div>
                         </div>
                     </div>`;
@@ -316,7 +352,7 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab = 'lineItems') {
                     </div>`;
             }
             if (tabName === 'database') {
-                const nav = RenderEngine.ui.tabs({
+                var nav = RenderEngine.ui.tabs({
                     items: [
                         { id: 'lineItems', label: 'Line Items' },
                         { id: 'contacts', label: 'Contacts' },

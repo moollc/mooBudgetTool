@@ -13,11 +13,11 @@
     window.mBT.core.routes = { handlers: {} };
 
     // === Configuration ===
-    const DEFAULT_ROUTE = 'db';
-    const THEME_KEY = 'mbt_app_theme';
-    const NAV_POS_KEY = 'mbt_nav_pos';
+    var DEFAULT_ROUTE = 'db';
+    var THEME_KEY = 'mbt_app_theme';
+    var NAV_POS_KEY = 'mbt_nav_pos';
 
-    const ROUTE_NAMES = {
+    var ROUTE_NAMES = {
         db: 'Database',
         stages: 'Stages',
         publisher: 'Publisher',
@@ -130,7 +130,6 @@
         /* --- Telemetry: log route navigation if user has opted in --- */
         if (window.mBT.telemetry) window.mBT.telemetry.log('route_change', { route: route });
 
-        console.log('[mBT] Route →', route);
     }
 
     // =========================================
@@ -257,7 +256,7 @@
 
     // === Cloud Sync Actions ===
     window.mBT.core.actions.toggleSync = function () {
-        const active = localStorage.getItem('mbt_supabase_sync') === 'true';
+        var active = localStorage.getItem('mbt_supabase_sync') === 'true';
         localStorage.setItem('mbt_supabase_sync', !active);
         alert('Cloud Sync ' + (!active ? 'Enabled' : 'Disabled'));
         populateSettings();
@@ -273,17 +272,14 @@
             console.warn('[mBT] Supabase not configured — open the Cloud Backup tool to add credentials.');
             return;
         }
-        console.log('[mBT] Pushing to Supabase...');
         mBTSync.pushAll().then(function (r) {
-            console.log('[mBT] Push complete — synced:', r.synced, 'errors:', r.errors);
         }).catch(function (e) {
-            console.error('[mBT] Push failed:', e);
         });
     };
 
     window.mBT.core.actions.openAISettings = function () {
-        const key = prompt('Enter AI API Key (optional):', localStorage.getItem('mbt_ai_api_key') || '');
-        const endpoint = prompt('Enter AI Endpoint:', localStorage.getItem('mbt_ai_endpoint') || 'http://localhost:1234/v1/chat/completions');
+        var key = prompt('Enter AI API Key (optional):', localStorage.getItem('mbt_ai_api_key') || '');
+        var endpoint = prompt('Enter AI Endpoint:', localStorage.getItem('mbt_ai_endpoint') || 'http://localhost:1234/v1/chat/completions');
         if (key !== null) localStorage.setItem('mbt_ai_api_key', key);
         if (endpoint !== null) localStorage.setItem('mbt_ai_endpoint', endpoint);
         alert('AI Settings saved.');
@@ -377,7 +373,6 @@
     // =========================================
 
     function boot() {
-        console.log('[mBT] Booting Monolith Core…');
 
         // Wire all nav buttons (sidebar + bottom nav)
         var navButtons = document.querySelectorAll('.nav-btn[data-route]');
@@ -413,7 +408,6 @@
             }, mBTSupabaseConfig.SYNC.AUTO_SYNC_INTERVAL);
         }
 
-        console.log('[mBT] Core module initialized ✓');
     }
 
     function checkPreflightWarning() {
@@ -442,86 +436,81 @@
         }
     }
 
-    async function hydrateDefaultData() {
+    function hydrateDefaultData() {
         if (!window.mBT || !window.mBT.storage) return;
-        try {
-            const projects = await window.mBT.storage.getAllProjects();
+        window.mBT.storage.getAllProjects().then(function(projects) {
             if (projects.length === 0) {
-                console.log('[mBT] Hydrating default budget template...');
-
-                // 1. Create Default Project
-                const defaultProject = {
+                var defaultProject = {
                     name: 'Default Production Budget',
                     budget: 50000,
                     currency: 'USD',
                     status: 'active',
                     lastModified: new Date().toISOString()
                 };
-                const projectId = await window.mBT.storage.createProject(defaultProject);
-
-                // 2. Seed Industry-standard Stages
-                const stages = [
-                    { projectId, description: 'Pre-roll / Prep', budgeted: 15000, amount: 0, allocationPercent: 0 },
-                    { projectId, description: 'Production / Principal', budgeted: 25000, amount: 0, allocationPercent: 0 },
-                    { projectId, description: 'Post / Wrap', budgeted: 10000, amount: 0, allocationPercent: 0 }
-                ];
-                for (const stage of stages) {
-                    await window.mBT.storage.createStage(stage);
-                }
-
-                // 3. Seed Dummy Contacts
-                const contacts = [
-                    { name: 'Alice Grip', department: 'Grip', email: 'alice@example.com', rate: 450, projectId },
-                    { name: 'Bob Sparky', department: 'Electrical', email: 'bob@example.com', rate: 400, projectId },
-                    { name: 'Charlie Sound', department: 'Sound', email: 'charlie@example.com', rate: 380, projectId }
-                ];
-                for (const contact of contacts) {
-                    await window.mBT.storage.setItem('contacts', [...(await window.mBT.storage.getItem('contacts') || []), contact]);
-                }
-
-                // 4. Initial RSI health item
-                const rsiItem = {
-                    id: 'first-audit',
-                    title: 'Perform First Production Audit',
-                    status: 'pending',
-                    severity: 'low',
-                    category: 'Technical Debt',
-                    description: 'Analyze initial budget allocation for contingency gaps.',
-                    timestamp: new Date().toISOString()
-                };
-                await window.mBT.storage.setItem('rsi_health_items', [rsiItem]);
-
-                console.log('[mBT] Hydration complete ✓');
+                window.mBT.storage.createProject(defaultProject).then(function(projectId) {
+                    var stages = [
+                        { projectId: projectId, description: 'Pre-roll / Prep', budgeted: 15000, amount: 0, allocationPercent: 0 },
+                        { projectId: projectId, description: 'Production / Principal', budgeted: 25000, amount: 0, allocationPercent: 0 },
+                        { projectId: projectId, description: 'Post / Wrap', budgeted: 10000, amount: 0, allocationPercent: 0 }
+                    ];
+                    var stageChain = Promise.resolve();
+                    for (var si = 0; si < stages.length; si++) {
+                        (function(stage) {
+                            stageChain = stageChain.then(function() {
+                                return window.mBT.storage.createStage(stage);
+                            });
+                        })(stages[si]);
+                    }
+                    return stageChain.then(function() {
+                        var contacts = [
+                            { name: 'Alice Grip', department: 'Grip', email: 'alice@example.com', rate: 450, projectId: projectId },
+                            { name: 'Bob Sparky', department: 'Electrical', email: 'bob@example.com', rate: 400, projectId: projectId },
+                            { name: 'Charlie Sound', department: 'Sound', email: 'charlie@example.com', rate: 380, projectId: projectId }
+                        ];
+                        var contactChain = Promise.resolve();
+                        for (var ci = 0; ci < contacts.length; ci++) {
+                            (function(contact) {
+                                contactChain = contactChain.then(function() {
+                                    return window.mBT.storage.getItem('contacts').then(function(existing) {
+                                        var arr = existing || [];
+                                        arr.push(contact);
+                                        return window.mBT.storage.setItem('contacts', arr);
+                                    });
+                                });
+                            })(contacts[ci]);
+                        }
+                        return contactChain.then(function() {
+                            var rsiItem = {
+                                id: 'first-audit',
+                                title: 'Perform First Production Audit',
+                                status: 'pending',
+                                severity: 'low',
+                                category: 'Technical Debt',
+                                description: 'Analyze initial budget allocation for contingency gaps.',
+                                timestamp: new Date().toISOString()
+                            };
+                            return window.mBT.storage.setItem('rsi_health_items', [rsiItem]);
+                        });
+                    });
+                });
             }
-        } catch (e) {
-            console.warn('[mBT] Hydration failed:', e);
-        }
+        }).catch(function() {});
     }
 
-    window.mBT.core.init = async function() {
-        console.log('[mBT] Initialize requested...');
-        
+    window.mBT.core.init = function() {
         // Asynchronously wait for WASM Blob Payload (Phase 49)
         if (typeof init_WASM === 'function') {
-            try {
-                // Initialize WASM instance
-                await init_WASM();
-                console.log('[mBT] Rust WASM module loaded and bridged successfully.');
-                
-                // Expose rust-accelerated functions to mBTLE if it exists
+            init_WASM().then(function() {
                 if (window.mBT.le && typeof wasm_bindgen !== 'undefined') {
                     window.mBT.le.wasmActive = true;
-                    // Replace heavy loops directly or flag to use wasm_bindgen.calculate_totals()
                 }
-            } catch (err) {
-                console.warn('[mBT] WASM module failed to initialize. Falling back to native JS engines.', err);
-            }
+                boot();
+            }).catch(function() {
+                boot();
+            });
         } else {
-            console.log('[mBT] No WASM module detected, running native JS engine.');
+            boot();
         }
-
-        // Proceed to core boot
-        boot();
     };
 
     // Note: index.html has a DOMContentLoaded listener that calls mBT.core.init().

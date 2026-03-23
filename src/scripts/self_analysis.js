@@ -15,12 +15,12 @@
     window.mBT = window.mBT || {};
     window.mBT.rsi = window.mBT.rsi || {};
 
-    const Auditor = {
+    var Auditor = {
         /**
          * Runs the full analysis suite and heavily prints to console.
          */
-        run: async function () {
-            console.groupCollapsed('%c🔍 [mBT Auditor] System Health Report', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
+        run: function () {
+            console.groupCollapsed('%c[mBT Auditor] System Health Report', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
 
             console.log("Running Phase 7.1 RSI Diagnostics...");
             this.checkNamespaceHealth();
@@ -34,17 +34,17 @@
         },
 
         checkNamespaceHealth: function () {
-            console.group('📦 Namespace Health (window.mBT)');
-            const mbt = window.mBT;
-            let healthy = true;
+            console.group('Namespace Health (window.mBT)');
+            var mbt = window.mBT;
+            var healthy = true;
 
             // Expected namespaces based on Phase 4-6 architectures
-            const expectedKeys = ['core', 'icons', 'storage', 'le'];
-            expectedKeys.forEach(key => {
+            var expectedKeys = ['core', 'icons', 'storage', 'le'];
+            expectedKeys.forEach(function(key) {
                 if (mbt[key]) {
-                    console.log(`✅ window.mBT.${key}: ACTIVE`);
+                    console.log('window.mBT.' + key + ': ACTIVE');
                 } else {
-                    console.warn(`❌ window.mBT.${key}: MISSING`);
+                    console.warn('window.mBT.' + key + ': MISSING');
                     healthy = false;
                 }
             });
@@ -52,10 +52,10 @@
             // Storage specific check
             if (mbt.storage) {
                 if (typeof mbt.storage.validateSchema === 'function') {
-                    console.log(`✅ Storage Schema Validator: ACTIVE`);
+                    console.log('Storage Schema Validator: ACTIVE');
                 }
             } else {
-                console.warn(`⚠️ Storage core missing or not initialized.`);
+                console.warn('Storage core missing or not initialized.');
             }
 
             console.groupEnd();
@@ -63,37 +63,37 @@
         },
 
         detectDeadCode: function () {
-            console.group('🧟 Dead Code & Route Detector');
+            console.group('Dead Code & Route Detector');
 
             // 1. Check UI Navigation vs Route Panels (Shell Level)
-            const navButtons = document.querySelectorAll('#sidebar-nav .nav-btn[data-route]');
-            const panels = document.querySelectorAll('.route-panel');
+            var navButtons = document.querySelectorAll('#sidebar-nav .nav-btn[data-route]');
+            var panels = document.querySelectorAll('.route-panel');
 
-            const buttonRoutes = Array.from(navButtons).map(b => b.getAttribute('data-route'));
-            const panelRoutes = Array.from(panels).map(p => p.id.replace('panel-', ''));
+            var buttonRoutes = Array.from(navButtons).map(function(b) { return b.getAttribute('data-route'); });
+            var panelRoutes = Array.from(panels).map(function(p) { return p.id.replace('panel-', ''); });
 
             // Check if every button has a panel
-            buttonRoutes.forEach(r => {
-                if (!panelRoutes.includes(r)) {
-                    console.error(`❌ Route mismatch: Button exists for '${r}', but no #panel-${r} found.`);
+            buttonRoutes.forEach(function(r) {
+                if (panelRoutes.indexOf(r) === -1) {
+                    console.error('Route mismatch: Button exists for \'' + r + '\', but no #panel-' + r + ' found.');
                 } else {
-                    console.log(`✅ Route mapping: ${r} button -> panel`);
+                    console.log('Route mapping: ' + r + ' button -> panel');
                 }
             });
 
             // Check if every panel has a button (could be internal, but worth warning)
-            panelRoutes.forEach(r => {
-                if (!buttonRoutes.includes(r)) {
-                    console.warn(`⚠️ Orphan Panel: #panel-${r} exists, but no sidebar button links to it.`);
+            panelRoutes.forEach(function(r) {
+                if (buttonRoutes.indexOf(r) === -1) {
+                    console.warn('Orphan Panel: #panel-' + r + ' exists, but no sidebar button links to it.');
                 }
             });
 
             // 2. Check registered JS route handlers
             if (window.mBT.core && window.mBT.core.routes && window.mBT.core.routes.handlers) {
-                const handlers = Object.keys(window.mBT.core.routes.handlers);
-                handlers.forEach(h => {
-                    if (!panelRoutes.includes(h)) {
-                        console.warn(`⚠️ Orphan Route Handler: Function registered for '${h}', but no panel exists.`);
+                var handlers = Object.keys(window.mBT.core.routes.handlers);
+                handlers.forEach(function(h) {
+                    if (panelRoutes.indexOf(h) === -1) {
+                        console.warn('Orphan Route Handler: Function registered for \'' + h + '\', but no panel exists.');
                     }
                 });
             }
@@ -102,15 +102,15 @@
         },
 
         analyzeBundle: function () {
-            console.group('📦 Bundle & Resource Analysis');
+            console.group('Bundle & Resource Analysis');
 
             // Count scripts in document
-            const scripts = document.querySelectorAll('script');
-            const scriptSources = [];
-            let inlineCount = 0;
+            var scripts = document.querySelectorAll('script');
+            var scriptSources = [];
+            var inlineCount = 0;
 
-            scripts.forEach(s => {
-                const src = s.getAttribute('src');
+            scripts.forEach(function(s) {
+                var src = s.getAttribute('src');
                 if (src) {
                     scriptSources.push(src);
                 } else {
@@ -119,29 +119,29 @@
             });
 
             // Check for duplicate script inclusions
-            const duplicates = scriptSources.filter((item, index) => scriptSources.indexOf(item) !== index);
+            var duplicates = scriptSources.filter(function(item, index) { return scriptSources.indexOf(item) !== index; });
 
             if (duplicates.length > 0) {
-                console.warn(`❌ Duplicate scripts detected:`, duplicates);
+                console.warn('Duplicate scripts detected:', duplicates);
             } else {
-                console.log(`✅ No duplicate script inclusions found.`);
+                console.log('No duplicate script inclusions found.');
             }
 
-            console.log(`📊 Total Scripts: ${scripts.length} (${scriptSources.length} external, ${inlineCount} inline)`);
-            scriptSources.forEach(src => console.log(`   - ${src}`));
+            console.log('Total Scripts: ' + scripts.length + ' (' + scriptSources.length + ' external, ' + inlineCount + ' inline)');
+            scriptSources.forEach(function(src) { console.log('   - ' + src); });
 
             // Very basic local storage size check (approximation)
             try {
-                let _lsTotal = 0, _xLen, _x;
+                var _lsTotal = 0, _xLen, _x;
                 for (_x in localStorage) {
                     if (!localStorage.hasOwnProperty(_x)) continue;
                     _xLen = ((localStorage[_x].length + _x.length) * 2);
                     _lsTotal += _xLen;
                 }
-                const lsKB = (_lsTotal / 1024).toFixed(2);
-                console.log(`💾 LocalStorage usage: ~${lsKB} KB`);
+                var lsKB = (_lsTotal / 1024).toFixed(2);
+                console.log('LocalStorage usage: ~' + lsKB + ' KB');
             } catch (e) {
-                console.log(`💾 LocalStorage usage: [Restricted]`);
+                console.log('LocalStorage usage: [Restricted]');
             }
 
             console.groupEnd();

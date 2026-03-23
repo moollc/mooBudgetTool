@@ -19,7 +19,6 @@ var mBTOGAPI = (function() {
             }
 
             var voteVal = typeStr === 'approve' ? 1 : -1;
-            console.log("OpenGate: Voting", voteVal, "on rate", rateId);
 
             return mBTOG.upsertVote(parseInt(rateId, 10), voteVal).then(function(success) {
                 if(success) {

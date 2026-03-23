@@ -127,5 +127,4 @@
         generateExecutiveSummary:    generateExecutiveSummary
     };
 
-    console.log('[mBT] AI reports service initialized ✓');
 })();

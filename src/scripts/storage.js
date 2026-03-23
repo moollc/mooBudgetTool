@@ -26,16 +26,16 @@ var STORE_NAMES = {
 var mBTStorage = {
   // Phase 16: Monolith Bridge (Async Support for localforage)
   getMonolithBudget: function() {
-    const prefix = 'prodBudget_v5_';
-    const lastLoaded = localStorage.getItem(prefix + 'lastLoaded');
+    var prefix = 'prodBudget_v5_';
+    var lastLoaded = localStorage.getItem(prefix + 'lastLoaded');
     if (!lastLoaded) return Promise.resolve(null);
-    const projectKey = prefix + lastLoaded;
+    var projectKey = prefix + lastLoaded;
     
-    const tryFallback = () => {
-        const raw = localStorage.getItem(projectKey);
+    var tryFallback = function() {
+        var raw = localStorage.getItem(projectKey);
         if (raw) {
           try { 
-            const data = JSON.parse(raw);
+            var data = JSON.parse(raw);
             if (data && !data.id) data.id = data.projectName || 'default';
             return data;
           } catch(e) {}
@@ -266,10 +266,10 @@ var mBTStorage = {
         return new Promise(function (resolve, reject) {
           var request = store.getAll();
           request.onsuccess = function () {
-            let results = request.result || [];
+            var results = request.result || [];
             if (monolith) {
               // Merge monolith project, ensuring it's at the top and unique
-              results = [monolith, ...results.filter(p => p.id !== monolith.id && p.name !== monolith.projectName)];
+              results = [monolith].concat(results.filter(function(p) { return p.id !== monolith.id && p.name !== monolith.projectName; }));
             }
             resolve(results);
           };
@@ -383,18 +383,20 @@ var mBTStorage = {
     var self = this;
     return this.getMonolithBudget().then(function(monolith) {
       return self._getDb().then(function (db) {
-        if (monolith && (projectId === monolith.id || projectId === monolith.projectName)) {
-          if (monolith.targetLock && monolith.targetLock.stages) {
-            const mStages = Object.entries(monolith.targetLock.stages)
-              .filter(([k, s]) => s && (s.days > 0 || s.subtotal > 0))
-              .map(([k, s]) => ({
-                id: 'monolith_' + k,
-                projectId: monolith.id,
-                projectName: monolith.projectName,
-                description: k.toUpperCase(),
-                amount: s.subtotal || 0,
-                budgeted: s.totalCap || 0
-              }));
+          if (monolith && (projectId === monolith.id || projectId === monolith.projectName)) {
+            if (monolith.targetLock && monolith.targetLock.stages) {
+              var mStages = Object.entries(monolith.targetLock.stages)
+                .filter(function(entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
+                .map(function(entry) {
+                  return {
+                    id: 'monolith_' + entry[0],
+                    projectId: monolith.id,
+                    projectName: monolith.projectName,
+                    description: entry[0].toUpperCase(),
+                    amount: entry[1].subtotal || 0,
+                    budgeted: entry[1].totalCap || 0
+                  };
+                });
             return Promise.resolve(mStages);
           }
         }
@@ -422,19 +424,21 @@ var mBTStorage = {
         return new Promise(function (resolve, reject) {
           var request = store.getAll();
           request.onsuccess = function () {
-            let results = request.result || [];
+            var results = request.result || [];
             if (monolith && monolith.targetLock && monolith.targetLock.stages) {
-              const mStages = Object.entries(monolith.targetLock.stages)
-                .filter(([k, s]) => s && (s.days > 0 || s.subtotal > 0))
-                .map(([k, s]) => ({
-                  id: 'monolith_' + k,
-                  projectId: monolith.id,
-                  projectName: monolith.projectName,
-                  description: k.toUpperCase(),
-                  amount: s.subtotal || 0,
-                  budgeted: s.totalCap || 0
-                }));
-              results = [...mStages, ...results];
+              var mStages = Object.entries(monolith.targetLock.stages)
+                .filter(function(entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
+                .map(function(entry) {
+                  return {
+                    id: 'monolith_' + entry[0],
+                    projectId: monolith.id,
+                    projectName: monolith.projectName,
+                    description: entry[0].toUpperCase(),
+                    amount: entry[1].subtotal || 0,
+                    budgeted: entry[1].totalCap || 0
+                  };
+                });
+              results = mStages.concat(results);
             }
             resolve(results);
           };
@@ -830,4 +834,3 @@ if (typeof window !== 'undefined') {
   window.mBT.storage = mBTStorage;
 }
 
-console.log('[mBT] Storage module initialized ✓');

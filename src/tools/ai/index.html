@@ -6,7 +6,7 @@
   <title>mBT AI Assistant</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
-  <style>.ai-glow{animation:glow 2s ease-in-out infinite}@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(99,102,241,.5)}50%{box-shadow:0 0 20px rgba(99,102,241,.8)}}body.embedded .max-w-4xl{max-width:100%}body.embedded .p-6{padding:12px}body.embedded h1{font-size:1.1rem}body.embedded p.text-indigo-100{display:none}@media (max-width:480px){.max-w-4xl{padding-left:8px!important;padding-right:8px!important}.p-6{padding:12px!important}#aiInput,#llmInput{font-size:16px}#cfgEndpoint,#cfgApiKey,#cfgModel{font-size:16px;min-height:44px}#tab-analytics,#tab-chat{font-size:12px;padding:8px 6px}}button,a{min-height:44px}.tab-active{background:#4f46e5;color:#fff}.tab-inactive{background:transparent;color:#6b7280}.tab-inactive:hover{background:#f3f4f6}#settings-panel{display:none}#settings-panel.open{display:block}#section-chat{display:none}#offline-banner{display:none}#offline-banner.visible{display:flex}#treatment-body{display:none}#treatment-body.open{display:block}</style>
+  <style>.ai-glow{animation:glow 2s ease-in-out infinite}@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(99,102,241,.5)}50%{box-shadow:0 0 20px rgba(99,102,241,.8)}}body.embedded .max-w-4xl{max-width:100%}body.embedded .p-6{padding:12px}body.embedded h1{font-size:1.1rem}body.embedded p.text-indigo-100{display:none}@media (max-width:480px){.max-w-4xl{padding-left:8px!important;padding-right:8px!important}.p-6{padding:12px!important}#aiInput,#llmInput{font-size:16px}#tab-analytics,#tab-chat,#tab-generate{font-size:12px;padding:8px 6px}}button,a{min-height:44px}.tab-active{background:#4f46e5;color:#fff}.tab-inactive{background:transparent;color:#6b7280}.tab-inactive:hover{background:#f3f4f6}#section-chat{display:none}#section-generate{display:none}#offline-banner{display:none}#offline-banner.visible{display:flex}#treatment-body{display:none}#treatment-body.open{display:block}</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <div class="max-w-4xl mx-auto p-6">
@@ -65,6 +65,10 @@
         class="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors tab-inactive">
         LLM Chat
       </button>
+      <button id="tab-generate" onclick="setMode('generate')"
+        class="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors tab-inactive">
+        Generate
+      </button>
     </div>
 
     <!-- ===== ANALYTICS SECTION ===== -->
@@ -100,68 +104,20 @@
     <!-- ===== LLM CHAT SECTION ===== -->
     <div id="section-chat">
 
-      <!-- Provider Config Bar -->
+      <!-- Provider Info Bar (read-only — configure in Settings > AI) -->
       <div class="bg-white rounded-lg shadow-sm border p-3 mb-3 flex items-center gap-3">
         <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Provider</span>
-        <select id="llmProvider" onchange="onProviderChange()"
-          class="text-sm border rounded-md px-3 py-1.5 bg-gray-50 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="lmstudio">LM Studio (Local)</option>
-          <option value="openai">OpenAI-compatible</option>
-          <option value="claude">Claude API</option>
-        </select>
-        <span id="llmModelLabel" class="text-xs text-gray-400 flex-1">localhost:1234</span>
-        <button onclick="toggleSettings()"
-        aria-label="Open LLM settings"
-        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
-        ⚙ Settings
-      </button>
-      <button onclick="exportLLMHistory()"
-        aria-label="Export LLM chat history"
-        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
-        Export
-      </button>
-      <button onclick="clearLLMChat()"
-        aria-label="Clear LLM chat history"
-        class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
-        Clear
-      </button>
-      </div>
-
-      <!-- Inline Settings Panel -->
-      <div id="settings-panel" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3 text-sm">
-        <div class="font-semibold text-amber-800 mb-3 text-xs uppercase tracking-wide">LLM Configuration</div>
-        <div class="grid grid-cols-1 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">Endpoint URL</label>
-            <input type="text" id="cfgEndpoint" aria-label="Endpoint URL"
-              placeholder="http://localhost:1234/v1/chat/completions"
-              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">API Key <span class="text-gray-400">(leave blank for local)</span></label>
-            <input type="password" id="cfgApiKey" aria-label="API Key"
-              placeholder="sk-..."
-              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">Model ID</label>
-            <input type="text" id="cfgModel" aria-label="Model ID"
-              placeholder="local-model"
-              class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          </div>
-          <div class="flex gap-2">
-            <button onclick="saveSettings()"
-              aria-label="Save LLM settings"
-              class="px-4 py-2 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700">
-              Save
-            </button>
-            <button onclick="toggleSettings()"
-              aria-label="Cancel LLM settings"
-              class="px-4 py-2 border rounded-md text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              Cancel
-            </button>
-          </div>
-        </div>
+        <span id="llmProviderLabel" class="text-sm font-medium text-gray-700 flex-1">—</span>
+        <button onclick="exportLLMHistory()"
+          aria-label="Export LLM chat history"
+          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
+          Export
+        </button>
+        <button onclick="clearLLMChat()"
+          aria-label="Clear LLM chat history"
+          class="text-xs px-3 py-1.5 border rounded-md text-gray-600 hover:bg-gray-50 font-medium">
+          Clear
+        </button>
       </div>
 
       <!-- LLM Message Thread -->
@@ -188,6 +144,54 @@
           <span class="text-gray-700 font-medium">Inject budget context into system prompt</span>
         </label>
         <span class="ml-auto text-xs text-gray-400" id="contextHint">Includes project name, budget totals &amp; stage breakdown</span>
+      </div>
+    </div>
+
+    <!-- ===== GENERATE SECTION ===== -->
+    <div id="section-generate">
+      <div class="bg-white rounded-lg shadow-sm border p-5 mb-4">
+        <div class="mb-4">
+          <h2 class="text-sm font-bold text-gray-800 mb-1">AI Budget Generator</h2>
+          <p class="text-xs text-gray-500">Describe your production. The AI will build a full budget structure and load it directly into the editor.</p>
+          <div class="mt-2 text-xs text-gray-400">Provider: <span id="genProviderLabel" class="font-semibold text-gray-600">—</span> &mdash; <span class="italic">Change in Settings &rsaquo; AI tab</span></div>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Production Brief</label>
+            <textarea id="genPromptInput" rows="4"
+              placeholder="e.g. 3-day TVC shoot in Kingston, $80k budget, 10-person crew, heavy post-production with VFX..."
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Production Type</label>
+            <select id="genTemplateHint" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400">
+              <option value="">Auto-detect from description</option>
+              <option value="Commercial">TVC / Commercial</option>
+              <option value="Documentary">Documentary</option>
+              <option value="Live Stream">Live Broadcast / Stream</option>
+            </select>
+          </div>
+
+          <!-- Status area -->
+          <div id="genStatus" class="hidden text-center py-4 text-sm text-gray-500">
+            <div class="flex items-center justify-center gap-2">
+              <span class="w-2 h-2 bg-violet-400 rounded-full animate-bounce"></span>
+              <span class="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+              <span class="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+              <span class="ml-2">Generating budget structure&hellip; (15&ndash;30 seconds)</span>
+            </div>
+          </div>
+          <div id="genError" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+
+          <div class="flex gap-2 pt-1">
+            <button onclick="runGenerate()"
+              id="genBtn"
+              class="flex-1 py-2.5 bg-violet-600 text-white rounded-lg font-semibold text-sm hover:bg-violet-700 transition-colors">
+              Generate Budget
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -308,11 +312,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        MODE TOGGLE
     ========================================= */
     function setMode(mode) {
-        var isAnalytics = (mode === 'analytics');
-        dom.getElementById('section-analytics').style.display = isAnalytics ? '' : 'none';
-        dom.getElementById('section-chat').style.display      = isAnalytics ? 'none' : '';
-        dom.getElementById('tab-analytics').className = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (isAnalytics ? 'tab-active' : 'tab-inactive');
-        dom.getElementById('tab-chat').className      = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (!isAnalytics ? 'tab-active' : 'tab-inactive');
+        dom.getElementById('section-analytics').style.display = (mode === 'analytics') ? '' : 'none';
+        dom.getElementById('section-chat').style.display      = (mode === 'chat')      ? '' : 'none';
+        dom.getElementById('section-generate').style.display  = (mode === 'generate')  ? '' : 'none';
+        dom.getElementById('tab-analytics').className = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'analytics' ? 'tab-active' : 'tab-inactive');
+        dom.getElementById('tab-chat').className      = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'chat'      ? 'tab-active' : 'tab-inactive');
+        dom.getElementById('tab-generate').className  = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'generate'  ? 'tab-active' : 'tab-inactive');
     }
 
     /* =========================================
@@ -470,48 +475,272 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     });
 
     /* =========================================
-       LLM CHAT MODE
+       UNIFIED PROVIDER SYSTEM
+       All providers read from the monolith's master localStorage keys.
+       No separate settings UI in this iframe.
     ========================================= */
 
-    var PROVIDER_PRESETS = {
-        lmstudio: { url: 'http://localhost:1234/v1/chat/completions', model: 'local-model',       label: 'localhost:1234' },
-        openai:   { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini',      label: 'api.openai.com' },
-        claude:   { url: 'https://api.anthropic.com/v1/messages',      model: 'claude-haiku-4-5-20251001', label: 'api.anthropic.com' }
+    var MONOLITH_PREFIX = 'prodBudget_v5_';
+
+    var PROVIDER_ENDPOINTS = {
+        gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/models/', model: 'gemini-2.5-flash',          label: 'Google Gemini' },
+        openai:    { url: 'https://api.openai.com/v1/chat/completions',               model: 'gpt-4o-mini',               label: 'OpenAI' },
+        deepseek:  { url: 'https://api.deepseek.com/chat/completions',                model: 'deepseek-chat',             label: 'DeepSeek' },
+        grok:      { url: 'https://api.x.ai/v1/chat/completions',                     model: 'grok-beta',                 label: 'Grok (xAI)' },
+        anthropic: { url: 'https://api.anthropic.com/v1/messages',                    model: 'claude-sonnet-4-6',         label: 'Anthropic (Claude)' },
+        lmstudio:  { url: 'http://localhost:1234/v1/chat/completions',                 model: 'local-model',               label: 'LM Studio (Local)' }
     };
 
-    function onProviderChange() {
-        var val = dom.getElementById('llmProvider').value;
-        var preset = PROVIDER_PRESETS[val] || PROVIDER_PRESETS.lmstudio;
-        dom.getElementById('llmModelLabel').textContent = preset.label;
-        /* Pre-fill settings fields with preset values if they're blank */
-        var ep = dom.getElementById('cfgEndpoint');
-        if (!ep.value) ep.value = preset.url;
-        var md = dom.getElementById('cfgModel');
-        if (!md.value) md.value = preset.model;
+    function getMonolithProvider() {
+        return localStorage.getItem(MONOLITH_PREFIX + 'selectedAiProvider') || 'gemini';
     }
 
-    function toggleSettings() {
-        var panel = dom.getElementById('settings-panel');
-        if (panel.classList.contains('open')) {
-            panel.classList.remove('open');
-        } else {
-            /* Pre-fill with current stored values */
-            dom.getElementById('cfgEndpoint').value = localStorage.getItem('mbt_ai_endpoint') || '';
-            dom.getElementById('cfgApiKey').value   = localStorage.getItem('mbt_ai_api_key')  || '';
-            dom.getElementById('cfgModel').value    = localStorage.getItem('mbt_ai_model')    || '';
-            panel.classList.add('open');
+    function getMonolithApiKey(provider) {
+        return localStorage.getItem(MONOLITH_PREFIX + provider + 'ApiKey') || '';
+    }
+
+    function getMonolithSystemPrompt() {
+        return localStorage.getItem(MONOLITH_PREFIX + 'aiSystemPrompt') || '';
+    }
+
+    function getProviderLabel(provider) {
+        return (PROVIDER_ENDPOINTS[provider] || {}).label || provider;
+    }
+
+    /* Unified LLM dispatcher — reads monolith master credentials, supports all 6 providers */
+    function callMonolithAI(userMessage, systemPrompt) {
+        var provider = getMonolithProvider();
+        var apiKey   = getMonolithApiKey(provider);
+        var cfg      = PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS.lmstudio;
+
+        /* LM Studio: read custom endpoint/model from monolith's localStorage */
+        if (provider === 'lmstudio') {
+            cfg = {
+                url:   localStorage.getItem(MONOLITH_PREFIX + 'lmstudioEndpoint') || cfg.url,
+                model: localStorage.getItem(MONOLITH_PREFIX + 'lmstudioModel')    || cfg.model,
+                label: 'LM Studio (Local)'
+            };
         }
+
+        var userConstraints = getMonolithSystemPrompt();
+        var sysInstruction  = userConstraints ? systemPrompt + ' USER CONSTRAINTS: ' + userConstraints : systemPrompt;
+
+        /* Gemini uses a unique REST format */
+        if (provider === 'gemini') {
+            var gemUrl = cfg.url + cfg.model + ':generateContent?key=' + apiKey;
+            return fetch(gemUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: userMessage }] }],
+                    systemInstruction: { parts: [{ text: sysInstruction }] }
+                })
+            })
+            .then(function(res) {
+                if (!res.ok) return res.json().then(function(e) { throw new Error('Gemini ' + res.status + ': ' + (e.error && e.error.message || res.statusText)); });
+                return res.json();
+            })
+            .then(function(data) {
+                return (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || 'No response.';
+            });
+        }
+
+        /* Anthropic uses the Messages API */
+        if (provider === 'anthropic') {
+            return fetch(cfg.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: cfg.model,
+                    max_tokens: 4096,
+                    system: sysInstruction,
+                    messages: [{ role: 'user', content: userMessage }]
+                })
+            })
+            .then(function(res) {
+                if (!res.ok) return res.json().then(function(e) { throw new Error('Anthropic ' + res.status + ': ' + (e.error && e.error.message || res.statusText)); });
+                return res.json();
+            })
+            .then(function(data) {
+                return (data.content && data.content[0] && data.content[0].text) || 'No response.';
+            });
+        }
+
+        /* OpenAI-compatible: OpenAI, DeepSeek, Grok, LM Studio */
+        var messages = [];
+        if (sysInstruction) messages.push({ role: 'system', content: sysInstruction });
+        messages.push({ role: 'user', content: userMessage });
+
+        var headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+
+        return fetch(cfg.url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ model: cfg.model, messages: messages, temperature: 0.7 })
+        })
+        .then(function(res) {
+            if (!res.ok) return res.json().then(function(e) { throw new Error(provider + ' ' + res.status + ': ' + (e.error && e.error.message || res.statusText)); });
+            return res.json();
+        })
+        .then(function(data) {
+            return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || 'No response.';
+        });
     }
 
-    function saveSettings() {
-        var ep  = dom.getElementById('cfgEndpoint').value.trim();
-        var key = dom.getElementById('cfgApiKey').value.trim();
-        var mdl = dom.getElementById('cfgModel').value.trim();
-        if (ep)  localStorage.setItem('mbt_ai_endpoint', ep);
-        if (key) localStorage.setItem('mbt_ai_api_key', key);
-        if (mdl) localStorage.setItem('mbt_ai_model', mdl);
-        dom.getElementById('settings-panel').classList.remove('open');
-        addLLMMessage('system', 'Settings saved.');
+    /* callLLM: Chat tab wrapper — includes llmHistory for conversation continuity */
+    function callLLM(userMessage, systemPrompt) {
+        var provider = getMonolithProvider();
+        var apiKey   = getMonolithApiKey(provider);
+        var cfg      = PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS.lmstudio;
+
+        if (provider === 'lmstudio') {
+            cfg = {
+                url:   localStorage.getItem(MONOLITH_PREFIX + 'lmstudioEndpoint') || cfg.url,
+                model: localStorage.getItem(MONOLITH_PREFIX + 'lmstudioModel')    || cfg.model,
+                label: 'LM Studio (Local)'
+            };
+        }
+
+        var userConstraints = getMonolithSystemPrompt();
+        var sysInstruction  = userConstraints ? systemPrompt + ' USER CONSTRAINTS: ' + userConstraints : systemPrompt;
+
+        if (provider === 'gemini') {
+            /* Gemini doesn't support multi-turn history in same way; send last user message */
+            var gemUrl = cfg.url + cfg.model + ':generateContent?key=' + apiKey;
+            return fetch(gemUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: userMessage }] }],
+                    systemInstruction: { parts: [{ text: sysInstruction }] }
+                })
+            })
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(d) { return (d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts && d.candidates[0].content.parts[0] && d.candidates[0].content.parts[0].text) || 'No response.'; });
+        }
+
+        if (provider === 'anthropic') {
+            var msgs = llmHistory.filter(function(m) { return m.role !== 'system'; });
+            msgs.push({ role: 'user', content: userMessage });
+            return fetch(cfg.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+                body: JSON.stringify({ model: cfg.model, max_tokens: 1024, system: sysInstruction, messages: msgs })
+            })
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(d) { return (d.content && d.content[0] && d.content[0].text) || 'No response.'; });
+        }
+
+        var messages = [];
+        if (sysInstruction) messages.push({ role: 'system', content: sysInstruction });
+        llmHistory.forEach(function(m) { messages.push(m); });
+        messages.push({ role: 'user', content: userMessage });
+
+        var headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+
+        return fetch(cfg.url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ model: cfg.model, messages: messages, temperature: 0.7 })
+        })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(d) { return (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || 'No response.'; });
+    }
+
+    /* =========================================
+       GENERATE MODE — Oracle Budget Pipeline
+    ========================================= */
+
+    function sanitizeBudgetNode(node) {
+        if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
+        if (Array.isArray(node))       return node.map(sanitizeBudgetNode);
+        if (node && typeof node === 'object') {
+            var c = {};
+            Object.keys(node).forEach(function(k) { c[k] = sanitizeBudgetNode(node[k]); });
+            return c;
+        }
+        return node;
+    }
+
+    function runGenerate() {
+        var userPrompt   = (dom.getElementById('genPromptInput').value || '').trim();
+        var templateHint = (dom.getElementById('genTemplateHint').value || '');
+        var provider     = getMonolithProvider();
+        var apiKey       = getMonolithApiKey(provider);
+
+        /* Validation */
+        var errEl  = dom.getElementById('genError');
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+
+        if (!userPrompt) {
+            errEl.textContent = 'Enter a production description to generate a budget.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+        if (!apiKey && provider !== 'lmstudio') {
+            errEl.textContent = 'No API key found for ' + getProviderLabel(provider) + '. Configure it in Settings > AI tab.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+
+        /* Show loading state */
+        dom.getElementById('genStatus').classList.remove('hidden');
+        dom.getElementById('genBtn').disabled = true;
+        dom.getElementById('genBtn').textContent = 'Generating\u2026';
+
+        var schemaGuide = [
+            'Return ONLY a valid JSON object \u2014 no markdown fences, no explanation, no comments.',
+            'Schema: { "projectName": string, "company": string, "startDate": "YYYY-MM-DD",',
+            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number,',
+            '"sections": { "Section Name": { "id": "snake_id", "isOpen": true, "items": [',
+            '{ "id": "item_001", "description": string, "quantity": number,',
+            '"unit": "Day|Week|Flat|Hour", "rate": number, "multiplier": 1, "actual": 0, "rateType": "negotiable" }',
+            '] } } }',
+            'Rules: plain text strings only (no HTML tags). Realistic USD rates. 3-5 sections, 4-8 items each.',
+            templateHint ? 'Use a ' + templateHint + ' budget structure.' : ''
+        ].join(' ');
+
+        callMonolithAI('Generate a production budget for: ' + userPrompt, schemaGuide)
+            .then(function(result) {
+                /* Strip markdown fences and parse */
+                var text = result.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+                var raw;
+                try {
+                    raw = JSON.parse(text);
+                } catch(e) {
+                    throw new Error('The AI returned invalid JSON. Simplify your prompt and try again.');
+                }
+
+                /* First-pass sanitization (monolith will sanitize again on receipt) */
+                var sanitized = sanitizeBudgetNode(raw);
+
+                if (!sanitized.projectName || typeof sanitized.sections !== 'object') {
+                    throw new Error('The AI returned an incomplete budget structure. Add more detail to your prompt.');
+                }
+
+                /* Fire postMessage to monolith */
+                window.mBTBridge.send('load-budget', { budgetData: sanitized });
+
+                /* Reset UI */
+                dom.getElementById('genStatus').classList.add('hidden');
+                dom.getElementById('genBtn').disabled = false;
+                dom.getElementById('genBtn').textContent = 'Generate Budget';
+                dom.getElementById('genPromptInput').value = '';
+            })
+            .catch(function(err) {
+                dom.getElementById('genStatus').classList.add('hidden');
+                dom.getElementById('genBtn').disabled = false;
+                dom.getElementById('genBtn').textContent = 'Generate Budget';
+                errEl.textContent = err.message || 'Generation failed. Check your provider settings and try again.';
+                errEl.classList.remove('hidden');
+            });
     }
 
     function buildSystemPrompt(ctx) {
@@ -667,9 +896,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             })
             .catch(function (err) {
                 removeLLMTyping(typingId);
-                var endpoint = localStorage.getItem('mbt_ai_endpoint') || 'http://localhost:1234';
-                addLLMMessage('ai', 'Could not reach provider (' + endpoint + '). ' +
-                    'Check that your provider is running, then open ⚙ Settings to configure the endpoint and API key.');
+                var prov = getProviderLabel(getMonolithProvider());
+                addLLMMessage('ai', 'Could not reach ' + prov + '. Check that your provider is running and the API key is configured in Settings > AI tab. Error: ' + err.message);
             });
     }
 
@@ -684,6 +912,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         updateOfflineBanner();
         loadTreatment();
 
+        /* Show active monolith provider in Chat and Generate tabs */
+        var activeProvider = getMonolithProvider();
+        var provLabel = getProviderLabel(activeProvider);
+        var llmLbl = dom.getElementById('llmProviderLabel');
+        if (llmLbl) llmLbl.textContent = provLabel;
+        var genLbl = dom.getElementById('genProviderLabel');
+        if (genLbl) genLbl.textContent = provLabel;
+
+        /* Handle ?mode= URL param — used when opened via openTool() from Budget Editor */
+        var urlParams = new URLSearchParams(window.location.search);
+        var startMode = urlParams.get('mode') || 'analytics';
+        setMode(startMode);
+
         try {
             context = await window.mBTAIContext.getCurrentProjectContext();
             dom.getElementById('activeProject').textContent = context.projectName || 'None';
@@ -697,27 +938,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             if (!context.allocations || !context.allocations.length) hints.push('No stage allocations found.');
 
             var greeting = 'Ready. Project: ' + (context.projectName || 'none loaded') + '.';
-            if (hints.length) greeting += '\n\nPreflight:\n' + hints.map(function (h) { return '⚠ ' + h; }).join('\n');
+            if (hints.length) greeting += '\n\nPreflight:\n' + hints.map(function (h) { return '- ' + h; }).join('\n');
             else greeting += ' Type a command or use the Quick Commands below.';
 
             addMessage(greeting, 'ai');
             restoreLLMHistory();
-            if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Select a provider and start chatting.');
+            if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Provider: ' + provLabel + '. Change provider in Settings > AI tab.');
         } catch (e) {
             dom.getElementById('aiStatus').textContent = 'Error';
             addMessage('Could not load project context: ' + e.message, 'ai');
         }
     }
-
-    /* Pre-fill provider selector from stored endpoint */
-    (function () {
-        var stored = localStorage.getItem('mbt_ai_endpoint') || '';
-        var sel = dom.getElementById('llmProvider');
-        if (stored.indexOf('anthropic') !== -1) sel.value = 'claude';
-        else if (stored.indexOf('openai.com') !== -1) sel.value = 'openai';
-        else sel.value = 'lmstudio';
-        onProviderChange();
-    })();
 
     init();
   </script>

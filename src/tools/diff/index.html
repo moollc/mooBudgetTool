@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>mBT — Conflict Resolver</title>
+  <script src="../../lib/tailwind.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .fade-in { animation: fadeIn 0.2s ease-out forwards; }
+    .col-local  { background: #eff6ff; border-color: #93c5fd; }
+    .col-remote { background: #f0fdf4; border-color: #86efac; }
+    .col-local  .badge  { background: #dbeafe; color: #1d4ed8; }
+    .col-remote .badge  { background: #dcfce7; color: #15803d; }
+    .conflict-row { border-left: 3px solid #f59e0b; }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
+
+  <!-- Header -->
+  <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
+    <div class="flex items-center gap-3">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" class="shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="text-white text-[11px] font-black uppercase tracking-tight">Sync Conflict</span>
+      <span id="conflict-count-badge" class="bg-amber-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full hidden">0 conflicts</span>
+    </div>
+    <span class="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Resolve before syncing</span>
+  </div>
+
+  <!-- Explanation bar -->
+  <div class="bg-amber-50 border-b border-amber-200 px-4 py-2.5 shrink-0">
+    <p class="text-[10px] font-bold text-amber-800 leading-snug">
+      You and a collaborator edited the same sections while offline. Choose which version to keep for each conflict below, then press <strong>Commit Resolution</strong>.
+    </p>
+  </div>
+
+  <!-- Loading state -->
+  <div id="state-loading" class="flex-1 flex items-center justify-center">
+    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 animate-pulse">Analyzing conflicts&hellip;</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="state-error" class="hidden flex-1 flex items-center justify-center p-8 text-center">
+    <div>
+      <p class="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-2">Failed to load conflict data</p>
+      <p id="error-msg" class="text-[9px] text-slate-400"></p>
+      <button onclick="mBTDiff.abort();" class="mt-4 px-4 py-2 bg-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-300 transition-colors">Discard &amp; Close</button>
+    </div>
+  </div>
+
+  <!-- No conflicts state -->
+  <div id="state-clean" class="hidden flex-1 flex items-center justify-center p-8 text-center">
+    <div>
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" class="mx-auto mb-3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <p class="text-[10px] font-black uppercase tracking-widest text-slate-700 mb-1">No Conflicts Detected</p>
+      <p class="text-[9px] text-slate-400 mb-4">The local and remote versions are already in sync.</p>
+      <button onclick="mBTDiff.commitResolution('local');" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors">Close</button>
+    </div>
+  </div>
+
+  <!-- Main diff view -->
+  <div id="state-diff" class="hidden flex-1 flex flex-col overflow-hidden">
+
+    <!-- Column headers -->
+    <div class="grid grid-cols-2 gap-3 px-4 pt-3 pb-1 shrink-0">
+      <div class="col-local rounded-xl border p-2.5 flex items-center gap-2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="text-[9px] font-black uppercase tracking-widest text-blue-700">Your Version (Local)</span>
+      </div>
+      <div class="col-remote rounded-xl border p-2.5 flex items-center gap-2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span class="text-[9px] font-black uppercase tracking-widest text-emerald-700">Remote Version (Cloud)</span>
+      </div>
+    </div>
+
+    <!-- Conflict rows -->
+    <div id="conflict-list" class="flex-1 overflow-y-auto no-scrollbar px-4 pb-4 space-y-2"></div>
+  </div>
+
+  <!-- Footer action bar -->
+  <div id="footer-bar" class="hidden shrink-0 bg-white border-t border-slate-200 px-4 py-3 flex items-center justify-between gap-3">
+    <button onclick="mBTDiff.abort();" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">
+      Discard &amp; Abort Sync
+    </button>
+    <div class="flex items-center gap-2">
+      <button onclick="mBTDiff.selectAll('local');" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Keep All Local</button>
+      <button onclick="mBTDiff.selectAll('remote');" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors">Keep All Remote</button>
+      <button id="btn-commit" onclick="mBTDiff.commitResolution();" disabled
+        class="px-5 py-2.5 bg-slate-300 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest cursor-not-allowed transition-colors">
+        Commit Resolution
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ========= mBTDiff — Offline Conflict Resolver =========
+       Receives conflict data from the monolith via postMessage (type: mbt:diff-init).
+       Renders a side-by-side view of diverged sections.
+       User selects 'local' or 'remote' for each conflict.
+       On commit: sends resolve-diff postMessage back to monolith.
+       On abort:  sends abort-diff postMessage (monolith discards unmerged deltas).
+    ========= */
+    var mBTDiff = (function() {
+
+        var _state = {
+            conflicts: [],    /* Array of DiffConflict objects from WASM */
+            localSections: {},
+            remoteSections: {},
+            choices: {},      /* { sectionName: 'local' | 'remote' } */
+            projectKey: null
+        };
+
+        /* --- XSS escape --- */
+        function esc(str) {
+            var d = document.createElement('div');
+            d.textContent = String(str || '');
+            return d.innerHTML;
+        }
+
+        /* --- Show a named state panel --- */
+        function showState(name) {
+            ['loading', 'error', 'diff', 'clean'].forEach(function(s) {
+                var el = document.getElementById('state-' + s);
+                if (el) el.classList.toggle('hidden', s !== name);
+            });
+            var footer = document.getElementById('footer-bar');
+            if (footer) footer.classList.toggle('hidden', name !== 'diff' && name !== 'clean');
+        }
+
+        /* --- Render section items as a mini table --- */
+        function renderItems(items) {
+            if (!items || !items.length) {
+                return '<p class="text-[8px] text-slate-400 italic py-1">No line items</p>';
+            }
+            return '<div class="space-y-0.5">' + items.slice(0, 8).map(function(it) {
+                return '<div class="flex items-center justify-between text-[8px] py-0.5 border-b border-slate-100/70">' +
+                    '<span class="font-bold text-slate-700 truncate pr-2">' + esc(it.description || '—') + '</span>' +
+                    '<span class="font-mono text-slate-500 shrink-0">' + (it.rate || 0) + ' &times; ' + (it.quantity || 1) + '</span>' +
+                    '</div>';
+            }).join('') +
+            (items.length > 8 ? '<p class="text-[8px] text-slate-400 pt-0.5">+' + (items.length - 8) + ' more</p>' : '') +
+            '</div>';
+        }
+
+        /* --- Render all conflict rows --- */
+        function renderConflicts() {
+            var list = document.getElementById('conflict-list');
+            if (!list) return;
+
+            var badge = document.getElementById('conflict-count-badge');
+            if (badge) {
+                badge.textContent = _state.conflicts.length + ' conflict' + (_state.conflicts.length !== 1 ? 's' : '');
+                badge.classList.remove('hidden');
+            }
+
+            var html = _state.conflicts.map(function(c) {
+                var localSec  = _state.localSections[c.section_name]  || { items: [] };
+                var remoteSec = _state.remoteSections[c.section_name] || { items: [] };
+                var localItems  = localSec.items  || [];
+                var remoteItems = remoteSec.items || [];
+
+                var typeLabel = {
+                    'item_changed':   'Values changed',
+                    'item_added':     'Items added locally',
+                    'item_removed':   'Items removed locally',
+                    'section_missing': 'Section missing on one side'
+                }[c.conflict_type] || c.conflict_type;
+
+                return '<div class="conflict-row rounded-xl bg-white border border-slate-200 p-3 fade-in" data-section="' + esc(c.section_name) + '">' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                        '<div>' +
+                            '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(c.section_name) + '</p>' +
+                            '<p class="text-[8px] text-amber-600 font-bold uppercase">' + esc(typeLabel) + '</p>' +
+                        '</div>' +
+                        '<div class="flex gap-1.5">' +
+                            '<button onclick="mBTDiff.choose(\'' + esc(c.section_name) + '\', \'local\');" ' +
+                                'data-choice-btn="' + esc(c.section_name) + '-local" ' +
+                                'class="choice-btn px-2.5 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-colors bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100">Keep Local</button>' +
+                            '<button onclick="mBTDiff.choose(\'' + esc(c.section_name) + '\', \'remote\');" ' +
+                                'data-choice-btn="' + esc(c.section_name) + '-remote" ' +
+                                'class="choice-btn px-2.5 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-colors bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100">Keep Remote</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-2">' +
+                        '<div class="col-local rounded-lg border p-2">' +
+                            '<p class="text-[7px] font-black uppercase tracking-widest text-blue-500 mb-1">' + localItems.length + ' items</p>' +
+                            renderItems(localItems) +
+                        '</div>' +
+                        '<div class="col-remote rounded-lg border p-2">' +
+                            '<p class="text-[7px] font-black uppercase tracking-widest text-emerald-500 mb-1">' + remoteItems.length + ' items</p>' +
+                            renderItems(remoteItems) +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            list.innerHTML = html;
+        }
+
+        /* --- Record a choice and update button states --- */
+        function choose(sectionName, side) {
+            _state.choices[sectionName] = side;
+
+            /* Update button ring styles */
+            ['local', 'remote'].forEach(function(s) {
+                var btn = document.querySelector('[data-choice-btn="' + sectionName + '-' + s + '"]');
+                if (!btn) return;
+                if (s === side) {
+                    btn.classList.add('ring-2', s === 'local' ? 'ring-blue-500' : 'ring-emerald-500');
+                    btn.style.fontWeight = '900';
+                } else {
+                    btn.classList.remove('ring-2', 'ring-blue-500', 'ring-emerald-500');
+                    btn.style.fontWeight = '';
+                }
+            });
+
+            /* Enable commit button once all conflicts are resolved */
+            var allResolved = _state.conflicts.every(function(c) { return _state.choices[c.section_name]; });
+            var commitBtn = document.getElementById('btn-commit');
+            if (commitBtn) {
+                commitBtn.disabled = !allResolved;
+                if (allResolved) {
+                    commitBtn.className = 'px-5 py-2.5 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-colors';
+                } else {
+                    commitBtn.className = 'px-5 py-2.5 bg-slate-300 text-slate-500 rounded-xl text-[9px] font-black uppercase tracking-widest cursor-not-allowed transition-colors';
+                }
+            }
+        }
+
+        /* --- Select all conflicts to one side at once --- */
+        function selectAll(side) {
+            _state.conflicts.forEach(function(c) { choose(c.section_name, side); });
+        }
+
+        /* --- Build the merged sections object from choices and send to monolith --- */
+        function commitResolution(forceSide) {
+            var mergedSections = {};
+
+            /* Start with all local sections as the base */
+            Object.keys(_state.localSections).forEach(function(k) {
+                mergedSections[k] = _state.localSections[k];
+            });
+
+            /* Apply user choices — override local with remote where 'remote' was chosen */
+            _state.conflicts.forEach(function(c) {
+                var side = forceSide || _state.choices[c.section_name] || 'local';
+                if (side === 'remote' && _state.remoteSections[c.section_name]) {
+                    mergedSections[c.section_name] = _state.remoteSections[c.section_name];
+                } else if (side === 'local' && _state.localSections[c.section_name]) {
+                    mergedSections[c.section_name] = _state.localSections[c.section_name];
+                }
+            });
+
+            /* Add any remote-only sections that were not in local */
+            Object.keys(_state.remoteSections).forEach(function(k) {
+                if (!mergedSections[k]) mergedSections[k] = _state.remoteSections[k];
+            });
+
+            window.parent.postMessage({
+                type: 'mbt:tool-action',
+                action: 'resolve-diff',
+                payload: {
+                    mergedSections: mergedSections,
+                    projectKey: _state.projectKey
+                }
+            }, '*');
+        }
+
+        /* --- Abort: discard unmerged deltas, tell monolith to cancel sync --- */
+        function abort() {
+            window.parent.postMessage({
+                type: 'mbt:tool-action',
+                action: 'abort-diff',
+                payload: { projectKey: _state.projectKey }
+            }, '*');
+        }
+
+        /* --- Incoming postMessage router --- */
+        window.addEventListener('message', function(e) {
+            if (!e.data) return;
+
+            if (e.data.type === 'mbt:diff-init') {
+                clearTimeout(_diffBootTimeout);
+                init(e.data.payload);
+            }
+
+            /* Phase 62 RBAC kill-switch: if evicted while diff modal is open,
+               forcibly abort and purge unmerged deltas */
+            if (e.data.type === 'mbt:rbac-eviction') {
+                clearTimeout(_diffBootTimeout);
+                /* Wipe unmerged state immediately — prevents ghost-commits */
+                _state.conflicts      = [];
+                _state.choices        = {};
+                _state.localSections  = {};
+                _state.remoteSections = {};
+                abort();
+            }
+        });
+
+        /* --- Init: receive conflict payload injected by monolith --- */
+        function init(payload) {
+            if (!payload) { showState('error'); return; }
+
+            _state.conflicts      = payload.conflicts      || [];
+            _state.localSections  = payload.localSections  || {};
+            _state.remoteSections = payload.remoteSections || {};
+            _state.projectKey     = payload.projectKey     || null;
+            _state.choices        = {};
+
+            if (!_state.conflicts.length) {
+                showState('clean');
+                return;
+            }
+
+            showState('diff');
+            renderConflicts();
+        }
+
+        return {
+            choose:           choose,
+            selectAll:        selectAll,
+            commitResolution: commitResolution,
+            abort:            abort,
+            init:             init
+        };
+    })();
+
+    /* Safety timeout — if monolith sends no payload within 5s, show error */
+    var _diffBootTimeout = setTimeout(function() {
+        var loadEl = document.getElementById('state-loading');
+        var errEl  = document.getElementById('state-error');
+        var msg    = document.getElementById('error-msg');
+        if (loadEl) loadEl.classList.add('hidden');
+        if (errEl)  errEl.classList.remove('hidden');
+        if (msg)    msg.textContent = 'No conflict data received from the editor.';
+    }, 5000);
+  </script>
+</body>
+</html>
