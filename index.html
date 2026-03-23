@@ -31,6 +31,41 @@
     <!-- Tier 5: Engine Modules -->
     <script src="./src/scripts/engine/opengate.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
+    <!-- Tier 5B: WebAssembly Conflict Diffing Engine (Phase 63) -->
+    <script type="module">
+        import init, * as mbtWasm from './src/core/wasm_node/pkg/mbt_wasm.js';
+        init().then(function() {
+            window.mBTWasm = mbtWasm;
+        }).catch(function(err) {
+            console.warn('WASM init failed (file:// protocol limitation). Diff will use JS fallback:', err);
+            /* Assign JS shim in case WASM fails to load */
+            window.mBTWasm = {
+                diff_sections: function(payloadJson) {
+                    try {
+                        var payload = JSON.parse(payloadJson);
+                        var conflicts = [];
+                        Object.keys(payload.remote.sections || {}).forEach(function(secName) {
+                            var local = (payload.local.sections || {})[secName];
+                            var remote = payload.remote.sections[secName];
+                            if (!local || JSON.stringify(local) !== JSON.stringify(remote)) {
+                                conflicts.push({
+                                    section_id: remote.id || secName,
+                                    section_name: secName,
+                                    conflict_type: local ? 'item_changed' : 'section_missing',
+                                    local_item_count: local ? (local.items || []).length : 0,
+                                    remote_item_count: (remote.items || []).length
+                                });
+                            }
+                        });
+                        return JSON.stringify(conflicts);
+                    } catch(e) {
+                        console.error('JS diff_sections fallback error:', e);
+                        return '[]';
+                    }
+                }
+            };
+        });
+    </script>
 	<script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message="" data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"></script>
     <script>
         // --- OFFLINE GUARDRAIL ---
@@ -741,6 +776,10 @@
                 if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
                     var rtProjectId = data.id || data.projectName;
                     if (rtProjectId) mBTRealtime.subscribeToProject(rtProjectId);
+                }
+                /* Phase 63.5: Negotiate multi-tab mutex for this project */
+                if (typeof mBTTabLock !== 'undefined') {
+                    mBTTabLock.negotiate(storageKeyPrefix + budget.projectName);
                 }
             }
         },
@@ -1519,16 +1558,19 @@
             /* Mark body so CSS and re-render hooks can respond */
             document.body.setAttribute('data-rbac-role', 'viewer');
 
-            /* Freeze all budget row inputs */
+            /* Freeze all budget row inputs.
+               NOTE: <select> ignores readonly — must use disabled + opacity override. */
             var inputs = document.querySelectorAll(
                 'input[data-field], select[data-field], ' +
-                'input[data-action="stage-update"], input[data-section]'
+                'input[data-action="stage-update"], input[data-section], select[data-section]'
             );
             for (var i = 0; i < inputs.length; i++) {
-                inputs[i].setAttribute('readonly', 'readonly');
                 inputs[i].setAttribute('disabled', 'disabled');
-                inputs[i].style.opacity = '0.55';
-                inputs[i].style.cursor  = 'not-allowed';
+                /* readonly is only meaningful on text inputs but harmless on others */
+                if (inputs[i].tagName === 'INPUT') inputs[i].setAttribute('readonly', 'readonly');
+                inputs[i].style.opacity      = '0.45';
+                inputs[i].style.cursor       = 'not-allowed';
+                inputs[i].style.pointerEvents = 'none';
             }
 
             /* Hide destructive action buttons (add row, delete row, section controls) */
@@ -1539,6 +1581,32 @@
             );
             for (var j = 0; j < actionBtns.length; j++) {
                 actionBtns[j].style.display = 'none';
+            }
+
+            /* Disable footer tool routers (Stages, Calendar, Publisher) */
+            var footerTools = ['stagesFooterBtn', 'calendarFooterBtn', 'secondaryActionBtn'];
+            for (var fi = 0; fi < footerTools.length; fi++) {
+                var fbtn = document.getElementById(footerTools[fi]);
+                if (fbtn) { fbtn.setAttribute('disabled', 'disabled'); fbtn.style.opacity = '0.4'; fbtn.style.pointerEvents = 'none'; }
+            }
+
+            /* Disable settings gear */
+            var mainBtn = document.getElementById('mainActionBtn');
+            if (mainBtn) { mainBtn.setAttribute('disabled', 'disabled'); mainBtn.style.opacity = '0.4'; mainBtn.style.pointerEvents = 'none'; }
+
+            /* Disable currency selector */
+            var currBtn = document.getElementById('currencyBtn');
+            if (currBtn) { currBtn.setAttribute('disabled', 'disabled'); currBtn.style.pointerEvents = 'none'; currBtn.style.opacity = '0.4'; }
+
+            /* Block section-toggle collapse and crew-profile assignment via a capture-phase
+               event guard — these use data-action routing, not dedicated button IDs */
+            if (!window._rbacBlocker) {
+                window._rbacBlocker = function(e) {
+                    if (getRole() !== 'viewer') return;
+                    var el = e.target.closest('[data-action="section-toggle"], [data-action="crew-profile"]');
+                    if (el) { e.stopImmediatePropagation(); e.preventDefault(); }
+                };
+                document.addEventListener('click', window._rbacBlocker, true /* capture phase */);
             }
 
             /* Inject persistent viewer banner at top of budget sections */
@@ -1554,6 +1622,12 @@
                     sectionsEl.parentNode.insertBefore(banner, sectionsEl);
                 }
             }
+
+            /* --- C9 Patch: Natively freeze all GridStack instances to kill drag-and-drop --- */
+            var grids = document.querySelectorAll('.grid-stack');
+            for (var g = 0; g < grids.length; g++) {
+                if (grids[g].gridstack) grids[g].gridstack.setStatic(true);
+            }
         }
 
         /* --- Lift lockdown when role is upgraded to editor or admin --- */
@@ -1562,13 +1636,14 @@
 
             var inputs = document.querySelectorAll(
                 'input[data-field], select[data-field], ' +
-                'input[data-action="stage-update"], input[data-section]'
+                'input[data-action="stage-update"], input[data-section], select[data-section]'
             );
             for (var i = 0; i < inputs.length; i++) {
-                inputs[i].removeAttribute('readonly');
                 inputs[i].removeAttribute('disabled');
-                inputs[i].style.opacity = '';
-                inputs[i].style.cursor  = '';
+                inputs[i].removeAttribute('readonly');
+                inputs[i].style.opacity       = '';
+                inputs[i].style.cursor        = '';
+                inputs[i].style.pointerEvents = '';
             }
 
             var actionBtns = document.querySelectorAll(
@@ -1580,8 +1655,33 @@
                 actionBtns[j].style.display = '';
             }
 
+            /* Re-enable footer tool routers */
+            var footerTools = ['stagesFooterBtn', 'calendarFooterBtn', 'secondaryActionBtn'];
+            for (var fi = 0; fi < footerTools.length; fi++) {
+                var fbtn = document.getElementById(footerTools[fi]);
+                if (fbtn) { fbtn.removeAttribute('disabled'); fbtn.style.opacity = ''; fbtn.style.pointerEvents = ''; }
+            }
+
+            /* Re-enable settings gear and currency selector */
+            var mainBtn = document.getElementById('mainActionBtn');
+            if (mainBtn) { mainBtn.removeAttribute('disabled'); mainBtn.style.opacity = ''; mainBtn.style.pointerEvents = ''; }
+            var currBtn = document.getElementById('currencyBtn');
+            if (currBtn) { currBtn.removeAttribute('disabled'); currBtn.style.pointerEvents = ''; currBtn.style.opacity = ''; }
+
+            /* Remove capture-phase blocker */
+            if (window._rbacBlocker) {
+                document.removeEventListener('click', window._rbacBlocker, true);
+                window._rbacBlocker = null;
+            }
+
             var banner = document.getElementById('rbac-viewer-banner');
             if (banner) banner.remove();
+
+            /* --- C9 Patch: Natively unfreeze all GridStack instances --- */
+            var grids = document.querySelectorAll('.grid-stack');
+            for (var g = 0; g < grids.length; g++) {
+                if (grids[g].gridstack) grids[g].gridstack.setStatic(false);
+            }
         }
 
         /* --- Apply the appropriate state for the current role --- */
@@ -1634,6 +1734,166 @@
     document.addEventListener('DOMContentLoaded', function() {
         if (typeof mBTRBAC !== 'undefined') mBTRBAC.applyCurrentRole();
     });
+
+    /* ========= Phase 63.5: mBTTabLock — Multi-Tab BroadcastChannel Mutex =========
+       Uses the native HTML5 BroadcastChannel API on a custom 'mbt_tab_ping' namespace.
+       When the budget editor opens, it negotiates primary write access.
+       If another tab already holds the budget open for the same projectKey,
+       this tab mounts a full-screen READ ONLY overlay and blocks all interaction.
+
+       Limitations (disclosed to user in overlay):
+         - BroadcastChannel is origin-scoped: cannot detect Incognito windows or other browsers.
+         - Ping-pong loop handles crashed tabs: if no reply arrives within 500ms, this tab
+           assumes primary command and becomes the new master writer.
+    ========= */
+    var mBTTabLock = (function() {
+        var CHANNEL_NAME  = 'mbt_tab_ping';
+        var PING_TIMEOUT  = 500;    /* ms to wait for a primary-tab response */
+        var PING_INTERVAL = 10000;  /* ms heartbeat from primary to keep claim alive */
+
+        var _channel      = null;
+        var _isPrimary    = false;
+        var _currentKey   = null;   /* projectKey currently held by this tab */
+        var _heartbeatTimer = null;
+        var _overlayEl    = null;
+
+        /* --- Mount the read-only overlay on non-primary tabs --- */
+        function _mountOverlay() {
+            if (_overlayEl) return;
+            _overlayEl = document.createElement('div');
+            _overlayEl.id = 'tab-lock-overlay';
+            _overlayEl.style.cssText =
+                'position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.82);' +
+                'backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;' +
+                'pointer-events:all;';
+            _overlayEl.innerHTML =
+                '<div style="background:#1e293b;border:1px solid #334155;border-radius:20px;padding:32px 40px;max-width:400px;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,0.5);">' +
+                '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" style="margin:0 auto 16px;display:block;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+                '<p style="color:#f1f5f9;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Budget Open in Another Tab</p>' +
+                '<p style="color:#94a3b8;font-size:10px;line-height:1.6;margin-bottom:6px;">This budget is already active in another browser tab. To prevent data conflicts, this tab is locked to read-only.</p>' +
+                '<p style="color:#64748b;font-size:9px;line-height:1.5;margin-bottom:20px;">Note: This lock cannot detect Incognito windows or other browsers. If you\'re sure no other tab is open, use the button below.</p>' +
+                '<button id="tab-lock-claim-btn" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;">Claim Primary Access</button>' +
+                '</div>';
+            document.body.appendChild(_overlayEl);
+            document.getElementById('tab-lock-claim-btn').addEventListener('click', function() {
+                _becomePrimary();
+            });
+        }
+
+        /* --- Remove overlay when this tab becomes primary --- */
+        function _removeOverlay() {
+            if (_overlayEl) { _overlayEl.remove(); _overlayEl = null; }
+        }
+
+        /* --- Become the primary writer for the current project --- */
+        function _becomePrimary() {
+            _isPrimary = true;
+            _removeOverlay();
+            /* Inject subtle 'Primary' badge in header */
+            var existing = document.getElementById('tab-primary-badge');
+            if (!existing) {
+                var badge = document.createElement('span');
+                badge.id = 'tab-primary-badge';
+                badge.textContent = 'Primary';
+                badge.style.cssText = 'background:#1d4ed8;color:#fff;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;padding:2px 7px;border-radius:6px;margin-left:8px;vertical-align:middle;';
+                var headerTitle = document.querySelector('#mbt-header-title, .mbt-header-title, header h1, header .text-sm');
+                if (headerTitle) headerTitle.appendChild(badge);
+            }
+            /* Broadcast claim so other tabs yield */
+            if (_channel) _channel.postMessage({ type: 'claim', key: _currentKey });
+            /* Start heartbeat */
+            _startHeartbeat();
+        }
+
+        /* --- Heartbeat: primary broadcasts alive signal periodically --- */
+        function _startHeartbeat() {
+            if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+            _heartbeatTimer = setInterval(function() {
+                if (_isPrimary && _channel) {
+                    _channel.postMessage({ type: 'heartbeat', key: _currentKey });
+                }
+            }, PING_INTERVAL);
+        }
+
+        /* --- Negotiate primary access for a given projectKey.
+               1. Send who_is_active ping
+               2. Wait PING_TIMEOUT ms for a response
+               3. If no response → become primary
+               4. If response arrives → mount overlay (secondary mode) --- */
+        function negotiate(projectKey) {
+            /* If switching projects, tear down current channel */
+            if (_currentKey && _currentKey !== projectKey) {
+                _teardown();
+            }
+            _currentKey = projectKey;
+
+            /* BroadcastChannel is not available on file:// in all browsers — guard gracefully */
+            if (typeof BroadcastChannel === 'undefined') return;
+
+            _channel = new BroadcastChannel(CHANNEL_NAME);
+            var responded = false;
+
+            _channel.onmessage = function(evt) {
+                var msg = evt.data;
+                if (!msg || msg.key !== _currentKey) return;
+
+                if (msg.type === 'who_is_active') {
+                    /* Another tab is asking — if we are primary, respond */
+                    if (_isPrimary) {
+                        _channel.postMessage({ type: 'i_am_active', key: _currentKey });
+                    }
+                } else if (msg.type === 'i_am_active' || msg.type === 'heartbeat') {
+                    if (!_isPrimary) {
+                        responded = true;
+                        _mountOverlay();
+                    }
+                } else if (msg.type === 'claim') {
+                    /* Another tab claimed primary — if we thought we were primary too (race), yield */
+                    if (_isPrimary) {
+                        _isPrimary = false;
+                        if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+                        var badge = document.getElementById('tab-primary-badge');
+                        if (badge) badge.remove();
+                        _mountOverlay();
+                    }
+                }
+            };
+
+            /* Flush any pending localforage writes before negotiating, to prevent data shearing */
+            var flushPromise = (typeof localforage !== 'undefined')
+                ? localforage.getItem('__flush_noop__').catch(function() {}) /* Forces IDB queue flush */
+                : Promise.resolve();
+
+            flushPromise.then(function() {
+                _channel.postMessage({ type: 'who_is_active', key: _currentKey });
+                setTimeout(function() {
+                    if (!responded) {
+                        _becomePrimary();
+                    }
+                }, PING_TIMEOUT);
+            });
+        }
+
+        /* --- Tear down channel (called on project switch) --- */
+        function _teardown() {
+            if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+            if (_channel) { _channel.close(); _channel = null; }
+            _isPrimary = false;
+            _currentKey = null;
+            _removeOverlay();
+            var badge = document.getElementById('tab-primary-badge');
+            if (badge) badge.remove();
+        }
+
+        /* Clean up when tab closes */
+        window.addEventListener('beforeunload', function() { _teardown(); });
+
+        return {
+            negotiate: negotiate,
+            teardown:  _teardown,
+            isPrimary: function() { return _isPrimary; }
+        };
+    })();
 
     /* Re-apply lockdown hook: called by reconcile after sectionContainer is rebuilt */
     function mBTRBACPostRender() {
@@ -2662,6 +2922,10 @@
             </div>
             <button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">
                 ${mBTAssets.wand}
+            </button>
+            <!-- Phase 64: Share Hub trigger button (Header/Status Bar mount) -->
+            <button id="shareHubBtn" title="Share & Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
             </button>
             <div id="statusBar" class="flex-grow py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
         </div>
@@ -9763,6 +10027,27 @@ window.updateAllHeaders = () => {
             });
         }
 
+        /* --- Phase 64: Ghost Cursor Locking --- Wire focus/blur on line item inputs to broadcastTypingLock/Release --- */
+        document.addEventListener('focus', function(e) {
+            var input = e.target;
+            if (input.matches && input.matches('input[data-id][data-field], select[data-id][data-field]')) {
+                var fieldId = (input.dataset.section || '') + '::' + (input.dataset.id || '') + '::' + (input.dataset.field || '');
+                if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingLock === 'function') {
+                    mBTRealtime.broadcastTypingLock(fieldId);
+                }
+            }
+        }, true);
+
+        document.addEventListener('blur', function(e) {
+            var input = e.target;
+            if (input.matches && input.matches('input[data-id][data-field], select[data-id][data-field]')) {
+                var fieldId = (input.dataset.section || '') + '::' + (input.dataset.id || '') + '::' + (input.dataset.field || '');
+                if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingRelease === 'function') {
+                    mBTRealtime.broadcastTypingRelease(fieldId);
+                }
+            }
+        }, true);
+
         // Phase 16: Hybrid Tool Loader — opens sub-PWAs in internal modal or new tab
         window.openTool = function(url) {
             /* Lifecycle sync: push local changes before handing off to a tool.
@@ -9781,6 +10066,11 @@ window.updateAllHeaders = () => {
             } else {
                 window.open(url, '_blank');
             }
+        };
+
+        /* --- Phase 64: Share Hub trigger button handler --- */
+        window.openShareHub = function() {
+            openTool('./src/tools/share/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
         };
 
         if (footer) {
@@ -10153,6 +10443,20 @@ window.updateAllHeaders = () => {
                 _unsealRealtimeRenderer();
                 mBTME.close('tool-window');
                 mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
+
+            /* --- Phase 64: role-change — Share Hub changed a peer's role --- */
+            } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
+                if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) {
+                    mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
+                }
+
+            /* --- Phase 64: revoke-link / revoke-user — Share Hub burned the link or evicted a user --- */
+            } else if (action === 'revoke-link' || action === 'revoke-user') {
+                /* Broadcast auth-changed event to evict all viewers or a specific user */
+                var evt = new CustomEvent('mbt:auth-changed', {
+                    detail: { evictAll: action === 'revoke-link', userId: payload.userId }
+                });
+                window.dispatchEvent(evt);
             }
         });
 
