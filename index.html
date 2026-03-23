@@ -135,6 +135,19 @@
 
             <!-- Right button group — clips as pill shrinks right -->
             <div id="nav-right" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
+                <!-- Phase 65: Undo/Redo Chevrons -->
+                <button id="undoBtn" data-action="undo" aria-label="Undo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
+                    <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Undo</span>
+                </button>
+                <button id="redoBtn" data-action="redo" aria-label="Redo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
+                    <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 0 4-4h12"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Redo</span>
+                </button>
                 <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -172,7 +185,7 @@
     let currentProjectName = null;
     let historyStack = [];
     let historyIndex = -1;
-    const MAX_HISTORY = 15;
+    const MAX_HISTORY = 20;
 
 /* --- 2. Dynamic Multi-Currency Logic --- */
     let displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
@@ -297,6 +310,29 @@
             if (typeof injectFooterIcons === 'function') injectFooterIcons();
             
             // 5. Persistence Recovery (ASYNC UPGRADE)
+            
+            // --- Phase 64: Anonymous Session Tagging ---
+            var urlParams = new URLSearchParams(window.location.search);
+            var inviteToken = urlParams.get('invite');
+            if (inviteToken) {
+                var isAuthed = localStorage.getItem('mbt_supabase_auth_token');
+                if (!isAuthed && (!localStorage.getItem('mbt_profile_display_name') || !localStorage.getItem('mbt_supabase_user_id') || String(localStorage.getItem('mbt_supabase_user_id')).indexOf('anon_') !== 0)) {
+                    var fallbackName = prompt("You've been invited to collaborate! Please enter a Display Name:", "Guest User");
+                    if (fallbackName) {
+                        localStorage.setItem('mbt_profile_display_name', fallbackName);
+                        localStorage.setItem('mbt_supabase_user_id', 'anon_' + Date.now() + '_' + Math.floor(Math.random() * 10000));
+                        // Force real-time to pick up the new identity if it somehow connected early
+                        if (window.mBTRealtime && window.mBTRealtime.isConnected()) window.mBTRealtime.disconnect();
+                    }
+                }
+                var pKey = urlParams.get('projectKey');
+                if (pKey) {
+                    localStorage.setItem(`${storageKeyPrefix}lastLoaded`, pKey.replace(storageKeyPrefix, ''));
+                }
+                // Strip the URL so refreshing doesn't keep prompting
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
             let projectToLoad = localStorage.getItem(`${storageKeyPrefix}lastLoaded`);
             
             // Logic Resolution: Await the project list from Async Storage
@@ -466,7 +502,9 @@
                 // Stream B: Persistence (Slow Debounce - ASYNC)
                 clearTimeout(this._saveTimer);
                 this._saveTimer = setTimeout(async () => {
-                    await mBT.data.save(); 
+                    // Snapshot before save so every persisted edit is captured in undo history
+                    if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Field Edit');
+                    await mBT.data.save();
                     const statusMsg = document.getElementById('statusBarMessage');
                     if (statusMsg) {
                         const originalText = statusMsg.textContent;
@@ -532,13 +570,14 @@
                     historyIndex--;
                     const snapshot = historyStack[historyIndex];
                     budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
-                    
-                    // Logic Resolution: Log restoration event to explain state jump in Activity Log
+
+                    // Log restoration event to explain state jump in Activity Log
                     if(mBT.data.state && mBT.data.state.audit) {
                         mBT.data.state.audit('RESTORE', `Undo: ${snapshot.description || 'System State'}`, { section: 'System' });
                     }
 
                     if(typeof render === 'function') render();
+                    if(typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
                 }
             },
             redoSnapshot: function() {
@@ -546,13 +585,14 @@
                     historyIndex++;
                     const snapshot = historyStack[historyIndex];
                     budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
-                    
-                    // Logic Resolution: Log restoration event
+
+                    // Log restoration event
                     if(mBT.data.state && mBT.data.state.audit) {
                         mBT.data.state.audit('RESTORE', `Redo: ${snapshot.description || 'System State'}`, { section: 'System' });
                     }
-                    
+
                     if(typeof render === 'function') render();
+                    if(typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
                 }
             }
         },
@@ -1170,8 +1210,9 @@
                     
                     historyIndex = historyStack.length - 1;
                     
-                    // Logic Resolution: Update UI Indicators (Passive)
+                    // Update status bar and undo/redo button states
                     if(typeof renderStatusBar === 'function') renderStatusBar();
+                    if(typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
                     
                 } catch (e) {
                     console.error("Snapshot Failed:", e);
@@ -9628,6 +9669,22 @@ window.updateAllHeaders = () => {
         container.innerHTML = html;
     }
 
+    function updateUndoRedoButtons() {
+        var undoBtn = document.getElementById('undoBtn');
+        var redoBtn = document.getElementById('redoBtn');
+        if (!undoBtn || !redoBtn) return;
+        var canUndo = historyIndex > 0;
+        var canRedo = historyIndex < historyStack.length - 1;
+        undoBtn.disabled = !canUndo;
+        redoBtn.disabled = !canRedo;
+        undoBtn.style.opacity = canUndo ? '1' : '0.35';
+        redoBtn.style.opacity = canRedo ? '1' : '0.35';
+        if (window.mBTUserRole === 'viewer') {
+            undoBtn.disabled = true; redoBtn.disabled = true;
+            undoBtn.style.opacity = '0.35'; redoBtn.style.opacity = '0.35';
+        }
+    }
+
     function renderStatusBar() {
         const container = document.getElementById('statusBar');
         if (!container) return;
@@ -10001,8 +10058,12 @@ window.updateAllHeaders = () => {
                     e.preventDefault();
                     if(mBT.core.actions['undo']) mBT.core.actions['undo']();
                 }
-                // Redo: Ctrl+Y
+                // Redo: Ctrl+Y or Ctrl+Shift+Z (standard Mac/Linux)
                 if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                    e.preventDefault();
+                    if(mBT.core.actions['redo']) mBT.core.actions['redo']();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
                     e.preventDefault();
                     if(mBT.core.actions['redo']) mBT.core.actions['redo']();
                 }
@@ -10047,6 +10108,56 @@ window.updateAllHeaders = () => {
                 }
             }
         }, true);
+
+        /* --- Phase 64: Ghost Cursor Visuals --- Listen for peer locks and tint the DOM --- */
+        window.addEventListener('mbt:peer-typing', function(e) {
+            var detail = e.detail;
+            if (!detail || !detail.fieldId) return;
+            var parts = detail.fieldId.split('::');
+            if (parts.length !== 3) return;
+            var secName = parts[0], id = parts[1], fieldName = parts[2];
+            var selector = 'input[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"], select[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"]';
+            var inputs = document.querySelectorAll(selector);
+            for (var i = 0; i < inputs.length; i++) {
+                var input = inputs[i];
+                // Force read-only and overlay styling
+                input.setAttribute('readonly', 'true');
+                if (input.tagName.toLowerCase() === 'select') input.setAttribute('disabled', 'true');
+                input.classList.add('peer-locked', 'ring-2', 'ring-rose-500', '!bg-rose-50/50', 'text-rose-900', 'cursor-not-allowed');
+                input.title = 'Locked by: ' + (detail.displayName || 'Collaborator');
+                // Optional: create a small absolute floating badge if it doesn't exist
+                if (!input.parentNode.querySelector('.ghost-badge')) {
+                    var badge = document.createElement('span');
+                    badge.className = 'ghost-badge absolute -top-4 right-0 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm z-50 pointer-events-none whitespace-nowrap opacity-90';
+                    badge.textContent = detail.displayName || 'Peer';
+                    input.parentNode.style.position = 'relative';
+                    input.parentNode.appendChild(badge);
+                }
+            }
+        });
+
+        window.addEventListener('mbt:peer-release', function(e) {
+            var detail = e.detail;
+            if (!detail || !detail.fieldId) return;
+            var parts = detail.fieldId.split('::');
+            if (parts.length !== 3) return;
+            var secName = parts[0], id = parts[1], fieldName = parts[2];
+            var selector = 'input[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"], select[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"]';
+            var inputs = document.querySelectorAll(selector);
+            for (var i = 0; i < inputs.length; i++) {
+                var input = inputs[i];
+                // Check if someone else immediately grabbed it before releasing
+                if (window.mBTRealtime && typeof mBTRealtime.isFieldLocked === 'function' && !mBTRealtime.isFieldLocked(detail.fieldId)) {
+                    input.removeAttribute('readonly');
+                    input.removeAttribute('disabled');
+                    input.classList.remove('peer-locked', 'ring-2', 'ring-rose-500', '!bg-rose-50/50', 'text-rose-900', 'cursor-not-allowed');
+                    input.title = '';
+                    var badge = input.parentNode.querySelector('.ghost-badge');
+                    if (badge) badge.remove();
+                }
+            }
+        });
+
 
         // Phase 16: Hybrid Tool Loader — opens sub-PWAs in internal modal or new tab
         window.openTool = function(url) {
@@ -10352,6 +10463,22 @@ window.updateAllHeaders = () => {
                     }
                 }
 
+            /* --- Phase 64: Share Hub Peer Roster Request --- */
+            } else if (action === 'get-peers') {
+                if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
+                    event.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }, '*');
+                } else {
+                    event.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
+                }
+
+            /* --- Phase 64: Share Hub Role Management --- */
+            } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
+                if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
+
+            /* --- Phase 64: Share Hub Link Revocation --- */
+            } else if (action === 'revoke-link' || action === 'revoke-user') {
+                window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { evictAll: action === 'revoke-link', userId: payload.userId } }));
+
             /* --- load-budget: receive AI-generated .moo payload from Oracle iframe --- */
             } else if (action === 'load-budget' && payload.budgetData) {
                 /* Defense-in-depth sanitization — iframe already sanitized, monolith sanitizes again */
@@ -10615,6 +10742,8 @@ window.updateAllHeaders = () => {
         }
         // Ensure Login UI reflects current connectivity
         resolveConnectivityStatus();
+        // Initialize undo/redo button states
+        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     });
 
 /* ======= END OF mBT ========== */
