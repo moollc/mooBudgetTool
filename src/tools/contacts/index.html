@@ -536,6 +536,17 @@ var mBTContacts = (function () {
                     field('Phone', 'tel', 'm-phone', '+1 (555) 123-4567', (prefill && prefill.phone) || '') +
                     field('Dietary Restrictions', 'text', 'm-dietary', 'e.g. Vegetarian, Halal', (prefill && prefill.dietaryRestrictions) || '') +
                     field('Allergies', 'text', 'm-allergies', 'e.g. Nuts, Shellfish', (prefill && prefill.allergies) || '') +
+                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Method</label>' +
+                    '<select id="m-wallet-type" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' +
+                        '<option value="">— None —</option>' +
+                        '<option value="payoneer"' + ((prefill && prefill.walletType === 'payoneer') ? ' selected' : '') + '>Payoneer</option>' +
+                        '<option value="zelle"'    + ((prefill && prefill.walletType === 'zelle')    ? ' selected' : '') + '>Zelle</option>' +
+                        '<option value="wire"'     + ((prefill && prefill.walletType === 'wire')     ? ' selected' : '') + '>Wire Transfer</option>' +
+                        '<option value="cashapp"'  + ((prefill && prefill.walletType === 'cashapp')  ? ' selected' : '') + '>Cash App</option>' +
+                        '<option value="paypal"'   + ((prefill && prefill.walletType === 'paypal')   ? ' selected' : '') + '>PayPal</option>' +
+                        '<option value="wise"'     + ((prefill && prefill.walletType === 'wise')     ? ' selected' : '') + '>Wise</option>' +
+                    '</select></div>' +
+                    field('Wallet / Account ID', 'text', 'm-wallet-address', 'Account number, email, or @tag', (prefill && prefill.walletAddress) || '') +
                 '</div>' +
                 '<div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2 shrink-0">' +
                     '<button class="modal-cancel text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">Cancel</button>' +
@@ -570,13 +581,17 @@ var mBTContacts = (function () {
         var phone = document.getElementById('m-phone').value.trim();
         var dietary = document.getElementById('m-dietary').value.trim();
         var allergies = document.getElementById('m-allergies').value.trim();
+        var walletType    = (document.getElementById('m-wallet-type')    || {}).value || '';
+        var walletAddress = (document.getElementById('m-wallet-address') || {}).value.trim();
 
         if (!name) { alert('Name is required'); return; }
 
         var contact = {
             name: name, department: dept, email: email || null, phone: phone || null,
             rate: rate || null, role: dept, category: dept,
-            dietaryRestrictions: dietary || null, allergies: allergies || null
+            dietaryRestrictions: dietary || null, allergies: allergies || null,
+            walletType:    walletType    || null,
+            walletAddress: walletAddress || null
         };
         if (state.editingId) contact.id = state.editingId;
 

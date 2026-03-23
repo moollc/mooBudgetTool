@@ -24,6 +24,15 @@
         }
         .sortable-ghost { opacity: 0.3; transform: scale(0.95); }
         .sortable-drag  { cursor: grabbing; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        /* Phase 62: RBAC view-only state — applied via body[data-rbac-role="viewer"] */
+        body[data-rbac-role="viewer"] .stage-remove-btn    { display: none !important; }
+        body[data-rbac-role="viewer"] .stage-draggable     { cursor: default !important; }
+        body[data-rbac-role="viewer"] input                { opacity: 0.45 !important; pointer-events: none !important; }
+        body[data-rbac-role="viewer"] #stage-add-btn,
+        body[data-rbac-role="viewer"] [onclick*="clearAll"],
+        body[data-rbac-role="viewer"] [onclick*="autoFillAll"],
+        body[data-rbac-role="viewer"] [onclick*="bulkAction"],
+        body[data-rbac-role="viewer"] [onclick*="syncFromDb"] { opacity: 0.4 !important; pointer-events: none !important; }
         .sync-bounce { animation: bounce 1s infinite; }
         @keyframes bounce { 0%,100%{transform:translateY(-25%);animation-timing-function:cubic-bezier(.8,0,1,1)} 50%{transform:translateY(0);animation-timing-function:cubic-bezier(0,0,.2,1)} }
         /* Tab Navigation Bar */
@@ -491,6 +500,12 @@
                 self.state._projectKey = params.get('projectKey') || null;
                 self.state.projectId   = params.get('projectId') || null;
                 self.state._currency   = params.get('currency') || 'JMD';
+
+                /* Phase 62: Stamp RBAC role on body for CSS-driven lockdown */
+                try {
+                    var rbacRole = localStorage.getItem('mbt_rbac_role') || 'editor';
+                    document.body.setAttribute('data-rbac-role', rbacRole);
+                } catch(_) {}
 
                 /* Phase 50C.8: Dispatch tool focus to parent presence channel */
                 function dispatchFocus() {
@@ -1185,12 +1200,18 @@
 
             initDragAndDrop: function() {
                 var self = this;
+                /* Phase 62: read RBAC role from parent's localStorage — if viewer, mount static */
+                var rbacRole = 'editor';
+                try { rbacRole = localStorage.getItem('mbt_rbac_role') || 'editor'; } catch(_) {}
+                var isViewOnly = (rbacRole === 'viewer');
+
                 dom.querySelectorAll('.stage-drop-zone').forEach(function(zone) {
-                    new Sortable(zone, {
+                    var instance = new Sortable(zone, {
                         group: 'stages',
                         animation: 150,
                         ghostClass: 'sortable-ghost',
                         dragClass: 'sortable-drag',
+                        disabled: isViewOnly,  /* Natively kills drag-and-drop for view-only users */
                         onEnd: function(evt) {
                             var itemId    = evt.item.dataset.id;
                             var fromStage = evt.from.dataset.stage;

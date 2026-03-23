@@ -2,326 +2,280 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mBT Share Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>mBT — Share Hub</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
   <style>
-    body { background: #f9fafb; }
-    #content { min-height: 300px; }
-    .link-box { background: #f0f9ff; border: 1px solid #bfdbfe; }
-    .user-row { transition: background-color 0.2s; }
-    .user-row:hover { background-color: #f3f4f6; }
-    .role-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
-    .role-admin { background: #fecaca; color: #991b1b; }
-    .role-editor { background: #bfdbfe; color: #1e40af; }
-    .role-viewer { background: #dbeafe; color: #0c4a6e; }
-    .status-online { background: #22c55e; }
-    .status-idle { background: #eab308; }
-    .status-offline { background: #6b7280; }
-    .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
-    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-    .skeleton-text { height: 16px; border-radius: 4px; margin: 8px 0; }
-    .link-copied { background: #dcfce7; border-color: #22c55e; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes slideUp { from { opacity:0; transform: translateY(20px) translateX(-50%); } to { opacity:1; transform: translateY(0) translateX(-50%); } }
+    .snack-in { animation: slideUp 0.25s ease-out forwards; }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-  <div class="max-w-4xl mx-auto p-4 md:p-6">
+<body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
 
-    <!-- Header -->
-    <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg shadow-lg p-6 mb-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-white">Share & Collaborate</h1>
-          <p class="text-emerald-100 mt-1">Manage access · invite teams · real-time presence</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div id="statusDot" class="w-3 h-3 bg-yellow-400 rounded-full"></div>
-          <span id="statusText" class="text-white text-sm">Connecting...</span>
-        </div>
-      </div>
+  <!-- Header -->
+  <div class="h-12 bg-white flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
+    <div class="flex items-center gap-4">
+      <button id="btn-back" class="flex items-center gap-2 text-slate-600 hover:text-slate-800 text-[10px] font-black uppercase tracking-widest transition-colors">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+      <div class="h-4 w-px bg-slate-200"></div>
+      <span class="text-slate-800 text-xl font-bold">Multiplayer Hub</span>
     </div>
+  </div>
 
-    <!-- Content Area -->
-    <div id="content">
+  <!-- Content -->
+  <div class="flex-1 overflow-y-auto no-scrollbar px-4 py-3 max-w-2xl mx-auto w-full">
 
-      <!-- Share Link Panel -->
-      <div class="bg-white rounded-lg shadow-sm border mb-4 p-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">Share Link</h2>
-        <div class="link-box rounded-lg p-4 mb-3">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Invite Link</label>
-          <div class="flex gap-2 items-stretch">
-            <input id="shareLink" type="text" readonly
-              class="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm text-gray-700 font-mono"
-              placeholder="Generating...">
-            <button onclick="mBTShare.copyLink()"
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-              Copy
-            </button>
-          </div>
-          <p class="text-xs text-gray-500 mt-2">Share this link with teammates. Valid until regenerated.</p>
-        </div>
-        <button onclick="mBTShare.regenerateLink()"
-          class="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium border border-red-200">
-          Regenerate Link (Revoke All Access)
+    <!-- Invite Section -->
+    <div class="mb-6">
+      <div class="flex items-center gap-2 mb-4">
+        <input id="invite-link-input" type="text" readonly value="Generating..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] text-slate-500 font-mono outline-none" />
+        <button id="btn-copy" class="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors shrink-0">Copy</button>
+        <button id="btn-regenerate" class="flex items-center gap-1.5 text-rose-600 hover:text-rose-700 text-[9px] font-black uppercase tracking-widest transition-colors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
+          Burn & Regenerate Link (Revokes old link)
         </button>
-        <p class="text-xs text-gray-500 mt-2 text-red-700">Warning: Existing viewers will be disconnected.</p>
       </div>
-
-      <!-- Active Users Panel -->
-      <div class="bg-white rounded-lg shadow-sm border p-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">Active Collaborators</h2>
-
-        <!-- User List -->
-        <div id="userListContainer" class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-gray-200">
-                <th class="text-left py-2 px-3 font-semibold text-gray-600 text-xs uppercase">User</th>
-                <th class="text-left py-2 px-3 font-semibold text-gray-600 text-xs uppercase">Role</th>
-                <th class="text-left py-2 px-3 font-semibold text-gray-600 text-xs uppercase">Status</th>
-                <th class="text-left py-2 px-3 font-semibold text-gray-600 text-xs uppercase">Last Active</th>
-                <th class="text-center py-2 px-3 font-semibold text-gray-600 text-xs uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="userList">
-              <!-- Populated by JS -->
-              <tr class="user-row">
-                <td class="py-3 px-3"><div class="skeleton skeleton-text w-24"></div></td>
-                <td class="py-3 px-3"><div class="skeleton skeleton-text w-16"></div></td>
-                <td class="py-3 px-3"><div class="skeleton skeleton-text w-20"></div></td>
-                <td class="py-3 px-3"><div class="skeleton skeleton-text w-32"></div></td>
-                <td class="py-3 px-3"><div class="skeleton skeleton-text w-12"></div></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p id="emptyState" class="text-center text-gray-500 text-sm py-4" style="display:none;">
-          No active collaborators. Share your link to invite teammates.
-        </p>
-      </div>
-
     </div>
+    
+    <table class="w-full text-left border-collapse">
+        <thead>
+            <tr class="bg-slate-50 border-b border-slate-100">
+                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">User</th>
+                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Status</th>
+                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Access Role</th>
+            </tr>
+        </thead>
+        <tbody id="peers-tbody" class="divide-y divide-slate-100/60 text-[11px] font-medium text-slate-700">
+            <tr><td colspan="3" class="px-4 py-4 text-center text-slate-400 text-[10px] uppercase tracking-widest">Loading peers...</td></tr>
+        </tbody>
+    </table>
 
   </div>
 
+  <!-- Snackbar -->
+  <div id="snackbar" class="hidden fixed bottom-6 left-1/2 z-50 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-5 py-3 rounded-lg shadow-2xl snack-in"></div>
+
   <script>
-    /* --- mBTShare: Share Hub namespace --- */
-    var mBTShare = (function() {
-      var MONOLITH_PREFIX = 'prodBudget_v5_';
-      var projectKey = null;
-      var isAdmin = false;
-      var shareToken = null;
-      var peers = [];
-      var pollInterval = null;
+    /* ========= mBTShareHub ========= */
+    var mBTShareHub = (function() {
+        var state = { projectKey: null, activeToken: null, peers: [], myUserId: '' };
 
-      function init() {
-        /* Parse projectKey from ?projectKey=... URL param */
-        var params = new URLSearchParams(location.search);
-        projectKey = params.get('projectKey');
-        if (!projectKey) {
-          console.error('No projectKey in URL');
-          setStatus('Error', 'offline');
-          return;
-        }
-        console.log('mBTShare init:', projectKey);
-
-        /* Check if parent monolith is available (connected = admin with Supabase) */
-        checkParentConnection();
-
-        /* Poll for peers every 3s */
-        pollInterval = setInterval(refreshUserList, 3000);
-        refreshUserList();
-      }
-
-      function checkParentConnection() {
-        /* Try to ping parent window to see if realtime is active */
-        if (window.parent && window.parent.mBTRealtime) {
-          isAdmin = true;
-          setStatus('Ready', 'online');
-          /* Load share token from localStorage or generate new one */
-          var stored = localStorage.getItem(MONOLITH_PREFIX + 'shareToken_' + projectKey);
-          shareToken = stored || generateToken();
-          localStorage.setItem(MONOLITH_PREFIX + 'shareToken_' + projectKey, shareToken);
-          document.getElementById('shareLink').value = getShareUrl();
-        } else {
-          isAdmin = false;
-          setStatus('Offline', 'offline');
-          setStatus('Offline', 'offline');
-        }
-      }
-
-      function generateToken() {
-        /* Simple token: base36(date + random) */
-        return 'invite_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
-      }
-
-      function getShareUrl() {
-        /* Return the full invite URL */
-        return window.location.origin + window.location.pathname + '?projectKey=' +
-               encodeURIComponent(projectKey) + '&invite=' + encodeURIComponent(shareToken);
-      }
-
-      function copyLink() {
-        var link = document.getElementById('shareLink').value;
-        navigator.clipboard.writeText(link).then(function() {
-          /* Visual feedback */
-          var btn = event.target;
-          var orig = btn.textContent;
-          btn.textContent = 'Copied!';
-          btn.parentElement.parentElement.classList.add('link-copied');
-          setTimeout(function() {
-            btn.textContent = orig;
-            btn.parentElement.parentElement.classList.remove('link-copied');
-          }, 2000);
-        }).catch(function() {
-          alert('Failed to copy. Please copy manually: ' + link);
-        });
-      }
-
-      function regenerateLink() {
-        if (!confirm('Regenerate link? Active viewers will be disconnected.')) return;
-
-        shareToken = generateToken();
-        localStorage.setItem(MONOLITH_PREFIX + 'shareToken_' + projectKey, shareToken);
-        document.getElementById('shareLink').value = getShareUrl();
-
-        /* Notify monolith to evict all viewers */
-        if (window.parent && window.mBTBridge) {
-          window.mBTBridge.send('revoke-link', {});
-        }
-        alert('Link regenerated. All viewers have been disconnected.');
-      }
-
-      function refreshUserList() {
-        if (!isAdmin || !window.parent || !window.parent.mBTRealtime) {
-          setStatus('Offline', 'offline');
-          return;
+        function snack(msg) {
+            var el = document.getElementById('snackbar');
+            if(!el) return;
+            el.textContent = msg;
+            el.classList.remove('hidden'); el.classList.add('snack-in');
+            clearTimeout(el._t);
+            el._t = setTimeout(function() { el.classList.add('hidden'); }, 3000);
         }
 
-        /* Get peers from parent monolith's Realtime connection */
-        try {
-          peers = window.parent.mBTRealtime.getPresencePeers() || [];
-          renderUserList();
-          setStatus('Connected', 'online');
-        } catch(e) {
-          console.warn('Failed to get peers:', e);
-          setStatus('Connecting...', 'idle');
-        }
-      }
-
-      function renderUserList() {
-        var tbody = document.getElementById('userList');
-        var empty = document.getElementById('emptyState');
-
-        if (!peers || peers.length === 0) {
-          tbody.innerHTML = '';
-          empty.style.display = 'block';
-          return;
-        }
-        empty.style.display = 'none';
-
-        var html = peers.map(function(peer) {
-          var statusClass = peer.isOnline ? 'status-online' : (Date.now() - (peer.lastActive || 0) < 60000 ? 'status-idle' : 'status-offline');
-          var lastActive = peer.lastActive ? formatRelativeTime(Date.now() - peer.lastActive) : '—';
-          var roleClass = 'role-' + (peer.role || 'viewer');
-
-          return '<tr class="user-row border-b border-gray-100">' +
-            '<td class="py-3 px-3"><div class="flex items-center gap-2">' +
-            '<div class="w-6 h-6 ' + statusClass + ' rounded-full"></div>' +
-            '<span class="text-gray-800 font-medium">' + esc(peer.displayName || 'Anonymous') + '</span>' +
-            '</div></td>' +
-            '<td class="py-3 px-3"><span class="role-badge ' + roleClass + '">' + esc(peer.role || 'viewer') + '</span></td>' +
-            '<td class="py-3 px-3"><span class="text-xs text-gray-500">' + (peer.isOnline ? 'Editing' : 'Offline') + '</span></td>' +
-            '<td class="py-3 px-3"><span class="text-xs text-gray-500">' + lastActive + '</span></td>' +
-            '<td class="py-3 px-3 text-center">' +
-            (peer.role !== 'admin' ? '<select data-peer-id="' + esc(peer.userId) + '" onchange="mBTShare.changeRole(this)" ' +
-              'class="text-xs px-2 py-1 border rounded bg-white text-gray-700 hover:bg-gray-50">' +
-              '<option value="">—</option>' +
-              '<option value="editor">Editor</option>' +
-              '<option value="viewer">Viewer</option>' +
-              '<option value="revoke">Revoke</option>' +
-              '</select>' : '(Admin)') +
-            '</td></tr>';
-        }).join('');
-
-        tbody.innerHTML = html;
-      }
-
-      function changeRole(selectEl) {
-        var peerId = selectEl.getAttribute('data-peer-id');
-        var newRole = selectEl.value;
-
-        if (!newRole) {
-          selectEl.value = '';
-          return;
+        /* Generate random 16-char token */
+        function createToken() {
+            return Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
         }
 
-        if (newRole === 'revoke') {
-          if (!confirm('Revoke access for this user?')) {
-            selectEl.value = '';
-            return;
-          }
-          /* Send to monolith to evict */
-          if (window.parent && window.mBTBridge) {
-            window.mBTBridge.send('revoke-user', { userId: peerId });
-          }
-        } else {
-          /* Change role */
-          if (window.parent && window.mBTBridge) {
-            window.mBTBridge.send('role-change', { targetUserId: peerId, newRole: newRole });
-          }
+        function getSupabaseHeaders() {
+            var token = localStorage.getItem('mbt_supabase_auth_token') || '';
+            var anon = localStorage.getItem('mbt_supabase_anon_key') || '';
+            return {
+                'Content-Type': 'application/json',
+                'apikey': anon,
+                'Authorization': 'Bearer ' + (token ? token : anon)
+            };
         }
 
-        selectEl.value = '';
-      }
+        function getBaseUrl() {
+            var url = localStorage.getItem('mbt_supabase_url');
+            if(!url) return null;
+            return url + '/rest/v1';
+        }
 
-      function esc(str) {
-        var div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-      }
+        /* Fetch existing invite token from mbt_generic or create one */
+        function initInviteToken() {
+            var baseUrl = getBaseUrl();
+            if(!baseUrl) {
+                document.getElementById('invite-link-input').value = 'Supabase offline or unconfigured.';
+                return;
+            }
+            if(!state.projectKey) {
+                document.getElementById('invite-link-input').value = 'No project loaded.';
+                return;
+            }
+            var rowKey = 'invite_' + state.projectKey.replace('prodBudget_v5_', '');
 
-      function formatRelativeTime(ms) {
-        var secs = Math.floor(ms / 1000);
-        if (secs < 60) return secs + 's ago';
-        var mins = Math.floor(secs / 60);
-        if (mins < 60) return mins + 'm ago';
-        var hrs = Math.floor(mins / 60);
-        if (hrs < 24) return hrs + 'h ago';
-        var days = Math.floor(hrs / 24);
-        return days + 'd ago';
-      }
+            fetch(baseUrl + '/mbt_generic?key=eq.' + encodeURIComponent(rowKey), { headers: getSupabaseHeaders() })
+            .then(function(res) { return res.json(); })
+            .then(function(rows) {
+                if (rows && rows.length > 0) {
+                    state.activeToken = rows[0].value.token;
+                    renderLink();
+                } else {
+                    generateNewToken(rowKey);
+                }
+            })
+            .catch(function(e) {
+                console.error(e);
+                snack('Failed to fetch invite token');
+                document.getElementById('invite-link-input').value = 'Network Error';
+            });
+        }
 
-      function setStatus(text, status) {
-        document.getElementById('statusText').textContent = text;
-        var dot = document.getElementById('statusDot');
-        dot.classList.remove('bg-green-400', 'bg-yellow-400', 'bg-gray-400');
-        if (status === 'online') dot.classList.add('bg-green-400');
-        else if (status === 'idle') dot.classList.add('bg-yellow-400');
-        else dot.classList.add('bg-gray-400');
-      }
+        function generateNewToken(rowKey) {
+            var token = createToken();
+            var baseUrl = getBaseUrl();
+            var payload = {
+                key: rowKey,
+                value: { token: token, created_at: new Date().toISOString() },
+                user_id: state.myUserId || localStorage.getItem('mbt_supabase_user_id') || 'anon'
+            };
 
-      function cleanup() {
-        if (pollInterval) clearInterval(pollInterval);
-      }
+            fetch(baseUrl + '/mbt_generic', {
+                method: 'POST',
+                headers: Object.assign({ 'Prefer': 'resolution=merge-duplicates' }, getSupabaseHeaders()),
+                body: JSON.stringify(payload)
+            })
+            .then(function(res) {
+                if(res.ok) {
+                    state.activeToken = token;
+                    renderLink();
+                } else {
+                    snack('Failed to generate token (Auth rules?)');
+                    document.getElementById('invite-link-input').value = 'Permission Denied';
+                }
+            }).catch(function(e) { console.error(e); });
+        }
 
-      window.addEventListener('beforeunload', cleanup);
+        function renderLink() {
+            var invitePath = window.location.origin + window.location.pathname.replace('/src/tools/share/index.html', '/index.html');
+            invitePath += '?projectKey=' + encodeURIComponent(state.projectKey) + '&invite=' + state.activeToken;
+            document.getElementById('invite-link-input').value = invitePath;
+        }
 
-      return {
-        init: init,
-        copyLink: copyLink,
-        regenerateLink: regenerateLink,
-        changeRole: changeRole,
-        refresh: refreshUserList
-      };
+        function burnToken() {
+            if(!confirm('Are you sure? Old links will break instantly, and active viewers will be kicked.')) return;
+            var baseUrl = getBaseUrl();
+            if(!baseUrl) return;
+            if(!state.projectKey) return;
+            var rowKey = 'invite_' + state.projectKey.replace('prodBudget_v5_', '');
+            
+            // Generate immediately overwrites
+            generateNewToken(rowKey);
+            
+            // Broadcast revoke to monolith
+            if(window.mBTBridge) window.mBTBridge.send('revoke-link', {});
+            snack('Link burned & regenerated');
+        }
+
+        function requestPeers() {
+            if(window.mBTBridge) window.mBTBridge.send('get-peers');
+        }
+
+        function getRoleColor(role) {
+            if(role === 'admin') return 'text-violet-600 bg-violet-50 border-violet-200';
+            if(role === 'editor') return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+            return 'text-slate-500 bg-slate-50 border-slate-200';
+        }
+
+        function renderPeers() {
+            var tbody = document.getElementById('peers-tbody');
+            if(!state.peers || state.peers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-slate-400 text-[10px] uppercase tracking-widest">No active collaborators</td></tr>';
+                return;
+            }
+
+            var html = '';
+            var myDisplay = localStorage.getItem('mbt_profile_display_name') || 'Me';
+
+            // Also inject myself actively doing this
+            var hasMe = false;
+            var augmentedPeers = state.peers.map(function(p) { if(p.userId === state.myUserId) hasMe = true; return p; });
+            if(!hasMe && state.myUserId) augmentedPeers.unshift({ userId: state.myUserId, displayName: myDisplay + ' (You)', role: 'admin' });
+
+            augmentedPeers.forEach(function(p) {
+                var isMe = p.userId === state.myUserId;
+                html += '<tr>' +
+                    '<td class="px-4 py-1.5 flex items-center gap-3">' +
+                        '<div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-black text-slate-500 shrink-0">' + (p.displayName || 'G')[0].toUpperCase() + '</div>' +
+                        '<div class="font-bold flex flex-col">' +
+                            '<span>' + (p.displayName || 'Collaborator') + (isMe ? ' (You)' : '') + '</span>' +
+                        '</div>' +
+                    '</td>' +
+                    '<td class="px-4 py-1.5">' +
+                        '<span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Online</span>' +
+                    '</td>' +
+                    '<td class="px-4 py-1.5 text-right">' +
+                        '<select data-user="' + (p.userId) + '" ' + (isMe ? 'disabled ' : '') + 'class="ml-auto block w-24 text-[9px] font-black uppercase tracking-widest p-1.5 outline-none rounded-md border ' + getRoleColor(p.role || 'viewer') + '">' +
+                            '<option value="viewer" ' + ((p.role === 'viewer' || !p.role) ? 'selected' : '') + '>Viewer</option>' +
+                            '<option value="editor" ' + (p.role === 'editor' ? 'selected' : '') + '>Editor</option>' +
+                            '<option value="admin" ' + (p.role === 'admin' ? 'selected' : '') + '>Admin</option>' +
+                        '</select>' +
+                    '</td>' +
+                '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function wireEvents() {
+            document.getElementById('btn-back').addEventListener('click', function() {
+                if(window.mBTBridge) window.mBTBridge.send('close-tool');
+            });
+            document.getElementById('btn-copy').addEventListener('click', function() {
+                var input = document.getElementById('invite-link-input');
+                input.select();
+                document.execCommand('copy');
+                snack('Link copied to clipboard');
+            });
+            document.getElementById('btn-regenerate').addEventListener('click', burnToken);
+
+            document.getElementById('peers-tbody').addEventListener('change', function(e) {
+                if(e.target.tagName.toLowerCase() === 'select') {
+                    if (e.target.value === 'revoke') {
+                        if(!confirm('Revoke access for this user?')) { e.target.value = 'viewer'; return; }
+                        if(window.mBTBridge) window.mBTBridge.send('revoke-user', { userId: e.target.dataset.user });
+                        return;
+                    }
+                    var userId = e.target.dataset.user;
+                    var role = e.target.value;
+                    e.target.className = 'ml-auto block w-24 text-[9px] font-black uppercase tracking-widest p-1.5 outline-none rounded-md border ' + getRoleColor(role);
+                    if(window.mBTBridge) window.mBTBridge.send('role-change', { targetUserId: userId, newRole: role });
+                    snack('Role updated to ' + role);
+                }
+            });
+
+            // Listen to PostMessage responses from monolith (peers list)
+            window.addEventListener('message', function(e) {
+                var d = e.data;
+                if(!d) return;
+                if(d.type === 'mbt-tools-response' && d.action === 'peers-list') {
+                    state.peers = d.payload || [];
+                    renderPeers();
+                }
+            });
+
+            // Poll peers every 5s
+            setInterval(requestPeers, 5000);
+        }
+
+        function init() {
+            var params = new URLSearchParams(window.location.search);
+            state.projectKey = params.get('projectKey') || '';
+            state.myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
+
+            wireEvents();
+            initInviteToken();
+            requestPeers();
+        }
+
+        return { init: init };
     })();
 
-    /* Initialize on page load */
-    window.addEventListener('DOMContentLoaded', function() {
-      mBTShare.init();
-    });
+    window.addEventListener('DOMContentLoaded', mBTShareHub.init);
   </script>
 </body>
 </html>
