@@ -2507,8 +2507,16 @@
     function getProjectDateFormat() { return localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD'; }
     function getProjectNameSeparator() { return localStorage.getItem(projectNameSeparatorKey) || ' '; }
     function hardResetApp() { 
-        mBTME.confirm("Factory Reset", "This will clear all local data and reload. Continue?", () => {
+        mBTME.confirm("System Flush", "This will clear all corrupted cache states and reload the application. Your API keys and Cloud Auth will be shielded. Continue?", () => {
+            var vault = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var k = localStorage.key(i);
+                if (k.indexOf('mbt_ai_') === 0 || k.indexOf('mbt_supabase_') === 0 || k === 'mbt_theme' || k.indexOf('mBT_') === 0) {
+                    vault.push({ key: k, val: localStorage.getItem(k) });
+                }
+            }
             localStorage.clear(); 
+            vault.forEach(function(p) { localStorage.setItem(p.key, p.val); });
             window.location.reload(); 
         });
     }
@@ -9963,7 +9971,7 @@ window.updateAllHeaders = () => {
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=15', { scope: './', updateViaCache: 'none' })
                 .then(reg => {
                     console.log('SW Synchronization active:', reg.scope);
                     reg.onupdatefound = () => {
