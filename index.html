@@ -126,6 +126,13 @@
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap">Crew</span>
                 </button>
+                <!-- Phase 65: Undo Chevron -->
+                <button id="undoBtn" data-action="undo" aria-label="Undo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
+                    <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Undo</span>
+                </button>
             </div>
 
             <!-- Center anchor — always visible, sets the collapsed pill size -->
@@ -135,24 +142,32 @@
 
             <!-- Right button group — clips as pill shrinks right -->
             <div id="nav-right" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
-                <!-- Phase 65: Undo/Redo Chevrons -->
-                <button id="undoBtn" data-action="undo" aria-label="Undo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
-                    <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-                    </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Undo</span>
-                </button>
+                <!-- Phase 65: Redo Chevron -->
                 <button id="redoBtn" data-action="redo" aria-label="Redo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
                     <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 0 4-4h12"/></svg>
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Redo</span>
                 </button>
+                <!-- Phase 66: Search -->
+                <button id="searchFooterBtn" data-action="command-palette" aria-label="Search" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap">Search</span>
+                </button>
                 <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400 whitespace-nowrap">Cal</span>
+                </button>
+                <!-- Phase 67: Fringes -->
+                <button id="fringesFooterBtn" aria-label="Fringes" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-orange-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-orange-400 whitespace-nowrap">Fringes</span>
                 </button>
                 <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-secondary-action"></div>
@@ -165,6 +180,16 @@
             </div>
         </div>
     </footer>
+
+    <!-- Phase 66: Command Palette Overlay -->
+    <div id="cmdPalette" class="hidden fixed inset-0 z-[9999] flex flex-col" style="background:rgba(15,23,42,0.85);backdrop-filter:blur(8px);">
+        <div class="w-full max-w-xl mx-auto mt-[10vh] px-4 flex flex-col gap-3">
+            <input id="cmdInput" type="text" autocomplete="off" placeholder="Search line items, crew, departments..."
+                class="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3.5 text-white text-sm placeholder-slate-400 outline-none focus:border-indigo-400 focus:bg-white/15 transition-all" />
+            <ul id="cmdResults" class="flex flex-col gap-1 max-h-[60vh] overflow-y-auto no-scrollbar"></ul>
+            <p id="cmdHint" class="text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">Type to search &mdash; Esc to close</p>
+        </div>
+    </div>
 </body>
 
 <script>
@@ -962,6 +987,7 @@
                         contingencyPercentage: 10,
                         salesTaxPercentage: 0,
                         discountPercentage: 0,
+                        fringes: [],
                         documents: [],
                         attachments: [],
                         aiContext: { chat: [], analysis: "" },
@@ -1483,6 +1509,39 @@
     }
 
 
+    /* --- Phase 68B: Badge helpers for pending edit notifications --- */
+    window.mBTClearPendingBadge = function() {
+        var badge = document.getElementById('shareHubBadge');
+        if (!badge) return;
+        badge.style.display = 'none';
+        badge.dataset.count = '0';
+        badge.textContent = '';
+    };
+
+    /* --- Phase 68A/68B: mbt:pending-edit-submitted — Editor save routed to approval queue --- */
+    window.addEventListener('mbt:pending-edit-submitted', function(evt) {
+        var badge = document.getElementById('shareHubBadge');
+        if (!badge) return;
+        var count = (parseInt(badge.dataset.count, 10) || 0) + 1;
+        badge.dataset.count = String(count);
+        badge.textContent = count > 9 ? '9+' : String(count);
+        badge.style.display = 'flex';
+    });
+
+    /* --- Phase 68B: mbt:approval-verdict — Owner approved or rejected this Editor's proposal --- */
+    window.addEventListener('mbt:approval-verdict', function(evt) {
+        var detail = evt.detail || {};
+        if (detail.verdict === 'approved') {
+            if (typeof mBTME !== 'undefined') {
+                mBTME.alert('Proposal Approved', 'Your budget changes have been approved and merged by the Owner.');
+            }
+        } else {
+            if (typeof mBTME !== 'undefined') {
+                mBTME.alert('Proposal Rejected', 'The Owner has rejected your proposed changes. Your local copy is unchanged.');
+            }
+        }
+    });
+
     /* --- mbt:diff-conflict: sync halted, open diff modal --- */
     window.addEventListener('mbt:diff-conflict', function(evt) {
         if (_diffActive) return; /* Already handling a conflict */
@@ -1584,9 +1643,12 @@
     var mBTRBAC = (function() {
         var ROLE_KEY = 'mbt_rbac_role';
 
-        /* --- Read current role (default: editor) --- */
+        /* --- Read current role (default: admin for local owners) --- */
         function getRole() {
-            return localStorage.getItem(ROLE_KEY) || 'editor';
+            var token = localStorage.getItem('mbt_supabase_auth_token');
+            var anon = localStorage.getItem('mbt_supabase_anon_key');
+            if (!token && !anon) return 'admin'; /* Offline local user */
+            return localStorage.getItem(ROLE_KEY) || 'admin';
         }
 
         /* --- Persist role locally --- */
@@ -1595,80 +1657,12 @@
         }
 
         /* --- Apply view-only lockdown: freeze all budget inputs and action buttons --- */
+        /* --- Phase 68A: View-only lockdown ABOLISHED.
+           Local state is always fluid for all roles.
+           Role is used for sync routing only (Editor saves → mbt_pending_edits).
+           This stub preserves the data-rbac-role attribute for CSS hooks only. --- */
         function applyViewOnlyLockdown() {
-            /* Mark body so CSS and re-render hooks can respond */
             document.body.setAttribute('data-rbac-role', 'viewer');
-
-            /* Freeze all budget row inputs.
-               NOTE: <select> ignores readonly — must use disabled + opacity override. */
-            var inputs = document.querySelectorAll(
-                'input[data-field], select[data-field], ' +
-                'input[data-action="stage-update"], input[data-section], select[data-section]'
-            );
-            for (var i = 0; i < inputs.length; i++) {
-                inputs[i].setAttribute('disabled', 'disabled');
-                /* readonly is only meaningful on text inputs but harmless on others */
-                if (inputs[i].tagName === 'INPUT') inputs[i].setAttribute('readonly', 'readonly');
-                inputs[i].style.opacity      = '0.45';
-                inputs[i].style.cursor       = 'not-allowed';
-                inputs[i].style.pointerEvents = 'none';
-            }
-
-            /* Hide destructive action buttons (add row, delete row, section controls) */
-            var actionBtns = document.querySelectorAll(
-                '[data-action="row-delete"], [data-action="section-add"], ' +
-                '[data-action="section-delete"], [data-action="section-rename"], ' +
-                '[data-action="row-add"], .stage-remove-btn, [data-action="row-lock"]'
-            );
-            for (var j = 0; j < actionBtns.length; j++) {
-                actionBtns[j].style.display = 'none';
-            }
-
-            /* Disable footer tool routers (Stages, Calendar, Publisher) */
-            var footerTools = ['stagesFooterBtn', 'calendarFooterBtn', 'secondaryActionBtn'];
-            for (var fi = 0; fi < footerTools.length; fi++) {
-                var fbtn = document.getElementById(footerTools[fi]);
-                if (fbtn) { fbtn.setAttribute('disabled', 'disabled'); fbtn.style.opacity = '0.4'; fbtn.style.pointerEvents = 'none'; }
-            }
-
-            /* Disable settings gear */
-            var mainBtn = document.getElementById('mainActionBtn');
-            if (mainBtn) { mainBtn.setAttribute('disabled', 'disabled'); mainBtn.style.opacity = '0.4'; mainBtn.style.pointerEvents = 'none'; }
-
-            /* Disable currency selector */
-            var currBtn = document.getElementById('currencyBtn');
-            if (currBtn) { currBtn.setAttribute('disabled', 'disabled'); currBtn.style.pointerEvents = 'none'; currBtn.style.opacity = '0.4'; }
-
-            /* Block section-toggle collapse and crew-profile assignment via a capture-phase
-               event guard — these use data-action routing, not dedicated button IDs */
-            if (!window._rbacBlocker) {
-                window._rbacBlocker = function(e) {
-                    if (getRole() !== 'viewer') return;
-                    var el = e.target.closest('[data-action="section-toggle"], [data-action="crew-profile"]');
-                    if (el) { e.stopImmediatePropagation(); e.preventDefault(); }
-                };
-                document.addEventListener('click', window._rbacBlocker, true /* capture phase */);
-            }
-
-            /* Inject persistent viewer banner at top of budget sections */
-            var banner = document.getElementById('rbac-viewer-banner');
-            if (!banner) {
-                banner = document.createElement('div');
-                banner.id = 'rbac-viewer-banner';
-                banner.style.cssText = 'position:sticky;top:0;z-index:100;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 16px;display:flex;align-items:center;gap:8px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#92400e;';
-                banner.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
-                    '<span>View Only — You have read-only access to this budget</span>';
-                var sectionsEl = document.getElementById('budget-sections');
-                if (sectionsEl && sectionsEl.parentNode) {
-                    sectionsEl.parentNode.insertBefore(banner, sectionsEl);
-                }
-            }
-
-            /* --- C9 Patch: Natively freeze all GridStack instances to kill drag-and-drop --- */
-            var grids = document.querySelectorAll('.grid-stack');
-            for (var g = 0; g < grids.length; g++) {
-                if (grids[g].gridstack) grids[g].gridstack.setStatic(true);
-            }
         }
 
         /* --- Lift lockdown when role is upgraded to editor or admin --- */
@@ -1738,25 +1732,16 @@
             var prevRole   = getRole();
             setRole(newRole);
 
-            if (newRole === 'viewer' && prevRole !== 'viewer') {
-                /* --- Freeze the DOM immediately --- */
-                applyViewOnlyLockdown();
-
-                /* Blur any active input so no in-flight edits can sneak through */
-                if (document.activeElement && document.activeElement !== document.body) {
-                    document.activeElement.blur();
-                }
-
-                /* Alert the user */
+            if (newRole === 'editor' && prevRole !== 'editor') {
+                /* Phase 68A: Editor role — DOM stays fluid, sync push is routed to approval queue */
+                applyViewOnlyLockdown(); /* no-op stub, sets data-rbac-role only */
                 if (typeof mBTME !== 'undefined') {
-                    mBTME.alert('Access Changed',
-                        changedBy + ' has changed your role to View Only. ' +
-                        'Your unsaved edits have been preserved locally, but you can no longer make changes to this budget.');
+                    mBTME.alert('Role Updated', changedBy + ' has set your role to Editor. Your saves will be submitted for Owner approval.');
                 }
-            } else if ((newRole === 'editor' || newRole === 'admin') && prevRole === 'viewer') {
+            } else if ((newRole === 'admin') && prevRole !== 'admin') {
                 liftLockdown();
                 if (typeof mBTME !== 'undefined') {
-                    mBTME.alert('Access Restored', changedBy + ' has granted you edit access.');
+                    mBTME.alert('Access Restored', changedBy + ' has granted you full Owner access.');
                 }
             }
         });
@@ -2070,10 +2055,17 @@
 
                 const contingency = subtotal * ((b.contingencyPercentage || 0) / 100);
                 const tax = subtotal * ((b.salesTaxPercentage || 0) / 100);
-                const preDiscount = subtotal + contingency + tax;
+                var fringesTotal = 0;
+                if (b.fringes && b.fringes.length) {
+                    b.fringes.forEach(function(f) {
+                        if (f.enabled !== false) fringesTotal += subtotal * ((parseFloat(f.rate) || 0) / 100);
+                    });
+                }
+                const preDiscount = subtotal + contingency + tax + fringesTotal;
                 const discount = preDiscount * ((b.discountPercentage || 0) / 100);
-                
+
                 b.subtotal = subtotal;
+                b.fringesTotal = fringesTotal;
                 b.grandTotal = preDiscount - discount;
                 b.actualTotal = grandActual;
             },
@@ -2964,10 +2956,13 @@
             <button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">
                 ${mBTAssets.wand}
             </button>
-            <!-- Phase 64: Share Hub trigger button (Header/Status Bar mount) -->
-            <button id="shareHubBtn" title="Share & Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-            </button>
+            <!-- Phase 64/68B: Share Hub trigger button with pending-edit notification badge -->
+            <span id="shareHubBtnWrap" style="position:relative;display:inline-flex;">
+                <button id="shareHubBtn" title="Share & Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                </button>
+                <span id="shareHubBadge" data-count="0" style="display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;background:#ef4444;border-radius:9999px;border:2px solid white;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;padding:0 3px;line-height:1;"></span>
+            </span>
             <div id="statusBar" class="flex-grow py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
         </div>
 
@@ -9679,10 +9674,6 @@ window.updateAllHeaders = () => {
         redoBtn.disabled = !canRedo;
         undoBtn.style.opacity = canUndo ? '1' : '0.35';
         redoBtn.style.opacity = canRedo ? '1' : '0.35';
-        if (window.mBTUserRole === 'viewer') {
-            undoBtn.disabled = true; redoBtn.disabled = true;
-            undoBtn.style.opacity = '0.35'; redoBtn.style.opacity = '0.35';
-        }
     }
 
     function renderStatusBar() {
@@ -10024,10 +10015,104 @@ window.updateAllHeaders = () => {
             if(mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
             else if(typeof handleUndo === 'function') handleUndo(); 
         });
-        mBT.core.action('redo', () => { 
+        mBT.core.action('redo', () => {
             if(mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
-            else if(typeof handleRedo === 'function') handleRedo(); 
+            else if(typeof handleRedo === 'function') handleRedo();
         });
+
+        /* --- Phase 66: Command Palette Engine --- */
+        (function() {
+            var _open = false;
+
+            function openPalette() {
+                var el = document.getElementById('cmdPalette');
+                if (!el) return;
+                _open = true;
+                el.classList.remove('hidden');
+                var inp = document.getElementById('cmdInput');
+                if (inp) { inp.value = ''; inp.focus(); }
+                renderResults('');
+            }
+
+            function closePalette() {
+                var el = document.getElementById('cmdPalette');
+                if (el) el.classList.add('hidden');
+                _open = false;
+            }
+
+            function renderResults(query) {
+                var ul = document.getElementById('cmdResults');
+                var hint = document.getElementById('cmdHint');
+                if (!ul) return;
+                if (!budget || !budget.sections) { ul.innerHTML = ''; return; }
+                var q = (query || '').trim().toLowerCase();
+                var results = [];
+                Object.keys(budget.sections).forEach(function(secKey) {
+                    var sec = budget.sections[secKey];
+                    if (!sec || !sec.items) return;
+                    sec.items.forEach(function(item) {
+                        var desc = (item.description || '').toLowerCase();
+                        var crew = (item.crew && item.crew.name ? item.crew.name : '').toLowerCase();
+                        if (!q || desc.indexOf(q) !== -1 || crew.indexOf(q) !== -1 || secKey.toLowerCase().indexOf(q) !== -1) {
+                            results.push({ secKey: secKey, item: item });
+                        }
+                    });
+                });
+                if (results.length === 0) {
+                    ul.innerHTML = '<li class="px-4 py-3 text-slate-500 text-[11px] text-center uppercase tracking-widest">No results</li>';
+                    if (hint) hint.textContent = 'No results';
+                    return;
+                }
+                var html = '';
+                var limit = Math.min(results.length, 40);
+                for (var i = 0; i < limit; i++) {
+                    var r = results[i];
+                    html += '<li data-result-id="' + esc(r.item.id) + '" class="flex items-center gap-3 px-4 py-2.5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">' +
+                        '<div class="flex flex-col min-w-0">' +
+                            '<span class="text-white text-[12px] font-bold truncate">' + esc(r.item.description || 'Untitled') + '</span>' +
+                            '<span class="text-slate-400 text-[10px] font-black uppercase tracking-widest">' + esc(r.secKey) + (r.item.crew && r.item.crew.name ? ' &mdash; ' + esc(r.item.crew.name) : '') + '</span>' +
+                        '</div>' +
+                    '</li>';
+                }
+                if (results.length > 40) html += '<li class="px-4 py-2 text-slate-500 text-[10px] text-center">+ ' + (results.length - 40) + ' more &mdash; refine your search</li>';
+                ul.innerHTML = html;
+                if (hint) hint.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '');
+            }
+
+            // Bind listeners immediately (elements are already in DOM at script execution)
+            var overlay = document.getElementById('cmdPalette');
+            var inp = document.getElementById('cmdInput');
+            var ul = document.getElementById('cmdResults');
+            if (overlay) overlay.addEventListener('click', function(e) { if (e.target === overlay) closePalette(); });
+            if (inp) inp.addEventListener('input', function() { renderResults(inp.value); });
+            if (ul) ul.addEventListener('click', function(e) {
+                var li = e.target.closest('[data-result-id]');
+                if (!li) return;
+                var row = document.querySelector('[data-id="' + li.dataset.resultId + '"]');
+                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                closePalette();
+            });
+            document.body.addEventListener('keydown', function(e) {
+                if (_open && e.key === 'Escape') { e.preventDefault(); closePalette(); }
+            }, true);
+
+            // Phase 66 Update: Mobile Swipe-Up to Search (PWA constraints)
+            var _startY = 0;
+            document.addEventListener('touchstart', function(e) {
+                if (e.touches && e.touches.length > 0) _startY = e.touches[0].clientY;
+            }, {passive: true});
+            document.addEventListener('touchend', function(e) {
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    var endY = e.changedTouches[0].clientY;
+                    // Detect deliberate swipe up from the strict bottom bezel (within 100px of bottom edge)
+                    if (_startY > window.innerHeight - 100 && (_startY - endY) > 50) {
+                        openPalette();
+                    }
+                }
+            }, {passive: true});
+
+            mBT.core.action('command-palette', openPalette);
+        }());
     }
 
     /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
@@ -10066,6 +10151,11 @@ window.updateAllHeaders = () => {
                 if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
                     e.preventDefault();
                     if(mBT.core.actions['redo']) mBT.core.actions['redo']();
+                }
+                // Search: Ctrl+K
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    if (mBT.core.actions['command-palette']) mBT.core.actions['command-palette']();
                 }
             });
 
@@ -10179,9 +10269,10 @@ window.updateAllHeaders = () => {
             }
         };
 
-        /* --- Phase 64: Share Hub trigger button handler --- */
+        /* --- Phase 64 / 68B: Share Hub trigger button handler — clears pending badge on open --- */
         window.openShareHub = function() {
             openTool('./src/tools/share/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+            if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
         };
 
         if (footer) {
@@ -10193,6 +10284,7 @@ window.updateAllHeaders = () => {
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+                else if (btn.id === 'fringesFooterBtn') openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
@@ -10584,6 +10676,41 @@ window.updateAllHeaders = () => {
                     detail: { evictAll: action === 'revoke-link', userId: payload.userId }
                 });
                 window.dispatchEvent(evt);
+
+            /* --- Phase 68B: approve-pending-edit — Owner approves an Editor proposal --- */
+            } else if (action === 'approve-pending-edit' && payload.editId) {
+                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
+                    mBTSync.sbPatchPendingEdit(payload.editId, {
+                        status: 'approved',
+                        updated_at: new Date().toISOString()
+                    }).then(function() {
+                        if (payload.projectId && payload.budgetSnapshot) {
+                            return mBTSync.forcePushProject(payload.projectId, payload.budgetSnapshot);
+                        }
+                    }).then(function() {
+                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) {
+                            mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'approved');
+                        }
+                        if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
+                    }).catch(function(e) {
+                        console.error('[mBT] Approval failed:', e);
+                    });
+                }
+
+            /* --- Phase 68B: reject-pending-edit — Owner rejects an Editor proposal --- */
+            } else if (action === 'reject-pending-edit' && payload.editId) {
+                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
+                    mBTSync.sbPatchPendingEdit(payload.editId, {
+                        status: 'rejected',
+                        updated_at: new Date().toISOString()
+                    }).then(function() {
+                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) {
+                            mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'rejected');
+                        }
+                    }).catch(function(e) {
+                        console.error('[mBT] Rejection failed:', e);
+                    });
+                }
             }
         });
 

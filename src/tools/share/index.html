@@ -28,33 +28,56 @@
     </div>
   </div>
 
-  <!-- Content -->
-  <div class="flex-1 overflow-y-auto no-scrollbar px-4 py-3 max-w-2xl mx-auto w-full">
+  <!-- Split-pane content grid -->
+  <div class="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
 
-    <!-- Invite Section -->
-    <div class="mb-6">
-      <div class="flex items-center gap-2 mb-4">
-        <input id="invite-link-input" type="text" readonly value="Generating..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] text-slate-500 font-mono outline-none" />
-        <button id="btn-copy" class="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors shrink-0">Copy</button>
-        <button id="btn-regenerate" class="flex items-center gap-1.5 text-rose-600 hover:text-rose-700 text-[9px] font-black uppercase tracking-widest transition-colors">
+    <!-- LEFT PANE: Invite + Peers -->
+    <div class="overflow-y-auto no-scrollbar p-6 flex flex-col gap-6">
+
+      <!-- Invite link row -->
+      <div class="flex flex-col gap-3">
+        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Invite Link</span>
+        <div class="flex items-center gap-2">
+          <input id="invite-link-input" type="text" readonly value="Generating..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] text-slate-500 font-mono outline-none min-w-0" />
+          <button id="btn-copy" class="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors shrink-0">Copy</button>
+        </div>
+        <button id="btn-regenerate" class="flex items-center gap-1.5 text-rose-600 hover:text-rose-700 text-[9px] font-black uppercase tracking-widest transition-colors self-start">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
-          Burn & Regenerate Link (Revokes old link)
+          Burn &amp; Regenerate Link (Revokes old link)
         </button>
       </div>
-    </div>
-    
-    <table class="w-full text-left border-collapse">
-        <thead>
+
+      <!-- Peers table -->
+      <div class="flex flex-col gap-2">
+        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Active Collaborators</span>
+        <table class="w-full text-left border-collapse">
+          <thead>
             <tr class="bg-slate-50 border-b border-slate-100">
-                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">User</th>
-                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Status</th>
-                <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Access Role</th>
+              <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">User</th>
+              <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Status</th>
+              <th class="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Access Role</th>
             </tr>
-        </thead>
-        <tbody id="peers-tbody" class="divide-y divide-slate-100/60 text-[11px] font-medium text-slate-700">
+          </thead>
+          <tbody id="peers-tbody" class="divide-y divide-slate-100/60 text-[11px] font-medium text-slate-700">
             <tr><td colspan="3" class="px-4 py-4 text-center text-slate-400 text-[10px] uppercase tracking-widest">Loading peers...</td></tr>
-        </tbody>
-    </table>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANE: Proposal Queue -->
+    <div class="overflow-y-auto no-scrollbar p-6 flex flex-col gap-4">
+      <div class="flex items-center justify-between shrink-0">
+        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pending Proposals</span>
+        <button id="btn-refresh-proposals" class="text-slate-400 hover:text-slate-700 transition-colors p-1" title="Refresh proposals">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </div>
+      <ul id="proposals-list" class="flex flex-col gap-3">
+        <li class="text-slate-400 text-[10px] uppercase tracking-widest text-center py-8">Loading proposals...</li>
+      </ul>
+    </div>
 
   </div>
 
@@ -64,7 +87,7 @@
   <script>
     /* ========= mBTShareHub ========= */
     var mBTShareHub = (function() {
-        var state = { projectKey: null, activeToken: null, peers: [], myUserId: '' };
+        var state = { projectKey: null, activeToken: null, peers: [], myUserId: '', proposals: [] };
 
         function snack(msg) {
             var el = document.getElementById('snackbar');
@@ -221,6 +244,85 @@
             tbody.innerHTML = html;
         }
 
+        function esc(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
+        function fetchProposals() {
+            var baseUrl = getBaseUrl();
+            var projectId = state.projectKey ? state.projectKey.replace('prodBudget_v5_', '') : '';
+            if (!baseUrl || !projectId) { renderProposals(); return; }
+
+            fetch(baseUrl + '/mbt_pending_edits?project_id=eq.' + encodeURIComponent(projectId) + '&status=eq.pending&order=created_at.desc', {
+                headers: getSupabaseHeaders()
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(rows) {
+                state.proposals = Array.isArray(rows) ? rows : [];
+                renderProposals();
+            })
+            .catch(function(e) {
+                console.error('[mBTShareHub] fetchProposals error:', e);
+                state.proposals = [];
+                renderProposals();
+            });
+        }
+
+        function renderProposals() {
+            var list = document.getElementById('proposals-list');
+            if (!list) return;
+            if (!state.proposals || state.proposals.length === 0) {
+                list.innerHTML = '<li class="text-slate-400 text-[10px] uppercase tracking-widest text-center py-8">No pending proposals</li>';
+                return;
+            }
+            var html = '';
+            state.proposals.forEach(function(p) {
+                var diffs = Array.isArray(p.diff_log) ? p.diff_log : [];
+                var diffRows = diffs.slice(0, 20).map(function(d) {
+                    var diff = d.diff || {};
+                    return '<tr class="border-b border-slate-100">' +
+                        '<td class="px-2 py-1 text-slate-500 text-[10px] max-w-[80px] truncate">' + esc(d.section || '\u2014') + '</td>' +
+                        '<td class="px-2 py-1 text-slate-600 text-[10px] max-w-[80px] truncate">' + esc(diff.field || d.target || '\u2014') + '</td>' +
+                        '<td class="px-2 py-1 text-rose-500 text-[10px] max-w-[80px] truncate line-through">' + esc(String(diff.oldValue !== undefined ? diff.oldValue : '\u2014')) + '</td>' +
+                        '<td class="px-2 py-1 text-emerald-600 text-[10px] max-w-[80px] truncate font-bold">' + esc(String(diff.newValue !== undefined ? diff.newValue : '\u2014')) + '</td>' +
+                    '</tr>';
+                }).join('');
+                if (diffs.length > 20) {
+                    diffRows += '<tr><td colspan="4" class="px-2 py-1 text-slate-400 text-[9px] text-center">+ ' + (diffs.length - 20) + ' more changes</td></tr>';
+                }
+
+                html += '<li class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">' +
+                    '<div class="px-4 py-3 flex items-center justify-between border-b border-slate-100">' +
+                        '<div class="flex flex-col gap-0.5">' +
+                            '<span class="text-[12px] font-bold text-slate-800">' + esc(p.requested_by || 'Editor') + '</span>' +
+                            '<span class="text-[10px] text-slate-400 font-medium">' + new Date(p.created_at).toLocaleString() + '</span>' +
+                            (p.message ? '<span class="text-[10px] text-slate-500 italic mt-0.5">' + esc(p.message) + '</span>' : '') +
+                        '</div>' +
+                        '<div class="flex items-center gap-2 shrink-0">' +
+                            '<button class="btn-reject text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 transition-colors"' +
+                                ' data-id="' + esc(p.id) + '" data-editor="' + esc(p.user_id) + '" data-project="' + esc(p.project_id) + '">Reject</button>' +
+                            '<button class="btn-approve text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"' +
+                                ' data-id="' + esc(p.id) + '" data-editor="' + esc(p.user_id) + '" data-project="' + esc(p.project_id) + '" data-snapkey="' + esc(p.id) + '">Approve</button>' +
+                        '</div>' +
+                    '</div>' +
+                    (diffs.length > 0
+                        ? '<div class="overflow-x-auto"><table class="w-full text-left">' +
+                            '<thead><tr class="bg-slate-50">' +
+                                '<th class="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Section</th>' +
+                                '<th class="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Field</th>' +
+                                '<th class="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Before</th>' +
+                                '<th class="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400">After</th>' +
+                            '</tr></thead>' +
+                            '<tbody>' + diffRows + '</tbody>' +
+                          '</table></div>'
+                        : '<p class="px-4 py-3 text-slate-400 text-[10px]">No field-level diff available.</p>'
+                    ) +
+                '</li>';
+            });
+            list.innerHTML = html;
+        }
+
         function wireEvents() {
             document.getElementById('btn-back').addEventListener('click', function() {
                 if(window.mBTBridge) window.mBTBridge.send('close-tool');
@@ -260,6 +362,48 @@
 
             // Poll peers every 5s
             setInterval(requestPeers, 5000);
+
+            document.getElementById('btn-refresh-proposals').addEventListener('click', fetchProposals);
+
+            document.getElementById('proposals-list').addEventListener('click', function(e) {
+                var approveBtn = e.target.closest('.btn-approve');
+                var rejectBtn  = e.target.closest('.btn-reject');
+
+                if (approveBtn) {
+                    if (!confirm('Approve this proposal? The snapshot will become the master budget.')) return;
+                    var snapKey = approveBtn.dataset.snapkey;
+                    var proposal = state.proposals.filter(function(p) { return p.id === snapKey; })[0];
+                    var snapshot = proposal ? proposal.budget_snapshot : null;
+                    if (window.mBTBridge) window.mBTBridge.send('approve-pending-edit', {
+                        editId:         approveBtn.dataset.id,
+                        projectId:      approveBtn.dataset.project,
+                        editorUserId:   approveBtn.dataset.editor,
+                        budgetSnapshot: snapshot
+                    });
+                    approveBtn.textContent = 'Approved';
+                    approveBtn.disabled = true;
+                    snack('Proposal approved and merged');
+                    setTimeout(function() {
+                        var id = approveBtn.dataset.id;
+                        state.proposals = state.proposals.filter(function(p) { return p.id !== id; });
+                        renderProposals();
+                    }, 800);
+                    return;
+                }
+
+                if (rejectBtn) {
+                    if (!confirm('Reject this proposal?')) return;
+                    if (window.mBTBridge) window.mBTBridge.send('reject-pending-edit', {
+                        editId:       rejectBtn.dataset.id,
+                        projectId:    rejectBtn.dataset.project,
+                        editorUserId: rejectBtn.dataset.editor
+                    });
+                    snack('Proposal rejected');
+                    var rejId = rejectBtn.dataset.id;
+                    state.proposals = state.proposals.filter(function(p) { return p.id !== rejId; });
+                    renderProposals();
+                }
+            });
         }
 
         function init() {
@@ -270,6 +414,7 @@
             wireEvents();
             initInviteToken();
             requestPeers();
+            fetchProposals();
         }
 
         return { init: init };

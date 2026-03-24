@@ -287,6 +287,15 @@
                     detail: { role: data.role || 'viewer', changed_by: data.changed_by || '' }
                 }));
             }
+
+        /* --- Phase 68B: Approval verdict — Owner approved or rejected an Editor's pending edit --- */
+        } else if (event === 'approval_verdict') {
+            var myVerdictId = localStorage.getItem('mbt_supabase_user_id') || '';
+            if (data.target_user_id && data.target_user_id === myVerdictId) {
+                window.dispatchEvent(new CustomEvent('mbt:approval-verdict', {
+                    detail: { verdict: data.verdict || 'rejected', projectId: data.project_id || '' }
+                }));
+            }
         }
     }
 
@@ -423,6 +432,23 @@
         }]);
     }
 
+    /* --- Phase 68B: Notify Editor that their pending edit was approved or rejected --- */
+
+    function broadcastApproval(targetUserId, projectId, verdict) {
+        if (!_activeProjectId || !_connected) return;
+        var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
+        var myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
+        _send([null, _nextRef(), presenceTopic, 'broadcast', {
+            event:   'approval_verdict',
+            payload: {
+                target_user_id: targetUserId,
+                project_id:     projectId,
+                verdict:        verdict,
+                decided_by:     myUserId
+            }
+        }]);
+    }
+
     /* --- Phase 50C.8: Tool Focus Broadcast --- */
 
     function broadcastFocus(toolName) {
@@ -476,6 +502,7 @@
         broadcastTypingRelease:   broadcastTypingRelease,
         broadcastFocus:           broadcastFocus,
         broadcastRoleChange:      broadcastRoleChange,
+        broadcastApproval:        broadcastApproval,
         isFieldLocked:            isFieldLocked,
         getLockedBy:              getLockedBy,
         getPresencePeers:         getPresencePeers,

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>mBT — Fringes</title>
+  <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../lib/localforage.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes slideUp { from { opacity:0; transform: translateY(20px) translateX(-50%); } to { opacity:1; transform: translateY(0) translateX(-50%); } }
+    .snack-in { animation: slideUp 0.25s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
+
+  <!-- Header -->
+  <div class="h-12 bg-white flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
+    <div class="flex items-center gap-4">
+      <button id="btn-back" class="flex items-center gap-2 text-slate-600 hover:text-slate-800 text-[10px] font-black uppercase tracking-widest transition-colors">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+      <div class="h-4 w-px bg-slate-200"></div>
+      <span class="text-slate-800 text-xl font-bold">Fringes</span>
+    </div>
+    <button id="btn-add" class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-colors">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Fringe
+    </button>
+  </div>
+
+  <!-- Description -->
+  <div class="px-4 py-3 bg-orange-50 border-b border-orange-100 shrink-0">
+    <p class="text-[11px] text-orange-700 font-medium">Fringes are global percentage modifiers applied to the budget subtotal (e.g. SAG P&amp;W, Payroll Tax). They appear as explicit line items in exports.</p>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 overflow-y-auto no-scrollbar">
+
+    <!-- Empty state -->
+    <div id="empty-state" class="hidden flex flex-col items-center justify-center h-full gap-3 py-16">
+      <div class="text-slate-300">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <p class="text-slate-400 text-[11px] font-black uppercase tracking-widest">No fringes defined</p>
+      <p class="text-slate-400 text-[11px]">Tap Add Fringe to get started</p>
+    </div>
+
+    <!-- Fringes list -->
+    <ul id="fringes-list" class="divide-y divide-slate-100"></ul>
+
+    <!-- Summary row -->
+    <div id="summary-row" class="hidden px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between">
+      <span class="text-[11px] font-black uppercase tracking-widest text-slate-500">Total Fringes</span>
+      <span id="summary-total" class="text-[13px] font-black text-orange-600">0%</span>
+    </div>
+
+  </div>
+
+  <!-- Snackbar -->
+  <div id="snackbar" class="hidden fixed bottom-6 left-1/2 z-50 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-5 py-3 rounded-lg shadow-2xl snack-in"></div>
+
+  <script>
+    /* ========= mBTFringes ========= */
+    var mBTFringes = (function() {
+        var state = { projectKey: null, budget: null, currency: 'JMD' };
+
+        function snack(msg) {
+            var el = document.getElementById('snackbar');
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.remove('hidden'); el.classList.add('snack-in');
+            clearTimeout(el._t);
+            el._t = setTimeout(function() { el.classList.add('hidden'); }, 3000);
+        }
+
+        function save() {
+            if (!state.projectKey || !state.budget) return;
+            localforage.setItem(state.projectKey, state.budget).then(function() {
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+            }).catch(function(e) { console.error('[mBTFringes] Save error:', e); });
+        }
+
+        function genId() {
+            return 'f' + Date.now();
+        }
+
+        function esc(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function totalEnabledRate() {
+            if (!state.budget || !state.budget.fringes) return 0;
+            return state.budget.fringes.reduce(function(sum, f) {
+                return sum + (f.enabled !== false ? (parseFloat(f.rate) || 0) : 0);
+            }, 0);
+        }
+
+        function render() {
+            var fringes = (state.budget && state.budget.fringes) ? state.budget.fringes : [];
+            var list = document.getElementById('fringes-list');
+            var empty = document.getElementById('empty-state');
+            var summary = document.getElementById('summary-row');
+            var summaryTotal = document.getElementById('summary-total');
+
+            if (!list) return;
+
+            if (fringes.length === 0) {
+                list.innerHTML = '';
+                if (empty) empty.classList.remove('hidden');
+                if (summary) summary.classList.add('hidden');
+                return;
+            }
+
+            if (empty) empty.classList.add('hidden');
+            if (summary) summary.classList.remove('hidden');
+
+            var html = '';
+            fringes.forEach(function(f) {
+                var enabled = f.enabled !== false;
+                html += '<li class="bg-white px-4 py-3 flex items-center gap-3" data-fringe-id="' + esc(f.id) + '">' +
+                    '<button class="fringe-toggle shrink-0 w-9 h-5 rounded-full transition-colors ' + (enabled ? 'bg-orange-500' : 'bg-slate-200') + '" data-id="' + esc(f.id) + '" aria-label="Toggle fringe">' +
+                        '<span class="block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ' + (enabled ? 'translate-x-4' : 'translate-x-0') + '"></span>' +
+                    '</button>' +
+                    '<input type="text" class="fringe-name flex-1 bg-transparent border-b border-slate-200 focus:border-orange-400 outline-none text-[13px] font-semibold text-slate-800 py-0.5 transition-colors" ' +
+                        'data-id="' + esc(f.id) + '" value="' + esc(f.name) + '" placeholder="Fringe name (e.g. SAG P&W)" />' +
+                    '<div class="flex items-center gap-1 shrink-0">' +
+                        '<input type="number" class="fringe-rate w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[12px] font-bold text-slate-700 outline-none focus:border-orange-400 text-right transition-colors" ' +
+                            'data-id="' + esc(f.id) + '" value="' + (parseFloat(f.rate) || 0) + '" step="0.1" min="0" max="100" />' +
+                        '<span class="text-[11px] font-black text-slate-400">%</span>' +
+                    '</div>' +
+                    '<button class="fringe-delete shrink-0 text-slate-300 hover:text-red-400 transition-colors p-1" data-id="' + esc(f.id) + '" aria-label="Delete fringe">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
+                    '</button>' +
+                '</li>';
+            });
+            list.innerHTML = html;
+
+            var total = totalEnabledRate();
+            if (summaryTotal) summaryTotal.textContent = total.toFixed(2).replace(/\.?0+$/, '') + '%';
+        }
+
+        function addFringe() {
+            if (!state.budget) return;
+            if (!state.budget.fringes) state.budget.fringes = [];
+            state.budget.fringes.push({ id: genId(), name: '', rate: 0, enabled: true });
+            render();
+            save();
+            // Focus the new name input
+            var rows = document.querySelectorAll('#fringes-list li');
+            if (rows.length > 0) {
+                var lastInput = rows[rows.length - 1].querySelector('.fringe-name');
+                if (lastInput) lastInput.focus();
+            }
+        }
+
+        function wireListEvents() {
+            var list = document.getElementById('fringes-list');
+            if (!list) return;
+
+            list.addEventListener('click', function(e) {
+                var toggleBtn = e.target.closest('.fringe-toggle');
+                var deleteBtn = e.target.closest('.fringe-delete');
+
+                if (toggleBtn) {
+                    var id = toggleBtn.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) {
+                        fringe.enabled = fringe.enabled === false ? true : false;
+                        render();
+                        save();
+                    }
+                    return;
+                }
+
+                if (deleteBtn) {
+                    var id = deleteBtn.dataset.id;
+                    state.budget.fringes = state.budget.fringes.filter(function(f) { return f.id !== id; });
+                    render();
+                    save();
+                    snack('Fringe removed');
+                    return;
+                }
+            });
+
+            list.addEventListener('change', function(e) {
+                var nameInput = e.target.closest('.fringe-name');
+                var rateInput = e.target.closest('.fringe-rate');
+
+                if (nameInput) {
+                    var id = nameInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) { fringe.name = nameInput.value; save(); }
+                    return;
+                }
+
+                if (rateInput) {
+                    var id = rateInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) {
+                        fringe.rate = parseFloat(rateInput.value) || 0;
+                        render();
+                        save();
+                    }
+                    return;
+                }
+            });
+
+            // Live update summary on rate input (before change fires)
+            list.addEventListener('input', function(e) {
+                var rateInput = e.target.closest('.fringe-rate');
+                if (rateInput) {
+                    var id = rateInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) {
+                        fringe.rate = parseFloat(rateInput.value) || 0;
+                        var summaryTotal = document.getElementById('summary-total');
+                        if (summaryTotal) summaryTotal.textContent = totalEnabledRate().toFixed(2).replace(/\.?0+$/, '') + '%';
+                    }
+                }
+                var nameInput = e.target.closest('.fringe-name');
+                if (nameInput) {
+                    var id = nameInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) fringe.name = nameInput.value;
+                }
+            });
+        }
+
+        function init() {
+            var params = new URLSearchParams(window.location.search);
+            state.projectKey = params.get('projectKey') || '';
+            state.currency = params.get('currency') || 'JMD';
+
+            document.getElementById('btn-back').addEventListener('click', function() {
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+            });
+
+            document.getElementById('btn-add').addEventListener('click', addFringe);
+
+            if (!state.projectKey) {
+                document.getElementById('empty-state').classList.remove('hidden');
+                document.querySelector('#empty-state p:last-child').textContent = 'No project key provided.';
+                return;
+            }
+
+            localforage.getItem(state.projectKey).then(function(data) {
+                if (!data) { snack('Project not found'); return; }
+                state.budget = data;
+                if (!state.budget.fringes) state.budget.fringes = [];
+                render();
+                wireListEvents();
+            }).catch(function(e) {
+                console.error('[mBTFringes] Load error:', e);
+                snack('Failed to load project');
+            });
+        }
+
+        return { init: init };
+    })();
+
+    window.addEventListener('DOMContentLoaded', mBTFringes.init);
+  </script>
+</body>
+</html>
