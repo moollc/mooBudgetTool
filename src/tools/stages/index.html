@@ -516,6 +516,11 @@
                 dispatchFocus();
                 window.addEventListener('focus', dispatchFocus);
 
+                /* Phase 73B: receive undo/redo routing from parent monolith */
+                window.addEventListener('message', function(e) {
+                    if (!e.data || e.data.type !== 'mbt:tool-action') return;
+                });
+
                 /* Back button */
                 dom.getElementById('btn-back').addEventListener('click', function() {
                     if (window.parent && window.parent !== window) {

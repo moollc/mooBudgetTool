@@ -114,7 +114,9 @@
             <!-- Left button group — clips as pill shrinks left -->
             <div id="nav-left" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
                 <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
-                    <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-stages"></div>
+                    <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                    </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400 whitespace-nowrap">Stages</span>
                 </button>
                 <button id="docsFooterBtn" aria-label="mBTDB Document Builder" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
@@ -151,14 +153,14 @@
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Redo</span>
                 </button>
                 <!-- Phase 66: Search -->
-                <button id="searchFooterBtn" data-action="command-palette" aria-label="Search" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="searchFooterBtn" data-action="command-palette" aria-label="Search" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap">Search</span>
                 </button>
                 <!-- Phase 73: Tools Drawer trigger (houses Stages + Fringes) -->
-                <button id="toolsDrawerBtn" aria-label="Tools" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="toolsDrawerBtn" aria-label="Tools" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                     </div>
@@ -230,6 +232,7 @@
     let historyStack = [];
     let historyIndex = -1;
     const MAX_HISTORY = 20;
+    var mBTActiveTool = null; /* Phase 73B: tracks which tool iframe is currently open */
 
 /* --- 2. Dynamic Multi-Currency Logic --- */
     let displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
@@ -1064,7 +1067,10 @@
                         aiContext: { chat: [], analysis: "" },
                         activityLog: [], // Tier 2 Audit Init
                         mediaRoot: null,
-                        storageProtocol: 'internal'
+                        storageProtocol: 'internal',
+                        projectLocation: '',
+                        projectCompany: '',
+                        shootDate: ''
                     };
                     
                     budget = mBT.data.state.wrap(newBudget);
@@ -3014,6 +3020,13 @@
             <div id="project-management-container" class="w-full md:w-auto flex-shrink-0"></div>
         </header>
 
+        <!-- Phase 74A: Project metadata fields (Location, Company, Shoot Date) -->
+        <div class="flex flex-wrap gap-2 mb-2">
+            <input type="text" id="projectCompanyInput" value="${budget.projectCompany || budget.company || ''}" placeholder="Production Company" class="flex-1 min-w-[140px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
+            <input type="text" id="projectLocationInput" value="${budget.projectLocation || ''}" placeholder="Shooting Location" class="flex-1 min-w-[140px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
+            <input type="date" id="shootDateInput" value="${budget.shootDate || ''}" title="Shoot Date" class="w-[150px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
+        </div>
+
         <div class="flex gap-2 items-center mb-3">
             <div class="relative shrink-0" id="currencyContainer">
                 <button id="currencyBtn" title="Base Currency"
@@ -3135,6 +3148,13 @@
         if (projNameInput && document.activeElement !== projNameInput) {
             projNameInput.value = budget.projectName;
         }
+        /* Phase 74A: sync project metadata inputs on re-render */
+        var _pci = document.getElementById('projectCompanyInput');
+        if (_pci && document.activeElement !== _pci) _pci.value = budget.projectCompany || budget.company || '';
+        var _pli = document.getElementById('projectLocationInput');
+        if (_pli && document.activeElement !== _pli) _pli.value = budget.projectLocation || '';
+        var _sdi = document.getElementById('shootDateInput');
+        if (_sdi && document.activeElement !== _sdi) _sdi.value = budget.shootDate || '';
 
         const fmt = mBTLE.format.currency;
         const isMobile = window.innerWidth < 768;
@@ -3623,7 +3643,7 @@ function getAbbreviatedName(name, maxLen = 25) {
             // Replaced fixed widths with w-px + whitespace-nowrap for numeric columns.
             // Reduced horizontal padding from p-2 to px-1 py-2 to improve proximity.
             return `
-                <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}">
+                <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}"${item.memoStatus === 'Pending' ? ' style="background-color:rgba(234,179,8,0.12);"' : ''}>
                     <td class="px-1 ${rowPad} text-center relative w-12 md:w-14 overflow-visible">
                         <div class="crew-wrapper inline-block">
                             <button data-action="crew-toggle" class="crew-avatar rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
@@ -3649,17 +3669,18 @@ function getAbbreviatedName(name, maxLen = 25) {
 
                     <td class="px-1 ${rowPad} text-left min-w-[200px]">
                         <input type="text" data-id="${safeId}" data-section="${safeSection}" data-field="description" value="${this.esc(item.description)}"
-                               class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item...">
+                               class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item..." ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
+                        ${item.memoStatus === 'Pending' ? '<span style="display:inline-block;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:rgba(120,53,15,0.85);background:rgba(234,179,8,0.25);border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">MEMO</span>' : ''}
                     </td>
 
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap">
                         <input type="number" data-id="${safeId}" data-section="${safeSection}" data-field="quantity" value="${item.quantity}"
-                               class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0">
+                               class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0" ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
                     </td>
 
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap">
                         <select data-id="${safeId}" data-section="${safeSection}" data-field="unit"
-                                class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center">
+                                class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center" ${item.memoStatus === 'Pending' ? 'disabled' : ''}>
                             ${['Day','Week','Flat','Policy','Hour'].map(u => `<option value="${u}" ${item.unit === u ? 'selected' : ''}>${u.substring(0,3)}</option>`).join('')}
                         </select>
                     </td>
@@ -3670,7 +3691,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                                 <span class="scale-75 pointer-events-none">${isLocked ? mBTAssets.lock : mBTAssets.zap}</span>
                             </button>
                             <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="rate" value="${toDisp(item.rate).toFixed(2)}"
-                                   class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0">
+                                   class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0" ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
                         </div>
                     </td>
 
@@ -3688,7 +3709,7 @@ function getAbbreviatedName(name, maxLen = 25) {
                     </td>
 
                     <td class="px-1 ${rowPad} text-center w-8">
-                        <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100">
+                        <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100" ${item.memoStatus === 'Pending' ? 'style="display:none;"' : ''}>
                             ${mBTAssets.trash}
                         </button>
                     </td>
@@ -3834,6 +3855,15 @@ function handleToggleSection(sectionName, triggerEl) {
 
 // Logic Resolution: Removes items from the budget object.
 function handleRemoveItem(sectionName, itemId) {
+    /* Phase 74A: block deletion of ghost items linked to deal memos */
+    var sec = budget.sections[sectionName];
+    if (sec) {
+        var _target = sec.items.find(function(i) { return String(i.id) === String(itemId); });
+        if (_target && _target.memoStatus === 'Pending') {
+            mBTME.alert('Cannot Delete', 'This row is linked to a Deal Memo. Change the memo status to Draft or Executed to remove it.');
+            return;
+        }
+    }
     mBTME.confirm("Delete Line Item", "Remove this item from the budget permanently?", () => {
         const sec = budget.sections[sectionName];
         if(sec) {
@@ -10093,13 +10123,22 @@ window.updateAllHeaders = () => {
 
         // G. History (Tier 4/5/6 Alignment)
         // Logic Resolution: Prioritize Tier 2 Namespace if available
-        mBT.core.action('undo', () => { 
-            if(mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
-            else if(typeof handleUndo === 'function') handleUndo(); 
+        /* Phase 73B: route undo/redo into active tool iframe when one is open */
+        mBT.core.action('undo', function() {
+            if (mBTActiveTool) {
+                var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo-action' }, '*'); return; }
+            }
+            if (mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
+            else if (typeof handleUndo === 'function') handleUndo();
         });
-        mBT.core.action('redo', () => {
-            if(mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
-            else if(typeof handleRedo === 'function') handleRedo();
+        mBT.core.action('redo', function() {
+            if (mBTActiveTool) {
+                var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo-action' }, '*'); return; }
+            }
+            if (mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
+            else if (typeof handleRedo === 'function') handleRedo();
         });
 
         /* --- Phase 66: Command Palette Engine --- */
@@ -10245,6 +10284,10 @@ window.updateAllHeaders = () => {
             document.body.addEventListener('input', (e) => {
                 const input = e.target;
                 if (input.id === 'projectName') { handleProjectNameChange(e); return; }
+                /* Phase 74A: project metadata fields */
+                if (input.id === 'projectCompanyInput') { budget.projectCompany = input.value; saveBudget(); return; }
+                if (input.id === 'projectLocationInput') { budget.projectLocation = input.value; saveBudget(); return; }
+                if (input.id === 'shootDateInput') { budget.shootDate = input.value; saveBudget(); return; }
                 if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                     budget[input.id] = parseFloat(input.value) || 0;
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -10346,6 +10389,9 @@ window.updateAllHeaders = () => {
             if (isInternal === 'true') {
                 var content = '<div class="w-full" style="height:85vh;"><iframe src="' + url + '" style="width:100%;height:100%;border:none;"></iframe></div>';
                 mBTME.open('tool-window', '', content, 'max-w-7xl', { noPadding: true, hideHeader: true });
+                /* Phase 73B: record active tool name for undo/redo routing */
+                var _tm = url.match(/\/tools\/([^\/]+)\//);
+                mBTActiveTool = _tm ? _tm[1] : 'unknown';
             } else {
                 window.open(url, '_blank');
             }
@@ -10591,6 +10637,7 @@ window.updateAllHeaders = () => {
             /* --- close-tool: dismiss tool modal and lifecycle sync --- */
             } else if (action === 'close-tool') {
                 if (typeof mBTME !== 'undefined' && mBTME.close) mBTME.close('tool-window');
+                mBTActiveTool = null; /* Phase 73B */
                 /* Phase 50C.8 Step C: Re-broadcast editor focus when tool is dismissed */
                 if (window.mBTRealtime && mBTRealtime.isConnected()) {
                     mBTRealtime.broadcastFocus('Budget Editor');
@@ -10745,6 +10792,7 @@ window.updateAllHeaders = () => {
                 currentProjectName = lbSanitized.projectName;
                 mBT.data.save().then(function() { mBT.data.load(lbSanitized.projectName); });
                 mBTME.close('tool-window');
+                mBTActiveTool = null; /* Phase 73B */
                 mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
 
             /* --- Phase 63: resolve-diff — user resolved conflict in diff iframe --- */
@@ -10752,6 +10800,7 @@ window.updateAllHeaders = () => {
                 _diffActive = false;
                 _unsealRealtimeRenderer();
                 mBTME.close('tool-window');
+                mBTActiveTool = null; /* Phase 73B */
 
                 /* Apply merged sections to the live budget */
                 if (budget) {
@@ -10777,6 +10826,7 @@ window.updateAllHeaders = () => {
                 _diffPendingRecord = null;
                 _unsealRealtimeRenderer();
                 mBTME.close('tool-window');
+                mBTActiveTool = null; /* Phase 73B */
                 mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
 
             /* --- Phase 64: role-change — Share Hub changed a peer's role --- */
