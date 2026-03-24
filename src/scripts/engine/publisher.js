@@ -2430,8 +2430,11 @@
                 getDefaultData: function (budget) {
                     return {
                         projectTitle: (budget && budget.projectName) || '',
+                        productionCompany: (budget && (budget.company || budget.projectCompany)) || '',
+                        productionStage: '',
                         genre: '', format: '', runtime: '', logline: '', synopsis: '',
                         director: '', producer: '', keyTalent: '',
+                        directorStatement: '', directorBio: '',
                         targetMarket: '', comparables: '', distributionPlan: '',
                         totalBudget: (budget && budget.grandTotal) ? String(budget.grandTotal) : '',
                         fundingToDate: '', askAmount: '', useOfFunds: '',
@@ -2452,10 +2455,13 @@
                     var css = '.pitch-cover{background:#0f172a;color:#fff;padding:40px 48px 32px;margin-bottom:24px;} .pitch-title{font-size:28pt;font-weight:900;line-height:1.1;} .pitch-sub{font-size:10pt;color:#94a3b8;margin-top:8px;}';
                     var body = '<div class="pitch-cover">' + logoHtml +
                         '<div class="pitch-title">' + title + '</div>' +
-                        '<div class="pitch-sub">' + esc(d.genre || '') + (d.format ? ' &bull; ' + esc(d.format) : '') + (d.runtime ? ' &bull; ' + esc(d.runtime) : '') + '</div></div>' +
+                        (d.productionCompany ? '<div style="font-size:11pt;color:#cbd5e1;margin-top:4px;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="pitch-sub">' + (d.productionStage ? esc(d.productionStage) + ' &bull; ' : '') + esc(d.genre || '') + (d.format ? ' &bull; ' + esc(d.format) : '') + (d.runtime ? ' &bull; ' + esc(d.runtime) : '') + '</div></div>' +
                         section('Logline', esc(d.logline)) +
                         section('Synopsis', esc(d.synopsis)) +
-                        section('Creative Team', pill('Director', d.director) + pill('Producer', d.producer) + pill('Key Talent', d.keyTalent)) +
+                        section('Creative Team', pill('Director', d.director) + pill('Producer', d.producer) + pill('Key Talent', d.keyTalent) +
+                            (d.directorStatement ? '<p style="margin:8px 0 0;font-size:10pt;color:#1e293b;line-height:1.5;"><strong>Director\'s Statement:</strong> ' + esc(d.directorStatement) + '</p>' : '') +
+                            (d.directorBio ? '<p style="margin:6px 0 0;font-size:9pt;color:#475569;line-height:1.5;"><strong>Bio / Credits:</strong> ' + esc(d.directorBio) + '</p>' : '')) +
                         section('Market &amp; Distribution', esc(d.targetMarket) + (d.comparables ? '<br>Comparables: ' + esc(d.comparables) : '') + (d.distributionPlan ? '<br>Distribution: ' + esc(d.distributionPlan) : '')) +
                         section('Investment', pill('Total Budget', d.totalBudget) + pill('Funding to Date', d.fundingToDate) + pill('Seeking', d.askAmount) + (d.useOfFunds ? '<p style="margin:6px 0 0;font-size:9pt;color:#475569;">Use of funds: ' + esc(d.useOfFunds) + '</p>' : '')) +
                         section('Contact', esc(d.contactName) + (d.contactEmail ? ' &bull; ' + esc(d.contactEmail) : '') + (d.contactPhone ? ' &bull; ' + esc(d.contactPhone) : ''));
@@ -2522,12 +2528,438 @@
                 }
             },
 
+            /* ---- Phase 74B: Appearance Release ---- */
+            appearanceRelease: {
+                id: 'appearanceRelease',
+                name: 'Appearance Release',
+                description: 'On-camera release for background, extras, and bystanders.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    return {
+                        productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
+                        date: new Date().toISOString().split('T')[0],
+                        releasorName: '', releasorAddress: '', releasorPhone: '',
+                        shootLocation: b.projectLocation || '', sceneDescription: '',
+                        compensationType: 'Gratis', compensationAmount: '',
+                        terms: 'I hereby grant to the Production Company, its successors, assigns, and licensees the irrevocable right to use my name, likeness, voice, and appearance as recorded in connection with the above-referenced production. I understand that the Production Company owns all rights to the material and may use it in any manner or media throughout the universe in perpetuity. I release the Production Company from any and all claims arising out of the use of said material. I have read this release and fully understand its contents.',
+                        witnessName: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">APPEARANCE RELEASE</div></div>';
+
+                    var info = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Name</div><div class="dm-name">' + or(d.releasorName) + '</div>' +
+                        (d.releasorAddress ? '<div class="dm-sub">' + esc(d.releasorAddress) + '</div>' : '') +
+                        (d.releasorPhone ? '<div class="dm-sub">Tel: ' + esc(d.releasorPhone) + '</div>' : '') + '</div>' +
+                        '<div class="dm-kvlist">' +
+                        '<div class="dm-kv"><b>Date:</b> ' + or(d.date) + '</div>' +
+                        '<div class="dm-kv"><b>Location:</b> ' + or(d.shootLocation) + '</div>' +
+                        (d.sceneDescription ? '<div class="dm-kv"><b>Scene:</b> ' + esc(d.sceneDescription) + '</div>' : '') +
+                        '<div class="dm-kv"><b>Compensation:</b> ' + esc(d.compensationType || 'Gratis') + (d.compensationAmount ? ' \u2014 ' + esc(d.compensationAmount) : '') + '</div>' +
+                        '</div></div>';
+
+                    var terms = '<div class="dm-hdr">Release &amp; Consent</div>' +
+                        '<div style="font-size:8pt;color:#475569;line-height:1.6;padding:8px 0;white-space:pre-wrap;">' + esc(d.terms || '') + '</div>';
+
+                    var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px;">' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Releasor Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.releasorName || '') + '</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.witnessName || '') + '</div></div></div>';
+
+                    var body = header + info + terms + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Appearance Release', body);
+                }
+            },
+
+            /* ---- Phase 74B: Vendor Invoice ---- */
+            vendorInvoice: {
+                id: 'vendorInvoice',
+                name: 'Vendor Invoice',
+                description: 'Inbound vendor invoice with line items, tax, and payment terms.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    return {
+                        productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
+                        vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '',
+                        invoiceNumber: '', invoiceDate: new Date().toISOString().split('T')[0], dueDate: '',
+                        poReference: '',
+                        items: [{ description: '', quantity: '1', unitPrice: '', amount: '' }],
+                        subtotal: '', taxRate: '0', taxAmount: '', total: '',
+                        paymentTerms: 'Net 30',
+                        notes: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">VENDOR INVOICE</div></div>';
+
+                    var meta = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Vendor</div><div class="dm-name">' + or(d.vendorName) + '</div>' +
+                        (d.vendorAddress ? '<div class="dm-sub">' + esc(d.vendorAddress) + '</div>' : '') +
+                        (d.vendorPhone ? '<div class="dm-sub">Tel: ' + esc(d.vendorPhone) + '</div>' : '') +
+                        (d.vendorEmail ? '<div class="dm-sub">' + esc(d.vendorEmail) + '</div>' : '') + '</div>' +
+                        '<div class="dm-kvlist">' +
+                        '<div class="dm-kv"><b>Invoice #:</b> ' + or(d.invoiceNumber) + '</div>' +
+                        '<div class="dm-kv"><b>Date:</b> ' + or(d.invoiceDate) + '</div>' +
+                        '<div class="dm-kv"><b>Due:</b> ' + or(d.dueDate) + '</div>' +
+                        (d.poReference ? '<div class="dm-kv"><b>PO Ref:</b> ' + esc(d.poReference) + '</div>' : '') +
+                        '<div class="dm-kv"><b>Terms:</b> ' + esc(d.paymentTerms || '') + '</div>' +
+                        '</div></div>';
+
+                    var items = d.items || [];
+                    var rows = '';
+                    var sub = 0;
+                    items.forEach(function (it, i) {
+                        var qty = parseFloat(it.quantity) || 0;
+                        var price = parseFloat(it.unitPrice) || 0;
+                        var amt = qty * price;
+                        sub += amt;
+                        rows += '<tr><td style="padding:4px 8px;">' + (i + 1) + '</td><td style="padding:4px 8px;">' + esc(it.description || '') +
+                            '</td><td style="padding:4px 8px;text-align:center;">' + qty +
+                            '</td><td style="padding:4px 8px;text-align:right;">' + price.toFixed(2) +
+                            '</td><td style="padding:4px 8px;text-align:right;font-weight:700;">' + amt.toFixed(2) + '</td></tr>';
+                    });
+                    var taxRate = parseFloat(d.taxRate) || 0;
+                    var tax = sub * (taxRate / 100);
+                    var total = sub + tax;
+
+                    var table = '<table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:14px;">' +
+                        '<thead><tr style="background:#f1f5f9;border-bottom:2px solid #0f172a;"><th style="padding:6px 8px;text-align:left;">#</th>' +
+                        '<th style="padding:6px 8px;text-align:left;">Description</th>' +
+                        '<th style="padding:6px 8px;text-align:center;">Qty</th>' +
+                        '<th style="padding:6px 8px;text-align:right;">Unit Price</th>' +
+                        '<th style="padding:6px 8px;text-align:right;">Amount</th></tr></thead>' +
+                        '<tbody>' + rows + '</tbody>' +
+                        '<tfoot><tr style="border-top:1px solid #cbd5e1;"><td colspan="4" style="padding:4px 8px;text-align:right;font-weight:700;">Subtotal</td><td style="padding:4px 8px;text-align:right;">' + sub.toFixed(2) + '</td></tr>' +
+                        '<tr><td colspan="4" style="padding:4px 8px;text-align:right;">Tax (' + taxRate + '%)</td><td style="padding:4px 8px;text-align:right;">' + tax.toFixed(2) + '</td></tr>' +
+                        '<tr style="border-top:2px solid #0f172a;"><td colspan="4" style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">TOTAL</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
+                        '</tfoot></table>';
+
+                    var notes = d.notes ? '<div class="dm-hdr">Notes</div><div style="font-size:8pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(d.notes) + '</div>' : '';
+
+                    var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px;">' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Vendor Signature &amp; Date</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
+
+                    var body = header + meta + table + notes + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Vendor Invoice', body);
+                }
+            },
+
+            /* ---- Phase 74B: Incident Report ---- */
+            incidentReport: {
+                id: 'incidentReport',
+                name: 'Incident Report',
+                description: 'On-set accident/incident documentation for insurance and safety compliance.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    return {
+                        productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
+                        incidentDate: new Date().toISOString().split('T')[0], incidentTime: '',
+                        location: b.projectLocation || '',
+                        reportedBy: '', reportedByRole: '',
+                        injuredPerson: '', injuredPersonRole: '',
+                        injuryType: 'Minor', bodyPart: '', description: '',
+                        immediateAction: '',
+                        witnesses: [{ name: '', role: '', phone: '' }],
+                        medicalAttention: 'None', hospitalName: '',
+                        supervisorName: '',
+                        followUpRequired: 'No', followUpNotes: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #dc2626;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;color:#dc2626;">INCIDENT / ACCIDENT REPORT</div></div>';
+
+                    var meta = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;border:1px solid #fecaca;padding:12px;border-radius:4px;background:#fef2f2;">' +
+                        '<div><div class="dm-lbl">Date</div><div class="dm-val">' + or(d.incidentDate) + '</div></div>' +
+                        '<div><div class="dm-lbl">Time</div><div class="dm-val">' + or(d.incidentTime) + '</div></div>' +
+                        '<div><div class="dm-lbl">Location</div><div class="dm-val">' + or(d.location) + '</div></div>' +
+                        '<div><div class="dm-lbl">Reported By</div><div class="dm-val">' + or(d.reportedBy) + '</div></div>' +
+                        '<div><div class="dm-lbl">Reporter Role</div><div class="dm-val">' + or(d.reportedByRole) + '</div></div>' +
+                        '<div><div class="dm-lbl">Severity</div><div class="dm-val" style="font-weight:900;color:' + (d.injuryType === 'Severe' ? '#dc2626' : d.injuryType === 'Moderate' ? '#d97706' : '#16a34a') + ';">' + esc(d.injuryType || 'Minor') + '</div></div>' +
+                        '</div>';
+
+                    var person = '<div class="dm-hdr">Injured Person</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Name</div><div class="dm-name">' + or(d.injuredPerson) + '</div></div>' +
+                        '<div><div class="dm-lbl">Role / Department</div><div class="dm-val">' + or(d.injuredPersonRole) + '</div></div>' +
+                        '<div><div class="dm-lbl">Body Part Affected</div><div class="dm-val">' + or(d.bodyPart) + '</div></div>' +
+                        '</div>';
+
+                    var desc = '<div class="dm-hdr">Description of Incident</div>' +
+                        '<div style="font-size:8.5pt;color:#334155;line-height:1.6;padding:8px 12px;border:1px solid #e2e8f0;border-radius:4px;margin-bottom:14px;min-height:60px;white-space:pre-wrap;">' + esc(d.description || '') + '</div>';
+
+                    var action = '<div class="dm-hdr">Immediate Action Taken</div>' +
+                        '<div style="font-size:8.5pt;color:#334155;line-height:1.6;padding:8px 12px;border:1px solid #e2e8f0;border-radius:4px;margin-bottom:14px;min-height:40px;white-space:pre-wrap;">' + esc(d.immediateAction || '') + '</div>';
+
+                    var wit = d.witnesses || [];
+                    var witRows = '';
+                    wit.forEach(function (w) {
+                        if (!w.name) return;
+                        witRows += '<tr><td style="padding:4px 8px;">' + esc(w.name) + '</td><td style="padding:4px 8px;">' + esc(w.role || '') + '</td><td style="padding:4px 8px;">' + esc(w.phone || '') + '</td></tr>';
+                    });
+                    var witTable = witRows ? '<div class="dm-hdr">Witnesses</div><table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:14px;">' +
+                        '<thead><tr style="background:#f1f5f9;border-bottom:1px solid #cbd5e1;"><th style="padding:4px 8px;text-align:left;">Name</th><th style="padding:4px 8px;text-align:left;">Role</th><th style="padding:4px 8px;text-align:left;">Phone</th></tr></thead>' +
+                        '<tbody>' + witRows + '</tbody></table>' : '';
+
+                    var medical = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Medical Attention</div><div class="dm-val">' + esc(d.medicalAttention || 'None') + '</div></div>' +
+                        (d.hospitalName ? '<div><div class="dm-lbl">Hospital / Facility</div><div class="dm-val">' + esc(d.hospitalName) + '</div></div>' : '<div></div>') +
+                        '<div><div class="dm-lbl">Follow-Up Required</div><div class="dm-val">' + esc(d.followUpRequired || 'No') + '</div></div>' +
+                        (d.followUpNotes ? '<div><div class="dm-lbl">Follow-Up Notes</div><div class="dm-val">' + esc(d.followUpNotes) + '</div></div>' : '<div></div>') +
+                        '</div>';
+
+                    var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px;">' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Supervisor Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.supervisorName || '') + '</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Injured Person Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.injuredPerson || '') + '</div></div></div>';
+
+                    var body = header + meta + person + desc + action + witTable + medical + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Incident Report', body);
+                }
+            },
+
+            /* ---- Phase 74C: NDA ---- */
+            nda: {
+                id: 'nda',
+                name: 'Non-Disclosure Agreement',
+                description: 'Confidentiality agreement for crew, vendors, and visitors.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    return {
+                        productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
+                        productionCompanyAddress: '',
+                        effectiveDate: b.startDate || new Date().toISOString().split('T')[0], expirationDate: '',
+                        recipientName: '', recipientTitle: '', recipientAddress: '',
+                        projectDescription: '',
+                        terms: '1. CONFIDENTIAL INFORMATION. "Confidential Information" means all non-public information disclosed by the Production Company, including but not limited to scripts, treatments, budgets, schedules, cast and crew lists, shooting locations, storylines, character details, and any proprietary production techniques.\n\n2. OBLIGATIONS. The Recipient agrees to: (a) hold all Confidential Information in strict confidence; (b) not disclose Confidential Information to any third party without prior written consent; (c) not use Confidential Information for any purpose other than the authorized engagement; (d) take reasonable precautions to prevent unauthorized disclosure.\n\n3. EXCLUSIONS. This Agreement does not apply to information that: (a) is or becomes publicly available through no fault of the Recipient; (b) was rightfully in the Recipient\'s possession before disclosure; (c) is independently developed by the Recipient.\n\n4. REMEDIES. The Recipient acknowledges that any breach may cause irreparable harm and that the Production Company shall be entitled to injunctive relief in addition to other legal remedies.\n\n5. TERM. This Agreement remains in effect for the duration specified above, or if no expiration is stated, for a period of three (3) years from the Effective Date.',
+                        governingLaw: 'Jamaica',
+                        witnessName: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">NON-DISCLOSURE AGREEMENT</div></div>';
+
+                    var parties = '<div class="dm-hdr">Parties</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Disclosing Party (Production)</div><div class="dm-name">' + or(d.productionCompany) + '</div>' +
+                        (d.productionCompanyAddress ? '<div class="dm-sub">' + esc(d.productionCompanyAddress) + '</div>' : '') + '</div>' +
+                        '<div><div class="dm-lbl">Receiving Party</div><div class="dm-name">' + or(d.recipientName) + '</div>' +
+                        (d.recipientTitle ? '<div class="dm-sub">' + esc(d.recipientTitle) + '</div>' : '') +
+                        (d.recipientAddress ? '<div class="dm-sub">' + esc(d.recipientAddress) + '</div>' : '') + '</div></div>';
+
+                    var dates = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">' +
+                        '<div><div class="dm-lbl">Effective Date</div><div class="dm-val">' + or(d.effectiveDate) + '</div></div>' +
+                        '<div><div class="dm-lbl">Expiration Date</div><div class="dm-val">' + or(d.expirationDate || '3 years from effective date') + '</div></div>' +
+                        '<div><div class="dm-lbl">Governing Law</div><div class="dm-val">' + esc(d.governingLaw || 'Jamaica') + '</div></div></div>';
+
+                    var projDesc = d.projectDescription ? '<div class="dm-hdr">Project Description</div>' +
+                        '<div style="font-size:8.5pt;color:#334155;line-height:1.6;padding:8px 12px;border:1px solid #e2e8f0;border-radius:4px;margin-bottom:14px;">' + esc(d.projectDescription) + '</div>' : '';
+
+                    var terms = '<div class="dm-hdr">Terms &amp; Conditions</div>' +
+                        '<div style="font-size:7.5pt;color:#475569;line-height:1.6;padding:8px 0;white-space:pre-wrap;">' + esc(d.terms || '') + '</div>';
+
+                    var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px;">' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Disclosing Party Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.productionCompany || '') + '</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Receiving Party Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.recipientName || '') + '</div></div></div>' +
+                        '<div style="margin-top:16px;"><div class="dm-sig-line" style="max-width:300px;"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.witnessName || '') + '</div></div>';
+
+                    var body = header + parties + dates + projDesc + terms + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — NDA', body);
+                }
+            },
+
+            /* ---- Phase 74C: Wrap Report ---- */
+            wrapReport: {
+                id: 'wrapReport',
+                name: 'Wrap Report',
+                description: 'End-of-production summary: spend vs budget, schedule adherence, outstanding items.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    var secSummary = [];
+                    var crewCount = 0; var castCount = 0;
+                    var sections = b.sections || {};
+                    Object.keys(sections).forEach(function (k) {
+                        var sec = sections[k];
+                        var items = sec.items || [];
+                        var budgeted = 0; var actual = 0;
+                        items.forEach(function (it) { budgeted += (it.total || 0); actual += (it.actual || 0); });
+                        secSummary.push({ sectionName: k, budgeted: budgeted.toFixed(2), actual: actual.toFixed(2), variance: (budgeted - actual).toFixed(2) });
+                        if (k.toLowerCase().indexOf('atl') > -1 || k.toLowerCase().indexOf('above') > -1) castCount += items.length;
+                        else crewCount += items.length;
+                    });
+                    return {
+                        productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
+                        wrapDate: new Date().toISOString().split('T')[0],
+                        totalShootDays: '', scheduledDays: '',
+                        budgetedTotal: (b.grandTotal || 0).toFixed(2),
+                        actualTotal: (b.actualTotal || 0).toFixed(2),
+                        variance: ((b.grandTotal || 0) - (b.actualTotal || 0)).toFixed(2),
+                        crewCount: String(crewCount), castCount: String(castCount),
+                        sections: secSummary,
+                        outstandingInvoices: '',
+                        equipmentReturned: 'All',
+                        notes: '', producerName: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">PRODUCTION WRAP REPORT</div></div>';
+
+                    var overview = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;">' +
+                        '<div style="background:#eff6ff;padding:10px;border-radius:6px;text-align:center;"><div class="dm-lbl">Wrap Date</div><div class="dm-val" style="font-size:10pt;">' + or(d.wrapDate) + '</div></div>' +
+                        '<div style="background:#eff6ff;padding:10px;border-radius:6px;text-align:center;"><div class="dm-lbl">Shoot Days</div><div class="dm-val" style="font-size:10pt;">' + or(d.totalShootDays) + (d.scheduledDays ? ' / ' + esc(d.scheduledDays) + ' sched.' : '') + '</div></div>' +
+                        '<div style="background:#eff6ff;padding:10px;border-radius:6px;text-align:center;"><div class="dm-lbl">Crew</div><div class="dm-val" style="font-size:10pt;">' + or(d.crewCount) + '</div></div>' +
+                        '<div style="background:#eff6ff;padding:10px;border-radius:6px;text-align:center;"><div class="dm-lbl">Cast</div><div class="dm-val" style="font-size:10pt;">' + or(d.castCount) + '</div></div></div>';
+
+                    var financial = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">' +
+                        '<div style="background:#f0fdf4;padding:12px;border-radius:6px;text-align:center;border:1px solid #bbf7d0;"><div class="dm-lbl">Budgeted Total</div><div style="font-size:12pt;font-weight:900;">' + or(d.budgetedTotal) + '</div></div>' +
+                        '<div style="background:#fef3c7;padding:12px;border-radius:6px;text-align:center;border:1px solid #fde68a;"><div class="dm-lbl">Actual Spent</div><div style="font-size:12pt;font-weight:900;">' + or(d.actualTotal) + '</div></div>' +
+                        '<div style="background:' + (parseFloat(d.variance) >= 0 ? '#f0fdf4;border:1px solid #bbf7d0;' : '#fef2f2;border:1px solid #fecaca;') + 'padding:12px;border-radius:6px;text-align:center;"><div class="dm-lbl">Variance</div><div style="font-size:12pt;font-weight:900;color:' + (parseFloat(d.variance) >= 0 ? '#16a34a' : '#dc2626') + ';">' + or(d.variance) + '</div></div></div>';
+
+                    var secs = d.sections || [];
+                    var secRows = '';
+                    secs.forEach(function (s) {
+                        var v = parseFloat(s.variance) || 0;
+                        secRows += '<tr><td style="padding:4px 8px;font-weight:600;">' + esc(s.sectionName || '') + '</td>' +
+                            '<td style="padding:4px 8px;text-align:right;">' + esc(s.budgeted || '0') + '</td>' +
+                            '<td style="padding:4px 8px;text-align:right;">' + esc(s.actual || '0') + '</td>' +
+                            '<td style="padding:4px 8px;text-align:right;color:' + (v >= 0 ? '#16a34a' : '#dc2626') + ';font-weight:700;">' + esc(s.variance || '0') + '</td></tr>';
+                    });
+                    var secTable = secRows ? '<div class="dm-hdr">Section Breakdown</div><table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:14px;">' +
+                        '<thead><tr style="background:#f1f5f9;border-bottom:2px solid #0f172a;"><th style="padding:6px 8px;text-align:left;">Section</th><th style="padding:6px 8px;text-align:right;">Budgeted</th><th style="padding:6px 8px;text-align:right;">Actual</th><th style="padding:6px 8px;text-align:right;">Variance</th></tr></thead>' +
+                        '<tbody>' + secRows + '</tbody></table>' : '';
+
+                    var extras = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
+                        '<div><div class="dm-lbl">Equipment Returned</div><div class="dm-val">' + esc(d.equipmentReturned || 'All') + '</div></div>' +
+                        '<div><div class="dm-lbl">Outstanding Invoices</div><div class="dm-val" style="white-space:pre-wrap;">' + esc(d.outstandingInvoices || 'None') + '</div></div></div>';
+
+                    var notes = d.notes ? '<div class="dm-hdr">Notes</div><div style="font-size:8pt;color:#475569;line-height:1.5;padding:4px 0;white-space:pre-wrap;">' + esc(d.notes) + '</div>' : '';
+
+                    var sig = '<div style="margin-top:30px;"><div class="dm-sig-line" style="max-width:350px;"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.producerName || '') + '</div></div>';
+
+                    var body = header + overview + financial + secTable + extras + notes + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Wrap Report', body);
+                }
+            },
+
+            /* ---- Phase 74C: Extras Voucher ---- */
+            extrasVoucher: {
+                id: 'extrasVoucher',
+                name: 'Extras Voucher',
+                description: 'Background actor payment voucher with call/wrap times and adjustments.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    return {
+                        productionTitle: b.projectName || '', date: new Date().toISOString().split('T')[0],
+                        voucherNumber: '',
+                        extraName: '', extraAddress: '', extraPhone: '',
+                        callTime: '06:00', wrapTime: '18:00',
+                        mealPenalty: 'None',
+                        basePay: '', adjustments: [{ description: '', amount: '' }],
+                        totalPay: '',
+                        wardrobe: 'Own', wardrobeDescription: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = options.editorData || {};
+                    var or = function (v) { return v ? esc(v) : '\u2014'; };
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">EXTRAS / BACKGROUND VOUCHER</div>' +
+                        (d.voucherNumber ? '<div style="font-size:9pt;color:#64748b;margin-top:2px;">Voucher #' + esc(d.voucherNumber) + '</div>' : '') + '</div>';
+
+                    var info = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
+                        '<div><div class="dm-lbl">Name</div><div class="dm-name">' + or(d.extraName) + '</div>' +
+                        (d.extraAddress ? '<div class="dm-sub">' + esc(d.extraAddress) + '</div>' : '') +
+                        (d.extraPhone ? '<div class="dm-sub">Tel: ' + esc(d.extraPhone) + '</div>' : '') + '</div>' +
+                        '<div class="dm-kvlist">' +
+                        '<div class="dm-kv"><b>Date:</b> ' + or(d.date) + '</div>' +
+                        '<div class="dm-kv"><b>Call:</b> ' + or(d.callTime) + '</div>' +
+                        '<div class="dm-kv"><b>Wrap:</b> ' + or(d.wrapTime) + '</div>' +
+                        '<div class="dm-kv"><b>Wardrobe:</b> ' + esc(d.wardrobe || 'Own') + (d.wardrobeDescription ? ' \u2014 ' + esc(d.wardrobeDescription) : '') + '</div>' +
+                        '<div class="dm-kv"><b>Meal Penalty:</b> ' + esc(d.mealPenalty || 'None') + '</div>' +
+                        '</div></div>';
+
+                    var base = parseFloat(d.basePay) || 0;
+                    var adjTotal = 0;
+                    var adjs = d.adjustments || [];
+                    var adjRows = '';
+                    adjs.forEach(function (a) {
+                        var amt = parseFloat(a.amount) || 0;
+                        adjTotal += amt;
+                        if (a.description || amt) {
+                            adjRows += '<tr><td style="padding:4px 8px;">' + esc(a.description || '') + '</td><td style="padding:4px 8px;text-align:right;">' + amt.toFixed(2) + '</td></tr>';
+                        }
+                    });
+                    var total = base + adjTotal;
+
+                    var pay = '<div class="dm-hdr">Payment</div>' +
+                        '<table style="width:100%;max-width:400px;border-collapse:collapse;font-size:8.5pt;margin-bottom:14px;">' +
+                        '<tr><td style="padding:4px 8px;">Base Pay</td><td style="padding:4px 8px;text-align:right;font-weight:700;">' + base.toFixed(2) + '</td></tr>' +
+                        adjRows +
+                        '<tr style="border-top:2px solid #0f172a;"><td style="padding:6px 8px;font-size:10pt;font-weight:900;">TOTAL</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
+                        '</table>';
+
+                    var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px;">' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Extra / Background Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.extraName || '') + '</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
+
+                    var body = header + info + pay + sig;
+                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Extras Voucher', body);
+                }
+            },
+
             /* ---- PUBLIC API ---- */
 
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {
                 var self = this;
-                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard'].map(function (key) {
+                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher'].map(function (key) {
                     var t = self[key];
                     return { id: t.id, name: t.name, description: t.description, formats: t.formats, hasEditor: !!t.hasEditor };
                 });

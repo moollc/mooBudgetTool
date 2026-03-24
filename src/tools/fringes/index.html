@@ -265,6 +265,11 @@
     })();
 
     window.addEventListener('DOMContentLoaded', mBTFringes.init);
+
+    /* Phase 73B: receive undo/redo routing from parent monolith */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:tool-action') return;
+    });
   </script>
 </body>
 </html>

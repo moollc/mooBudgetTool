@@ -322,6 +322,10 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
         </button>
+        <button class="toolbar-btn" id="btn-share" title="Share document">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share
+        </button>
         <button class="toolbar-btn primary" id="btn-pdf" title="Export PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           PDF
@@ -401,10 +405,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Template categories for grouped picker */
   var TEMPLATE_CATEGORIES = [
     { label: 'Funding', ids: ['fundingPackage', 'budgetComparison', 'pitchDeck'] },
-    { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash'] },
-    { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood'] },
+    { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash', 'vendorInvoice', 'extrasVoucher'] },
+    { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood', 'incidentReport', 'wrapReport'] },
     { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'storyboard'] },
-    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement'] }
+    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'nda'] }
   ];
 
   /* Required fields per template for preflight check */
@@ -419,7 +423,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     kitRentalAgreement: ['ownerName', 'startDate'],
     dood: ['productionTitle', 'shootDays'],
     fundingPackage: ['productionTitle', 'logline'],
-    budgetComparison: ['compTitle']
+    budgetComparison: ['compTitle'],
+    appearanceRelease: ['releasorName'],
+    vendorInvoice: ['vendorName', 'invoiceNumber'],
+    incidentReport: ['injuredPerson', 'description'],
+    nda: ['recipientName'],
+    wrapReport: ['productionTitle'],
+    extrasVoucher: ['extraName', 'basePay']
   };
 
   /* Templates that support CSV export */
@@ -483,6 +493,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   dispatchFocus();
   window.addEventListener('focus', dispatchFocus);
+
+  /* Phase 73B: receive undo/redo routing from parent monolith */
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'mbt:tool-action') return;
+    /* mBTDB has no internal undo/redo stack — no-op, wired for future use */
+  });
 
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
@@ -1291,6 +1307,61 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     else { setTimeout(done, 4000); }
   });
 
+  /* Phase 72: Web Share Pipeline */
+  dom.getElementById('btn-share').addEventListener('click', function () {
+    if (!budget || !activeTemplateId) return;
+    var btn = this;
+    var origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Sharing\u2026';
+    var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
+
+    function mailtoFallback() {
+      var title = (editorData && editorData.productionTitle) || (budget && budget.projectName) || 'Document';
+      window.location.href = 'mailto:?subject=' + encodeURIComponent(title) + '&body=' + encodeURIComponent('Please find the attached document: ' + title);
+      done();
+    }
+
+    if (typeof window.html2pdf === 'undefined') { mailtoFallback(); return; }
+
+    /* Build PDF as blob using html2pdf builder API, then share */
+    var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
+    var styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
+    var bodyMatch  = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    var css      = styleMatch ? styleMatch[1] : '';
+    var bodyHtml = bodyMatch  ? bodyMatch[1]  : html;
+    var container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;';
+    container.innerHTML = '<style>' + css + '</style>' + bodyHtml;
+    document.body.appendChild(container);
+
+    var fname = ((budget.projectName || 'document').replace(/[^a-z0-9_\-]/gi, '_')) + '_' + activeTemplateId + '.pdf';
+    var opts = {
+      margin: [0.65, 0.65, 0.65, 0.65],
+      filename: fname,
+      image: { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2, useCORS: false, logging: false },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opts).from(container).outputPdf('blob').then(function (blob) {
+      document.body.removeChild(container);
+      var file = new File([blob], fname, { type: 'application/pdf' });
+      var shareData = { files: [file], title: (editorData && editorData.productionTitle) || budget.projectName || 'Document' };
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        navigator.share(shareData).then(done).catch(function (err) {
+          if (err.name !== 'AbortError') mailtoFallback(); else done();
+        });
+      } else {
+        mailtoFallback();
+      }
+    }).catch(function (err) {
+      if (document.body.contains(container)) document.body.removeChild(container);
+      console.error('[mBTDB share]', err);
+      mailtoFallback();
+    });
+  });
+
   dom.getElementById('btn-print').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
     var btn = this;
@@ -1391,6 +1462,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var d = editorData;
     var html;
     if (templateId === 'callSheet') {
+      if ((!d.shootingLocations || d.shootingLocations.length === 0) && !d.productionTitle) {
+          setTimeout(autoPopulateFromBudget, 50);
+      }
       html = buildCallSheetHtml(d);
     } else if (templateId === 'purchaseOrder') {
       html = buildPurchaseOrderHtml(d);
@@ -1426,6 +1500,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       html = buildPitchDeckHtml(d);
     } else if (templateId === 'storyboard') {
       html = buildStoryboardHtml(d);
+    } else if (templateId === 'appearanceRelease') {
+      html = buildAppearanceReleaseHtml(d);
+    } else if (templateId === 'vendorInvoice') {
+      html = buildVendorInvoiceHtml(d);
+    } else if (templateId === 'incidentReport') {
+      html = buildIncidentReportHtml(d);
+    } else if (templateId === 'nda') {
+      html = buildNdaHtml(d);
+    } else if (templateId === 'wrapReport') {
+      html = buildWrapReportHtml(d);
+    } else if (templateId === 'extrasVoucher') {
+      html = buildExtrasVoucherHtml(d);
     } else {
       panel.innerHTML = '<p style="padding:20px;color:var(--muted);">This template has no editor.</p>';
       return;
@@ -1444,6 +1530,25 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (loadBtn) loadBtn.addEventListener('click', autoPopulateFromBudget);
     var weatherBtn = fresh.querySelector('#btn-fetch-weather');
     if (weatherBtn) weatherBtn.addEventListener('click', fetchWeatherAndHospitals);
+    /* Phase 70: auto-fetch weather on open if location is set but forecasts not yet loaded */
+    if (editorData && editorData.shootingLocations && editorData.shootingLocations.length &&
+        editorData.shootingLocations[0].address && !editorData.locationForecasts) {
+        try { setTimeout(fetchWeatherAndHospitals, 400); } catch(e) { console.warn('[mBTDB] Auto-weather fetch failed:', e); }
+    }
+
+    /* Phase 71: crewDealMemo status change — inject/remove ghost item in budget */
+    if (templateId === 'crewDealMemo') {
+      var statusSel = fresh.querySelector('[data-key="status"]');
+      if (statusSel) statusSel.addEventListener('change', function() {
+        if (!editorData.memoId) {
+          editorData.memoId = 'memo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        }
+        editorData.status = this.value;
+        saveEditorData();
+        if (this.value === 'Sent') injectGhostItem();
+        else removeGhostItem();
+      });
+    }
 
     /* DOOD: rebuilds grid when shoot day count changes */
     var doodDaysInput = fresh.querySelector('[data-key="shootDays"]');
@@ -1641,8 +1746,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function buildCrewDealMemoHtml(d) {
     var html = '';
+    var statusHtml = '<div class="ed-field"><label>Memo Status</label><select data-key="status" class="bg-slate-50 border border-slate-200 text-[12px] font-bold px-2 py-2 outline-none text-slate-700 rounded-lg focus:border-blue-400">' + 
+                     '<option value="Draft"' + (!d.status || d.status === 'Draft' ? ' selected' : '') + '>Draft</option>' +
+                     '<option value="Sent"' + (d.status === 'Sent' ? ' selected' : '') + '>Sent</option>' +
+                     '<option value="Executed"' + (d.status === 'Executed' ? ' selected' : '') + '>Executed</option>' +
+                     '</select></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
-      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
+      '<div class="ed-row ed-3">' + statusHtml + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row ed-3">' + fld('startDate', 'Start Date', 'date') + fld('endDate', 'End Date', 'date') + fld('guaranteedDays', 'Guaranteed Days') + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Employee</div>' +
@@ -1997,15 +2107,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Funding Pitch Deck Editor ======== */
   function buildPitchDeckHtml(d) {
     var html = '<div class="ed-section"><div class="ed-section-hdr">Project</div>' +
-      '<div class="ed-row">' + fld('projectTitle', 'Project Title', null, true) + '</div>' +
-      '<div class="ed-row ed-3">' + fld('genre', 'Genre') + fld('format', 'Format (Feature / Series)') + fld('runtime', 'Runtime') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('projectTitle', 'Project Title') + fld('productionCompany', 'Production Company') + '</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Production Stage</label><select data-key="productionStage">' +
+      ['Development', 'Pre-Production', 'In Production', 'Post-Production', 'Seeking Distribution'].map(function(v) { return '<option value="' + v + '"' + (d.productionStage === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('genre', 'Genre') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('format', 'Format (Feature / Series)') + fld('runtime', 'Runtime') + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Narrative</div>' +
-      '<div class="ed-row">' + fld('logline', 'Logline', null, true) + '</div>' +
-      '<div class="ed-row">' + fld('synopsis', 'Synopsis', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('logline', 'Logline', 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('synopsis', 'Synopsis', 'textarea', true) + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Creative Team</div>' +
       '<div class="ed-row ed-3">' + fld('director', 'Director') + fld('producer', 'Producer') + fld('keyTalent', 'Key Talent / Attachments') + '</div>' +
+      '<div class="ed-row">' + fld('directorStatement', "Director\'s Statement", 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('directorBio', 'Director Bio / Credits', 'textarea', true) + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Market</div>' +
       '<div class="ed-row">' + fld('targetMarket', 'Target Market / Audience', null, true) + '</div>' +
@@ -2050,6 +2167,181 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '</tr>';
     });
     html += '</tbody></table></div>';
+    return html;
+  }
+
+  /* Phase 74B: Appearance Release editor */
+  function buildAppearanceReleaseHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('date', 'Date', 'date') + fld('shootLocation', 'Shoot Location') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Releasor</div>' +
+      '<div class="ed-row">' + fld('releasorName', 'Full Name', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('releasorAddress', 'Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('releasorPhone', 'Phone') + fld('sceneDescription', 'Scene Description') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Compensation</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Type</label><select data-key="compensationType">' +
+      ['Gratis', 'Flat Fee', 'Day Rate'].map(function(v) { return '<option value="' + v + '"' + (d.compensationType === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('compensationAmount', 'Amount') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Release Terms</div>' +
+      '<div class="ed-row">' + fld('terms', 'Terms & Consent', 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('witnessName', 'Witness Name') + '</div></div>';
+    return html;
+  }
+
+  /* Phase 74B: Vendor Invoice editor */
+  function buildVendorInvoiceHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Invoice Details</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production') + fld('productionCompany', 'Production Company') + '</div>' +
+      '<div class="ed-row ed-3">' + fld('invoiceNumber', 'Invoice #') + fld('invoiceDate', 'Date', 'date') + fld('dueDate', 'Due Date', 'date') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('poReference', 'PO Reference') +
+      '<div class="ed-field"><label>Payment Terms</label><select data-key="paymentTerms">' +
+      ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60'].map(function(v) { return '<option value="' + v + '"' + (d.paymentTerms === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div></div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Vendor</div>' +
+      '<div class="ed-row">' + fld('vendorName', 'Name', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('vendorAddress', 'Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('vendorPhone', 'Phone') + fld('vendorEmail', 'Email') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Line Items</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Description</th><th style="width:60px;">Qty</th><th style="width:90px;">Unit Price</th><th style="width:90px;">Amount</th><th></th></tr></thead><tbody>';
+    (d.items || []).forEach(function (it, i) {
+      html += '<tr>' +
+        '<td><input data-arr="items" data-i="' + i + '" data-f="description" value="' + esc(it.description) + '"></td>' +
+        '<td><input data-arr="items" data-i="' + i + '" data-f="quantity" value="' + esc(it.quantity) + '" style="width:50px;text-align:center;"></td>' +
+        '<td><input data-arr="items" data-i="' + i + '" data-f="unitPrice" value="' + esc(it.unitPrice) + '" style="width:80px;text-align:right;"></td>' +
+        '<td><input data-arr="items" data-i="' + i + '" data-f="amount" value="' + esc(it.amount) + '" style="width:80px;text-align:right;" readonly></td>' +
+        '<td><button class="ed-del" data-arr="items" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="items">+ Add Item</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Totals</div>' +
+      '<div class="ed-row ed-3">' + fld('subtotal', 'Subtotal') + fld('taxRate', 'Tax Rate (%)') + fld('total', 'Total') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Notes</div>' +
+      '<div class="ed-row">' + fld('notes', 'Additional Notes', 'textarea', true) + '</div></div>';
+    return html;
+  }
+
+  /* Phase 74B: Incident Report editor */
+  function buildIncidentReportHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production') + fld('productionCompany', 'Company') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Incident Details</div>' +
+      '<div class="ed-row ed-3">' + fld('incidentDate', 'Date', 'date') + fld('incidentTime', 'Time', 'time') + fld('location', 'Location') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('reportedBy', 'Reported By') + fld('reportedByRole', 'Reporter Role') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Injured Person</div>' +
+      '<div class="ed-row ed-2">' + fld('injuredPerson', 'Name') + fld('injuredPersonRole', 'Role / Dept') + '</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Severity</label><select data-key="injuryType">' +
+      ['Near Miss', 'Minor', 'Moderate', 'Severe'].map(function(v) { return '<option value="' + v + '"' + (d.injuryType === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('bodyPart', 'Body Part Affected') + '</div>' +
+      '<div class="ed-row">' + fld('description', 'Description of Incident', 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('immediateAction', 'Immediate Action Taken', 'textarea', true) + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Witnesses</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Name</th><th style="width:120px;">Role</th><th style="width:120px;">Phone</th><th></th></tr></thead><tbody>';
+    (d.witnesses || []).forEach(function (w, i) {
+      html += '<tr>' +
+        '<td><input data-arr="witnesses" data-i="' + i + '" data-f="name" value="' + esc(w.name) + '"></td>' +
+        '<td><input data-arr="witnesses" data-i="' + i + '" data-f="role" value="' + esc(w.role) + '"></td>' +
+        '<td><input data-arr="witnesses" data-i="' + i + '" data-f="phone" value="' + esc(w.phone) + '"></td>' +
+        '<td><button class="ed-del" data-arr="witnesses" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="witnesses">+ Add Witness</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Medical &amp; Follow-Up</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Medical Attention</label><select data-key="medicalAttention">' +
+      ['None', 'First Aid', 'Hospital', 'Ambulance'].map(function(v) { return '<option value="' + v + '"' + (d.medicalAttention === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('hospitalName', 'Hospital / Facility') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('supervisorName', 'Supervisor Name') +
+      '<div class="ed-field"><label>Follow-Up Required</label><select data-key="followUpRequired">' +
+      ['No', 'Yes'].map(function(v) { return '<option value="' + v + '"' + (d.followUpRequired === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div></div>' +
+      '<div class="ed-row">' + fld('followUpNotes', 'Follow-Up Notes', 'textarea', true) + '</div></div>';
+    return html;
+  }
+
+  /* Phase 74C: NDA editor */
+  function buildNdaHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Disclosing Party (Production)</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Company Name') + '</div>' +
+      '<div class="ed-row">' + fld('productionCompanyAddress', 'Company Address', null, true) + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Receiving Party</div>' +
+      '<div class="ed-row">' + fld('recipientName', 'Full Name', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('recipientTitle', 'Title / Role') + fld('recipientAddress', 'Address') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Agreement Details</div>' +
+      '<div class="ed-row ed-3">' + fld('effectiveDate', 'Effective Date', 'date') + fld('expirationDate', 'Expiration Date', 'date') + fld('governingLaw', 'Governing Law') + '</div>' +
+      '<div class="ed-row">' + fld('projectDescription', 'Project Description', 'textarea', true) + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Terms</div>' +
+      '<div class="ed-row">' + fld('terms', 'Terms & Conditions', 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('witnessName', 'Witness Name') + '</div></div>';
+    return html;
+  }
+
+  /* Phase 74C: Wrap Report editor */
+  function buildWrapReportHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Company') + '</div>' +
+      '<div class="ed-row ed-3">' + fld('wrapDate', 'Wrap Date', 'date') + fld('totalShootDays', 'Total Shoot Days') + fld('scheduledDays', 'Scheduled Days') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Financial Summary</div>' +
+      '<div class="ed-row ed-3">' + fld('budgetedTotal', 'Budgeted Total') + fld('actualTotal', 'Actual Total') + fld('variance', 'Variance') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('crewCount', 'Crew Count') + fld('castCount', 'Cast Count') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Section Breakdown</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Section</th><th style="width:100px;">Budgeted</th><th style="width:100px;">Actual</th><th style="width:100px;">Variance</th><th></th></tr></thead><tbody>';
+    (d.sections || []).forEach(function (s, i) {
+      html += '<tr>' +
+        '<td><input data-arr="sections" data-i="' + i + '" data-f="sectionName" value="' + esc(s.sectionName) + '"></td>' +
+        '<td><input data-arr="sections" data-i="' + i + '" data-f="budgeted" value="' + esc(s.budgeted) + '" style="text-align:right;"></td>' +
+        '<td><input data-arr="sections" data-i="' + i + '" data-f="actual" value="' + esc(s.actual) + '" style="text-align:right;"></td>' +
+        '<td><input data-arr="sections" data-i="' + i + '" data-f="variance" value="' + esc(s.variance) + '" style="text-align:right;" readonly></td>' +
+        '<td><button class="ed-del" data-arr="sections" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="sections">+ Add Section</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Status &amp; Notes</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Equipment Returned</label><select data-key="equipmentReturned">' +
+      ['All', 'Partial', 'Pending'].map(function(v) { return '<option value="' + v + '"' + (d.equipmentReturned === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('producerName', 'Producer Name') + '</div>' +
+      '<div class="ed-row">' + fld('outstandingInvoices', 'Outstanding Invoices', 'textarea', true) + '</div>' +
+      '<div class="ed-row">' + fld('notes', 'Additional Notes', 'textarea', true) + '</div></div>';
+    return html;
+  }
+
+  /* Phase 74C: Extras Voucher editor */
+  function buildExtrasVoucherHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Voucher Info</div>' +
+      '<div class="ed-row ed-3">' + fld('productionTitle', 'Production') + fld('date', 'Date', 'date') + fld('voucherNumber', 'Voucher #') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Extra / Background</div>' +
+      '<div class="ed-row">' + fld('extraName', 'Full Name', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('extraAddress', 'Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('extraPhone', 'Phone') + fld('callTime', 'Call Time', 'time') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('wrapTime', 'Wrap Time', 'time') +
+      '<div class="ed-field"><label>Wardrobe</label><select data-key="wardrobe">' +
+      ['Own', 'Provided'].map(function(v) { return '<option value="' + v + '"' + (d.wardrobe === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div></div>' +
+      '<div class="ed-row">' + fld('wardrobeDescription', 'Wardrobe Description') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Payment</div>' +
+      '<div class="ed-row ed-2">' + fld('basePay', 'Base Pay') +
+      '<div class="ed-field"><label>Meal Penalty</label><select data-key="mealPenalty">' +
+      ['None', '1', '2', '3'].map(function(v) { return '<option value="' + v + '"' + (d.mealPenalty === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div></div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Adjustments</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Description</th><th style="width:100px;">Amount</th><th></th></tr></thead><tbody>';
+    (d.adjustments || []).forEach(function (a, i) {
+      html += '<tr>' +
+        '<td><input data-arr="adjustments" data-i="' + i + '" data-f="description" value="' + esc(a.description) + '"></td>' +
+        '<td><input data-arr="adjustments" data-i="' + i + '" data-f="amount" value="' + esc(a.amount) + '" style="text-align:right;"></td>' +
+        '<td><button class="ed-del" data-arr="adjustments" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="adjustments">+ Add Adjustment</button></div>';
     return html;
   }
 
@@ -2185,6 +2477,67 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Call Sheet Smart Features ======== */
 
+  /* Phase 71: inject a ghost line item into the budget for a "Sent" deal memo */
+  function injectGhostItem() {
+    if (!projectKey || !editorData || !editorData.memoId) return;
+    localforage.getItem(projectKey).then(function(bgt) {
+      if (!bgt || !bgt.sections) return;
+      var dept = (editorData.department || editorData.role || '').toLowerCase();
+      var secKeys = Object.keys(bgt.sections);
+      var matchKey = secKeys[0];
+      for (var i = 0; i < secKeys.length; i++) {
+        if (secKeys[i].toLowerCase().indexOf(dept) > -1) { matchKey = secKeys[i]; break; }
+      }
+      var sec = bgt.sections[matchKey];
+      if (!sec.items) sec.items = [];
+      var existing = -1;
+      for (var j = 0; j < sec.items.length; j++) {
+        if (sec.items[j].memoId === editorData.memoId) { existing = j; break; }
+      }
+      var ghost = {
+        id: editorData.memoId,
+        description: editorData.role || 'Deal Memo',
+        crew: { name: editorData.employeeName || '' },
+        memoStatus: 'Pending',
+        memoId: editorData.memoId,
+        quantity: 1,
+        rate: parseFloat(editorData.rate) || 0,
+        multiplier: 1,
+        actual: 0,
+        unit: 'Flat'
+      };
+      if (existing > -1) { sec.items[existing] = ghost; }
+      else { sec.items.push(ghost); }
+      localforage.setItem(projectKey, bgt).then(function() {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+        }
+      });
+    });
+  }
+
+  /* Phase 71: remove a ghost item from the budget (Draft or Executed status) */
+  function removeGhostItem() {
+    if (!projectKey || !editorData || !editorData.memoId) return;
+    localforage.getItem(projectKey).then(function(bgt) {
+      if (!bgt || !bgt.sections) return;
+      var changed = false;
+      Object.keys(bgt.sections).forEach(function(k) {
+        var sec = bgt.sections[k];
+        if (!sec.items) return;
+        var before = sec.items.length;
+        sec.items = sec.items.filter(function(item) { return item.memoId !== editorData.memoId; });
+        if (sec.items.length !== before) changed = true;
+      });
+      if (!changed) return;
+      localforage.setItem(projectKey, bgt).then(function() {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+        }
+      });
+    });
+  }
+
   /* Auto-populate Production Info fields from budget ATL crew items */
   function autoPopulateFromBudget() {
     if (!budget || !budget.sections) return;
@@ -2231,9 +2584,31 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     });
     if (!editorData.productionTitle && budget.projectName) { editorData.productionTitle = budget.projectName; changed = true; }
     
+    if ((budget.projectCompany || budget.company) && !editorData.productionCompany) {
+      editorData.productionCompany = budget.projectCompany || budget.company;
+      changed = true;
+    }
+    /* Phase 70: inject shoot date into the call sheet date field */
+    if (budget.shootDate && !editorData.date) { editorData.date = budget.shootDate; changed = true; }
+
+    var locHydrated = false;
+    if ((budget.projectLocation || budget.shootDate) && (!editorData.shootingLocations || editorData.shootingLocations.length === 0)) {
+        editorData.shootingLocations = [{
+            name: 'Basecamp',
+            address: budget.projectLocation || '',
+            parking: '',
+            notes: budget.shootDate ? ('Shoot Date: ' + budget.shootDate) : ''
+        }];
+        changed = true;
+        if (budget.projectLocation) locHydrated = true;
+    }
+    
     if (changed) { 
         saveEditorData(); 
         buildEditor('callSheet'); 
+        if (locHydrated) {
+            setTimeout(fetchWeatherAndHospitals, 300);
+        }
     } else {
         alert("No additional crew contacts found to populate or fields already filled.");
     }
