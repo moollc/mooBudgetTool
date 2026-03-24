@@ -30,6 +30,7 @@
     <script src="./src/lib/jszip.min.js"></script>
     <!-- Tier 5: Engine Modules -->
     <script src="./src/scripts/engine/opengate.js"></script>
+    <script src="./src/scripts/engine/opfs.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
     <!-- Tier 5B: WebAssembly Conflict Diffing Engine (Phase 63) -->
     <script type="module">
@@ -156,18 +157,18 @@
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap">Search</span>
                 </button>
+                <!-- Phase 73: Tools Drawer trigger (houses Stages + Fringes) -->
+                <button id="toolsDrawerBtn" aria-label="Tools" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap">Tools</span>
+                </button>
                 <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400 whitespace-nowrap">Cal</span>
-                </button>
-                <!-- Phase 67: Fringes -->
-                <button id="fringesFooterBtn" aria-label="Fringes" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
-                    <div class="text-slate-400 group-hover:text-orange-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
-                    </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-orange-400 whitespace-nowrap">Fringes</span>
                 </button>
                 <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-secondary-action"></div>
@@ -188,6 +189,24 @@
                 class="w-full bg-white/10 border border-white/20 rounded-2xl px-4 py-3.5 text-white text-sm placeholder-slate-400 outline-none focus:border-indigo-400 focus:bg-white/15 transition-all" />
             <ul id="cmdResults" class="flex flex-col gap-1 max-h-[60vh] overflow-y-auto no-scrollbar"></ul>
             <p id="cmdHint" class="text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">Type to search &mdash; Esc to close</p>
+        </div>
+    </div>
+
+    <!-- Phase 73: Tools Drawer overlay (Stages + Fringes) -->
+    <div id="toolsDrawer" class="hidden fixed inset-0 z-[9998]" style="background:rgba(15,23,42,0.6);">
+        <div class="absolute bottom-[56px] left-0 right-0 bg-white border-t border-slate-200 shadow-2xl rounded-t-2xl px-4 py-4 flex gap-3 justify-center">
+            <button data-tool="stages" class="drawer-tool-btn flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 transition-all group">
+                <div class="text-slate-400 group-hover:text-violet-500 [&>svg]:w-7 [&>svg]:h-7">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                </div>
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-500">Stages</span>
+            </button>
+            <button data-tool="fringes" class="drawer-tool-btn flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50 transition-all group">
+                <div class="text-slate-400 group-hover:text-orange-400 [&>svg]:w-7 [&>svg]:h-7">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                </div>
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500 group-hover:text-orange-400">Fringes</span>
+            </button>
         </div>
     </div>
 </body>
@@ -317,6 +336,15 @@
             if(mBT.opengate && typeof mBT.opengate.init === 'function') {
                 await mBT.opengate.init();
             }
+
+            // 3.7 Phase 69: Immunity Protocol + OPFS Bootstrap
+            // Async IIFE keeps await contained — must resolve before step 5 Persistence Recovery
+            await (async function() {
+                if (typeof mBTOPFS === 'undefined') return;
+                await mBTOPFS.requestPersistence();
+                var opfsReady = await mBTOPFS.init();
+                if (opfsReady) mBTOPFS.migrate(localforage);
+            })();
 
             // 3.6 Background cloud tasks (non-blocking)
             if (mBT.opengate && typeof mBT.opengate.fetchRateAverages === 'function') {
@@ -745,49 +773,92 @@
         
         // --- STORAGE & PERSISTENCE (ASYNC UPGRADE) ---
         // Logic Resolution: Swapped synchronous localStorage for Async localForage to unblock UI thread.
+        // Phase 69: mBTOPFS added as primary tier for prodBudget_v5_* keys. Dual-write keeps
+        // localforage in sync so tool iframes that call localforage directly continue unmodified.
         storage: {
-            // Internal Helper: Check if Engine is Online
+            // Internal Helper: Check if localforage Engine is Online
             _ready: function() { return typeof localforage !== 'undefined'; },
 
-            async save(key, data) { 
-                if (this._ready()) await localforage.setItem(key, data); 
-                else localStorage.setItem(key, JSON.stringify(data)); 
+            async save(key, data) {
+                /* Phase 69: Dual-write — OPFS primary (budget keys only) + localforage in parallel */
+                var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? mBTOPFS.save(key, data) : Promise.resolve();
+                var storageP = this._ready()
+                    ? localforage.setItem(key, data)
+                    : Promise.resolve(localStorage.setItem(key, JSON.stringify(data)));
+                await Promise.all([opfsP, storageP]);
             },
-            
-            async load(key) { 
-                if (this._ready()) return await localforage.getItem(key);
+
+            async load(key) {
+                /* Phase 69: Read from OPFS and localforage in parallel, prefer the newer updated_at.
+                   Tools that write directly to localforage (e.g. Calendar) will have a newer timestamp
+                   until the monolith next saves, at which point OPFS is brought back into sync. */
+                var opfsData = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? await mBTOPFS.load(key).catch(function() { return null; })
+                    : null;
+                var forageData = this._ready()
+                    ? await localforage.getItem(key).catch(function() { return null; })
+                    : null;
+
+                if (opfsData && forageData) {
+                    return ((forageData.updated_at || '') > (opfsData.updated_at || ''))
+                        ? forageData : opfsData;
+                }
+                if (opfsData) return opfsData;
+                if (forageData) {
+                    /* Lazy migration: localforage has data, OPFS does not — write through */
+                    if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) {
+                        mBTOPFS.save(key, forageData).catch(function() {});
+                    }
+                    return forageData;
+                }
                 const raw = localStorage.getItem(key);
                 return raw ? JSON.parse(raw) : null;
             },
-            
-            async remove(key) { 
-                if (this._ready()) await localforage.removeItem(key);
-                else localStorage.removeItem(key);
+
+            async remove(key) {
+                /* Phase 69: Remove from OPFS in parallel with localforage */
+                var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? mBTOPFS.remove(key).catch(function() {}) : Promise.resolve();
+                var storageP = this._ready()
+                    ? localforage.removeItem(key) : Promise.resolve();
+                localStorage.removeItem(key);
+                await Promise.all([opfsP, storageP]);
             },
-            
-            async keys() { 
-                if (this._ready()) return await localforage.keys();
-                return Object.keys(localStorage);
+
+            async keys() {
+                /* Phase 69: Merge OPFS budget keys with localforage keys (deduped) */
+                var opfsKeys = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? await mBTOPFS.keys().catch(function() { return []; }) : [];
+                var storageKeys = this._ready()
+                    ? await localforage.keys() : Object.keys(localStorage);
+                var combined = {};
+                opfsKeys.concat(storageKeys).forEach(function(k) { combined[k] = true; });
+                return Object.keys(combined);
             },
 
             // Task 1: Binary Storage Extension (Blobs)
-            async saveBlob(key, blob) { 
-                try { 
-                    if (this._ready()) {
-                        await localforage.setItem(key, blob); 
-                        return true; 
-                    } else {
-                        console.warn("Blob storage requires localForage (Offline Fallback Active). Asset skipped.");
-                        return false; 
+            async saveBlob(key, blob) {
+                try {
+                    /* Phase 69: OPFS primary for blobs, localforage secondary */
+                    if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) {
+                        await mBTOPFS.saveBlob(key, blob);
                     }
-                } 
+                    if (this._ready()) await localforage.setItem(key, blob);
+                    return true;
+                }
                 catch(e) { console.error("Blob Storage Error:", e); return false; }
             },
             async loadBlob(key) {
-                try { 
+                try {
+                    /* Phase 69: Try OPFS blob store first */
+                    if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) {
+                        const opfsBlob = await mBTOPFS.loadBlob(key);
+                        if (opfsBlob) return URL.createObjectURL(opfsBlob);
+                    }
                     if (this._ready()) {
-                        const blob = await localforage.getItem(key); 
-                        return blob instanceof Blob ? URL.createObjectURL(blob) : null; 
+                        const blob = await localforage.getItem(key);
+                        return blob instanceof Blob ? URL.createObjectURL(blob) : null;
                     }
                     return null;
                 } catch(e) { console.error("Blob Retrieval Error:", e); return null; }
@@ -2996,15 +3067,17 @@
                     </div>
                     <p id="summaryDiscount" class="text-sm sm:text-base font-black text-slate-800 leading-tight ml-1 truncate">--</p>
                 </div>
-                <div class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px]">
+                <!-- Phase 73: Contingency & Fringes card — clickable to open Fringes tool -->
+                <div id="contingencyFringesCard" class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px] cursor-pointer hover:border-orange-200 hover:bg-orange-50 transition-all">
                     <div class="flex items-center gap-2 mb-1">
                         <div class="flex items-center bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 shrink-0">
-                            <input type="number" step="0.1" id="contingencyPercentage" value="${budget.contingencyPercentage}" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none">
+                            <input type="number" step="0.1" id="contingencyPercentage" value="${budget.contingencyPercentage}" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none" onclick="event.stopPropagation()">
                             <span class="text-[9px] font-black text-slate-300 ml-0.5">%</span>
                         </div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Contingency</label>
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Contingency &amp; Fringes</label>
                     </div>
                     <p id="summaryContingency" class="text-sm sm:text-base font-black text-slate-800 leading-tight ml-1 truncate">--</p>
+                    <p id="summaryFringesInline" class="text-[10px] font-medium text-orange-500 leading-tight ml-1 truncate hidden"></p>
                 </div>
                 <div class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px]">
                     <div class="flex items-center gap-2 mb-1">
@@ -3083,6 +3156,15 @@
         setTxt('summaryDiscount', fmt(-discount)); // Show as negative visually
         setTxt('summaryContingency', fmt(contingency));
         setTxt('summaryTax', fmt(tax));
+        var _fringesInline = document.getElementById('summaryFringesInline');
+        if (_fringesInline) {
+            if (budget.fringesTotal && budget.fringesTotal > 0) {
+                _fringesInline.textContent = '+ ' + fmt(budget.fringesTotal) + ' fringes';
+                _fringesInline.classList.remove('hidden');
+            } else {
+                _fringesInline.classList.add('hidden');
+            }
+        }
 
         // Update Burn Rate Box (Smart Engine)
         let totalDays = 0;
@@ -10284,12 +10366,40 @@ window.updateAllHeaders = () => {
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
-                else if (btn.id === 'fringesFooterBtn') openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                else if (btn.id === 'toolsDrawerBtn') { var _td = document.getElementById('toolsDrawer'); if (_td) _td.classList.toggle('hidden'); }
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
             });
         }
+
+        /* --- Phase 73: Contingency & Fringes card click — opens Fringes tool --- */
+        (function() {
+            var card = document.getElementById('contingencyFringesCard');
+            if (!card) return;
+            card.addEventListener('click', function() {
+                if (budget && currentProjectName) {
+                    openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + budget.projectName) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                }
+            });
+        })();
+
+        /* --- Phase 73: Tools Drawer — tool dispatch + backdrop close --- */
+        (function() {
+            var drawer = document.getElementById('toolsDrawer');
+            if (!drawer) return;
+            drawer.addEventListener('click', function(e) {
+                var toolBtn = e.target.closest('.drawer-tool-btn');
+                if (toolBtn) {
+                    drawer.classList.add('hidden');
+                    var tool = toolBtn.dataset.tool;
+                    if (tool === 'stages') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                    if (tool === 'fringes') openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                    return;
+                }
+                if (e.target === drawer) drawer.classList.add('hidden');
+            });
+        })();
 
         /* --- Currency Popover: toggle, select, outside-click dismiss --- */
         document.addEventListener('click', function(e) {
@@ -10471,6 +10581,12 @@ window.updateAllHeaders = () => {
             /* --- reconcile: reload budget from storage (Stages, Calendar, etc.) --- */
             if (action === 'reconcile' && currentProjectName) {
                 mBT.data.load(currentProjectName);
+
+            /* --- Phase 73: update-fringes — Fringes tool routes save through monolith to avoid BroadcastChannel alarm --- */
+            } else if (action === 'update-fringes' && currentProjectName && budget) {
+                budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
+                saveBudget();
+                mBTLE.reconcile(budget);
 
             /* --- close-tool: dismiss tool modal and lifecycle sync --- */
             } else if (action === 'close-tool') {

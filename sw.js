@@ -1,6 +1,6 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.1 ========= */
 
-const CACHE_NAME = 'mbt-monolith-cache-v12';
+const CACHE_NAME = 'mbt-monolith-cache-v14';
 
 const PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -33,6 +33,7 @@ const PRECACHE_ASSETS = [
     './src/scripts/self_analysis.js',
     './src/scripts/engine/mbtle.js',
     './src/scripts/engine/opengate.js',
+    './src/scripts/engine/opfs.js',
     './src/scripts/engine/totalizer.js',
     './src/scripts/engine/publisher.js',
 
@@ -64,8 +65,10 @@ const PRECACHE_ASSETS = [
     './src/tools/calendar/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
+    './src/tools/fringes/index.html',
     './src/tools/publisher/index.html',
     './src/tools/rsi/index.html',
+    './src/tools/share/index.html',
     './src/tools/stages/index.html',
     './src/tools/supabase/index.html',
     './src/tools/template/index.html',

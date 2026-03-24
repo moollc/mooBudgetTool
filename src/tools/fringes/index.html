@@ -78,10 +78,11 @@
         }
 
         function save() {
+            /* Phase 73: Route through monolith postMessage to avoid BroadcastChannel PWA alarm.
+               The monolith update-fringes handler writes to localforage and calls reconcile. */
             if (!state.projectKey || !state.budget) return;
-            localforage.setItem(state.projectKey, state.budget).then(function() {
-                window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
-            }).catch(function(e) { console.error('[mBTFringes] Save error:', e); });
+            var fringes = state.budget.fringes || [];
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-fringes', payload: { fringes: fringes } }, '*');
         }
 
         function genId() {
