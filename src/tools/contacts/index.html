@@ -386,6 +386,12 @@ var mBTContacts = (function () {
             if (c.allergies) details += '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 uppercase tracking-widest">Allergy: ' + esc(c.allergies) + '</span>';
             details += '</div>';
         }
+        if (c.walletType) {
+            var walletLabel = c.walletType.charAt(0).toUpperCase() + c.walletType.slice(1);
+            details += '<div class="flex items-center gap-2 text-[10px] text-slate-500">' +
+                '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' +
+                esc(walletLabel) + (c.walletAddress ? ': ' + esc(c.walletAddress) : '') + '</div>';
+        }
         if (details) html += '<div class="space-y-1">' + details + '</div>';
 
         /* Action buttons */
@@ -465,7 +471,9 @@ var mBTContacts = (function () {
         STORAGE.saveContact({
             name: c.name, department: c.department, email: c.email || null,
             phone: c.phone || null, rate: c.rate || null, role: c.department,
-            category: c.department, projectId: c.projectId || null, projectName: c.projectName || null
+            category: c.department, projectId: c.projectId || null, projectName: c.projectName || null,
+            walletType: c.walletType || null,
+            walletAddress: c.walletAddress || null
         }).then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
             state.dbContacts = all || [];
             updateSaveAllBtn();

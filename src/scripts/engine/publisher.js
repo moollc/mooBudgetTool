@@ -173,13 +173,14 @@
                 doc.setFont('helvetica', 'normal');
                 doc.text((budgetData.company || 'Independent') + ' | Date: ' + new Date().toLocaleDateString(), 105, 22, { align: 'center' });
 
-                var summaryData = [
-                    ['Subtotal', fmt(budgetData.subtotal)],
-                    ['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))],
-                    ['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))],
-                    ['Discount (' + (budgetData.discountPercentage || 0) + '%)', '-' + fmt((budgetData.subtotal || 0) * ((budgetData.discountPercentage || 0) / 100))],
-                    [{ content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }, { content: fmt(budgetData.grandTotal), styles: { fontStyle: 'bold', textColor: [21, 128, 61] } }]
-                ];
+                var summaryData = [['Subtotal', fmt(budgetData.subtotal)]];
+                (budgetData.fringes || []).forEach(function(f) {
+                    if (f.enabled !== false) summaryData.push([esc(f.name) + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
+                });
+                summaryData.push(['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))]);
+                summaryData.push(['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))]);
+                summaryData.push(['Discount (' + (budgetData.discountPercentage || 0) + '%)', '-' + fmt((budgetData.subtotal || 0) * ((budgetData.discountPercentage || 0) / 100))]);
+                summaryData.push([{ content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }, { content: fmt(budgetData.grandTotal), styles: { fontStyle: 'bold', textColor: [21, 128, 61] } }]);
                 doc.autoTable({ startY: 30, head: [['Financial Summary', 'Amount']], body: summaryData, theme: 'grid', headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' }, columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 'auto', halign: 'right' } }, margin: { left: 14, right: 14 } });
 
                 var finalY   = doc.lastAutoTable.finalY + 10;
@@ -483,13 +484,14 @@
                 doc.setFont('helvetica', 'normal');
                 doc.text((budgetData.company || 'Independent') + ' | Date: ' + new Date().toLocaleDateString(), 105, 22, { align: 'center' });
 
-                var summaryData = [
-                    ['Subtotal', fmt(budgetData.subtotal)],
-                    ['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))],
-                    ['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))],
-                    ['Discount (' + (budgetData.discountPercentage || 0) + '%)', '-' + fmt((budgetData.subtotal || 0) * ((budgetData.discountPercentage || 0) / 100))],
-                    [{ content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }, { content: fmt(budgetData.grandTotal), styles: { fontStyle: 'bold', textColor: [21, 128, 61] } }]
-                ];
+                var summaryData = [['Subtotal', fmt(budgetData.subtotal)]];
+                (budgetData.fringes || []).forEach(function(f) {
+                    if (f.enabled !== false) summaryData.push([esc(f.name) + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
+                });
+                summaryData.push(['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))]);
+                summaryData.push(['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))]);
+                summaryData.push(['Discount (' + (budgetData.discountPercentage || 0) + '%)', '-' + fmt((budgetData.subtotal || 0) * ((budgetData.discountPercentage || 0) / 100))]);
+                summaryData.push([{ content: 'GRAND TOTAL', styles: { fontStyle: 'bold', fillColor: [240, 253, 244] } }, { content: fmt(budgetData.grandTotal), styles: { fontStyle: 'bold', textColor: [21, 128, 61] } }]);
 
                 doc.autoTable({
                     startY: 30,
@@ -647,6 +649,9 @@
 
                 wsData.push(['SUMMARY', 'AMOUNT']);
                 wsData.push(['Subtotal', budgetData.subtotal]);
+                (budgetData.fringes || []).forEach(function(f) {
+                    if (f.enabled !== false) wsData.push([f.name + ' (' + (f.rate || 0) + '%)', (budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100)]);
+                });
                 wsData.push(['Contingency', (budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100)]);
                 wsData.push(['Grand Total', budgetData.grandTotal]);
                 wsData.push([]);

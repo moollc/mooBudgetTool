@@ -353,6 +353,41 @@
         return res.json();
     }
 
+    /* --- Phase 68A: Insert Editor save into mbt_pending_edits holding table.
+           Throws on network/RLS failure — caller handles graceful degradation. --- */
+    async function sbInsertPendingEdit(payload) {
+        var baseUrl = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        if (!baseUrl) throw new Error('[mBTSync] No Supabase URL configured');
+        var url = baseUrl + '/rest/v1/mbt_pending_edits';
+        var res = await fetchWithRetry(url, {
+            method: 'POST',
+            headers: Object.assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            var errText = await res.text();
+            throw new Error('[mBTSync] Pending edit insert failed: ' + errText);
+        }
+        return res.json();
+    }
+
+    /* --- Phase 68B: PATCH status on a mbt_pending_edits row (approve / reject) --- */
+    async function sbPatchPendingEdit(editId, updates) {
+        var baseUrl = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        if (!baseUrl) throw new Error('[mBTSync] No Supabase URL configured');
+        var url = baseUrl + '/rest/v1/mbt_pending_edits?id=eq.' + encodeURIComponent(editId);
+        var res = await fetchWithRetry(url, {
+            method: 'PATCH',
+            headers: Object.assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
+            body: JSON.stringify(updates)
+        });
+        if (!res.ok) {
+            var errText = await res.text();
+            throw new Error('[mBTSync] Pending edit PATCH failed: ' + errText);
+        }
+        return res.json();
+    }
+
     /* --- Phase 63: Conflict-aware project upsert — wraps sbUpsert with version check.
            Returns { pushed: true } if successful, { conflict: true } if halted. --- */
     async function sbUpsertProject(record) {
@@ -584,16 +619,52 @@
                         updated_at: cleanBudget.updated_at || new Date().toISOString(),
                         version_hash: _generateVersionHash({ id: budgetId, updated_at: cleanBudget.updated_at, data: cleanBudget })
                     };
-                    /* Phase 63: conflict-aware push — halts and fires mbt:diff-conflict if remote diverged */
-                    var pushResult = await sbUpsertProject(monolithPayload);
-                    if (pushResult.conflict) {
-                        /* Conflict detected — sync queue is halted for this project.
-                           The mbt:diff-conflict event is already dispatched; stop processing. */
-                        _isSyncing = false;
-                        return { synced: totalSynced, errors: totalErrors, conflicts: conflicts, haltedByConflict: true };
+                    /* Phase 68A: Role-aware push — Editors route to approval queue; admins push to master DB */
+                    var currentRole = localStorage.getItem('mbt_rbac_role') || 'admin';
+
+                    if (currentRole === 'editor') {
+                        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Editor';
+                        var recentDiffs = [];
+                        try {
+                            var logEntries = (budgetData.activityLog || []).slice(-50);
+                            recentDiffs = logEntries.filter(function(e) { return e.diff; });
+                        } catch(diffErr) { /* non-fatal */ }
+
+                        var pendingPayload = {
+                            project_id:      budgetId,
+                            user_id:         userId,
+                            requested_by:    displayName,
+                            status:          'pending',
+                            budget_snapshot: cleanBudget,
+                            diff_log:        recentDiffs,
+                            message:         ''
+                        };
+                        try {
+                            await sbInsertPendingEdit(pendingPayload);
+                            window.dispatchEvent(new CustomEvent('mbt:pending-edit-submitted', { detail: { projectId: budgetId } }));
+                            console.log('[mBTSync] Editor save routed to approval queue for project:', budgetId);
+                        } catch(pendingErr) {
+                            /* Graceful degrade: if pending insert fails, fall through to normal push */
+                            console.error('[mBTSync] Pending queue insert failed, falling back to direct push:', pendingErr);
+                            var fallbackResult = await sbUpsertProject(monolithPayload);
+                            if (fallbackResult.conflict) {
+                                _isSyncing = false;
+                                return { synced: totalSynced, errors: totalErrors, conflicts: conflicts, haltedByConflict: true };
+                            }
+                        }
+                        totalSynced++;
+                        pushedProjectIds[budgetId] = true;
+                    } else {
+                        /* Admin/owner: Phase 63 conflict-aware push to master DB */
+                        var pushResult = await sbUpsertProject(monolithPayload);
+                        if (pushResult.conflict) {
+                            /* Conflict detected — sync queue halted; mbt:diff-conflict already dispatched */
+                            _isSyncing = false;
+                            return { synced: totalSynced, errors: totalErrors, conflicts: conflicts, haltedByConflict: true };
+                        }
+                        totalSynced++;
+                        pushedProjectIds[budgetId] = true;
                     }
-                    totalSynced++;
-                    pushedProjectIds[budgetId] = true;
                 } catch (e) {
                     console.error('[mBTSync] Monolith push error for ' + lfKey + ':', e);
                     totalErrors++;
@@ -907,6 +978,8 @@
         saveProfile:        saveProfile,
         fetchProfile:       fetchProfile,
         refreshAccessToken: refreshAccessToken,
+        /* Phase 68B: PATCH status on a pending edit row */
+        sbPatchPendingEdit: sbPatchPendingEdit,
         /* Phase 63: force-push a resolved project after diff merge, bypassing conflict check */
         forcePushProject:   function(projectId, data) {
             var userId = localStorage.getItem('mbt_supabase_user_id') || '';
