@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>mBT — PO & Petty Cash</title>
+  <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../lib/localforage.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(20px) translateX(-50%); } to { opacity:1; transform:translateY(0) translateX(-50%); } }
+    .snack-in { animation: slideUp 0.25s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
+
+  <!-- Header -->
+  <div class="h-12 bg-white flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
+    <div class="flex items-center gap-4">
+      <button id="btn-back" class="flex items-center gap-2 text-slate-600 hover:text-slate-800 text-[10px] font-black uppercase tracking-widest transition-colors">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </button>
+      <div class="h-4 w-px bg-slate-200"></div>
+      <span class="text-slate-800 text-xl font-bold">PO &amp; Petty Cash</span>
+    </div>
+    <button id="btn-add" class="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-colors">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New PO
+    </button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-white border-b border-slate-200 shrink-0 flex">
+    <button id="tab-po" class="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-sky-600 border-b-2 border-sky-500 transition-all">Purchase Orders</button>
+    <button id="tab-cash" class="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent hover:text-slate-600 transition-all">Petty Cash</button>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 overflow-y-auto no-scrollbar">
+
+    <!-- PO Panel -->
+    <div id="panel-po">
+      <div id="po-empty" class="hidden flex flex-col items-center justify-center h-48 gap-3 py-8">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-slate-300"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p class="text-slate-400 text-[11px] font-black uppercase tracking-widest">No purchase orders</p>
+      </div>
+      <ul id="po-list" class="divide-y divide-slate-100"></ul>
+    </div>
+
+    <!-- Petty Cash Panel -->
+    <div id="panel-cash" class="hidden">
+      <div class="px-4 py-3 bg-amber-50 border-b border-amber-100 shrink-0 flex items-center justify-between">
+        <p class="text-[11px] text-amber-700 font-medium">3-stage float: Issued &rarr; Active &rarr; Reconciled</p>
+        <button id="btn-add-float" class="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Issue Float
+        </button>
+      </div>
+      <div id="cash-empty" class="hidden flex flex-col items-center justify-center h-48 gap-3 py-8">
+        <p class="text-slate-400 text-[11px] font-black uppercase tracking-widest">No petty cash floats</p>
+      </div>
+      <ul id="cash-list" class="divide-y divide-slate-100"></ul>
+    </div>
+
+  </div>
+
+  <!-- Summary bar -->
+  <div class="h-12 bg-white border-t border-slate-200 shrink-0 flex items-center justify-between px-4">
+    <span id="summary-label" class="text-[10px] font-black uppercase tracking-widest text-slate-500">Committed</span>
+    <span id="summary-total" class="text-[13px] font-black text-sky-600">—</span>
+  </div>
+
+  <!-- PO Form Modal -->
+  <div id="po-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center" style="background:rgba(15,23,42,0.7);">
+    <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <h3 id="po-modal-title" class="text-[11px] font-black text-slate-800 uppercase tracking-widest">New Purchase Order</h3>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Name</label>
+          <div class="flex gap-2">
+            <input id="po-vendor" type="text" placeholder="Vendor name" class="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
+            <button id="po-vendor-lookup" class="px-3 py-2 bg-slate-100 hover:bg-sky-50 rounded-xl text-[9px] font-black text-slate-500 hover:text-sky-600 uppercase tracking-widest transition-colors">Lookup</button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Description</label>
+          <input id="po-description" type="text" placeholder="What is being purchased?" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Amount</label>
+            <input id="po-amount" type="number" step="0.01" min="0" placeholder="0.00" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 outline-none focus:border-sky-400">
+          </div>
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</label>
+            <input id="po-date" type="date" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-400">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</label>
+            <select id="po-status" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
+              <option value="Draft">Draft</option>
+              <option value="Committed">Committed</option>
+              <option value="Invoiced">Invoiced</option>
+              <option value="Paid">Paid</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Section (Dept)</label>
+            <select id="po-section" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
+              <option value="">— General —</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes</label>
+          <input id="po-notes" type="text" placeholder="Optional notes" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-400">
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button id="po-modal-cancel" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors">Cancel</button>
+        <button id="po-modal-save" class="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest transition-colors">Save PO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Float Form Modal -->
+  <div id="float-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center" style="background:rgba(15,23,42,0.7);">
+    <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4">
+      <h3 class="text-[11px] font-black text-slate-800 uppercase tracking-widest">Issue Petty Cash Float</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Float Holder</label>
+          <input id="float-holder" type="text" placeholder="Department head name" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-amber-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Float Amount</label>
+            <input id="float-amount" type="number" step="0.01" min="0" placeholder="0.00" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 outline-none focus:border-amber-400">
+          </div>
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Issue Date</label>
+            <input id="float-date" type="date" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-400">
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button id="float-modal-cancel" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors">Cancel</button>
+        <button id="float-modal-save" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-widest transition-colors">Issue Float</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snackbar -->
+  <div id="snackbar" class="hidden fixed bottom-16 left-1/2 z-50 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-5 py-3 rounded-lg shadow-2xl snack-in"></div>
+
+  <script>
+    /* ========= mBTPO ========= */
+    var mBTPO = (function() {
+        var state = { projectKey: null, budget: null, currency: 'JMD', activeTab: 'po', editingPoId: null, pendingContactId: null };
+
+        /* --- Utilities --- */
+        function snack(msg) {
+            var el = document.getElementById('snackbar');
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.remove('hidden'); el.classList.add('snack-in');
+            clearTimeout(el._t);
+            el._t = setTimeout(function() { el.classList.add('hidden'); }, 3000);
+        }
+
+        function esc(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function fmt(n) {
+            var num = parseFloat(n) || 0;
+            return state.currency + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function genId() { return 'po_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4); }
+
+        function getLedgers() {
+            if (!state.budget) return { poCounter: 1, pos: [], pettyCash: [] };
+            if (!state.budget.ledgers) state.budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+            return state.budget.ledgers;
+        }
+
+        function saveLedgers() {
+            var l = getLedgers();
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: l.pos, pettyCash: l.pettyCash, poCounter: l.poCounter } }, '*');
+        }
+
+        function getPoNumber() {
+            var l = getLedgers();
+            var num = l.poCounter || 1;
+            l.poCounter = num + 1;
+            return 'PO-' + String(num).padStart(3, '0');
+        }
+
+        /* --- Status badge --- */
+        function statusBadge(status) {
+            var colors = { Draft: 'bg-slate-100 text-slate-500', Committed: 'bg-blue-100 text-blue-600', Invoiced: 'bg-amber-100 text-amber-700', Paid: 'bg-emerald-100 text-emerald-700' };
+            var cls = colors[status] || 'bg-slate-100 text-slate-400';
+            return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ' + cls + '">' + esc(status) + '</span>';
+        }
+
+        function floatStatusBadge(status) {
+            var colors = { Issued: 'bg-amber-100 text-amber-700', Active: 'bg-blue-100 text-blue-600', Reconciled: 'bg-emerald-100 text-emerald-700' };
+            var cls = colors[status] || 'bg-slate-100 text-slate-400';
+            return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ' + cls + '">' + esc(status) + '</span>';
+        }
+
+        /* --- Render PO list --- */
+        function renderPOs() {
+            var l = getLedgers();
+            var list = document.getElementById('po-list');
+            var empty = document.getElementById('po-empty');
+            var summaryLabel = document.getElementById('summary-label');
+            var summaryTotal = document.getElementById('summary-total');
+
+            if (!list) return;
+
+            if (!l.pos || l.pos.length === 0) {
+                list.innerHTML = '';
+                if (empty) empty.classList.remove('hidden');
+            } else {
+                if (empty) empty.classList.add('hidden');
+                var html = '';
+                l.pos.forEach(function(po) {
+                    html += '<li class="bg-white px-4 py-3 flex items-start gap-3 group">' +
+                        '<div class="flex-1 min-w-0">' +
+                            '<div class="flex items-center gap-2 flex-wrap">' +
+                                '<span class="text-[11px] font-black text-slate-700">' + esc(po.poNumber) + '</span>' +
+                                statusBadge(po.status) +
+                                (po.sectionKey ? '<span class="text-[9px] text-slate-400 font-bold">' + esc(po.sectionKey) + '</span>' : '') +
+                            '</div>' +
+                            '<p class="text-[12px] font-semibold text-slate-800 truncate mt-0.5">' + esc(po.vendor || '—') + '</p>' +
+                            (po.description ? '<p class="text-[10px] text-slate-400 truncate">' + esc(po.description) + '</p>' : '') +
+                        '</div>' +
+                        '<div class="flex flex-col items-end gap-1 shrink-0">' +
+                            '<span class="text-[12px] font-black font-mono text-slate-800">' + fmt(po.amount) + '</span>' +
+                            '<span class="text-[9px] text-slate-400">' + esc(po.date || '') + '</span>' +
+                        '</div>' +
+                        '<div class="flex flex-col gap-1 shrink-0">' +
+                            '<button class="po-edit text-slate-300 hover:text-sky-500 transition-colors" data-id="' + esc(po.id) + '" title="Edit">' +
+                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+                            '</button>' +
+                            '<button class="po-delete text-slate-300 hover:text-rose-500 transition-colors" data-id="' + esc(po.id) + '" title="Delete">' +
+                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>' +
+                            '</button>' +
+                        '</div>' +
+                    '</li>';
+                });
+                list.innerHTML = html;
+            }
+
+            /* summary: total committed + invoiced */
+            var committed = (l.pos || []).reduce(function(s, p) {
+                return s + (p.status === 'Committed' || p.status === 'Invoiced' ? (parseFloat(p.amount) || 0) : 0);
+            }, 0);
+            if (summaryLabel) summaryLabel.textContent = 'Total Committed / Invoiced';
+            if (summaryTotal) summaryTotal.textContent = fmt(committed);
+        }
+
+        /* --- Render Petty Cash list --- */
+        function renderCash() {
+            var l = getLedgers();
+            var list = document.getElementById('cash-list');
+            var empty = document.getElementById('cash-empty');
+            if (!list) return;
+
+            if (!l.pettyCash || l.pettyCash.length === 0) {
+                list.innerHTML = '';
+                if (empty) empty.classList.remove('hidden');
+                return;
+            }
+            if (empty) empty.classList.add('hidden');
+
+            var html = '';
+            l.pettyCash.forEach(function(f) {
+                var spent = (f.receipts || []).reduce(function(s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
+                var variance = (parseFloat(f.floatAmount) || 0) - spent;
+                html += '<li class="bg-white px-4 py-3 space-y-2">' +
+                    '<div class="flex items-center justify-between">' +
+                        '<div>' +
+                            '<p class="text-[12px] font-black text-slate-700">' + esc(f.floatHolder || '—') + '</p>' +
+                            '<p class="text-[9px] text-slate-400 font-bold">Issued: ' + esc(f.issuedDate || '—') + '</p>' +
+                        '</div>' +
+                        '<div class="flex items-center gap-3">' +
+                            floatStatusBadge(f.status) +
+                            '<button class="float-advance text-slate-300 hover:text-amber-500 transition-colors" data-id="' + esc(f.id) + '" title="Advance status">' +
+                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>' +
+                            '</button>' +
+                            '<button class="float-delete text-slate-300 hover:text-rose-500 transition-colors" data-id="' + esc(f.id) + '" title="Delete">' +
+                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="flex gap-4 text-[10px] font-bold">' +
+                        '<span class="text-slate-500">Float: <span class="font-black text-slate-800">' + fmt(f.floatAmount) + '</span></span>' +
+                        '<span class="text-slate-500">Spent: <span class="font-black text-amber-700">' + fmt(spent) + '</span></span>' +
+                        '<span class="text-slate-500">Remaining: <span class="font-black ' + (variance >= 0 ? 'text-emerald-600' : 'text-rose-600') + '">' + fmt(variance) + '</span></span>' +
+                    '</div>' +
+                    /* receipt add row */
+                    '<div class="flex gap-2 pt-1">' +
+                        '<input type="text" class="float-receipt-desc flex-1 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-amber-400" placeholder="Receipt description" data-fid="' + esc(f.id) + '">' +
+                        '<input type="number" step="0.01" min="0" class="float-receipt-amt w-20 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono font-bold text-slate-700 outline-none focus:border-amber-400" placeholder="0.00" data-fid="' + esc(f.id) + '">' +
+                        '<button class="float-receipt-add bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-colors" data-fid="' + esc(f.id) + '">Add</button>' +
+                    '</div>' +
+                    (f.receipts && f.receipts.length ? '<ul class="space-y-0.5 pt-1">' + f.receipts.map(function(r, ri) {
+                        return '<li class="flex justify-between items-center text-[10px] text-slate-500 py-0.5">' +
+                            '<span>' + esc(r.description) + '</span>' +
+                            '<div class="flex items-center gap-2"><span class="font-mono font-bold">' + fmt(r.amount) + '</span>' +
+                            '<button class="float-receipt-del text-slate-200 hover:text-rose-400 transition-colors" data-fid="' + esc(f.id) + '" data-ri="' + ri + '">' +
+                                '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                            '</button></div></li>';
+                    }).join('') + '</ul>' : '') +
+                '</li>';
+            });
+            list.innerHTML = html;
+        }
+
+        /* --- Tab switch --- */
+        function switchTab(tab) {
+            state.activeTab = tab;
+            document.getElementById('panel-po').classList.toggle('hidden', tab !== 'po');
+            document.getElementById('panel-cash').classList.toggle('hidden', tab !== 'cash');
+            document.getElementById('tab-po').className = 'flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ' +
+                (tab === 'po' ? 'text-sky-600 border-b-2 border-sky-500' : 'text-slate-400 border-b-2 border-transparent hover:text-slate-600');
+            document.getElementById('tab-cash').className = 'flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ' +
+                (tab === 'cash' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-slate-400 border-b-2 border-transparent hover:text-slate-600');
+        }
+
+        /* --- Populate section dropdown --- */
+        function populateSections() {
+            var sel = document.getElementById('po-section');
+            if (!sel || !state.budget || !state.budget.sections) return;
+            var existing = sel.innerHTML;
+            var opts = '<option value="">— General —</option>';
+            Object.keys(state.budget.sections).forEach(function(k) {
+                opts += '<option value="' + esc(k) + '">' + esc(k) + '</option>';
+            });
+            sel.innerHTML = opts;
+        }
+
+        /* --- Open PO form --- */
+        function openPoModal(po) {
+            state.editingPoId = po ? po.id : null;
+            state.pendingContactId = po ? (po.contactId || null) : null;
+            document.getElementById('po-modal-title').textContent = po ? 'Edit Purchase Order' : 'New Purchase Order';
+            document.getElementById('po-vendor').value = po ? po.vendor : '';
+            document.getElementById('po-description').value = po ? po.description : '';
+            document.getElementById('po-amount').value = po ? po.amount : '';
+            document.getElementById('po-date').value = po ? po.date : new Date().toISOString().split('T')[0];
+            document.getElementById('po-status').value = po ? po.status : 'Draft';
+            document.getElementById('po-notes').value = po ? (po.notes || '') : '';
+            populateSections();
+            if (po && po.sectionKey) document.getElementById('po-section').value = po.sectionKey;
+            document.getElementById('po-modal').classList.remove('hidden');
+        }
+
+        function closePoModal() {
+            state.editingPoId = null;
+            state.pendingContactId = null;
+            document.getElementById('po-modal').classList.add('hidden');
+        }
+
+        /* --- Save PO --- */
+        function savePO() {
+            var l = getLedgers();
+            var vendor = document.getElementById('po-vendor').value.trim();
+            var amount = parseFloat(document.getElementById('po-amount').value) || 0;
+            if (!vendor) { snack('Vendor name required'); return; }
+            if (amount <= 0) { snack('Amount must be greater than 0'); return; }
+
+            if (state.editingPoId) {
+                var existing = l.pos.find(function(p) { return p.id === state.editingPoId; });
+                if (existing) {
+                    existing.vendor = vendor;
+                    existing.description = document.getElementById('po-description').value.trim();
+                    existing.amount = amount;
+                    existing.date = document.getElementById('po-date').value;
+                    existing.status = document.getElementById('po-status').value;
+                    existing.sectionKey = document.getElementById('po-section').value;
+                    existing.notes = document.getElementById('po-notes').value.trim();
+                    if (state.pendingContactId) existing.contactId = state.pendingContactId;
+                }
+            } else {
+                l.pos.push({
+                    id: genId(),
+                    poNumber: getPoNumber(),
+                    vendor: vendor,
+                    contactId: state.pendingContactId || null,
+                    description: document.getElementById('po-description').value.trim(),
+                    amount: amount,
+                    date: document.getElementById('po-date').value,
+                    status: document.getElementById('po-status').value,
+                    sectionKey: document.getElementById('po-section').value,
+                    itemId: null,
+                    notes: document.getElementById('po-notes').value.trim()
+                });
+            }
+            saveLedgers();
+            renderPOs();
+            closePoModal();
+            snack(state.editingPoId ? 'PO updated' : 'PO created');
+        }
+
+        /* --- Issue Float --- */
+        function openFloatModal() {
+            document.getElementById('float-holder').value = '';
+            document.getElementById('float-amount').value = '';
+            document.getElementById('float-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('float-modal').classList.remove('hidden');
+        }
+
+        function saveFloat() {
+            var holder = document.getElementById('float-holder').value.trim();
+            var amount = parseFloat(document.getElementById('float-amount').value) || 0;
+            if (!holder) { snack('Float holder name required'); return; }
+            if (amount <= 0) { snack('Float amount must be greater than 0'); return; }
+            var l = getLedgers();
+            l.pettyCash.push({
+                id: genId(),
+                floatHolder: holder,
+                floatAmount: amount,
+                issuedDate: document.getElementById('float-date').value,
+                status: 'Issued',
+                receipts: []
+            });
+            saveLedgers();
+            renderCash();
+            document.getElementById('float-modal').classList.add('hidden');
+            snack('Float issued to ' + holder);
+        }
+
+        /* --- List event delegation --- */
+        function wireListEvents() {
+            /* PO list */
+            var poList = document.getElementById('po-list');
+            if (poList) {
+                poList.addEventListener('click', function(e) {
+                    var editBtn = e.target.closest('.po-edit');
+                    var delBtn = e.target.closest('.po-delete');
+                    if (editBtn) {
+                        var l = getLedgers();
+                        var po = l.pos.find(function(p) { return p.id === editBtn.dataset.id; });
+                        if (po) openPoModal(po);
+                        return;
+                    }
+                    if (delBtn) {
+                        var l = getLedgers();
+                        l.pos = l.pos.filter(function(p) { return p.id !== delBtn.dataset.id; });
+                        saveLedgers();
+                        renderPOs();
+                        snack('PO removed');
+                        return;
+                    }
+                });
+            }
+
+            /* Cash list */
+            var cashList = document.getElementById('cash-list');
+            if (cashList) {
+                cashList.addEventListener('click', function(e) {
+                    var advBtn = e.target.closest('.float-advance');
+                    var delBtn = e.target.closest('.float-delete');
+                    var addBtn = e.target.closest('.float-receipt-add');
+                    var delR = e.target.closest('.float-receipt-del');
+                    var l = getLedgers();
+
+                    if (advBtn) {
+                        var fl = l.pettyCash.find(function(f) { return f.id === advBtn.dataset.id; });
+                        if (fl) {
+                            fl.status = fl.status === 'Issued' ? 'Active' : fl.status === 'Active' ? 'Reconciled' : 'Reconciled';
+                            saveLedgers();
+                            renderCash();
+                        }
+                        return;
+                    }
+                    if (delBtn) {
+                        l.pettyCash = l.pettyCash.filter(function(f) { return f.id !== delBtn.dataset.id; });
+                        saveLedgers();
+                        renderCash();
+                        snack('Float removed');
+                        return;
+                    }
+                    if (addBtn) {
+                        var fid = addBtn.dataset.fid;
+                        var descInput = cashList.querySelector('.float-receipt-desc[data-fid="' + fid + '"]');
+                        var amtInput = cashList.querySelector('.float-receipt-amt[data-fid="' + fid + '"]');
+                        var desc = descInput ? descInput.value.trim() : '';
+                        var amt = amtInput ? parseFloat(amtInput.value) || 0 : 0;
+                        if (!desc || amt <= 0) { snack('Enter description and amount'); return; }
+                        var fl2 = l.pettyCash.find(function(f) { return f.id === fid; });
+                        if (fl2) {
+                            if (!fl2.receipts) fl2.receipts = [];
+                            fl2.receipts.push({ description: desc, amount: amt, date: new Date().toISOString().split('T')[0] });
+                            if (fl2.status === 'Issued') fl2.status = 'Active';
+                            saveLedgers();
+                            renderCash();
+                        }
+                        return;
+                    }
+                    if (delR) {
+                        var fid2 = delR.dataset.fid;
+                        var ri = parseInt(delR.dataset.ri);
+                        var fl3 = l.pettyCash.find(function(f) { return f.id === fid2; });
+                        if (fl3 && fl3.receipts) {
+                            fl3.receipts.splice(ri, 1);
+                            saveLedgers();
+                            renderCash();
+                        }
+                        return;
+                    }
+                });
+            }
+        }
+
+        /* --- Vendor lookup (reads from Contacts DB via localforage) --- */
+        function wireVendorLookup() {
+            var btn = document.getElementById('po-vendor-lookup');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var contactsKey = 'mbtContacts_' + (state.projectKey || '');
+                localforage.getItem(contactsKey).then(function(contacts) {
+                    if (!contacts || !contacts.length) { snack('No contacts found'); return; }
+                    var vendors = contacts.filter(function(c) { return c.type === 'Vendor' || c.category === 'Vendor' || true; });
+                    var listHtml = vendors.slice(0, 30).map(function(c) {
+                        return '<button class="vendor-pick w-full text-left px-3 py-2 hover:bg-sky-50 rounded-lg text-sm font-bold text-slate-700 transition-colors" data-name="' + esc(c.name || '') + '" data-contact-id="' + esc(c.id || '') + '">' + esc(c.name || '') + (c.company ? ' <span class="text-slate-400 font-normal text-xs">— ' + esc(c.company) + '</span>' : '') + '</button>';
+                    }).join('');
+                    var overlay = document.createElement('div');
+                    overlay.className = 'fixed inset-0 z-[60] flex items-end sm:items-center justify-center';
+                    overlay.style.background = 'rgba(15,23,42,0.7)';
+                    overlay.innerHTML = '<div class="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-4 max-h-[70vh] overflow-y-auto">' +
+                        '<p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Select Vendor</p>' +
+                        listHtml + '</div>';
+                    document.body.appendChild(overlay);
+                    overlay.addEventListener('click', function(e) {
+                        var pick = e.target.closest('.vendor-pick');
+                        if (pick) { document.getElementById('po-vendor').value = pick.dataset.name; state.pendingContactId = pick.dataset.contactId || null; document.body.removeChild(overlay); return; }
+                        if (e.target === overlay) document.body.removeChild(overlay);
+                    });
+                }).catch(function() { snack('Could not load contacts'); });
+            });
+        }
+
+        /* --- Init --- */
+        function init() {
+            var params = new URLSearchParams(window.location.search);
+            state.projectKey = params.get('projectKey') || '';
+            state.currency = params.get('currency') || 'JMD';
+
+            document.getElementById('btn-back').addEventListener('click', function() {
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+            });
+
+            document.getElementById('btn-add').addEventListener('click', function() { openPoModal(null); });
+            document.getElementById('btn-add-float').addEventListener('click', openFloatModal);
+
+            document.getElementById('tab-po').addEventListener('click', function() { switchTab('po'); });
+            document.getElementById('tab-cash').addEventListener('click', function() { switchTab('cash'); });
+
+            document.getElementById('po-modal-cancel').addEventListener('click', closePoModal);
+            document.getElementById('po-modal-save').addEventListener('click', savePO);
+            document.getElementById('float-modal-cancel').addEventListener('click', function() { document.getElementById('float-modal').classList.add('hidden'); });
+            document.getElementById('float-modal-save').addEventListener('click', saveFloat);
+
+            wireVendorLookup();
+
+            if (!state.projectKey) {
+                document.getElementById('po-empty').classList.remove('hidden');
+                return;
+            }
+
+            localforage.getItem(state.projectKey).then(function(data) {
+                if (!data) { snack('Project not found'); return; }
+                state.budget = data;
+                if (!state.budget.ledgers) state.budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+                renderPOs();
+                renderCash();
+                wireListEvents();
+            }).catch(function(e) {
+                console.error('[mBTPO] Load error:', e);
+                snack('Failed to load project');
+            });
+        }
+
+        /* --- Phase 80: Non-destructive ledger refresh (does not reset UI state or open forms) --- */
+        function hydrateLedgerViews(pos, pettyCash) {
+            if (!state.budget) return;
+            if (Array.isArray(pos)) state.budget.ledgers.pos = pos;
+            if (Array.isArray(pettyCash)) state.budget.ledgers.pettyCash = pettyCash;
+            renderPOs();
+            renderCash();
+        }
+
+        return {
+            init: init,
+            io: {
+                hydrateLedgerViews: function(pos, pettyCash) { hydrateLedgerViews(pos, pettyCash); }
+            }
+        };
+    })();
+
+    window.addEventListener('DOMContentLoaded', mBTPO.init);
+
+    /* Phase 73B / Phase 80: message routing */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:tool-action') return;
+        var action = e.data.action;
+        var payload = e.data.payload || {};
+        /* Phase 80: relay from monolith when sibling Contacts tool processes a payment */
+        if (action === 'reload-ledgers') {
+            mBTPO.io.hydrateLedgerViews(payload.pos, payload.pettyCash);
+        }
+    });
+  </script>
+</body>
+</html>
