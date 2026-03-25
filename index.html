@@ -11,7 +11,6 @@
     
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/assets/cow-512.png">
-
     <link href="./src/lib/gridstack.min.css" rel="stylesheet"/>
     <link rel="stylesheet" href="./public/css/mbt-core.css">
             <script src="./src/lib/gridstack-all.js"></script>
@@ -152,6 +151,13 @@
                     </div>
                     <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Redo</span>
                 </button>
+                <!-- Phase 77: Actuals mode toggle -->
+                <button id="actualsToggleBtn" aria-label="Actuals Mode" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors" id="icon-actuals-toggle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap transition-colors">Actuals</span>
+                </button>
                 <!-- Phase 66: Search -->
                 <button id="searchFooterBtn" data-action="command-palette" aria-label="Search" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
@@ -208,6 +214,13 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                 </div>
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-500 group-hover:text-orange-400">Fringes</span>
+            </button>
+            <!-- Phase 78: PO & Petty Cash -->
+            <button data-tool="po" class="drawer-tool-btn flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
+                <div class="text-slate-400 group-hover:text-sky-500 [&>svg]:w-7 [&>svg]:h-7">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </div>
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-500">PO / Cash</span>
             </button>
         </div>
     </div>
@@ -1070,7 +1083,10 @@
                         storageProtocol: 'internal',
                         projectLocation: '',
                         projectCompany: '',
-                        shootDate: ''
+                        shootDate: '',
+                        jurisdiction: { name: '', incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
+                        ledgers: { poCounter: 1, pos: [], pettyCash: [] },
+                        actualsMode: false
                     };
                     
                     budget = mBT.data.state.wrap(newBudget);
@@ -2086,6 +2102,13 @@
                     item.quantity = Math.max(0, parseFloat(item.quantity) || 0);
                     item.rate = Math.max(0, parseFloat(item.rate) || 0);
                     item.multiplier = Math.max(1, parseFloat(item.multiplier) || 1);
+                    /* Phase 76: qualifying spend flag */
+                    if (item.qualifying === undefined) item.qualifying = false;
+                    /* Phase 77: actuarial fields */
+                    if (item.actualQuantity === undefined) item.actualQuantity = 0;
+                    if (item.actualRate === undefined) item.actualRate = 0;
+                    if (!item.actualDate) item.actualDate = '';
+                    if (item.committedCost === undefined) item.committedCost = 0;
                     return item;
                 }
             },
@@ -2095,7 +2118,22 @@
                 const b = target || budget;
                 
                 if (!b || !b.sections) return;
-                let subtotal = 0; let grandActual = 0;
+
+                /* Phase 78: aggregate committedCost from POs before item calculations */
+                if (b.ledgers && b.ledgers.pos && b.ledgers.pos.length) {
+                    Object.keys(b.sections).forEach(function(sk) {
+                        b.sections[sk].items.forEach(function(it) { it.committedCost = 0; });
+                    });
+                    b.ledgers.pos.forEach(function(po) {
+                        if (po.status !== 'Committed' && po.status !== 'Invoiced') return;
+                        if (po.itemId && po.sectionKey && b.sections[po.sectionKey]) {
+                            var _poItem = b.sections[po.sectionKey].items.find(function(it) { return it.id === po.itemId; });
+                            if (_poItem) _poItem.committedCost = (_poItem.committedCost || 0) + (parseFloat(po.amount) || 0);
+                        }
+                    });
+                }
+
+                let subtotal = 0; let grandActual = 0; var incentiveQualifyingTotal = 0;
 
                 Object.keys(b.sections).forEach(sectionKey => {
                     let sectionEstTotal = 0;
@@ -2124,7 +2162,24 @@
                         }
 
                         sectionEstTotal += item.total;
-                        grandActual += parseFloat(item.actual) || 0;
+
+                        /* Phase 77: actuals mode — compute actual cost from qty×rate */
+                        if (b.actualsMode) {
+                            var _aq = parseFloat(item.actualQuantity) || 0;
+                            var _ar = parseFloat(item.actualRate) || 0;
+                            var _ac = _aq * _ar;
+                            item.actual = _ac;
+                            item.ETC = Math.max(0, item.total - (parseFloat(item.committedCost) || 0) - _ac);
+                            grandActual += _ac;
+                        } else {
+                            grandActual += parseFloat(item.actual) || 0;
+                        }
+
+                        /* Phase 76: qualifying spend — skip ATL sections */
+                        var _jAtl = (b.jurisdiction && b.jurisdiction.atlSections) || [];
+                        if (item.qualifying && _jAtl.indexOf(sectionKey) === -1) {
+                            incentiveQualifyingTotal += item.total;
+                        }
                     });
                     section.total = sectionEstTotal;
                     subtotal += sectionEstTotal;
@@ -2145,6 +2200,24 @@
                 b.fringesTotal = fringesTotal;
                 b.grandTotal = preDiscount - discount;
                 b.actualTotal = grandActual;
+
+                /* Phase 76: incentive rebate — add fringes on qualifying labor then apply rate */
+                var incentiveRebate = 0;
+                if (b.jurisdiction && b.jurisdiction.incentiveRate > 0) {
+                    var _fringeRateQ = 0;
+                    if (b.fringes && b.fringes.length) {
+                        b.fringes.forEach(function(f) {
+                            if (f.enabled !== false) _fringeRateQ += (parseFloat(f.rate) || 0);
+                        });
+                    }
+                    var _qualWithFringes = incentiveQualifyingTotal * (1 + _fringeRateQ / 100);
+                    var _minSpend = parseFloat(b.jurisdiction.minSpend) || 0;
+                    if (_qualWithFringes >= _minSpend || _minSpend === 0) {
+                        incentiveRebate = _qualWithFringes * ((parseFloat(b.jurisdiction.incentiveRate) || 0) / 100);
+                    }
+                }
+                b.incentiveQualifyingTotal = incentiveQualifyingTotal;
+                b.incentiveRebate = incentiveRebate;
             },
             
             // --- Phase 9: AI Simulation Engine (Neural Risk Mitigation) ---
@@ -2415,6 +2488,17 @@
         else if (field === 'rate') item.rate = parseFloat(value) || 0;
         else if (field === 'unit') item.unit = value;
         else if (field === 'actual') item.actual = parseFloat(value) || 0;
+        /* Phase 77: actuarial fields */
+        else if (field === 'actualQuantity') {
+            item.actualQuantity = parseFloat(value) || 0;
+            if (!item.actualDate) item.actualDate = new Date().toISOString().split('T')[0];
+        }
+        else if (field === 'actualRate') {
+            item.actualRate = parseFloat(value) || 0;
+            if (!item.actualDate) item.actualDate = new Date().toISOString().split('T')[0];
+        }
+        else if (field === 'actualDate') item.actualDate = value;
+        else if (field === 'committedCost') item.committedCost = parseFloat(value) || 0;
 
         // Deficiency 1 Fix: Single-Source of Truth
         // We rely on the Proxy (Tier 2) to trigger Global Math & Persistence (debounced).
@@ -2507,17 +2591,22 @@
     function getProjectDateFormat() { return localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD'; }
     function getProjectNameSeparator() { return localStorage.getItem(projectNameSeparatorKey) || ' '; }
     function hardResetApp() { 
-        mBTME.confirm("System Flush", "This will clear all corrupted cache states and reload the application. Your API keys and Cloud Auth will be shielded. Continue?", () => {
-            var vault = [];
-            for (var i = 0; i < localStorage.length; i++) {
-                var k = localStorage.key(i);
-                if (k.indexOf('mbt_ai_') === 0 || k.indexOf('mbt_supabase_') === 0 || k === 'mbt_theme' || k.indexOf('mBT_') === 0) {
-                    vault.push({ key: k, val: localStorage.getItem(k) });
-                }
+        mBTME.confirm("System Flush", "This will wipe the Offline Cache to pull the latest app update. Your Budgets, Contacts, and Cloud Auth are shielded. Continue?", () => {
+
+            // Phase 82: PWA Toolset Wipe
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for(let registration of registrations) { registration.unregister(); }
+                });
             }
-            localStorage.clear(); 
-            vault.forEach(function(p) { localStorage.setItem(p.key, p.val); });
-            window.location.reload(); 
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                    for(let name of names) { caches.delete(name); }
+                });
+            }
+
+            // Allow async destruction queues to execute
+            setTimeout(() => { window.location.reload(true); }, 800);
         });
     }
 
@@ -3019,21 +3108,14 @@
 
         app.innerHTML = `
         <header class="mb-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3">
-            <div class="flex items-center gap-4 w-full md:w-auto flex-grow">
-                <input type="text" id="projectName" value="${budget.projectName}" class="text-2xl sm:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter" />
+            <div class="flex items-center gap-4 w-full md:w-auto flex-grow min-w-0">
+                <input type="text" id="projectName" value="${budget.projectName}" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />
                 <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>
                 <!-- Sub-Phase 51.2: Live presence avatars — populated by mbt:presence-update -->
                 <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>
             </div>
-            <div id="project-management-container" class="w-full md:w-auto flex-shrink-0"></div>
+            <div id="project-management-container" class="w-full md:w-auto flex-shrink-0 max-w-full overflow-hidden"></div>
         </header>
-
-        <!-- Phase 74A: Project metadata fields (Location, Company, Shoot Date) -->
-        <div class="flex flex-wrap gap-2 mb-2">
-            <input type="text" id="projectCompanyInput" value="${budget.projectCompany || budget.company || ''}" placeholder="Production Company" class="flex-1 min-w-[140px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
-            <input type="text" id="projectLocationInput" value="${budget.projectLocation || ''}" placeholder="Shooting Location" class="flex-1 min-w-[140px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
-            <input type="date" id="shootDateInput" value="${budget.shootDate || ''}" title="Shoot Date" class="w-[150px] text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 focus:bg-white transition-all" />
-        </div>
 
         <div class="flex gap-2 items-center mb-3">
             <div class="relative shrink-0" id="currencyContainer">
@@ -3055,7 +3137,7 @@
                 </button>
                 <span id="shareHubBadge" data-count="0" style="display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;background:#ef4444;border-radius:9999px;border:2px solid white;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;padding:0 3px;line-height:1;"></span>
             </span>
-            <div id="statusBar" class="flex-grow py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
+            <div id="statusBar" class="flex-grow min-w-0 py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>
         </div>
 
         <div id="summary" class="mb-4 space-y-2">
@@ -3112,6 +3194,26 @@
                 </div>
             </div>
 
+            <!-- Phase 76: Tax Incentive Rebate card — clickable to configure jurisdiction -->
+            <div id="taxIncentiveCard" class="cursor-pointer hover:border-emerald-200 hover:bg-emerald-50 transition-all px-4 py-2 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-row items-center justify-between min-h-[52px] ${budget.jurisdiction && budget.jurisdiction.name ? '' : 'hidden'}">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="flex items-center justify-center bg-emerald-100 w-8 h-8 rounded-xl shrink-0 text-emerald-600">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest truncate">Tax Incentive Rebate</p>
+                        <p id="taxIncentiveJurisdiction" class="text-[9px] text-slate-400 font-bold truncate">${budget.jurisdiction && budget.jurisdiction.name ? budget.jurisdiction.name + ' &bull; ' + (budget.jurisdiction.incentiveRate || 0) + '%' : 'Not configured'}</p>
+                    </div>
+                </div>
+                <p id="summaryIncentiveRebate" class="text-sm font-black text-emerald-600 leading-tight ml-2 truncate flex-shrink-0">--</p>
+            </div>
+
+            <!-- Phase 76: Jurisdiction config prompt when no incentive set -->
+            <button id="taxIncentiveSetupBtn" data-action="jurisdiction-modal" class="w-full text-left px-4 py-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-all flex items-center gap-3 min-h-[44px] ${budget.jurisdiction && budget.jurisdiction.name ? 'hidden' : ''}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-300"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configure Tax Incentive Jurisdiction</span>
+            </button>
+
             <!-- Daily Burn -->
             <div class="px-4 py-2 bg-gradient-to-r from-rose-50 to-white rounded-2xl border border-rose-100 shadow-sm flex flex-row items-center justify-between min-h-[52px]">
                 <div class="flex items-center gap-3">
@@ -3156,13 +3258,6 @@
         if (projNameInput && document.activeElement !== projNameInput) {
             projNameInput.value = budget.projectName;
         }
-        /* Phase 74A: sync project metadata inputs on re-render */
-        var _pci = document.getElementById('projectCompanyInput');
-        if (_pci && document.activeElement !== _pci) _pci.value = budget.projectCompany || budget.company || '';
-        var _pli = document.getElementById('projectLocationInput');
-        if (_pli && document.activeElement !== _pli) _pli.value = budget.projectLocation || '';
-        var _sdi = document.getElementById('shootDateInput');
-        if (_sdi && document.activeElement !== _sdi) _sdi.value = budget.shootDate || '';
 
         const fmt = mBTLE.format.currency;
         const isMobile = window.innerWidth < 768;
@@ -3192,6 +3287,24 @@
             } else {
                 _fringesInline.classList.add('hidden');
             }
+        }
+
+        /* Phase 76: incentive rebate display */
+        var _rebateEl = document.getElementById('summaryIncentiveRebate');
+        var _taxCard = document.getElementById('taxIncentiveCard');
+        var _taxSetupBtn = document.getElementById('taxIncentiveSetupBtn');
+        var _jurLabel = document.getElementById('taxIncentiveJurisdiction');
+        var _hasJur = budget.jurisdiction && budget.jurisdiction.name;
+        if (_taxCard) _taxCard.classList.toggle('hidden', !_hasJur);
+        if (_taxSetupBtn) _taxSetupBtn.classList.toggle('hidden', !!_hasJur);
+        if (_rebateEl && _hasJur) _rebateEl.textContent = fmt(budget.incentiveRebate || 0);
+        if (_jurLabel && _hasJur) _jurLabel.textContent = budget.jurisdiction.name + ' \u2022 ' + (budget.jurisdiction.incentiveRate || 0) + '%';
+
+        /* Phase 77: actuals toggle button active state */
+        var _actualsBtn = document.getElementById('actualsToggleBtn');
+        if (_actualsBtn) {
+            _actualsBtn.classList.toggle('text-amber-400', !!budget.actualsMode);
+            _actualsBtn.classList.toggle('text-slate-400', !budget.actualsMode);
         }
 
         // Update Burn Rate Box (Smart Engine)
@@ -3644,6 +3757,8 @@ function getAbbreviatedName(name, maxLen = 25) {
             const waLink = mBTPublisher.comm.whatsapp(crew.phone);
             const mailLink = mBTPublisher.comm.email(crew.email);
             const isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
+            const isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
+            const hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
 
             /* --- compact mode: tighter rows, variance column hidden --- */
             const rowPad = isCompact ? 'py-1' : 'py-2';
@@ -3707,14 +3822,41 @@ function getAbbreviatedName(name, maxLen = 25) {
                         ${isMobile ? formatAbbreviated(estimated, displayCurrency) : mBTLE.format.currency(estimated)}
                     </td>
 
+                    ${isActuals ? `
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">
+                        ${mBTLE.format.currency(item.committedCost || 0)}
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actualQuantity" value="${toDisp(item.actualQuantity || 0).toFixed(2)}"
+                               class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actualRate" value="${toDisp(item.actualRate || 0).toFixed(2)}"
+                               class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">
+                        ${mBTLE.format.currency(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))))}
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="${safeId}">
+                        ${mBTLE.format.currency(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)))}
+                    </td>
+                    ` : `
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap">
                         <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actual" value="${toDisp(item.actual || 0).toFixed(2)}"
                                class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">
                     </td>
-
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-black text-xs ${hideVar}" data-variance-id="${safeId}">
                         ${isMobile ? formatAbbreviated(variance, displayCurrency) : mBTLE.format.currency(variance)}
                     </td>
+                    `}
+
+                    ${hasIncentive ? `
+                    <td class="px-1 ${rowPad} text-center w-8">
+                        <button data-action="item-qualifying-toggle" data-id="${safeId}" data-section="${safeSection}"
+                                class="w-6 h-6 rounded-md text-[9px] font-black transition-all ${item.qualifying ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-100 text-slate-300 hover:bg-emerald-100 hover:text-emerald-600'}"
+                                title="${item.qualifying ? 'Qualifying spend' : 'Mark as qualifying'}">Q</button>
+                    </td>
+                    ` : ''}
 
                     <td class="px-1 ${rowPad} text-center w-8">
                         <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100" ${item.memoStatus === 'Pending' ? 'style="display:none;"' : ''}>
@@ -3799,6 +3941,8 @@ function getAbbreviatedName(name, maxLen = 25) {
             // Fix: Escape quotes in section name to prevent HTML attribute injection
             const safeSectionName = name.replace(/"/g, '&quot;');
             const _isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
+            const _isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
+            const _hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
 
             const bodyContent = `
                 <div class="table-container overflow-x-auto no-scrollbar relative">
@@ -3812,8 +3956,17 @@ function getAbbreviatedName(name, maxLen = 25) {
                                 <th class="p-1 w-px text-center whitespace-nowrap px-3">Unit</th>
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Rate</th>
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Est</th>
+                                ${_isActuals ? `
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-slate-400">Commit</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-amber-500">Act Qty</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-amber-500">Act Rate</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-blue-500">ETC</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2">Var</th>
+                                ` : `
                                 <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Act</th>
                                 <th class="p-1 w-px text-right whitespace-nowrap px-3 ${_isCompact ? 'hidden' : ''}">Var</th>
+                                `}
+                                ${_hasIncentive ? `<th class="p-1 w-8 text-center text-emerald-500">Q</th>` : ''}
                                 <th class="p-1 w-8"></th>
                             </tr>
                         </thead>
@@ -9822,7 +9975,7 @@ window.updateAllHeaders = () => {
         container.innerHTML = `
             <div class="flex items-center justify-between w-full h-full px-2">
                 <!-- Left: Status & Rec -->
-                <div class="flex items-center gap-3 overflow-hidden mr-4">
+                <div class="flex items-center gap-3 overflow-hidden mr-4 flex-1 min-w-0">
                      <div class="flex items-center gap-2 shrink-0">
                          <span class="relative flex h-2 w-2">
                             ${isRecording ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>' : ''}
@@ -9971,7 +10124,7 @@ window.updateAllHeaders = () => {
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=20', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=21', { scope: './', updateViaCache: 'none' })
                 .then(reg => {
                     console.log('SW Synchronization active:', reg.scope);
                     reg.onupdatefound = () => {
@@ -10055,6 +10208,27 @@ window.updateAllHeaders = () => {
                 item.rateType = item.rateType === 'fixed' ? 'negotiable' : 'fixed';
                 saveBudget();
                 render(); // Full render needed to swap icon state
+            }
+        });
+
+        /* Phase 76: qualifying spend toggle */
+        mBT.core.action('item-qualifying-toggle', (e, el) => {
+            var _sec = el.dataset.section;
+            var _id = el.dataset.id;
+            if (!budget || !budget.sections[_sec]) return;
+            var _item = budget.sections[_sec].items.find(function(i) { return i.id === _id; });
+            if (_item) {
+                _item.qualifying = !_item.qualifying;
+                saveBudget();
+                mBTLE.reconcile();
+                /* surgical button swap without full re-render */
+                el.classList.toggle('bg-emerald-500', _item.qualifying);
+                el.classList.toggle('text-white', _item.qualifying);
+                el.classList.toggle('shadow-sm', _item.qualifying);
+                el.classList.toggle('bg-slate-100', !_item.qualifying);
+                el.classList.toggle('text-slate-300', !_item.qualifying);
+                el.title = _item.qualifying ? 'Qualifying spend' : 'Mark as qualifying';
+                if (typeof mBT.ui.paint === 'function') mBT.ui.paint();
             }
         });
 
@@ -10292,10 +10466,6 @@ window.updateAllHeaders = () => {
             document.body.addEventListener('input', (e) => {
                 const input = e.target;
                 if (input.id === 'projectName') { handleProjectNameChange(e); return; }
-                /* Phase 74A: project metadata fields */
-                if (input.id === 'projectCompanyInput') { budget.projectCompany = input.value; saveBudget(); return; }
-                if (input.id === 'projectLocationInput') { budget.projectLocation = input.value; saveBudget(); return; }
-                if (input.id === 'shootDateInput') { budget.shootDate = input.value; saveBudget(); return; }
                 if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                     budget[input.id] = parseFloat(input.value) || 0;
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -10418,7 +10588,7 @@ window.updateAllHeaders = () => {
                 // Phase 16: Footer Nav uses hybrid openTool() loader
                 if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
-                else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+                else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'toolsDrawerBtn') { var _td = document.getElementById('toolsDrawer'); if (_td) _td.classList.toggle('hidden'); }
                 else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
@@ -10449,9 +10619,85 @@ window.updateAllHeaders = () => {
                     var tool = toolBtn.dataset.tool;
                     if (tool === 'stages') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                     if (tool === 'fringes') openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                    /* Phase 78: PO & Petty Cash */
+                    if (tool === 'po') openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                     return;
                 }
                 if (e.target === drawer) drawer.classList.add('hidden');
+            });
+        })();
+
+        /* --- Phase 76: Jurisdiction modal --- */
+        var JURISDICTION_PRESETS = {
+            'JAMPRO':    { incentiveRate: 20, minSpend: 0,       atlSections: ['Story', 'Producer', 'Cast'] },
+            'UK HETV':   { incentiveRate: 25, minSpend: 1000000, atlSections: ['Story', 'Producer', 'Cast'] },
+            'Georgia':   { incentiveRate: 20, minSpend: 500000,  atlSections: ['Story', 'Producer', 'Cast'] },
+            'Louisiana': { incentiveRate: 25, minSpend: 300000,  atlSections: ['Story', 'Producer', 'Cast'] },
+            'Custom':    { incentiveRate: 0,  minSpend: 0,       atlSections: ['Story', 'Producer', 'Cast'] }
+        };
+
+        function showJurisdictionModal() {
+            if (!budget) return;
+            var j = budget.jurisdiction || {};
+            var presetsHtml = '<option value="">-- None --</option>' +
+                Object.keys(JURISDICTION_PRESETS).map(function(k) {
+                    return '<option value="' + k + '"' + (j.name === k ? ' selected' : '') + '>' + k + '</option>';
+                }).join('');
+            var body = '<div class="space-y-4">' +
+                '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Jurisdiction Preset</label>' +
+                '<select id="jur-preset" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400">' + presetsHtml + '</select></div>' +
+                '<div class="grid grid-cols-2 gap-3">' +
+                '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Incentive Rate %</label>' +
+                '<input type="number" id="jur-rate" step="0.1" min="0" max="100" value="' + (j.incentiveRate || 0) + '" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400"></div>' +
+                '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Min Qualifying Spend</label>' +
+                '<input type="number" id="jur-minspend" step="1000" min="0" value="' + (j.minSpend || 0) + '" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400"></div></div>' +
+                '<p class="text-[10px] text-slate-400">ATL sections excluded: Story, Producer, Cast. Mark qualifying rows with the Q button.</p>' +
+                '</div>';
+            mBTME.confirm('Tax Incentive Jurisdiction', body, function() {
+                var preset = document.getElementById('jur-preset');
+                var rateEl = document.getElementById('jur-rate');
+                var minEl = document.getElementById('jur-minspend');
+                var name = preset ? preset.value : '';
+                var rate = rateEl ? (parseFloat(rateEl.value) || 0) : 0;
+                var minSpend = minEl ? (parseFloat(minEl.value) || 0) : 0;
+                budget.jurisdiction = { name: name, incentiveRate: rate, minSpend: minSpend, atlSections: ['Story', 'Producer', 'Cast'] };
+                saveBudget();
+                mBTLE.reconcile();
+                render();
+            }, { confirmLabel: 'Save' });
+            /* auto-fill rate/minSpend when preset changes */
+            setTimeout(function() {
+                var ps = document.getElementById('jur-preset');
+                if (!ps) return;
+                ps.addEventListener('change', function() {
+                    var p = JURISDICTION_PRESETS[ps.value];
+                    if (!p) return;
+                    var re = document.getElementById('jur-rate');
+                    var me = document.getElementById('jur-minspend');
+                    if (re) re.value = p.incentiveRate;
+                    if (me) me.value = p.minSpend;
+                });
+            }, 50);
+        }
+
+        mBT.core.action('jurisdiction-modal', function() { showJurisdictionModal(); });
+
+        /* Phase 76: Tax Incentive card click → jurisdiction modal */
+        (function() {
+            var card = document.getElementById('taxIncentiveCard');
+            if (card) card.addEventListener('click', function() { showJurisdictionModal(); });
+        })();
+
+        /* --- Phase 77: Actuals toggle button --- */
+        (function() {
+            var btn = document.getElementById('actualsToggleBtn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                if (!budget) return;
+                budget.actualsMode = !budget.actualsMode;
+                saveBudget();
+                mBTLE.reconcile();
+                render();
             });
         })();
 
@@ -10641,6 +10887,23 @@ window.updateAllHeaders = () => {
                 budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
                 saveBudget();
                 mBTLE.reconcile(budget);
+
+            /* --- Phase 78: update-ledgers — PO tool routes ledger saves through monolith --- */
+            } else if (action === 'update-ledgers' && currentProjectName && budget) {
+                if (!budget.ledgers) budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+                if (Array.isArray(payload.pos)) budget.ledgers.pos = payload.pos;
+                if (Array.isArray(payload.pettyCash)) budget.ledgers.pettyCash = payload.pettyCash;
+                if (payload.poCounter != null) budget.ledgers.poCounter = payload.poCounter;
+                saveBudget();
+                mBTLE.reconcile(budget);
+                if (typeof render === 'function') render();
+                /* Phase 80: relay to PO sibling iframe if it is the currently open tool */
+                if (typeof mBTActiveTool !== 'undefined' && mBTActiveTool === 'po') {
+                    var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                    if (_poIframe && _poIframe.contentWindow) {
+                        _poIframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }, '*');
+                    }
+                }
 
             /* --- close-tool: dismiss tool modal and lifecycle sync --- */
             } else if (action === 'close-tool') {

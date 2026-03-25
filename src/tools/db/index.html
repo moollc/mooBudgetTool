@@ -405,7 +405,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Template categories for grouped picker */
   var TEMPLATE_CATEGORIES = [
     { label: 'Funding', ids: ['fundingPackage', 'budgetComparison', 'pitchDeck'] },
-    { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash', 'vendorInvoice', 'extrasVoucher'] },
+    { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash', 'vendorInvoice', 'extrasVoucher', 'weeklyCostReport'] },
     { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood', 'incidentReport', 'wrapReport'] },
     { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'storyboard'] },
     { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'nda'] }
@@ -429,7 +429,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     incidentReport: ['injuredPerson', 'description'],
     nda: ['recipientName'],
     wrapReport: ['productionTitle'],
-    extrasVoucher: ['extraName', 'basePay']
+    extrasVoucher: ['extraName', 'basePay'],
+    weeklyCostReport: ['productionTitle', 'periodStart', 'periodEnd']
   };
 
   /* Templates that support CSV export */
@@ -1512,6 +1513,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       html = buildWrapReportHtml(d);
     } else if (templateId === 'extrasVoucher') {
       html = buildExtrasVoucherHtml(d);
+    } else if (templateId === 'weeklyCostReport') {
+      html = buildWeeklyCostReportHtml(d);
     } else {
       panel.innerHTML = '<p style="padding:20px;color:var(--muted);">This template has no editor.</p>';
       return;
@@ -2311,6 +2314,47 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       fld('producerName', 'Producer Name') + '</div>' +
       '<div class="ed-row">' + fld('outstandingInvoices', 'Outstanding Invoices', 'textarea', true) + '</div>' +
       '<div class="ed-row">' + fld('notes', 'Additional Notes', 'textarea', true) + '</div></div>';
+    return html;
+  }
+
+  /* Phase 79: Weekly Cost Report editor */
+  function buildWeeklyCostReportHtml(d) {
+    var html = '';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Report Details</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Company') + '</div>' +
+      '<div class="ed-row ed-3">' + fld('periodStart', 'Period Start', 'date') + fld('periodEnd', 'Period End', 'date') + fld('reportDate', 'Report Date', 'date') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('preparedBy', 'Prepared By') + fld('approvedBy', 'Approved By') + '</div></div>';
+    var items = d.lineItems || [];
+    html += '<div class="ed-section"><div class="ed-section-hdr">Line Items</div>' +
+      '<p style="font-size:10px;color:var(--muted);margin:0 10px 10px;line-height:1.5;">Auto-populated from budget actuals. Set the period above and use Preview to generate the filtered report.</p>';
+    if (items.length > 0) {
+      html += '<div class="ed-tbl-wrap"><table class="ed-tbl" style="font-size:10px;"><thead><tr>' +
+        '<th>Account</th><th>Description</th><th style="width:65px;">Budget</th>' +
+        '<th style="width:60px;">Committed</th><th style="width:60px;">Actual</th>' +
+        '<th style="width:50px;">ETC</th><th style="width:55px;">Variance</th><th style="width:42px;">% Used</th>' +
+        '</tr></thead><tbody>';
+      items.forEach(function (item, i) {
+        var pct = parseFloat(item.pctUsed) || 0;
+        var pctColor = pct > 100 ? '#dc2626' : pct > 85 ? '#d97706' : '#16a34a';
+        var varColor = parseFloat(item.variance) >= 0 ? '#16a34a' : '#dc2626';
+        html += '<tr>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="account" value="' + esc(item.account || '') + '" readonly style="color:#94a3b8;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="description" value="' + esc(item.description || '') + '" readonly></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="budget" value="' + esc(item.budget || '0') + '" readonly style="text-align:right;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="committed" value="' + esc(item.committed || '0') + '" readonly style="text-align:right;color:#d97706;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="actual" value="' + esc(item.actual || '0') + '" readonly style="text-align:right;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="etc" value="' + esc(item.etc || '0') + '" readonly style="text-align:right;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="variance" value="' + esc(item.variance || '0') + '" readonly style="text-align:right;color:' + varColor + ';"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="pctUsed" value="' + esc(item.pctUsed || '0') + '" readonly style="text-align:right;color:' + pctColor + ';"></td>' +
+          '</tr>';
+      });
+      html += '</tbody></table></div>';
+    } else {
+      html += '<p style="font-size:10px;color:var(--muted);margin:8px 10px;">No line items found. Ensure your budget has sections with items.</p>';
+    }
+    html += '</div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Notes</div>' +
+      '<div class="ed-row">' + fld('notes', 'Notes', 'textarea', true) + '</div></div>';
     return html;
   }
 

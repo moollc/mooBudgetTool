@@ -2817,18 +2817,23 @@
                         var sec = sections[k];
                         var items = sec.items || [];
                         var budgeted = 0; var actual = 0;
-                        items.forEach(function (it) { budgeted += (it.total || 0); actual += (it.actual || 0); });
+                        items.forEach(function (it) {
+                            budgeted += (it.total || 0);
+                            var actAmt = (parseFloat(it.actualQuantity) || 0) * (parseFloat(it.actualRate) || 0);
+                            actual += (actAmt > 0 ? actAmt : (parseFloat(it.actual) || 0));
+                        });
                         secSummary.push({ sectionName: k, budgeted: budgeted.toFixed(2), actual: actual.toFixed(2), variance: (budgeted - actual).toFixed(2) });
                         if (k.toLowerCase().indexOf('atl') > -1 || k.toLowerCase().indexOf('above') > -1) castCount += items.length;
                         else crewCount += items.length;
                     });
+                    var computedActualTotal = secSummary.reduce(function (s, r) { return s + (parseFloat(r.actual) || 0); }, 0);
                     return {
                         productionTitle: b.projectName || '', productionCompany: b.projectCompany || b.company || '',
                         wrapDate: new Date().toISOString().split('T')[0],
                         totalShootDays: '', scheduledDays: '',
                         budgetedTotal: (b.grandTotal || 0).toFixed(2),
-                        actualTotal: (b.actualTotal || 0).toFixed(2),
-                        variance: ((b.grandTotal || 0) - (b.actualTotal || 0)).toFixed(2),
+                        actualTotal: computedActualTotal.toFixed(2),
+                        variance: ((b.grandTotal || 0) - computedActualTotal).toFixed(2),
                         crewCount: String(crewCount), castCount: String(castCount),
                         sections: secSummary,
                         outstandingInvoices: '',
@@ -2954,12 +2959,333 @@
                 }
             },
 
+            /* ---- Phase 79: Weekly Cost Report ---- */
+            weeklyCostReport: {
+                id: 'weeklyCostReport',
+                name: 'Weekly Cost Report',
+                description: 'Period-filtered actuarial summary: Budget, Committed, Actual, ETC, Variance, and % Used by account.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (budget) {
+                    var b = budget || {};
+                    var sections = b.sections || {};
+                    var ledgers = b.ledgers || {};
+                    var pos = ledgers.pos || [];
+                    var lineItems = [];
+                    Object.keys(sections).forEach(function (secKey) {
+                        var sec = sections[secKey];
+                        (sec.items || []).forEach(function (it) {
+                            /* committedCost pre-aggregated by reconcile from POs */
+                            var committed = parseFloat(it.committedCost) || 0;
+                            /* Fall back: sum directly from POs if reconcile hasn't run yet */
+                            if (committed === 0) {
+                                pos.forEach(function (po) {
+                                    if ((po.status === 'Committed' || po.status === 'Invoiced' || po.status === 'Paid') && po.itemId === it.id) {
+                                        committed += parseFloat(po.amount) || 0;
+                                    }
+                                });
+                            }
+                            var actAmt = (parseFloat(it.actualQuantity) || 0) * (parseFloat(it.actualRate) || 0);
+                            var actual = actAmt > 0 ? actAmt : (parseFloat(it.actual) || 0);
+                            var budgetVal = parseFloat(it.total) || 0;
+                            var etc = budgetVal - committed - actual;
+                            var variance = budgetVal - actual;
+                            var pctUsed = budgetVal > 0 ? ((actual + committed) / budgetVal * 100) : 0;
+                            lineItems.push({
+                                account: secKey,
+                                description: it.description || '',
+                                actualDate: it.actualDate || '',
+                                budget: budgetVal.toFixed(2),
+                                committed: committed.toFixed(2),
+                                actual: actual.toFixed(2),
+                                etc: etc.toFixed(2),
+                                variance: variance.toFixed(2),
+                                pctUsed: pctUsed.toFixed(1)
+                            });
+                        });
+                    });
+                    var today = new Date().toISOString().split('T')[0];
+                    var weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0];
+                    return {
+                        productionTitle: b.projectName || '',
+                        productionCompany: (b.company || b.projectCompany) || '',
+                        reportDate: today,
+                        periodStart: weekAgo,
+                        periodEnd: today,
+                        preparedBy: '',
+                        approvedBy: '',
+                        lineItems: lineItems,
+                        notes: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var b = budgetData || {};
+                    var d = (options && options.editorData) || this.getDefaultData(b);
+                    var currency = (options && options.currency) || 'JMD';
+                    var rate = parseFloat((options && options.rate)) || 1;
+                    var fmt = function (v) { return fmtCurrency(v, currency, rate); };
+                    var title = esc(d.productionTitle || b.projectName || 'Production');
+                    var period = (d.periodStart && d.periodEnd) ? (esc(d.periodStart) + ' \u2013 ' + esc(d.periodEnd)) : 'All Periods';
+
+                    /* Filter line items to period: items with no actualDate are always included (shows budget/committed) */
+                    var items = (d.lineItems || []).filter(function (item) {
+                        if (!item.actualDate) return true;
+                        if (d.periodStart && item.actualDate < d.periodStart) return false;
+                        if (d.periodEnd && item.actualDate > d.periodEnd) return false;
+                        return true;
+                    });
+
+                    /* Aggregate section subtotals */
+                    var secMap = {};
+                    var secOrder = [];
+                    items.forEach(function (item) {
+                        var k = item.account || 'Uncategorized';
+                        if (!secMap[k]) { secMap[k] = { budget: 0, committed: 0, actual: 0, etc: 0, items: [] }; secOrder.push(k); }
+                        secMap[k].budget += parseFloat(item.budget) || 0;
+                        secMap[k].committed += parseFloat(item.committed) || 0;
+                        secMap[k].actual += parseFloat(item.actual) || 0;
+                        secMap[k].etc += parseFloat(item.etc) || 0;
+                        secMap[k].items.push(item);
+                    });
+
+                    var grandBudget = 0, grandCommitted = 0, grandActual = 0, grandEtc = 0;
+                    secOrder.forEach(function (k) { grandBudget += secMap[k].budget; grandCommitted += secMap[k].committed; grandActual += secMap[k].actual; grandEtc += secMap[k].etc; });
+
+                    var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div style="font-size:16pt;font-weight:900;">' + title + '</div>' +
+                        '<div style="font-size:11pt;font-weight:700;letter-spacing:2px;margin-top:4px;">WEEKLY COST REPORT</div>' +
+                        '<div style="font-size:8pt;color:#64748b;margin-top:6px;">Period: ' + period + ' &bull; Report Date: ' + esc(d.reportDate || '\u2014') +
+                        (d.preparedBy ? ' &bull; Prepared by: ' + esc(d.preparedBy) : '') + '</div></div>';
+
+                    var grandPct = grandBudget > 0 ? ((grandActual + grandCommitted) / grandBudget * 100) : 0;
+                    var grandVariance = grandBudget - grandActual;
+                    var summary = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">' +
+                        '<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Total Budget</div><div style="font-size:11pt;font-weight:900;">' + fmt(grandBudget) + '</div></div>' +
+                        '<div style="background:#fef3c7;border:1px solid #fde68a;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Committed</div><div style="font-size:11pt;font-weight:900;">' + fmt(grandCommitted) + '</div></div>' +
+                        '<div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Actual</div><div style="font-size:11pt;font-weight:900;">' + fmt(grandActual) + '</div></div>' +
+                        '<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">ETC</div><div style="font-size:11pt;font-weight:900;">' + fmt(grandEtc) + '</div></div>' +
+                        '<div style="background:' + (grandVariance >= 0 ? '#f0fdf4;border:1px solid #bbf7d0;' : '#fef2f2;border:1px solid #fecaca;') + 'padding:10px;border-radius:6px;text-align:center;"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">% Used</div><div style="font-size:11pt;font-weight:900;color:' + (grandPct > 100 ? '#dc2626' : grandPct > 85 ? '#d97706' : '#16a34a') + ';">' + grandPct.toFixed(1) + '%</div></div></div>';
+
+                    var css = 'table{width:100%;border-collapse:collapse;font-size:7.5pt;}' +
+                        'th{background:#0f172a;color:#fff;padding:5px 6px;text-align:left;font-size:7pt;text-transform:uppercase;letter-spacing:0.5px;}' +
+                        'td{padding:3px 6px;border-bottom:1px solid #f1f5f9;}' +
+                        'tr.sec-hdr td{background:#f1f5f9;font-weight:800;font-size:7.5pt;border-top:2px solid #e2e8f0;}' +
+                        'tr.grand td{background:#0f172a;color:#fff;font-weight:900;font-size:8pt;}';
+
+                    var tableHtml = '<table><thead><tr>' +
+                        '<th style="width:80px;">Account</th><th>Description</th>' +
+                        '<th style="width:72px;text-align:right;">Budget</th>' +
+                        '<th style="width:72px;text-align:right;">Committed</th>' +
+                        '<th style="width:72px;text-align:right;">Actual</th>' +
+                        '<th style="width:60px;text-align:right;">ETC</th>' +
+                        '<th style="width:68px;text-align:right;">Variance</th>' +
+                        '<th style="width:48px;text-align:right;">% Used</th>' +
+                        '</tr></thead><tbody>';
+
+                    secOrder.forEach(function (secKey) {
+                        var sec = secMap[secKey];
+                        var secVariance = sec.budget - sec.actual;
+                        var secPct = sec.budget > 0 ? ((sec.actual + sec.committed) / sec.budget * 100) : 0;
+                        tableHtml += '<tr class="sec-hdr">' +
+                            '<td colspan="2">' + esc(secKey) + '</td>' +
+                            '<td style="text-align:right;">' + fmt(sec.budget) + '</td>' +
+                            '<td style="text-align:right;">' + fmt(sec.committed) + '</td>' +
+                            '<td style="text-align:right;">' + fmt(sec.actual) + '</td>' +
+                            '<td style="text-align:right;">' + fmt(sec.etc) + '</td>' +
+                            '<td style="text-align:right;color:' + (secVariance >= 0 ? '#16a34a' : '#dc2626') + ';">' + fmt(secVariance) + '</td>' +
+                            '<td style="text-align:right;color:' + (secPct > 100 ? '#dc2626' : secPct > 85 ? '#d97706' : '#475569') + ';">' + secPct.toFixed(1) + '%</td></tr>';
+                        sec.items.forEach(function (item) {
+                            var v = parseFloat(item.budget) - parseFloat(item.actual);
+                            var p = parseFloat(item.budget) > 0 ? ((parseFloat(item.actual) + parseFloat(item.committed)) / parseFloat(item.budget) * 100) : 0;
+                            tableHtml += '<tr>' +
+                                '<td style="color:#94a3b8;font-size:7pt;">' + esc(item.account) + '</td>' +
+                                '<td>' + esc(item.description) + (item.actualDate ? '<span style="color:#94a3b8;font-size:6.5pt;margin-left:4px;">(' + esc(item.actualDate) + ')</span>' : '') + '</td>' +
+                                '<td style="text-align:right;">' + fmt(item.budget) + '</td>' +
+                                '<td style="text-align:right;color:#d97706;">' + fmt(item.committed) + '</td>' +
+                                '<td style="text-align:right;">' + fmt(item.actual) + '</td>' +
+                                '<td style="text-align:right;">' + fmt(item.etc) + '</td>' +
+                                '<td style="text-align:right;color:' + (v >= 0 ? '#16a34a' : '#dc2626') + ';">' + fmt(v) + '</td>' +
+                                '<td style="text-align:right;color:' + (p > 100 ? '#dc2626' : p > 85 ? '#d97706' : '#475569') + ';">' + p.toFixed(1) + '%</td></tr>';
+                        });
+                    });
+
+                    tableHtml += '<tr class="grand">' +
+                        '<td colspan="2">GRAND TOTAL</td>' +
+                        '<td style="text-align:right;">' + fmt(grandBudget) + '</td>' +
+                        '<td style="text-align:right;">' + fmt(grandCommitted) + '</td>' +
+                        '<td style="text-align:right;">' + fmt(grandActual) + '</td>' +
+                        '<td style="text-align:right;">' + fmt(grandEtc) + '</td>' +
+                        '<td style="text-align:right;">' + fmt(grandVariance) + '</td>' +
+                        '<td style="text-align:right;">' + grandPct.toFixed(1) + '%</td></tr>' +
+                        '</tbody></table>';
+
+                    var notes = d.notes ? '<div style="margin-top:12px;font-size:8pt;color:#475569;line-height:1.5;"><strong>Notes:</strong> ' + esc(d.notes) + '</div>' : '';
+                    var sig = d.approvedBy ? '<div style="margin-top:24px;"><div style="display:inline-block;border-top:1px solid #0f172a;padding-top:4px;font-size:8pt;min-width:240px;"><strong>Approved by: ' + esc(d.approvedBy) + '</strong></div></div>' : '';
+                    return engine._wrapHtml(title + ' \u2014 Weekly Cost Report', header + summary + tableHtml + notes + sig, css);
+                },
+
+                /* Native jsPDF + autoTable path — called by toPdf() instead of html2pdf to avoid
+                   html2canvas memory crashes and blurry rasterization on large accounting tables. */
+                renderAutoTablePdf: function (budgetData, options) {
+                    if (typeof window.jspdf === 'undefined') { notify('Error', 'jsPDF not loaded.'); return; }
+                    var jsPDF = window.jspdf.jsPDF;
+                    var b = budgetData || {};
+                    var d = (options && options.editorData) || this.getDefaultData(b);
+                    var currency = (options && options.currency) || 'JMD';
+                    var rate = parseFloat((options && options.rate)) || 1;
+                    var fmt = function (v) { return fmtCurrency(v, currency, rate); };
+
+                    /* Landscape for 8 columns */
+                    var doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'landscape' });
+                    var pageW = doc.internal.pageSize.getWidth();
+                    var pageH = doc.internal.pageSize.getHeight();
+                    var margin = 36;
+
+                    var titleStr = d.productionTitle || (b && b.projectName) || 'Production';
+                    var period = (d.periodStart && d.periodEnd) ? (d.periodStart + ' \u2013 ' + d.periodEnd) : 'All Periods';
+
+                    /* Header block */
+                    var y = margin + 4;
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(14);
+                    doc.setTextColor(15, 23, 42);
+                    doc.text(titleStr, margin, y);
+                    y += 16;
+                    doc.setFontSize(10);
+                    doc.text('WEEKLY COST REPORT', margin, y);
+                    y += 13;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(100, 116, 139);
+                    var meta = 'Period: ' + period + '   |   Report Date: ' + (d.reportDate || '\u2014');
+                    if (d.preparedBy) meta += '   |   Prepared by: ' + d.preparedBy;
+                    doc.text(meta, margin, y);
+                    doc.setTextColor(0, 0, 0);
+                    y += 10;
+
+                    /* Period-filtered line items */
+                    var rawItems = (d.lineItems || []).filter(function (item) {
+                        if (!item.actualDate) return true;
+                        if (d.periodStart && item.actualDate < d.periodStart) return false;
+                        if (d.periodEnd && item.actualDate > d.periodEnd) return false;
+                        return true;
+                    });
+
+                    /* Aggregate section subtotals */
+                    var secMap = {}; var secOrder = [];
+                    rawItems.forEach(function (item) {
+                        var k = item.account || 'Uncategorized';
+                        if (!secMap[k]) { secMap[k] = { budget: 0, committed: 0, actual: 0, etc: 0, items: [] }; secOrder.push(k); }
+                        secMap[k].budget += parseFloat(item.budget) || 0;
+                        secMap[k].committed += parseFloat(item.committed) || 0;
+                        secMap[k].actual += parseFloat(item.actual) || 0;
+                        secMap[k].etc += parseFloat(item.etc) || 0;
+                        secMap[k].items.push(item);
+                    });
+                    var grandBudget = 0, grandCommitted = 0, grandActual = 0, grandEtc = 0;
+                    secOrder.forEach(function (k) { grandBudget += secMap[k].budget; grandCommitted += secMap[k].committed; grandActual += secMap[k].actual; grandEtc += secMap[k].etc; });
+                    var grandVariance = grandBudget - grandActual;
+                    var grandPct = grandBudget > 0 ? ((grandActual + grandCommitted) / grandBudget * 100) : 0;
+
+                    /* Build autoTable body rows */
+                    var tableBody = [];
+                    secOrder.forEach(function (secKey) {
+                        var sec = secMap[secKey];
+                        var sv = sec.budget - sec.actual;
+                        var sp = sec.budget > 0 ? ((sec.actual + sec.committed) / sec.budget * 100) : 0;
+                        /* Section header row */
+                        tableBody.push([
+                            { content: secKey, colSpan: 2, styles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [15, 23, 42] } },
+                            { content: fmt(sec.budget), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
+                            { content: fmt(sec.committed), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
+                            { content: fmt(sec.actual), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
+                            { content: fmt(sec.etc), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
+                            { content: fmt(sv), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: sv >= 0 ? [22, 163, 74] : [220, 38, 38] } },
+                            { content: sp.toFixed(1) + '%', styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: sp > 100 ? [220, 38, 38] : sp > 85 ? [217, 119, 6] : [71, 85, 105] } }
+                        ]);
+                        /* Item detail rows */
+                        sec.items.forEach(function (item) {
+                            var iv = parseFloat(item.budget) - parseFloat(item.actual);
+                            var ip = parseFloat(item.budget) > 0 ? ((parseFloat(item.actual) + parseFloat(item.committed)) / parseFloat(item.budget) * 100) : 0;
+                            var desc = (item.description || '') + (item.actualDate ? ' (' + item.actualDate + ')' : '');
+                            tableBody.push([
+                                { content: item.account || '', styles: { textColor: [148, 163, 184] } },
+                                desc,
+                                { content: fmt(item.budget), styles: { halign: 'right' } },
+                                { content: fmt(item.committed), styles: { halign: 'right', textColor: [217, 119, 6] } },
+                                { content: fmt(item.actual), styles: { halign: 'right' } },
+                                { content: fmt(item.etc), styles: { halign: 'right' } },
+                                { content: fmt(iv), styles: { halign: 'right', textColor: iv >= 0 ? [22, 163, 74] : [220, 38, 38] } },
+                                { content: ip.toFixed(1) + '%', styles: { halign: 'right', textColor: ip > 100 ? [220, 38, 38] : ip > 85 ? [217, 119, 6] : [71, 85, 105] } }
+                            ]);
+                        });
+                    });
+                    /* Grand total row */
+                    tableBody.push([
+                        { content: 'GRAND TOTAL', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: fmt(grandBudget), styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: fmt(grandCommitted), styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: fmt(grandActual), styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: fmt(grandEtc), styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: fmt(grandVariance), styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+                        { content: grandPct.toFixed(1) + '%', styles: { fontStyle: 'bold', halign: 'right', fillColor: [15, 23, 42], textColor: [255, 255, 255] } }
+                    ]);
+
+                    doc.autoTable({
+                        startY: y + 4,
+                        head: [['Account', 'Description', 'Budget', 'Committed', 'Actual', 'ETC', 'Variance', '% Used']],
+                        body: tableBody,
+                        theme: 'plain',
+                        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+                        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+                        columnStyles: {
+                            0: { cellWidth: 68 },
+                            1: { cellWidth: 'auto' },
+                            2: { cellWidth: 70, halign: 'right' },
+                            3: { cellWidth: 70, halign: 'right' },
+                            4: { cellWidth: 70, halign: 'right' },
+                            5: { cellWidth: 58, halign: 'right' },
+                            6: { cellWidth: 66, halign: 'right' },
+                            7: { cellWidth: 46, halign: 'right' }
+                        },
+                        margin: { left: margin, right: margin },
+                        didDrawPage: function (data) {
+                            doc.setFontSize(7);
+                            doc.setTextColor(150, 150, 150);
+                            doc.text('Page ' + data.pageNumber, pageW - margin, pageH - 18, { align: 'right' });
+                            doc.setTextColor(0, 0, 0);
+                        }
+                    });
+
+                    /* Notes and approval signature below table */
+                    var postY = doc.lastAutoTable.finalY + 12;
+                    if (d.notes) {
+                        doc.setFontSize(8);
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(71, 85, 105);
+                        doc.text('Notes: ' + d.notes, margin, postY);
+                        doc.setTextColor(0, 0, 0);
+                        postY += 14;
+                    }
+                    if (d.approvedBy) {
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(8);
+                        doc.line(margin, postY - 2, margin + 200, postY - 2);
+                        doc.text('Approved by: ' + d.approvedBy, margin, postY + 8);
+                    }
+
+                    var fname = slugify(b.projectName || 'production') + '_weekly_cost_report.pdf';
+                    doc.save(fname);
+                }
+            },
+
             /* ---- PUBLIC API ---- */
 
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {
                 var self = this;
-                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher'].map(function (key) {
+                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher', 'weeklyCostReport'].map(function (key) {
                     var t = self[key];
                     return { id: t.id, name: t.name, description: t.description, formats: t.formats, hasEditor: !!t.hasEditor };
                 });
@@ -3085,6 +3411,18 @@
 
             /** Download PDF of a rendered template using html2pdf.js */
             toPdf: function (templateId, budgetData, options) {
+                /* Route templates with a native autoTable renderer directly through jsPDF.
+                   This bypasses html2canvas entirely, preventing memory crashes on large tables. */
+                var tmpl = this[templateId];
+                if (tmpl && typeof tmpl.renderAutoTablePdf === 'function') {
+                    try {
+                        tmpl.renderAutoTablePdf(budgetData, options || {});
+                    } catch (e) {
+                        notify('PDF Error', 'Export failed: ' + e.message);
+                        console.error('[mBTPublisher toPdf autoTable]', e);
+                    }
+                    return Promise.resolve();
+                }
                 if (typeof window.html2pdf === 'undefined') {
                     notify('Error', 'PDF export engine (html2pdf) not loaded.');
                     return Promise.reject(new Error('html2pdf not loaded'));

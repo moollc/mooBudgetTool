@@ -1,12 +1,12 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.1 ========= */
 
-const CACHE_NAME = 'mbt-monolith-cache-v15';
+const CACHE_NAME = 'mbt-monolith-cache-v17';
 
 const PRECACHE_ASSETS = [
     /* --- Shell entry --- */
     './index.html',
     './manifest.json',
-    './cow-maskable.svg',
+    './manifest.json',
 
     /* --- Vendored libraries --- */
     './src/lib/gridstack.min.css',
@@ -37,8 +37,15 @@ const PRECACHE_ASSETS = [
     './src/scripts/engine/totalizer.js',
     './src/scripts/engine/publisher.js',
 
+    /* --- App CSS --- */
+    './public/css/mbt-core.css',
+
     /* --- Core modules --- */
     './src/core/mBT.core.js',
+    './src/core/mBT.assets.js',
+    './src/core/mBT.templates.js',
+    './src/core/ui.settings.js',
+    './src/core/finance.engine.js',
     './src/core/blueprints.js',
     './src/core/components/ToolHost.js',
     './src/core/components/EmbeddedMode.js',
@@ -56,6 +63,7 @@ const PRECACHE_ASSETS = [
     './src/services/ai-pattern-recognition.js',
     './src/services/ai-reports.js',
     './src/services/supabase-sync.js',
+    './src/services/supabase-realtime.js',
 
     /* --- Tools manifest --- */
     './src/tools/tools-manifest.json',
@@ -66,6 +74,7 @@ const PRECACHE_ASSETS = [
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
     './src/tools/fringes/index.html',
+    './src/tools/po/index.html',
     './src/tools/publisher/index.html',
     './src/tools/rsi/index.html',
     './src/tools/share/index.html',
@@ -73,15 +82,19 @@ const PRECACHE_ASSETS = [
     './src/tools/supabase/index.html',
     './src/tools/template/index.html',
 
-    /* --- PWA icons --- */
-    './public/icon-192x192.png',
-    './public/icon-512x512.png',
+    /* --- PWA icons (local — GitHub CDN would cause atomic install failure when offline) --- */
+    './assets/cow-512.png',
+    './assets/cow-192.png'
 ];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => cache.addAll(PRECACHE_ASSETS))
+            .then((cache) => {
+                /* Map absolute bypass to installation assets to defeat old-SW interception */
+                const requests = PRECACHE_ASSETS.map(url => new Request(url, { cache: 'no-store' }));
+                return cache.addAll(requests);
+            })
             .then(() => self.skipWaiting())
     );
 });
@@ -99,25 +112,48 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    /* --- Offline-first: cache hit returns immediately, fallback to network --- */
-    event.respondWith(
-        caches.match(event.request)
-            .then((cached) => {
-                if (cached) return cached;
-                return fetch(event.request).then((response) => {
-                    /* --- Cache successful GET responses for future offline use --- */
-                    if (event.request.method === 'GET' && response && response.status === 200) {
-                        const clone = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                    }
-                    return response;
-                });
-            })
-            .catch(() => {
-                /* --- Final fallback for navigation requests --- */
-                if (event.request.mode === 'navigate') {
-                    return caches.match('./index.html');
+    /* Only cache GET requests */
+    if (event.request.method !== 'GET') return;
+
+    /* --- Navigation requests: network-first so code updates reflect immediately ---
+       On file://, "network" is the local file system — always returns the latest version.
+       Falls back to cached index.html only when the source is unreachable (true offline). */
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request, { cache: 'no-cache' }).then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
                 }
-            })
+                return networkResponse;
+            }).catch(() => caches.match('./index.html', { ignoreSearch: true }))
+        );
+        return;
+    }
+
+    /* --- All other assets: stale-while-revalidate for fast loads --- */
+    event.respondWith(
+        caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
+            /* 1. Fire up a network fetch bypassing ALL browser HTTP caches to get the absolute newest version */
+            const fetchPromise = fetch(event.request, { cache: 'no-cache' }).then((networkResponse) => {
+                /* 2. Silently update the bare-URL cache to prevent query-string bloat */
+                if (networkResponse && networkResponse.status === 200) {
+                    const clone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        const cleanUrl = new URL(event.request.url);
+                        cleanUrl.search = '';
+                        cache.put(cleanUrl, clone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                /* If network fails and we have no cache, fallback for navigation */
+                if (!cachedResponse && event.request.mode === 'navigate') {
+                    return caches.match('./index.html', { ignoreSearch: true });
+                }
+            });
+
+            /* 3. Instantly return the cached response for zero-latency UI */
+            return cachedResponse || fetchPromise;
+        })
     );
 });

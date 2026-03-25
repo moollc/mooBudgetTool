@@ -131,6 +131,16 @@
               <span>Save .moo</span>
             </button>
 
+            <button id="btn-csv-wise" aria-label="Export Wise batch payment CSV" class="btn-action bg-teal-600 hover:bg-teal-700 text-white focus:ring-teal-500 flex-col h-24 justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+              <span>Wise CSV</span>
+            </button>
+
+            <button id="btn-csv-qb" aria-label="Export QuickBooks vendor CSV" class="btn-action bg-amber-600 hover:bg-amber-700 text-white focus:ring-amber-500 flex-col h-24 justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+              <span>QuickBooks CSV</span>
+            </button>
+
           </div>
 
           <!-- Status message area -->
@@ -463,6 +473,28 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           showStatus('.moo save failed. See console.', 'error');
         }
       });
+
+      dom.getElementById('btn-csv-wise').addEventListener('click', function () {
+        if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
+        showStatus('Generating Wise CSV…', 'info');
+        try {
+          exportAccountingCSV('wise');
+        } catch (e) {
+          console.error(e);
+          showStatus('Wise CSV export failed. See console.', 'error');
+        }
+      });
+
+      dom.getElementById('btn-csv-qb').addEventListener('click', function () {
+        if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
+        showStatus('Generating QuickBooks CSV…', 'info');
+        try {
+          exportAccountingCSV('qb');
+        } catch (e) {
+          console.error(e);
+          showStatus('QuickBooks CSV export failed. See console.', 'error');
+        }
+      });
     }
 
     // ─── 7. HTML export (data-only, no DOM cloning needed) ──────────────────────
@@ -509,6 +541,60 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       pub.io.forceDownload(blob, String(projectName).toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_Digital.html');
       showStatus('Standalone HTML saved.', 'info');
+    }
+
+    // ─── 8. Accounting CSV export (Wise & QuickBooks) ─────────────────────────────
+    function exportAccountingCSV(type) {
+      var pos = (budget && budget.ledgers && budget.ledgers.pos) || [];
+      var rows = pos.filter(function (po) {
+        return po.status === 'Paid' || po.status === 'Invoiced';
+      });
+
+      if (!rows.length) {
+        showStatus('No Paid or Invoiced POs to export.', 'error');
+        return;
+      }
+
+      var csvRows = [];
+      var curr = budget.currency || currency || 'USD';
+      var projName = (budget.projectName || 'budget').replace(/[^a-z0-9_\-]/gi, '_');
+
+      if (type === 'wise') {
+        /* Wise batch payment import: Name, Description, Amount, Currency, Reference */
+        csvRows.push(['Name', 'Description', 'Amount', 'Currency', 'Reference']);
+        rows.forEach(function (po) {
+          csvRows.push([
+            po.vendor      || '',
+            po.description || '',
+            po.amount      || 0,
+            curr,
+            po.poNumber    || po.id
+          ]);
+        });
+      } else {
+        /* QuickBooks vendor bill import: Date, Vendor, Amount, Account, RefNo */
+        csvRows.push(['Date', 'Vendor', 'Amount', 'Account', 'RefNo']);
+        rows.forEach(function (po) {
+          csvRows.push([
+            po.date        || '',
+            po.vendor      || '',
+            po.amount      || 0,
+            po.sectionKey  || 'General',
+            po.poNumber    || po.id
+          ]);
+        });
+      }
+
+      var csvContent = csvRows.map(function (row) {
+        return row.map(function (cell) {
+          var s = String(cell == null ? '' : cell).replace(/"/g, '""');
+          return /[,"\n\r]/.test(s) ? '"' + s + '"' : s;
+        }).join(',');
+      }).join('\r\n');
+
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var suffix = type === 'wise' ? '_wise_payments.csv' : '_quickbooks_vendors.csv';
+      window.mBTPublisher.io.forceDownload(blob, projName + suffix);
     }
 
     // ─── Boot ────────────────────────────────────────────────────────────────────
