@@ -14,7 +14,7 @@
         body { font-family: 'Inter', sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .studio-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
+        .studio-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; position: relative; z-index: 1; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-radius: 16px; }
         .burn-ring { transition: stroke-dashoffset 1s ease-out, stroke 0.5s ease; }
         .conflict-glow { box-shadow: 0 0 20px rgba(245,158,11,0.2); border-color: #f59e0b !important; animation: pulse-amber 2s infinite; }
         @keyframes pulse-amber {
@@ -184,24 +184,24 @@
                     </div>
                 </div>
                 <!-- Stats -->
-                <div class="w-full space-y-3">
-                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                <div class="w-full space-y-2">
+                    <div class="flex justify-between items-end p-3 rounded-xl" style="background:rgba(255,255,255,0.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.08);">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grand Total</span>
                         <span id="stat-grand-total" class="text-sm font-black text-slate-900">$0.00</span>
                     </div>
-                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                    <div class="flex justify-between items-end p-3 rounded-xl" style="background:rgba(255,255,255,0.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.08);">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cap Limit</span>
                         <span id="stat-total-cap" class="text-sm font-black text-slate-900">$0.00</span>
                     </div>
-                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                    <div class="flex justify-between items-end p-3 rounded-xl" style="background:rgba(255,255,255,0.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.08);">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Burn</span>
                         <span id="stat-daily-burn" class="text-sm font-black text-slate-900">$0.00</span>
                     </div>
-                    <div class="flex justify-between items-end border-b border-slate-50 pb-2">
+                    <div class="flex justify-between items-end p-3 rounded-xl" style="background:rgba(255,255,255,0.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.08);">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Runway</span>
                         <span id="stat-runway" class="text-sm font-black text-slate-900">0 Days</span>
                     </div>
-                    <div class="flex justify-between items-end">
+                    <div class="flex justify-between items-end p-3 rounded-xl" style="background:rgba(255,255,255,0.7);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.08);">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Risk</span>
                         <span id="stat-risk" class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Minimal</span>
                     </div>
@@ -527,7 +527,7 @@
                         window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
     } else {
       /* Fallback for standalone direct-launch */
-      window.location.href = '../../../index.html';
+      window.location.href = '/index.html';
     }
                 });
 
@@ -813,10 +813,19 @@
                         '</div>';
                 }
 
+                /* Phase 90.RC: resolve temporal settings for payable-day cost display */
+                var _workWeek   = (b.settings && b.settings.workWeek) || 5;
+                var _blackouts  = b.blackoutDays || [];
+                var _starts     = getStageStartDates(b);
+
                 return items.map(function(entry) {
                     var item = entry.item;
                     var sd   = item.stageData[stageKey];
-                    var cost = (parseFloat(sd.days) || 0) * (parseFloat(sd.rate || item.rate) || 0);
+                    var grossDays   = parseFloat(sd.days) || 0;
+                    var payableDays = _starts[stageKey]
+                        ? computeWorkingDays(grossDays, _starts[stageKey], _workWeek, _blackouts)
+                        : grossDays;
+                    var cost = payableDays * (parseFloat(sd.rate || item.rate) || 0);
                     return '<div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm stage-item group cursor-grab active:cursor-grabbing" data-id="' + esc(item.id) + '">' +
                         '<div class="flex justify-between items-start mb-2">' +
                             '<div class="min-w-0 flex-grow pr-2">' +

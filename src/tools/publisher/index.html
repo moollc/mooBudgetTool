@@ -54,7 +54,7 @@
       <p class="text-sm text-slate-500 mb-2" id="fallback-message">
         No project loaded. Open Publisher from inside MooBudget Studio.
       </p>
-      <a href="../../index.html"
+      <a href="/index.html"
         aria-label="Open MooBudget Studio"
         class="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition-colors">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> Open MooBudget Studio
@@ -132,12 +132,12 @@
             </button>
 
             <button id="btn-csv-wise" aria-label="Export Wise batch payment CSV" class="btn-action bg-teal-600 hover:bg-teal-700 text-white focus:ring-teal-500 flex-col h-24 justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>
               <span>Wise CSV</span>
             </button>
 
             <button id="btn-csv-qb" aria-label="Export QuickBooks vendor CSV" class="btn-action bg-amber-600 hover:bg-amber-700 text-white focus:ring-amber-500 flex-col h-24 justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M10 10v6M14 10v6"/></svg>
               <span>QuickBooks CSV</span>
             </button>
 
@@ -244,7 +244,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
     } else {
       /* Fallback for standalone direct-launch */
-      window.location.href = '../../../index.html';
+      window.location.href = '/index.html';
     }
     });
 
@@ -479,6 +479,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         showStatus('Generating Wise CSV…', 'info');
         try {
           exportAccountingCSV('wise');
+          /* Phase 81: Accounting Bridge — notify shell */
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'wise' } }, '*');
+          }
         } catch (e) {
           console.error(e);
           showStatus('Wise CSV export failed. See console.', 'error');
@@ -490,6 +494,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         showStatus('Generating QuickBooks CSV…', 'info');
         try {
           exportAccountingCSV('qb');
+          /* Phase 81: Accounting Bridge — notify shell */
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'qb' } }, '*');
+          }
         } catch (e) {
           console.error(e);
           showStatus('QuickBooks CSV export failed. See console.', 'error');
