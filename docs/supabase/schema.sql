@@ -46,3 +46,43 @@ CREATE POLICY "owner_update_status" ON mbt_pending_edits
             WHERE p.id = project_id AND p.user_id = auth.uid()
         )
     );
+
+/* =========================================================================
+   Phase 92: Presence 2.0 — mbt_activity_log persistent activity feed table
+   Run this migration in the Supabase SQL editor before deploying Phase 92.
+   ========================================================================= */
+
+CREATE TABLE IF NOT EXISTS mbt_activity_log (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id   TEXT        NOT NULL,
+    user_id      UUID        NOT NULL DEFAULT auth.uid(),
+    display_name TEXT        NOT NULL DEFAULT 'Collaborator',
+    action_type  TEXT        NOT NULL
+                             CHECK (action_type IN ('field_edit', 'tool_open', 'field_lock', 'budget_save')),
+    section      TEXT        NOT NULL DEFAULT '',
+    field        TEXT        NOT NULL DEFAULT '',
+    detail       TEXT        NOT NULL DEFAULT '',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+/* Index for fetching recent activity per project, sorted newest-first */
+CREATE INDEX IF NOT EXISTS mbt_activity_log_project_time
+    ON mbt_activity_log (project_id, created_at DESC);
+
+/* RLS: Any authenticated user can insert their own rows.
+   Rows are readable by the inserting user and by the project owner. */
+ALTER TABLE mbt_activity_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "members_insert_own_activity" ON mbt_activity_log
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "members_read_own_activity" ON mbt_activity_log
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "owner_read_all_activity" ON mbt_activity_log
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM projects p
+            WHERE p.id = project_id AND p.user_id = auth.uid()
+        )
+    );

@@ -3,16 +3,19 @@
    No external dependencies — works fully offline when Supabase is unreachable.
 
    Public API (window.mBTRealtime):
-     connect()                         — Open WebSocket connection
-     disconnect()                      — Close connection and clear all state
-     subscribeToProject(projectId)     — Join DB changes + Presence for a project
-     unsubscribeFromProject(projectId) — Leave channels for a project
-     broadcastTypingLock(fieldId)      — Claim a field for editing (broadcast)
-     broadcastTypingRelease(fieldId)   — Release a claimed field (broadcast)
-     isFieldLocked(fieldId)            — True if another peer holds this field
-     getLockedBy(fieldId)              — Display name of lock holder (or null)
-     getPresencePeers()                — Array of connected peer objects
-     isConnected()                     — True if WebSocket is open
+     connect()                               — Open WebSocket connection
+     disconnect()                            — Close connection and clear all state
+     subscribeToProject(projectId)           — Join DB changes + Presence for a project
+     unsubscribeFromProject(projectId)       — Leave channels for a project
+     broadcastTypingLock(fieldId)            — Claim a field for editing (broadcast)
+     broadcastTypingRelease(fieldId)         — Release a claimed field (broadcast)
+     broadcastTypingStatus(fieldLabel)       — Non-exclusive "is editing" status broadcast
+     broadcastTypingStatusRelease()          — Clear typing status broadcast
+     broadcastActivity(type,section,field,detail) — Log an activity entry (broadcast + DB persist)
+     isFieldLocked(fieldId)                  — True if another peer holds this field
+     getLockedBy(fieldId)                    — Display name of lock holder (or null)
+     getPresencePeers()                      — Array of connected peer objects
+     isConnected()                           — True if WebSocket is open
 
    Events dispatched on window:
      mbt:realtime-connected            — WebSocket handshake succeeded
@@ -21,6 +24,8 @@
      mbt:presence-update               — { peers[] } — presence roster changed
      mbt:peer-typing                   — { fieldId, userId, displayName }
      mbt:peer-release                  — { fieldId }
+     mbt:peer-typing-status            — { userId, displayName, fieldLabel, active }
+     mbt:activity-log                  — { user_id, display_name, action_type, section, field, detail, created_at }
 ========= */
 
 (function () {
@@ -38,6 +43,10 @@
     var _activeProjectId = null;     /* projectId currently subscribed */
     var _connected       = false;    /* WebSocket.OPEN state flag */
     var _intentionalClose = false;   /* Suppress auto-reconnect on manual disconnect */
+    /* --- Phase 92: Typing status debounce/release timers --- */
+    var _typingStatusDebounce = null; /* Outgoing broadcast debounce (300ms) */
+    var _typingStatusRelease  = null; /* Auto-release timer (2s idle) */
+    var _lastTypingField      = '';   /* fieldLabel captured at last broadcastTypingStatus call */
 
     /* --- Phoenix protocol helpers --- */
 
@@ -123,12 +132,15 @@
 
     function disconnect() {
         _intentionalClose = true;
-        if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+        if (_reconnectTimer)      { clearTimeout(_reconnectTimer);      _reconnectTimer      = null; }
+        if (_typingStatusDebounce){ clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
+        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
         _stopHeartbeat();
         _channels        = {};
         _presenceState   = {};
         _typingLocks     = {};
         _activeProjectId = null;
+        _lastTypingField = '';
         _connected       = false;
         if (_ws) {
             _ws.onclose = null; /* Prevent reconnect from manual disconnect */
@@ -296,6 +308,26 @@
                     detail: { verdict: data.verdict || 'rejected', projectId: data.project_id || '' }
                 }));
             }
+
+        /* --- Phase 92: Activity log — peer broadcast a persisted activity entry --- */
+        } else if (event === 'activity_log') {
+            var myActId = localStorage.getItem('mbt_supabase_user_id') || '';
+            /* Ignore own echoes — local dispatch already fired in broadcastActivity() */
+            if (data.user_id && data.user_id === myActId) return;
+            window.dispatchEvent(new CustomEvent('mbt:activity-log', { detail: data }));
+
+        /* --- Phase 92: Typing status — non-exclusive "peer is editing" indicator --- */
+        } else if (event === 'typing_status') {
+            var myTsId = localStorage.getItem('mbt_supabase_user_id') || '';
+            if (data.user_id && data.user_id === myTsId) return;
+            window.dispatchEvent(new CustomEvent('mbt:peer-typing-status', {
+                detail: {
+                    userId:      data.user_id      || '',
+                    displayName: data.display_name || 'Peer',
+                    fieldLabel:  data.field_label  || '',
+                    active:      !!data.active
+                }
+            }));
         }
     }
 
@@ -389,6 +421,9 @@
         _presenceState   = {};
         _typingLocks     = {};
         _activeProjectId = null;
+        _lastTypingField = '';
+        if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
+        if (_typingStatusRelease)  { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
         _dispatchPresenceUpdate();
     }
 
@@ -462,6 +497,106 @@
         }]);
     }
 
+    /* --- Phase 92: Typing Status Broadcasts (non-exclusive, for toast display) --- */
+
+    /* Internal: send a typing_status broadcast with active flag */
+    function _sendTypingStatus(fieldLabel, active) {
+        if (!_activeProjectId || !_connected) return;
+        var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
+        var userId        = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName   = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
+        _send([null, _nextRef(), presenceTopic, 'broadcast', {
+            event:   'typing_status',
+            payload: { user_id: userId, display_name: displayName, field_label: fieldLabel, active: active }
+        }]);
+    }
+
+    /* Called on input focusin — debounced 300ms, auto-releases after 2s idle */
+    function broadcastTypingStatus(fieldLabel) {
+        _lastTypingField = fieldLabel;
+        /* Cancel any pending auto-release timer while user is still active */
+        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease); _typingStatusRelease = null; }
+        /* Debounce outgoing broadcast to avoid flooding on rapid keystrokes */
+        if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); }
+        _typingStatusDebounce = setTimeout(function() {
+            _typingStatusDebounce = null;
+            _sendTypingStatus(_lastTypingField, true);
+            /* Auto-release 2s after the debounced send fires with no further activity */
+            _typingStatusRelease = setTimeout(function() {
+                _typingStatusRelease = null;
+                _sendTypingStatus(_lastTypingField, false);
+            }, 2000);
+        }, 300);
+    }
+
+    /* Called on input focusout — immediately broadcasts inactive and clears timers */
+    function broadcastTypingStatusRelease() {
+        if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
+        if (_typingStatusRelease)  { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
+        _sendTypingStatus(_lastTypingField, false);
+        _lastTypingField = '';
+    }
+
+    /* --- Phase 92: Activity Log Broadcast + DB Persist --- */
+
+    /* Internal: POST an activity row to mbt_activity_log via Supabase REST (fire and forget) */
+    function _persistActivity(payload) {
+        var cfg = window.mBTSupabaseConfig;
+        if (!cfg || !cfg.API_URL || !_activeProjectId) return;
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        if (!jwt) return;
+        var body = {
+            project_id:   _activeProjectId,
+            user_id:      payload.user_id,
+            display_name: payload.display_name,
+            action_type:  payload.action_type,
+            section:      payload.section || '',
+            field:        payload.field   || '',
+            detail:       payload.detail  || ''
+        };
+        fetch(cfg.API_URL + '/rest/v1/mbt_activity_log', {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'apikey':        cfg.ANON_KEY || '',
+                'Authorization': 'Bearer ' + jwt,
+                'Prefer':        'return=minimal'
+            },
+            body: JSON.stringify(body)
+        }).catch(function(e) {
+            console.warn('[mBTRealtime] Activity log persist failed:', e);
+        });
+    }
+
+    /* Broadcast an activity entry to peers, persist to DB, and dispatch locally.
+       actionType: 'field_edit' | 'tool_open' | 'field_lock' | 'budget_save'
+       section, field, detail: human-readable context strings */
+    function broadcastActivity(actionType, section, field, detail) {
+        var userId      = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
+        var payload = {
+            user_id:      userId,
+            display_name: displayName,
+            action_type:  actionType || 'field_edit',
+            section:      section    || '',
+            field:        field      || '',
+            detail:       detail     || '',
+            created_at:   new Date().toISOString()
+        };
+        /* Broadcast to all peers on the presence channel */
+        if (_activeProjectId && _connected) {
+            var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
+            _send([null, _nextRef(), presenceTopic, 'broadcast', {
+                event:   'activity_log',
+                payload: payload
+            }]);
+        }
+        /* Persist to DB (non-blocking) */
+        _persistActivity(payload);
+        /* Dispatch locally so the sender's own feed updates immediately */
+        window.dispatchEvent(new CustomEvent('mbt:activity-log', { detail: payload }));
+    }
+
     /* --- Query helpers --- */
 
     function isFieldLocked(fieldId) {
@@ -494,19 +629,22 @@
 
     /* --- Global exposure --- */
     window.mBTRealtime = {
-        connect:                  connect,
-        disconnect:               disconnect,
-        subscribeToProject:       subscribeToProject,
-        unsubscribeFromProject:   unsubscribeFromProject,
-        broadcastTypingLock:      broadcastTypingLock,
-        broadcastTypingRelease:   broadcastTypingRelease,
-        broadcastFocus:           broadcastFocus,
-        broadcastRoleChange:      broadcastRoleChange,
-        broadcastApproval:        broadcastApproval,
-        isFieldLocked:            isFieldLocked,
-        getLockedBy:              getLockedBy,
-        getPresencePeers:         getPresencePeers,
-        isConnected:              isConnected
+        connect:                    connect,
+        disconnect:                 disconnect,
+        subscribeToProject:         subscribeToProject,
+        unsubscribeFromProject:     unsubscribeFromProject,
+        broadcastTypingLock:        broadcastTypingLock,
+        broadcastTypingRelease:     broadcastTypingRelease,
+        broadcastTypingStatus:      broadcastTypingStatus,
+        broadcastTypingStatusRelease: broadcastTypingStatusRelease,
+        broadcastActivity:          broadcastActivity,
+        broadcastFocus:             broadcastFocus,
+        broadcastRoleChange:        broadcastRoleChange,
+        broadcastApproval:          broadcastApproval,
+        isFieldLocked:              isFieldLocked,
+        getLockedBy:                getLockedBy,
+        getPresencePeers:           getPresencePeers,
+        isConnected:                isConnected
     };
 
 })();

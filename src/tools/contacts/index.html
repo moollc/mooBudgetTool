@@ -9,11 +9,40 @@
   <script src="../../core/mBT.assets.js"></script>
   <script src="../../core/mBT.templates.js"></script>
   <script src="../../scripts/storage.js"></script>
-  <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    .glass-card {
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Phase 87D: Shared Responsive Utility (.mbt-mobile-safe) */
+        .mbt-mobile-safe {
+            flex-wrap: wrap;
+        }
+        .mbt-mobile-safe > * {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        .mbt-mobile-safe .mbt-truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mbt-mobile-safe .mbt-touch-btn {
+            min-height: 44px;
+            min-width: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        @media (max-width: 640px) {
+            .mbt-mobile-safe {
+                gap: 4px;
+            }
+            .mbt-mobile-safe > * {
+                min-height: 40px;
+                min-width: 40px;
+            }
+        }
+        .glass-card {
       background: rgba(255,255,255,0.75);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
@@ -961,7 +990,7 @@ var mBTContacts = (function () {
             window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
     } else {
       /* Fallback for standalone direct-launch */
-      window.location.href = '../../../index.html';
+      window.location.href = '/index.html';
     }
     });
 

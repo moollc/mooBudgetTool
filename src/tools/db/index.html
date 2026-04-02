@@ -507,7 +507,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
     } else {
       /* Fallback for standalone direct-launch */
-      window.location.href = '../../../index.html';
+      window.location.href = '/index.html';
     }
   });
 

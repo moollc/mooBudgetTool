@@ -1,3 +1,9 @@
+/**
+ * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+ * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * License: MIT
+ */
+
 /* ========= v19.54 mBTPublisher: OUTPUT & COMMUNICATIONS ENGINE v20.0 ========= */
 /* Tier 5 Module Controller — document generation, file IO, communication links.
    All methods accept data as parameters. No global state reads.

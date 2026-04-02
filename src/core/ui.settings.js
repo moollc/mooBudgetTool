@@ -1,3 +1,9 @@
+/**
+ * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+ * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * License: MIT
+ */
+
 window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
             subTab = subTab || 'lineItems';
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -114,6 +120,50 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
                                         <input type="checkbox" id="autoHideNavToggle" ${autoHideNav ? 'checked' : ''} onchange="localStorage.setItem('mBT_autoHideNav', this.checked); if(typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();" class="sr-only peer">
                                         <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                                     </label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Pill Layout</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Distribute nav buttons equally between left and right sides</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="pillLayoutToggle" ${localStorage.getItem('mBT_pillLayout') === 'true' ? 'checked' : ''} onchange="localStorage.setItem('mBT_pillLayout', this.checked ? 'true' : 'false'); var _pg=document.getElementById('pillGridContainer'); if(_pg) _pg.classList.toggle('hidden', !this.checked); if(typeof mBT !== 'undefined' && mBT.ui && mBT.ui.footer) mBT.ui.footer.rebalance();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                                <!-- Phase 92.6 Task 3: Pill-toggle grid for hiding/showing footer buttons -->
+                                <div id="pillGridContainer" class="mt-3 pt-3 border-t border-slate-100 ${localStorage.getItem('mBT_pillLayout') === 'true' ? '' : 'hidden'}">
+                                    <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Toggle Button Visibility</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        ${function() {
+                                            var btnDefs = [
+                                                { id: 'stagesFooterBtn', label: 'Stages' },
+                                                { id: 'docsFooterBtn', label: 'Docs' },
+                                                { id: 'contactsFooterBtn', label: 'Crew' },
+                                                { id: 'actualsToggleBtn', label: 'Actuals' },
+                                                { id: 'searchFooterBtn', label: 'Search' },
+                                                { id: 'toolsDrawerBtn', label: 'Tools' },
+                                                { id: 'calendarFooterBtn', label: 'Cal' },
+                                                { id: 'secondaryActionBtn', label: 'Publish' },
+                                                { id: 'footerCoffeeBtn', label: 'Support' },
+                                                { id: 'footerHelpBtn', label: 'Help' },
+                                                { id: 'activityFeedBtn', label: 'Activity' }
+                                            ];
+                                            var hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
+                                            var hidden = [];
+                                            try { hidden = hiddenRaw ? JSON.parse(hiddenRaw) : []; } catch(e) { hidden = []; }
+                                            return btnDefs.map(function(b) {
+                                                var isHidden = hidden.indexOf(b.id) > -1;
+                                                return '<button data-pill-toggle-btn="' + b.id + '" ' +
+                                                    'onclick="var _h=localStorage.getItem(\'mBT_footerHiddenBtns\'); var _a=[]; try{_a=_h?JSON.parse(_h):[];}catch(e){_a=[];} var _i=_a.indexOf(\'' + b.id + '\'); if(_i>-1){_a.splice(_i,1);}else{_a.push(\'' + b.id + '\');} localStorage.setItem(\'mBT_footerHiddenBtns\',JSON.stringify(_a)); this.classList.toggle(\'bg-slate-200\',_a.indexOf(\'' + b.id + '\')>-1); this.classList.toggle(\'text-slate-400\',_a.indexOf(\'' + b.id + '\')>-1); this.classList.toggle(\'bg-blue-100\',_a.indexOf(\'' + b.id + '\')===-1); this.classList.toggle(\'text-blue-700\',_a.indexOf(\'' + b.id + '\')===-1); if(typeof mBT!==\'undefined\'&&mBT.ui&&mBT.ui.footer) mBT.ui.footer.rebalance();" ' +
+                                                    'class="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ' +
+                                                    (isHidden ? 'bg-slate-200 text-slate-400 line-through' : 'bg-blue-100 text-blue-700') + '">' +
+                                                    b.label + '</button>';
+                                            }).join('');
+                                        }()}
+                                    </div>
                                 </div>
                             </div>
                         </div>

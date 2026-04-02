@@ -1,4 +1,10 @@
 /**
+ * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+ * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * License: MIT
+ */
+
+/**
  * mBT Contacts Service — Crew and Vendor Management (Modular JS)
  */
 

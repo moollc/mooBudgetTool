@@ -1,11 +1,10 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.1 ========= */
 
-const CACHE_NAME = 'mbt-monolith-cache-v17';
+const CACHE_NAME = 'mbt-monolith-cache-v21';
 
 const PRECACHE_ASSETS = [
     /* --- Shell entry --- */
     './index.html',
-    './manifest.json',
     './manifest.json',
 
     /* --- Vendored libraries --- */
@@ -83,8 +82,7 @@ const PRECACHE_ASSETS = [
     './src/tools/template/index.html',
 
     /* --- PWA icons (local — GitHub CDN would cause atomic install failure when offline) --- */
-    './assets/cow-512.png',
-    './assets/cow-192.png'
+    './assets/mBT.svg'
 ];
 
 self.addEventListener('install', (event) => {

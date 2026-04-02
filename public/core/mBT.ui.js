@@ -3,37 +3,72 @@
     // Previously: mBTME
     mBT.ui.modal = {
         containerId: 'global-modal-container',
+        // --- Phase 87B: Z-Registry LIFO Stack Array ---
+        stack: [],
+        focusStack: [],
         // --- Registry Resolution: Pointing to Tier 1 Asset Registry ---
         icons: { 
             close: mBTAssets.close,
             alert: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
         },
       
+        // --- Phase 87B: Emergency Reset Method ---
+        reset: function() {
+            this.stack.forEach(function(modalId) {
+                var el = document.getElementById(modalId);
+                if (el) el.remove();
+            });
+            this.stack = [];
+            this.focusStack = [];
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', this._escHandler, true);
+        },
+
+        // --- Phase 87B: ESC Handler (LIFO - closes topmost only) ---
+        _escHandler: function(e) {
+            if (e.key !== 'Escape') return;
+            var topModalId = mBT.ui.modal.stack[mBT.ui.modal.stack.length - 1];
+            if (topModalId) {
+                e.preventDefault();
+                e.stopPropagation();
+                mBT.ui.modal.close(topModalId);
+            }
+        },
+
         // --- Portal Generation: Dynamic injection of overlay layers ---
         open: function(id, title, contentHtml, maxWidth = 'max-w-2xl', options = {}) {
             const container = document.getElementById(this.containerId);
             if (!container) return;
             
-            // Sprint 3: Accessibility & Focus Management (Stack-based for nested support)
-            if (!this.focusStack) this.focusStack = [];
+            // Phase 87B: Cap at 5 modals deep
+            if (this.stack.length >= 5) {
+                console.warn('[mBT] Modal stack depth limit reached (5). Close existing modals first.');
+                return;
+            }
+
+            // Accessibility & Focus Management
             this.focusStack.push(document.activeElement);
 
-            // Logic Resolution: Prevent background scrolling while modal is active
+            // Prevent background scrolling while modal is active
             document.body.style.overflow = 'hidden';
 
             const modalId = `${id}Modal`;
             this.close(modalId, true); // Cleanup duplicates
             
+            // Phase 87B: Dynamic Z-index from stack depth (base 1000 + stack * 10)
+            const baseZ = 1000;
+            const currentZ = baseZ + (this.stack.length * 10);
+            
             // UPDATED HEADER: Uses grid to perfectly center the title while keeping the close button right-aligned
             const headerHtml = options.hideHeader ? '' : `
-                <div class="p-4 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
+                <div class="px-4 py-2.5 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
                     <div></div> <h2 class="text-xs font-black uppercase tracking-widest text-slate-800 text-center truncate px-2">${title}</h2>
                     <div class="text-right">
                         <button onclick="mBT.ui.modal.close('${modalId}')" class="text-slate-400 hover:text-red-500 transition-all p-1 rounded-md hover:bg-slate-50">${this.icons.close}</button>
                     </div>
                 </div>`;
             const fullHtml = `
-                <div id="${modalId}" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[999] transition-opacity duration-300 opacity-0 hidden" tabindex="-1">
+                <div id="${modalId}" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 hidden" tabindex="-1" role="dialog" aria-modal="true" aria-label="${title || 'Dialog'}" style="z-index:${currentZ}">
                     <div id="${modalId}Content" class="bg-white rounded-2xl shadow-2xl w-full ${maxWidth} mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">
                         ${headerHtml}
                         <div class="flex-grow overflow-hidden ${options.noPadding ? 'p-0' : 'p-0'}" id="${modalId}Body">${contentHtml}</div>
@@ -43,26 +78,31 @@
             const modal = document.getElementById(modalId);
             modal.classList.remove('hidden');
             
+            // Phase 87B: Push to stack
+            this.stack.push(modalId);
+            
+            // Bind ESC handler (only once, uses capture phase)
+            if (this.stack.length === 1) {
+                document.addEventListener('keydown', this._escHandler, true);
+            }
+            
             // Animation & Focus Trapping
             setTimeout(() => {
                 modal.classList.remove('opacity-0');
                 document.getElementById(`${modalId}Content`)?.classList.remove('scale-95');
                 
-                // Sprint 3: Auto-focus first interactive element
+                // Auto-focus first interactive element
                 const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
                 if (focusable.length > 0) {
                     const auto = modal.querySelector('[autofocus]');
                     if (auto) auto.focus();
                     else focusable[0].focus();
                 } else {
-                    modal.focus(); // Fallback focus to container
+                    modal.focus();
                 }
             }, 50);
           
             modal.addEventListener('click', (e) => { if (e.target === modal) this.close(modalId); });
-            // Sprint 3: Escape Key Listener
-            const escHandler = (e) => { if(e.key === 'Escape') { this.close(modalId); window.removeEventListener('keydown', escHandler); } };
-            window.addEventListener('keydown', escHandler);
 
             if (options.onOpen && typeof options.onOpen === 'function') setTimeout(options.onOpen, 50);
             return modal;
@@ -72,14 +112,21 @@
             const modal = document.getElementById(modalId);
             if (!modal) return;
             
-            // Logic Resolution: Release body scroll if no other modals are open
-            if(document.querySelectorAll('[id$="Modal"]').length <= 1) document.body.style.overflow = '';
+            // Phase 87B: Pop from stack
+            var stackIdx = this.stack.indexOf(modalId);
+            if (stackIdx > -1) this.stack.splice(stackIdx, 1);
+            
+            // Unbind ESC handler if stack is empty
+            if (this.stack.length === 0) {
+                document.removeEventListener('keydown', this._escHandler, true);
+                document.body.style.overflow = '';
+            }
 
             const finalize = () => {
                 modal.remove(); 
                 if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
                 
-                // Sprint 3: Focus Restoration
+                // Focus Restoration
                 if (this.focusStack && this.focusStack.length > 0) {
                     const el = this.focusStack.pop();
                     if (el && document.body.contains(el)) el.focus();

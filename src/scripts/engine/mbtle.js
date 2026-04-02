@@ -1,4 +1,10 @@
 /**
+ * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+ * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * License: MIT
+ */
+
+/**
  * mBTLE — mBT Logic Engine (JavaScript Version)
  * Core math and currency utilities for offline budget calculations
  */
@@ -70,6 +76,67 @@ var convertCurrency = function(value, from, to) {
   var rates = CURRENCY_RATES[from];
   if (!rates || !(to in rates)) return value;
   return round(value * rates[to]);
+};
+
+// === TEMPORAL UTILITIES (Phase 90) ===
+
+/**
+ * Compute payable working days within a date range (Work-week aware)
+ * @param {number} grossDays - Total calendar days
+ * @param {string|Date} startDate - Reference start date
+ * @param {number} workWeek - Days per week (5, 6, 7)
+ * @param {string[]} blackouts - Array of YYYY-MM-DD strings
+ * @returns {number} Net working days
+ */
+var computeWorkingDays = function(grossDays, startDate, workWeek, blackouts) {
+  if (!workWeek || workWeek >= 7) return grossDays;
+  var working = 0;
+  var cursor = new Date(startDate);
+  /* Handle Timezone offset for pure date objects */
+  if (typeof startDate === 'string') {
+    cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
+  }
+  
+  for (var i = 0; i < grossDays; i++) {
+    var dow = cursor.getDay();
+    var dateStr = cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0') + '-' + String(cursor.getDate()).padStart(2, '0');
+    var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) || (workWeek === 6 && dow === 0);
+    var isBlackout = blackouts && blackouts.indexOf(dateStr) > -1;
+    if (!isWeekend && !isBlackout) working++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return working;
+};
+
+/**
+ * Calculate stage start dates accounting for offsets and waterfall logic
+ * @param {Object} b - The budget object
+ * @returns {Object} { dev: Date, pre: Date, prod: Date, post: Date, dist: Date }
+ */
+var getStageStartDates = function(b) {
+  var starts = {};
+  if (!b || !b.startDate) return starts;
+  var cursor = new Date(b.startDate);
+  cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
+  var prevStart = null;
+
+  var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+  KEYS.forEach(function(k) {
+    var stageData = (b.targetLock && b.targetLock.stages && b.targetLock.stages[k]) || {};
+    var days = parseFloat(stageData.days) || 0;
+    var offset = stageData.offsetDays;
+    
+    if (typeof offset === 'number' && prevStart) {
+      cursor = new Date(prevStart);
+      cursor.setDate(cursor.getDate() + offset);
+    }
+    
+    starts[k] = new Date(cursor);
+    prevStart = new Date(cursor);
+    /* Increment cursor by duration for simple waterfall fallback */
+    cursor = new Date(cursor.getTime() + days * 86400000);
+  });
+  return starts;
 };
 
 // === MATH UTILITIES ===
@@ -276,5 +343,8 @@ window.mBT.le = {
   validateProject: validateProject,
   validateStage: validateStage,
   stageCrewDays: stageCrewDays,
+  /* Phase 90: Temporal utilities exposed for monolith reconcile() */
+  computeWorkingDays: computeWorkingDays,
+  getStageStartDates: getStageStartDates,
 };
 

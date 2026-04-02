@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+  Part of the mBT (Moo Budget Tool) Ecosystem.
+  License: MIT
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,10 +12,10 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v19.54-Beta</title>
+    <title>mooBudgetTool v19.55</title>
     
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/assets/cow-512.png">
+    <link rel="apple-touch-icon" href="./assets/mBT.svg">
     <link href="./src/lib/gridstack.min.css" rel="stylesheet"/>
     <link rel="stylesheet" href="./public/css/mbt-core.css">
             <script src="./src/lib/gridstack-all.js"></script>
@@ -27,6 +32,19 @@
     <script src="./src/lib/pdf.min.js"></script>
     <script src="./src/lib/localforage.min.js"></script>
     <script src="./src/lib/jszip.min.js"></script>
+    
+    <!-- Tier 2: Storage & Migration -->
+    <script src="./src/scripts/storage.js"></script>
+    <script src="./src/scripts/icons.js"></script>
+    <script src="./src/core/mBT.assets.js"></script>
+    <script src="./src/scripts/migration.js"></script>
+    
+    <!-- Tier 3: Logic Engine (mBTLE) -->
+    <script src="./src/scripts/engine/mbtle.js"></script>
+    
+    <!-- Tier 4: Totalizer & Reconciliation -->
+    <script src="./src/scripts/engine/totalizer.js"></script>
+
     <!-- Tier 5: Engine Modules -->
     <script src="./src/scripts/engine/opengate.js"></script>
     <script src="./src/scripts/engine/opfs.js"></script>
@@ -100,6 +118,39 @@
     <script src="./src/config/supabase.js"></script>
     <script src="./src/services/supabase-sync.js"></script>
     <script src="./src/services/supabase-realtime.js"></script>
+    <!-- Phase 87D: Shared Responsive Utility (.mbt-mobile-safe) -->
+    <style>
+        /* --- .mbt-mobile-safe: Unified responsive pattern for touch targets, flex-wrap, and truncation --- */
+        .mbt-mobile-safe {
+            flex-wrap: wrap;
+        }
+        .mbt-mobile-safe > * {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        .mbt-mobile-safe .mbt-truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mbt-mobile-safe .mbt-touch-btn {
+            min-height: 44px;
+            min-width: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* Responsive: tighter on mobile */
+        @media (max-width: 640px) {
+            .mbt-mobile-safe {
+                gap: 4px;
+            }
+            .mbt-mobile-safe > * {
+                min-height: 40px;
+                min-width: 40px;
+            }
+        }
+    </style>
 </head>
 
 <body class="bg-gray-100 pb-16">
@@ -112,28 +163,28 @@
 
             <!-- Left button group — clips as pill shrinks left -->
             <div id="nav-left" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
-                <button id="stagesFooterBtn" aria-label="Stages View" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="stagesFooterBtn" data-pill-order="1" data-pill-side="left" aria-label="Stages View" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-emerald-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400 whitespace-nowrap">Stages</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-emerald-400 whitespace-nowrap hidden md:block">Stages</span>
                 </button>
-                <button id="docsFooterBtn" aria-label="mBTDB Document Builder" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="docsFooterBtn" data-pill-order="2" data-pill-side="left" aria-label="mBTDB Document Builder" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-blue-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-docs"></div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400 whitespace-nowrap">Docs</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-blue-400 whitespace-nowrap hidden md:block">Docs</span>
                 </button>
-                <button id="contactsFooterBtn" aria-label="Crew Contacts" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="contactsFooterBtn" data-pill-order="3" data-pill-side="left" aria-label="Crew Contacts" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap">Crew</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap hidden md:block">Crew</span>
                 </button>
                 <!-- Phase 65: Undo Chevron -->
-                <button id="undoBtn" data-action="undo" aria-label="Undo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
+                <button id="undoBtn" data-action="undo" aria-label="Undo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0" style="opacity:0.35;">
                     <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Undo</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors hidden md:block">Undo</span>
                 </button>
             </div>
 
@@ -145,46 +196,60 @@
             <!-- Right button group — clips as pill shrinks right -->
             <div id="nav-right" class="flex items-center overflow-hidden" style="transition:max-width 0.35s cubic-bezier(0.4,0,0.2,1),opacity 0.25s ease;max-width:400px;opacity:1;">
                 <!-- Phase 65: Redo Chevron -->
-                <button id="redoBtn" data-action="redo" aria-label="Redo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0" style="opacity:0.35;">
+                <button id="redoBtn" data-action="redo" aria-label="Redo" disabled class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0" style="opacity:0.35;">
                     <div class="text-slate-400 group-hover:text-white [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 0 4-4h12"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors">Redo</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors hidden md:block">Redo</span>
                 </button>
                 <!-- Phase 77: Actuals mode toggle -->
-                <button id="actualsToggleBtn" aria-label="Actuals Mode" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="actualsToggleBtn" data-pill-order="4" data-pill-side="right" aria-label="Actuals Mode" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors" id="icon-actuals-toggle">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap transition-colors">Actuals</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap transition-colors hidden md:block">Actuals</span>
                 </button>
                 <!-- Phase 66: Search -->
-                <button id="searchFooterBtn" data-action="command-palette" aria-label="Search" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="searchFooterBtn" data-pill-order="5" data-pill-side="right" data-action="command-palette" aria-label="Search" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap">Search</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap hidden md:block">Search</span>
                 </button>
                 <!-- Phase 73: Tools Drawer trigger (houses Stages + Fringes) -->
-                <button id="toolsDrawerBtn" aria-label="Tools" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="toolsDrawerBtn" data-pill-order="6" data-pill-side="right" aria-label="Tools" class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap">Tools</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-teal-400 whitespace-nowrap hidden md:block">Tools</span>
                 </button>
-                <button id="calendarFooterBtn" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="calendarFooterBtn" data-pill-order="7" data-pill-side="right" aria-label="Production Calendar" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-violet-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     </div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400 whitespace-nowrap">Cal</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-violet-400 whitespace-nowrap hidden md:block">Cal</span>
                 </button>
-                <button id="secondaryActionBtn" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="secondaryActionBtn" data-pill-order="8" data-pill-side="right" aria-label="Publish Menu" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-indigo-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-secondary-action"></div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 whitespace-nowrap">Publish</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 whitespace-nowrap hidden md:block">Publish</span>
                 </button>
-                <button id="footerCoffeeBtn" aria-label="Support" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-2 py-1 flex-shrink-0">
+                <button id="footerCoffeeBtn" data-pill-order="9" data-pill-side="right" aria-label="Support" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
                     <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6" id="icon-coffee"></div>
-                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap">Support</span>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap hidden md:block">Support</span>
+                </button>
+                <!-- Phase 87C: Help Button -->
+                <button id="footerHelpBtn" data-pill-order="10" data-pill-side="right" data-action="help-overlay" aria-label="Help" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap hidden md:block">Help</span>
+                </button>
+                <!-- Phase 92.1: Activity Feed trigger -->
+                <button id="activityFeedBtn" data-pill-order="11" data-pill-side="right" data-action="activity-feed" aria-label="Activity Feed" class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">
+                    <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </div>
+                    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap hidden md:block">Activity</span>
                 </button>
             </div>
         </div>
@@ -199,6 +264,58 @@
             <p id="cmdHint" class="text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">Type to search &mdash; Esc to close</p>
         </div>
     </div>
+
+    <!-- Phase 92.1: Activity Feed slide-out drawer -->
+    <div id="activityFeedDrawer" class="hidden fixed inset-y-0 right-0 z-[9997] w-80 max-w-[85vw]" style="background:rgba(15,23,42,0.92);backdrop-filter:blur(16px);border-left:1px solid rgba(255,255,255,0.08);">
+        <div class="flex flex-col h-full">
+            <!-- Drawer Header -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-300">Activity Feed</h3>
+                <button id="activityFeedCloseBtn" class="text-slate-400 hover:text-white transition-colors p-1">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <!-- Activity List -->
+            <div id="activityFeedList" class="flex-grow overflow-y-auto no-scrollbar p-3 space-y-2">
+                <!-- Mock items for visual testing -->
+                <div class="p-3 bg-white/5 rounded-xl border border-white/5">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Field Lock</span>
+                        <span class="text-[8px] text-slate-500 ml-auto">2m ago</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 font-bold">User locked "Director" rate field</p>
+                </div>
+                <div class="p-3 bg-white/5 rounded-xl border border-white/5">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Budget Edit</span>
+                        <span class="text-[8px] text-slate-500 ml-auto">5m ago</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 font-bold">Updated "Camera Operator" quantity to 2</p>
+                </div>
+                <div class="p-3 bg-white/5 rounded-xl border border-white/5">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-2 h-2 rounded-full bg-violet-500"></div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Tool Open</span>
+                        <span class="text-[8px] text-slate-500 ml-auto">8m ago</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 font-bold">Opened Production Calendar</p>
+                </div>
+                <div class="p-3 bg-white/5 rounded-xl border border-white/5">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Typing</span>
+                        <span class="text-[8px] text-slate-500 ml-auto">Just now</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 font-bold">User is editing "Gaffer" description</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 92.1: Toast notification container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none" style="max-width:320px;"></div>
 
     <!-- Phase 73: Tools Drawer overlay (Stages + Fringes) -->
     <div id="toolsDrawer" class="hidden fixed inset-0 z-[9998]" style="background:rgba(15,23,42,0.6);">
@@ -230,33 +347,33 @@
 /* ================= v19.54 TIER 1: Environment Configuration ================= */
 
 /* --- 1. Global System Identity --- */
-    const APP_VERSION = "19.54";
-    const storageKeyPrefix = 'prodBudget_v5_';
-    const trashKey = `${storageKeyPrefix}trash`;
-    const globalItemsKey = `${storageKeyPrefix}globalItems`;
-    const templatesKey = `${storageKeyPrefix}templates`;
-    const projectDateFormatKey = `${storageKeyPrefix}projectDateFormat`;
-    const projectNameSeparatorKey = `${storageKeyPrefix}projectNameSeparator`;
-    const projectStorageProtocolKey = `${storageKeyPrefix}projectStorageProtocol`;
-    
-    // Core physics and hydration state
-    let budget = null;
-    let currentProjectName = null;
-    let historyStack = [];
-    let historyIndex = -1;
-    const MAX_HISTORY = 20;
+    var APP_VERSION = "19.54";
+    var storageKeyPrefix = 'prodBudget_v5_';
+    var trashKey = storageKeyPrefix + 'trash';
+    var globalItemsKey = storageKeyPrefix + 'globalItems';
+    var templatesKey = storageKeyPrefix + 'templates';
+    var projectDateFormatKey = storageKeyPrefix + 'projectDateFormat';
+    var projectNameSeparatorKey = storageKeyPrefix + 'projectNameSeparator';
+    var projectStorageProtocolKey = storageKeyPrefix + 'projectStorageProtocol';
+
+    /* Core physics and hydration state */
+    var budget = null;
+    var currentProjectName = null;
+    var historyStack = [];
+    var historyIndex = -1;
+    var MAX_HISTORY = 20;
     var mBTActiveTool = null; /* Phase 73B: tracks which tool iframe is currently open */
 
 /* --- 2. Dynamic Multi-Currency Logic --- */
-    let displayCurrency = localStorage.getItem(`${storageKeyPrefix}currency`) || 'JMD';
-    
-    // Base Rates (Defaults for offline endurance)
-    let exchangeRates = JSON.parse(localStorage.getItem(`${storageKeyPrefix}rates`)) || {
+    var displayCurrency = localStorage.getItem(storageKeyPrefix + 'currency') || 'JMD';
+
+    /* Base Rates (Defaults for offline endurance) */
+    var exchangeRates = JSON.parse(localStorage.getItem(storageKeyPrefix + 'rates')) || {
         'USD': 1.0, 'JMD': 157.50, 'GBP': 0.79, 'CAD': 1.36, 'EUR': 0.92,
         'AUD': 1.52, 'NZD': 1.63, 'ZAR': 18.50, 'INR': 83.00, 'JPY': 150.00, 'CNY': 7.20
     };
 
-    const FILM_CURRENCIES = [
+    var FILM_CURRENCIES = [
         // bg=button color, c1=first letter, c2=second letter
         { code: 'JMD', cc: 'JM', bg: '#0b0b0b', c1: '#009b3a', c2: '#ffd700' }, // Jamaica: black btn, green J, gold M
         { code: 'USD', cc: 'US', bg: '#b22234', c1: '#ffffff', c2: '#3c3b6e' },  // USA: red btn, white U, navy S
@@ -927,7 +1044,10 @@
                 /* Sub-Phase 51.2: Subscribe to realtime when project loads */
                 if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
                     var rtProjectId = data.id || data.projectName;
-                    if (rtProjectId) mBTRealtime.subscribeToProject(rtProjectId);
+                    if (rtProjectId) {
+                        mBTRealtime.subscribeToProject(rtProjectId);
+                        _rtFetchActivityHistory(rtProjectId); /* Phase 92: Seed activity feed for latecomers */
+                    }
                 }
                 /* Phase 63.5: Negotiate multi-tab mutex for this project */
                 if (typeof mBTTabLock !== 'undefined') {
@@ -1404,6 +1524,79 @@
         }).join('');
     }
 
+    /* --- Phase 92: Activity Feed & Typing Status helpers --- */
+    var _focusedFieldSnapshot = null; /* { value, itemId } captured at focusin for change detection */
+
+    /* Find the section/category name for a budget item by item id */
+    function _rtFindSection(itemId) {
+        if (!itemId || typeof budget === 'undefined' || !budget || !budget.categories) return '';
+        var cats = budget.categories;
+        for (var ci = 0; ci < cats.length; ci++) {
+            var cat = cats[ci];
+            var items = cat.items || cat.lineItems || [];
+            for (var li = 0; li < items.length; li++) {
+                if (String(items[li].id) === String(itemId)) {
+                    return cat.name || cat.label || '';
+                }
+            }
+        }
+        return '';
+    }
+
+    /* Prepend an activity log entry to #activityFeed [data-feed-list] — element built by Cline */
+    function _rtAppendActivity(entry) {
+        var feed = document.getElementById('activityFeed');
+        if (!feed) return;
+        var list = feed.querySelector('[data-feed-list]');
+        if (!list) return;
+        var time = entry.created_at
+            ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '';
+        var actionLabel = entry.field
+            ? esc(entry.action_type || '') + ' ' + esc(entry.field) + (entry.section ? ' in ' + esc(entry.section) : '')
+            : esc(entry.detail || entry.action_type || '');
+        var item = document.createElement('div');
+        item.setAttribute('class', 'feed-entry');
+        item.innerHTML = '<span class="feed-user">' + esc(entry.display_name || 'Collaborator') + '</span>' +
+                         ' <span class="feed-action">' + actionLabel + '</span>' +
+                         ' <span class="feed-time">' + esc(time) + '</span>';
+        list.insertBefore(item, list.firstChild);
+        while (list.children.length > 50) { list.removeChild(list.lastChild); }
+    }
+
+    /* Show or hide the peer typing toast #peerTypingToast — element built by Cline */
+    function _rtShowTypingStatus(displayName, fieldLabel, active) {
+        var toast = document.getElementById('peerTypingToast');
+        if (!toast) return;
+        if (!active) {
+            toast.style.display = 'none';
+            toast.textContent   = '';
+            return;
+        }
+        toast.textContent = displayName + ' is editing' + (fieldLabel ? ' \u2014 ' + fieldLabel : '');
+        toast.style.display = '';
+    }
+
+    /* Fetch last 50 activity entries for projectId from mbt_activity_log and seed the feed */
+    function _rtFetchActivityHistory(projectId) {
+        if (!projectId) return;
+        var cfg = window.mBTSupabaseConfig;
+        if (!cfg || !cfg.API_URL) return;
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        if (!jwt) return;
+        fetch(
+            cfg.API_URL + '/rest/v1/mbt_activity_log?project_id=eq.' + encodeURIComponent(String(projectId)) +
+            '&order=created_at.desc&limit=50',
+            { headers: { 'apikey': cfg.ANON_KEY || '', 'Authorization': 'Bearer ' + jwt } }
+        ).then(function(res) {
+            return res.ok ? res.json() : [];
+        }).then(function(rows) {
+            if (!Array.isArray(rows) || !rows.length) return;
+            /* Reverse so oldest entries are inserted first — newest ends at top of feed */
+            for (var i = rows.length - 1; i >= 0; i--) { _rtAppendActivity(rows[i]); }
+        }).catch(function() {});
+    }
+
     /* --- Task 2 & 3: Remote project update event → granular reconcile --- */
     window.addEventListener('mbt:remote-project-update', function(evt) {
         /* Phase 63: Realtime renderer is sealed while diff modal is resolving a conflict */
@@ -1543,7 +1736,7 @@
         inp.title = '';
     });
 
-    /* --- Task 4: Broadcast typing lock/release via event delegation on budget rows ---
+    /* --- Task 4 + Phase 92: Broadcast typing lock/release and activity status ---
            Uses data-id + data-field as the composite field identifier. --- */
     document.addEventListener('focusin', function(e) {
         var inp = e.target;
@@ -1554,6 +1747,8 @@
             inp.blur();
             return;
         }
+        /* Phase 92: Capture value snapshot before the user edits — compared at focusout */
+        _focusedFieldSnapshot = { value: inp.value, itemId: inp.getAttribute('data-id') };
         if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
         var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
         if (mBTRealtime.isFieldLocked(fieldId)) {
@@ -1561,15 +1756,44 @@
             return;
         }
         mBTRealtime.broadcastTypingLock(fieldId);
+        mBTRealtime.broadcastTypingStatus(inp.getAttribute('data-field') || '');
     });
 
     document.addEventListener('focusout', function(e) {
         var inp = e.target;
         if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
             !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        /* Phase 92: Broadcast field_edit activity if value changed since focusin */
+        if (_focusedFieldSnapshot &&
+            _focusedFieldSnapshot.itemId === inp.getAttribute('data-id') &&
+            inp.value !== _focusedFieldSnapshot.value &&
+            window.mBTRealtime && mBTRealtime.isConnected() && mBTRealtime.broadcastActivity) {
+            mBTRealtime.broadcastActivity(
+                'field_edit',
+                _rtFindSection(inp.getAttribute('data-id') || ''),
+                inp.getAttribute('data-field') || '',
+                ''
+            );
+        }
+        _focusedFieldSnapshot = null;
         if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
         var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
         mBTRealtime.broadcastTypingRelease(fieldId);
+        if (mBTRealtime.broadcastTypingStatusRelease) mBTRealtime.broadcastTypingStatusRelease();
+    });
+
+    /* --- Phase 92: Activity feed — append entries dispatched by realtime engine --- */
+    window.addEventListener('mbt:activity-log', function(evt) {
+        var entry = evt.detail;
+        if (!entry) return;
+        _rtAppendActivity(entry);
+    });
+
+    /* --- Phase 92: Typing status toast — show or hide #peerTypingToast --- */
+    window.addEventListener('mbt:peer-typing-status', function(evt) {
+        var d = evt.detail;
+        if (!d) return;
+        _rtShowTypingStatus(d.displayName || 'Peer', d.fieldLabel || '', !!d.active);
     });
 
     /* ========= Phase 63: Offline Sync Conflict Resolution =========
@@ -2067,6 +2291,18 @@
         return new Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD' }).format(value);
     }
 
+    /* --- Payment Services Registry (Phase 88) --- */
+    /* Single source for payment method definitions used by paymentModal and Contacts Wallet. */
+    var PAYMENT_SERVICES = [
+        { id: 'cash',     label: 'Cash / Petty Cash',   icon: mBTAssets.money      },
+        { id: 'transfer', label: 'Bank Transfer (JMD)',  icon: mBTAssets.bank       },
+        { id: 'wire',     label: 'Intl Wire (USD)',      icon: mBTAssets.globe      },
+        { id: 'cheque',   label: 'Cheque',               icon: mBTAssets.receipt    },
+        { id: 'paypal',   label: 'PayPal',               icon: mBTAssets.creditCard },
+        { id: 'wise',     label: 'Wise',                 icon: mBTAssets.wallet     },
+        { id: 'payoneer', label: 'Payoneer',             icon: mBTAssets.creditCard }
+    ];
+
     /* ========= mBT.logic: CORE INTELLIGENCE (Math & Metrics) ========= */
     mBT.logic = {
         // ... (Keep existing math and stages) ...
@@ -2113,10 +2349,9 @@
                 }
             },
             reconcile: function(target) {
-                // Deficiency 3 Fix: Pure Logic Only. NO DOM MANIPULATION.
-                // Logic Resolution: Now accepts optional 'target' for Shadow Budgeting (Simulations)
-                const b = target || budget;
-                
+                /* Pure Logic Only — no DOM manipulation.
+                   Accepts optional 'target' for Shadow Budgeting (Simulations). */
+                var b = target || budget;
                 if (!b || !b.sections) return;
 
                 /* Phase 78: aggregate committedCost from POs before item calculations */
@@ -2133,31 +2368,44 @@
                     });
                 }
 
-                let subtotal = 0; let grandActual = 0; var incentiveQualifyingTotal = 0;
+                /* Phase 90: Resolve temporal utilities for payable-day calculations */
+                var _le = (typeof mBT !== 'undefined' && mBT.le) ? mBT.le : null;
+                var stageStarts = (_le && _le.getStageStartDates) ? _le.getStageStartDates(b) : {};
+                var workWeek = (b.targetLock && b.targetLock.workWeek) || 7;
+                var blackouts = (b.targetLock && b.targetLock.blackouts) || [];
 
-                Object.keys(b.sections).forEach(sectionKey => {
-                    let sectionEstTotal = 0;
-                    const section = b.sections[sectionKey];
-                    section.items.forEach(item => {
-                        this.validate.item(item);
+                var subtotal = 0;
+                var grandActual = 0;
+                var incentiveQualifyingTotal = 0;
+                var self = this;
 
-                        // --- LOGIC INJECTION: Stage Aggregation ---
+                Object.keys(b.sections).forEach(function(sectionKey) {
+                    var sectionEstTotal = 0;
+                    var section = b.sections[sectionKey];
+                    section.items.forEach(function(item) {
+                        self.validate.item(item);
+
+                        /* --- Stage Aggregation (Phase 90.RC): uses computeWorkingDays for payable days --- */
                         if (item.stageData && Object.keys(item.stageData).length > 0) {
-                            let stageSumCost = 0;
-                            let stageSumDays = 0;
-                            Object.values(item.stageData).forEach(d => {
-                                const dDays = parseFloat(d.days) || 0;
-                                const dRate = parseFloat(d.rate) || 0;
-                                stageSumCost += (dDays * dRate);
-                                stageSumDays += dDays;
+                            var stageSumCost = 0;
+                            var stageSumDays = 0;
+                            Object.keys(item.stageData).forEach(function(stageKey) {
+                                var d = item.stageData[stageKey];
+                                var grossDays = parseFloat(d.days) || 0;
+                                var dRate = parseFloat(d.rate) || 0;
+                                /* Apply work-week and blackout calendar if temporal utilities are available */
+                                var payableDays = (_le && _le.computeWorkingDays && stageStarts[stageKey])
+                                    ? _le.computeWorkingDays(grossDays, stageStarts[stageKey], workWeek, blackouts)
+                                    : grossDays;
+                                stageSumCost += (payableDays * dRate);
+                                stageSumDays += payableDays;
                             });
-                            
                             item.quantity = stageSumDays;
                             item.total = stageSumCost || 0;
                             item.rate = stageSumDays > 0 ? (stageSumCost / stageSumDays) : 0;
-                            if(stageSumDays > 0) item.unit = 'Day'; 
+                            if (stageSumDays > 0) item.unit = 'Day';
                         } else {
-                            const calc = calculateItem(item);
+                            var calc = calculateItem(item);
                             item.total = calc.estimated || 0;
                         }
 
@@ -2185,16 +2433,16 @@
                     subtotal += sectionEstTotal;
                 });
 
-                const contingency = subtotal * ((b.contingencyPercentage || 0) / 100);
-                const tax = subtotal * ((b.salesTaxPercentage || 0) / 100);
+                var contingency = subtotal * ((b.contingencyPercentage || 0) / 100);
+                var tax = subtotal * ((b.salesTaxPercentage || 0) / 100);
                 var fringesTotal = 0;
                 if (b.fringes && b.fringes.length) {
                     b.fringes.forEach(function(f) {
                         if (f.enabled !== false) fringesTotal += subtotal * ((parseFloat(f.rate) || 0) / 100);
                     });
                 }
-                const preDiscount = subtotal + contingency + tax + fringesTotal;
-                const discount = preDiscount * ((b.discountPercentage || 0) / 100);
+                var preDiscount = subtotal + contingency + tax + fringesTotal;
+                var discount = preDiscount * ((b.discountPercentage || 0) / 100);
 
                 b.subtotal = subtotal;
                 b.fringesTotal = fringesTotal;
@@ -2269,36 +2517,51 @@
         stages: {
             // Returns { grandTotal, stageTotals: {dev: $, ...}, totalCap: $, dailyBurn: $, runwayDays: # }
             calculateMetrics: function() {
-                const tl = budget.targetLock || { totalCap: 0, stages: {} };
-                const result = {
-                    grandTotal: 0,
+                var tl = (budget && budget.targetLock) ? budget.targetLock : { totalCap: 0, stages: {} };
+                var workWeek = (budget && budget.settings && budget.settings.workWeek) || 5;
+                var blackouts = (budget && budget.blackoutDays) || [];
+                var stageStarts = (typeof getStageStartDates !== 'undefined') ? getStageStartDates(budget) : {};
+
+                var result = {
+                    grandTotal: budget.grandTotal || 0,
                     stageTotals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
                     totalCap: tl.totalCap || 0,
                     totalDays: 0,
+                    totalWorkingDays: 0,
                     dailyBurn: 0,
                     runwayDays: 0
                 };
 
-                // 1. Calculate Costs (Aggregation)
-                Object.values(budget.sections).forEach(sec => {
-                    sec.items.forEach(item => {
-                        const est = parseFloat(item.total) || 0;
-                        result.grandTotal += est;
+                // 1. Calculate Costs (Aggregation using Payable Days)
+                var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+                Object.values(budget.sections || {}).forEach(function(sec) {
+                    (sec.items || []).forEach(function(item) {
+                        if (!item.stageData) return;
+                        KEYS.forEach(function(k) {
+                            var sd = item.stageData[k];
+                            if (sd) {
+                                var grossDays = parseFloat(sd.days) || 0;
+                                var payable = (stageStarts[k] && typeof computeWorkingDays !== 'undefined') 
+                                    ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts) 
+                                    : grossDays;
+                                result.stageTotals[k] += payable * (parseFloat(sd.rate || item.rate) || 0);
+                            }
+                        });
                     });
                 });
-                
-                // Sync with main budget source of truth if available
-                if (budget.grandTotal) result.grandTotal = budget.grandTotal;
 
                 // 2. Calculate Burn Logic
-                const validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
-                validKeys.forEach(k => {
+                KEYS.forEach(function(k) {
                     if (tl.stages && tl.stages[k]) {
-                        result.totalDays += (parseFloat(tl.stages[k].days) || 0);
+                        var grossDays = parseFloat(tl.stages[k].days) || 0;
+                        result.totalDays += grossDays;
+                        result.totalWorkingDays += (stageStarts[k] && typeof computeWorkingDays !== 'undefined')
+                            ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts)
+                            : grossDays;
                     }
                 });
                 
-                if (result.totalDays > 0) result.dailyBurn = result.grandTotal / result.totalDays;
+                if (result.totalWorkingDays > 0) result.dailyBurn = result.grandTotal / result.totalWorkingDays;
                 if (result.dailyBurn > 0) result.runwayDays = result.totalCap / result.dailyBurn;
 
                 return result;
@@ -2441,8 +2704,8 @@
                 
                 // 5. The "Crash" Check
                 // Do we have enough Cap Room to absorb this delay?
-                const cap = metrics.totalCap || 0;
-                const isCritical = cap > 0 && projectedTotal > cap;
+                var cap = metrics.totalCap || 0;
+                var isCritical = cap > 0 && projectedTotal > cap;
 
                 return {
                     status: isCritical ? 'CRITICAL' : 'WARNING',
@@ -2451,15 +2714,41 @@
                     cost: delayCost,
                     projectedTotal: projectedTotal,
                     message: isCritical ? "INSOLVENCY RISK" : "DELAY COST",
-                    subMessage: isCritical 
-                        ? `Projected ${mBT.logic.math.format.currency(projectedTotal)} exceeds Cap` 
-                        : `Est. Penalty: ${mBT.logic.math.format.currency(delayCost)}`
+                    subMessage: isCritical
+                        ? 'Projected ' + mBT.logic.math.format.currency(projectedTotal) + ' exceeds Cap'
+                        : 'Est. Penalty: ' + mBT.logic.math.format.currency(delayCost)
                 };
             }
         }
     };
     
-    // --- Tier 5 Handshake Polyfill ---
+    /* --- recordTransaction: Phase 80-compliant payment recorder ---
+       Routes payment state through budget.ledgers.pos[] only.
+       Does NOT write to item.actual (Phase 77 owns that field).
+       Does NOT write to contact.payments[] (use pos[] SSoT instead). */
+    mBT.logic.recordTransaction = function(data) {
+        /* data: { poId, amount, service, reference, notes } */
+        if (!budget || !budget.ledgers || !budget.ledgers.pos) return null;
+        var pos = budget.ledgers.pos;
+        var targetPo = null;
+        for (var i = 0; i < pos.length; i++) {
+            if (pos[i].id === data.poId) { targetPo = pos[i]; break; }
+        }
+        if (!targetPo) return null;
+        targetPo.status = 'Paid';
+        targetPo.paidAmount = data.amount || targetPo.amount;
+        targetPo.paidDate = new Date().toISOString().split('T')[0];
+        targetPo.paymentService = data.service || '';
+        targetPo.paymentRef = data.reference || '';
+        targetPo.paymentNotes = data.notes || '';
+        saveBudget();
+        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+        /* Sync ledger state to sibling tool iframes */
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash, poCounter: budget.ledgers.poCounter } }, '*');
+        return targetPo;
+    };
+
+    /* --- Tier 5 Handshake Polyfill --- */
     mBT.utils = { formatCurrency: mBT.logic.math.format.currency };
 
     // --- Aliases for Backward Compatibility ---
@@ -3042,7 +3331,7 @@
     };
 
     // 2. The Main Render Loop (The Gatekeeper)
-    mBT.ui.refresh = function() {
+    mBT.ui.refresh = async function() {
         const app = document.getElementById('app');
         if (!budget || !app) return;
 
@@ -3084,7 +3373,7 @@
         }
         
         // B. Auxiliary Interface Updates (Top Level)
-        if (typeof renderProjectManagement === 'function') renderProjectManagement();
+        if (typeof renderProjectManagement === 'function') await renderProjectManagement();
         if (typeof renderStatusBar === 'function') renderStatusBar();
         if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
         if (typeof updateOnlineStatus === 'function') updateOnlineStatus();
@@ -3114,7 +3403,7 @@
                 <!-- Sub-Phase 51.2: Live presence avatars — populated by mbt:presence-update -->
                 <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>
             </div>
-            <div id="project-management-container" class="w-full md:w-auto flex-shrink-0 max-w-full overflow-hidden"></div>
+            <div id="project-management-container" class="w-full md:w-auto flex-shrink-0 max-w-full"></div>
         </header>
 
         <div class="flex gap-2 items-center mb-3">
@@ -3863,6 +4152,13 @@ function getAbbreviatedName(name, maxLen = 25) {
                             ${mBTAssets.trash}
                         </button>
                     </td>
+                    ${item.contact_id ? `
+                    <td class="px-1 ${rowPad} text-center w-8">
+                        <button data-action="quick-pay" data-contact-id="${this.esc(item.contact_id)}" data-item-id="${safeId}" data-section="${safeSection}" class="text-emerald-400 hover:text-emerald-600 transition-colors scale-75 md:scale-100" title="Quick Pay">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                        </button>
+                    </td>
+                    ` : ''}
                 </tr>`;
         },
 
@@ -3945,7 +4241,7 @@ function getAbbreviatedName(name, maxLen = 25) {
             const _hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
 
             const bodyContent = `
-                <div class="table-container overflow-x-auto no-scrollbar relative">
+                <div class="table-container overflow-x-auto no-scrollbar relative mbt-mobile-safe">
                     <table class="w-full border-collapse min-w-full table-auto">
                         <thead class="bg-slate-50 text-[11px] font-black uppercase tracking-tighter text-slate-400 border-b border-slate-100">
                             <tr>
@@ -4422,212 +4718,222 @@ window.mBT_renameBlueprint = async function(oldName) {
     /* ========= v19.54 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
     // Previously: mBTME
     mBT.ui.modal = {
-        containerId: 'global-modal-container',
-        // --- Registry Resolution: Pointing to Tier 1 Asset Registry ---
-        icons: { 
+        containerId: 'global-modal-container', stack: [],
+        /* --- Registry Resolution: Pointing to Tier 1 Asset Registry --- */
+        icons: {
             close: mBTAssets.close,
-            alert: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+            alert: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
         },
-      
-        // --- Portal Generation: Dynamic injection of overlay layers ---
-        open: function(id, title, contentHtml, maxWidth = 'max-w-2xl', options = {}) {
-            const container = document.getElementById(this.containerId);
+
+        /* --- Portal Generation: Dynamic injection of overlay layers --- */
+        open: function(id, title, contentHtml, maxWidth, options) {
+            maxWidth = maxWidth || 'max-w-2xl';
+            options = options || {};
+            var self = this;
+            var container = document.getElementById(this.containerId);
             if (!container) return;
-            
-            // Sprint 3: Accessibility & Focus Management (Stack-based for nested support)
+
+            /* Focus Management (Stack-based for nested support) */
             if (!this.focusStack) this.focusStack = [];
             this.focusStack.push(document.activeElement);
 
-            // Logic Resolution: Prevent background scrolling while modal is active
+            /* Prevent background scrolling while modal is active */
             document.body.style.overflow = 'hidden';
 
-            const modalId = `${id}Modal`;
-            this.close(modalId, true); // Cleanup duplicates
-            
-            // UPDATED HEADER: Uses grid to perfectly center the title while keeping the close button right-aligned
-            const headerHtml = options.hideHeader ? '' : `
-                <div class="px-4 py-2.5 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
-                    <div></div> <h2 class="text-xs font-black uppercase tracking-widest text-slate-800 text-center truncate px-2">${title}</h2>
-                    <div class="text-right">
-                        <button onclick="mBT.ui.modal.close('${modalId}')" class="text-slate-400 hover:text-red-500 transition-all p-1 rounded-md hover:bg-slate-50">${this.icons.close}</button>
-                    </div>
-                </div>`;
-            const fullHtml = `
-                <div id="${modalId}" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[999] transition-opacity duration-300 opacity-0 hidden" tabindex="-1">
-                    <div id="${modalId}Content" class="bg-white rounded-2xl shadow-2xl w-full ${maxWidth} mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">
-                        ${headerHtml}
-                        <div class="flex-grow overflow-hidden ${options.noPadding ? 'p-0' : 'p-0'}" id="${modalId}Body">${contentHtml}</div>
-                    </div>
-                </div>`;
+            var modalId = id + 'Modal';
+            this.close(modalId, true); /* Cleanup duplicates */
+
+            var headerHtml = options.hideHeader ? '' :
+                '<div class="px-4 py-2.5 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">' +
+                '<div></div><h2 class="text-xs font-black uppercase tracking-widest text-slate-800 text-center truncate px-2">' + title + '</h2>' +
+                '<div class="text-right">' +
+                '<button onclick="mBT.ui.modal.close(\'' + modalId + '\')" class="text-slate-400 hover:text-red-500 transition-all p-1 rounded-md hover:bg-slate-50">' + this.icons.close + '</button>' +
+                '</div></div>';
+
+            /* Phase 87B: Calculate dynamic Z-index based on stack depth */
+            var baseZ = 999;
+            var newZ = baseZ + (this.stack.length * 10);
+            this.stack.push(modalId);
+            var fullHtml =
+                '<div id="' + modalId + '" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 hidden" style="z-index:' + newZ + '; transition: opacity 300ms;" tabindex="-1">' +
+                '<div id="' + modalId + 'Content" class="bg-white rounded-2xl shadow-2xl w-full ' + maxWidth + ' mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">' +
+                headerHtml +
+                '<div class="flex-grow overflow-hidden" id="' + modalId + 'Body">' + contentHtml + '</div>' +
+                '</div></div>';
             container.insertAdjacentHTML('beforeend', fullHtml);
-            const modal = document.getElementById(modalId);
+            var modal = document.getElementById(modalId);
             modal.classList.remove('hidden');
-            
-            // Animation & Focus Trapping
-            setTimeout(() => {
+
+            /* Animation & Focus Trapping */
+            setTimeout(function() {
                 modal.classList.remove('opacity-0');
-                document.getElementById(`${modalId}Content`)?.classList.remove('scale-95');
-                
-                // Sprint 3: Auto-focus first interactive element
-                const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                var contentEl = document.getElementById(modalId + 'Content');
+                if (contentEl) contentEl.classList.remove('scale-95');
+
+                /* Auto-focus first interactive element */
+                var focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
                 if (focusable.length > 0) {
-                    const auto = modal.querySelector('[autofocus]');
+                    var auto = modal.querySelector('[autofocus]');
                     if (auto) auto.focus();
                     else focusable[0].focus();
                 } else {
-                    modal.focus(); // Fallback focus to container
+                    modal.focus();
                 }
             }, 50);
-          
-            modal.addEventListener('click', (e) => { if (e.target === modal) this.close(modalId); });
-            // Sprint 3: Escape Key Listener
-            const escHandler = (e) => { if(e.key === 'Escape') { this.close(modalId); window.removeEventListener('keydown', escHandler); } };
+
+            modal.addEventListener('click', function(e) { if (e.target === modal) self.close(modalId); });
+            /* Escape Key Listener */
+            var escHandler = function(e) {
+                if (e.key === 'Escape') {
+                    if (self.stack[self.stack.length - 1] === modalId) {
+                        self.close(modalId);
+                        window.removeEventListener('keydown', escHandler);
+                    }
+                }
+            };
             window.addEventListener('keydown', escHandler);
 
             if (options.onOpen && typeof options.onOpen === 'function') setTimeout(options.onOpen, 50);
             return modal;
         },
-        // --- Portal Dissolution: Synchronized removal of UI layers ---
-        close: function(modalId, instant = false) {
-            const modal = document.getElementById(modalId);
-            if (!modal) return;
-            
-            // Logic Resolution: Release body scroll if no other modals are open
-            if(document.querySelectorAll('[id$="Modal"]').length <= 1) document.body.style.overflow = '';
 
-            const finalize = () => {
-                modal.remove(); 
-                if(typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                
-                // Sprint 3: Focus Restoration
-                if (this.focusStack && this.focusStack.length > 0) {
-                    const el = this.focusStack.pop();
+        /* --- Portal Dissolution: Synchronized removal of UI layers --- */
+        close: function(modalId, instant) {
+            instant = instant || false;
+            var self = this;
+            /* Phase 87B: Pop from stack */
+            this.stack = (this.stack || []).filter(function(id) { return id !== modalId; });
+            if (this.stack.length === 0) document.body.style.overflow = '';
+            var modal = document.getElementById(modalId);
+            if (!modal) return;
+
+            var finalize = function() {
+                modal.remove();
+                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                /* Focus Restoration */
+                if (self.focusStack && self.focusStack.length > 0) {
+                    var el = self.focusStack.pop();
                     if (el && document.body.contains(el)) el.focus();
                 }
             };
 
             if (instant) { finalize(); } else {
                 modal.classList.add('opacity-0');
-                document.getElementById(`${modalId}Content`)?.classList.add('scale-95');
+                var contentEl = document.getElementById(modalId + 'Content');
+                if (contentEl) contentEl.classList.add('scale-95');
                 setTimeout(finalize, 300);
             }
         },
 
-        // --- System: Non-blocking Confirmation Modal ---
+        /* --- System: Non-blocking Confirmation Modal --- */
         confirm: function(title, message, onConfirm) {
-            const content = `
-                <div class="p-8 text-center flex flex-col items-center justify-center">
-                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4 animate-bounce shadow-sm">
-                        ${this.icons.alert}
-                    </div>
-                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
-                    <p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">${message}</p>
-                    <div class="flex gap-3 w-full max-w-xs">
-                        <button id="mbtConfirmCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>
-                        <button id="mbtConfirmYes" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">Confirm</button>
-                    </div>
-                </div>`;
-            
+            var self = this;
+            var content =
+                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                '<div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4 animate-bounce shadow-sm">' + this.icons.alert + '</div>' +
+                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                '<p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">' + message + '</p>' +
+                '<div class="flex gap-3 w-full max-w-xs">' +
+                '<button id="mbtConfirmCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>' +
+                '<button id="mbtConfirmYes" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">Confirm</button>' +
+                '</div></div>';
             this.open('confirmation', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
-            
-            // Bind listeners after render
-            setTimeout(() => {
-                const cancelBtn = document.getElementById('mbtConfirmCancel');
-                const yesBtn = document.getElementById('mbtConfirmYes');
-                if(cancelBtn) cancelBtn.onclick = () => this.close('confirmationModal');
-                if(yesBtn) yesBtn.onclick = () => {
-                    this.close('confirmationModal');
-                    if(onConfirm && typeof onConfirm === 'function') onConfirm();
+            setTimeout(function() {
+                var cancelBtn = document.getElementById('mbtConfirmCancel');
+                var yesBtn = document.getElementById('mbtConfirmYes');
+                if (cancelBtn) cancelBtn.onclick = function() { self.close('confirmationModal'); };
+                if (yesBtn) yesBtn.onclick = function() {
+                    self.close('confirmationModal');
+                    if (onConfirm && typeof onConfirm === 'function') onConfirm();
                 };
             }, 50);
         },
 
-        // --- System: Non-blocking Alert Modal ---
+        /* --- System: Non-blocking Alert Modal --- */
         alert: function(title, message, onOk) {
-            const content = `
-                <div class="p-8 text-center flex flex-col items-center justify-center">
-                    <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-4 shadow-sm">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    </div>
-                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
-                    <p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">${message}</p>
-                    <button id="mbtAlertOk" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>
-                </div>`;
-            
+            var self = this;
+            var content =
+                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                '<div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-4 shadow-sm">' +
+                '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+                '</div>' +
+                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                '<p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">' + message + '</p>' +
+                '<button id="mbtAlertOk" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>' +
+                '</div>';
             this.open('alert', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
-            
-            setTimeout(() => {
-                const okBtn = document.getElementById('mbtAlertOk');
-                if(okBtn) okBtn.onclick = () => {
-                    this.close('alertModal');
-                    if(onOk && typeof onOk === 'function') onOk();
+            setTimeout(function() {
+                var okBtn = document.getElementById('mbtAlertOk');
+                if (okBtn) okBtn.onclick = function() {
+                    self.close('alertModal');
+                    if (onOk && typeof onOk === 'function') onOk();
                 };
             }, 50);
         },
 
-        // --- System: Non-blocking Prompt Modal ---
+        /* --- System: Non-blocking Prompt Modal --- */
         prompt: function(title, message, defaultValue, onOk) {
-            const content = `
-                <div class="p-8 text-center flex flex-col items-center justify-center">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">${title}</h3>
-                    <p class="text-xs text-slate-500 font-bold mb-4 max-w-xs leading-relaxed">${message}</p>
-                    <input type="text" id="mbtPromptInput" value="${defaultValue || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-6" autofocus>
-                    <div class="flex gap-3 w-full max-w-xs">
-                        <button id="mbtPromptCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>
-                        <button id="mbtPromptOk" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>
-                    </div>
-                </div>`;
-            
+            var self = this;
+            var content =
+                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                '<p class="text-xs text-slate-500 font-bold mb-4 max-w-xs leading-relaxed">' + message + '</p>' +
+                '<input type="text" id="mbtPromptInput" value="' + (defaultValue || '') + '" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-6" autofocus>' +
+                '<div class="flex gap-3 w-full max-w-xs">' +
+                '<button id="mbtPromptCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>' +
+                '<button id="mbtPromptOk" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>' +
+                '</div></div>';
             this.open('prompt', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
-            
-            setTimeout(() => {
-                const input = document.getElementById('mbtPromptInput');
-                if(input) {
+            setTimeout(function() {
+                var input = document.getElementById('mbtPromptInput');
+                if (input) {
                     input.focus();
                     input.select();
-                    input.addEventListener('keydown', (e) => {
-                        if(e.key === 'Enter') document.getElementById('mbtPromptOk').click();
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') document.getElementById('mbtPromptOk').click();
                     });
                 }
-                const cancelBtn = document.getElementById('mbtPromptCancel');
-                const okBtn = document.getElementById('mbtPromptOk');
-                if(cancelBtn) cancelBtn.onclick = () => this.close('promptModal');
-                if(okBtn) okBtn.onclick = () => {
-                    const val = document.getElementById('mbtPromptInput').value;
-                    this.close('promptModal');
-                    if(onOk && typeof onOk === 'function') onOk(val);
+                var cancelBtn = document.getElementById('mbtPromptCancel');
+                var okBtn = document.getElementById('mbtPromptOk');
+                if (cancelBtn) cancelBtn.onclick = function() { self.close('promptModal'); };
+                if (okBtn) okBtn.onclick = function() {
+                    var val = document.getElementById('mbtPromptInput').value;
+                    self.close('promptModal');
+                    if (onOk && typeof onOk === 'function') onOk(val);
                 };
             }, 50);
         },
 
-        // --- System: Status Loader ---
+        /* --- System: Status Loader --- */
         showLoader: function(message) {
-            const content = `
-                <div class="p-6 flex flex-col items-center justify-center">
-                    <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 animate-pulse">${message}</p>
-                </div>`;
+            var content =
+                '<div class="p-6 flex flex-col items-center justify-center">' +
+                '<div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>' +
+                '<p class="text-[10px] font-black uppercase tracking-widest text-slate-500 animate-pulse">' + message + '</p>' +
+                '</div>';
             this.open('loader', '', content, 'max-w-xs', { hideHeader: true, noPadding: true });
         },
         hideLoader: function() {
             this.close('loaderModal');
         },
 
-         // --- Search Integration: Filtering logic for modal lists ---
+        /* --- Search Integration: Filtering logic for modal lists --- */
         attachSearch: function(inputId, listContainerId, dataItems, renderRowFn) {
-            const input = document.getElementById(inputId);
-            const list = document.getElementById(listContainerId);
+            var input = document.getElementById(inputId);
+            var list = document.getElementById(listContainerId);
             if (!input || !list) return;
-            input.addEventListener('input', (e) => {
-                const term = e.target.value.toLowerCase();
-                const filtered = dataItems.filter(item => (item.description || item.name || item.label || '').toLowerCase().includes(term));
-                // Logic Resolution: Added col-span-full to support grid layouts in "No Matches" state
-                list.innerHTML = filtered.length > 0 ? filtered.map(renderRowFn).join('') : `<div class="p-12 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest col-span-full">No Matches</div>`;
+            input.addEventListener('input', function(e) {
+                var term = e.target.value.toLowerCase();
+                var filtered = dataItems.filter(function(item) {
+                    return (item.description || item.name || item.label || '').toLowerCase().includes(term);
+                });
+                /* Added col-span-full to support grid layouts in No Matches state */
+                list.innerHTML = filtered.length > 0 ? filtered.map(renderRowFn).join('') : '<div class="p-12 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest col-span-full">No Matches</div>';
             });
         }
     };
-    
-    // --- Global Alias for Backward Compatibility (The Bridge) ---
+
+    /* --- Global Alias for Backward Compatibility --- */
     window.mBTME = mBT.ui.modal;
 
     /* mBTPublisher engine loaded from src/scripts/engine/publisher.js */
@@ -9646,44 +9952,44 @@ _renderTalent: function(docId, d) {
         // --- NEW: Tab Scroll Spy (Intersection Observer) ---
         // This watches the carousel and lights up the matching tab with a glow
         const carousel = document.getElementById('stagesCarousel');
-        const cards = document.querySelectorAll('.stage-card');
-        const tabs = document.querySelectorAll('.stage-nav-tab');
-        
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
+        var cards = document.querySelectorAll('.stage-card');
+        var tabs = document.querySelectorAll('.stage-nav-tab');
+
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
-                    // 1. Identify active ID
-                    const cardId = entry.target.id;
-                    const tabId = cardId.replace('card-', 'nav-tab-');
-                    const activeTab = document.getElementById(tabId);
-                    
+                    /* 1. Identify active ID */
+                    var cardId = entry.target.id;
+                    var tabId = cardId.replace('card-', 'nav-tab-');
+                    var activeTab = document.getElementById(tabId);
+
                     if (activeTab) {
-                        // 2. Reset all tabs
-                        tabs.forEach(t => {
+                        /* 2. Reset all tabs */
+                        tabs.forEach(function(t) {
                             t.classList.remove('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
                             t.classList.add('text-slate-400', 'border-transparent');
-                            t.style.textShadow = 'none'; // Remove glow
+                            t.style.textShadow = 'none'; /* Remove glow */
                         });
 
-                        // 3. Activate current tab
+                        /* 3. Activate current tab */
                         activeTab.classList.remove('text-slate-400', 'border-transparent');
                         activeTab.classList.add('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
-                        
-                        // 4. Apply the requested GLOW
+
+                        /* 4. Apply the requested GLOW */
                         activeTab.style.textShadow = '0 0 12px rgba(37,99,235,0.4)';
-                        
-                        // 5. Ensure tab is visible on mobile nav
+
+                        /* 5. Ensure tab is visible on mobile nav */
                         activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                     }
                 }
             });
-        }, { root: carousel, threshold: 0.6 }); // 60% visibility required to trigger snap active state
+        }, { root: carousel, threshold: 0.6 }); /* 60% visibility required to trigger snap active state */
 
-        cards.forEach(card => observer.observe(card));
-        
-        // Interaction Bindings for Real-time Slider Sync
-        const bindInput = (el) => {
-            el.addEventListener('input', (e) => {
+        cards.forEach(function(card) { observer.observe(card); });
+
+        /* Interaction Bindings for Real-time Slider Sync */
+        var bindInput = function(el) {
+            el.addEventListener('input', function(e) {
                 if(typeof balanceStageSliders === 'function') balanceStageSliders(e.target.dataset.stageKey, parseFloat(e.target.value));
                 if(window.updateAllHeaders) window.updateAllHeaders();
             });
@@ -9894,13 +10200,14 @@ window.updateAllHeaders = () => {
         let projects = (mBT.data && mBT.data.getList) ? await mBT.data.getList() : [];
         projects.sort().reverse();
         
-        const menuItems = [
+        var menuItems = [
             { label: 'New Budget', icon: mBTAssets.plus, color: 'text-emerald-600', bg: 'hover:bg-emerald-50', action: 'project-new' },
             { label: 'Duplicate Budget', icon: mBTAssets.copy, color: 'text-blue-600', bg: 'hover:bg-blue-50', action: 'project-duplicate' },
             { label: 'Save as Blueprint', icon: mBTAssets.save, color: 'text-indigo-600', bg: 'hover:bg-indigo-50', action: 'blueprint-save' },
             { label: 'Template Manager', icon: mBTAssets.grid, color: 'text-violet-600', bg: 'hover:bg-violet-50', action: 'template-manager' },
             { label: 'Sync Rates', icon: mBTAssets.cloud, color: 'text-sky-600', bg: 'hover:bg-sky-50', action: 'project-sync' },
             { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
+            { label: 'Payments / Ledger', icon: mBTAssets.wallet, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'open-payments-ledger' },
             { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
             { divider: true },
             { label: 'Delete Budget', icon: mBTAssets.trash, color: 'text-rose-600', bg: 'hover:bg-rose-50', action: 'project-delete' }
@@ -9924,12 +10231,12 @@ window.updateAllHeaders = () => {
                     </div>
                 </div>
                 <div class="relative flex-shrink-0">
-                    <button onclick="const m=document.getElementById('fileMenuDropdown'); m.classList.toggle('hidden');" class="flex items-center gap-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 px-4 py-2.5 rounded-xl transition-all active:scale-95 group">
+                    <button id="fileMenuBtn" data-action="file-menu-toggle" class="flex items-center gap-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 px-4 py-2.5 rounded-xl transition-all active:scale-95 group">
                         <span class="text-[11px] font-black uppercase tracking-widest">File</span>
                         <svg class="w-3 h-3 transition-transform group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="fileMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200" onmouseleave="this.classList.add('hidden')">
-                        ${menuItems.map(item => item.divider ? `<div class="h-px bg-slate-100 my-1"></div>` : `<button data-action="${item.action}" onclick="document.getElementById('fileMenuDropdown').classList.add('hidden')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 ${item.color} ${item.bg} transition-colors group"><span class="opacity-70 group-hover:opacity-100 scale-90">${item.icon}</span><span class="text-[11px] font-black uppercase tracking-widest">${item.label}</span></button>`).join('')}
+                    <div id="fileMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-[200] overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200" onmouseleave="this.classList.add('hidden')">
+                        ${menuItems.map(item => item.divider ? `<div class="h-px bg-slate-100 my-1"></div>` : `<button data-action="${item.action}" class="w-full text-left px-4 py-2.5 flex items-center gap-3 ${item.color} ${item.bg} transition-colors group"><span class="opacity-70 group-hover:opacity-100 scale-90">${item.icon}</span><span class="text-[11px] font-black uppercase tracking-widest">${item.label}</span></button>`).join('')}
                     </div>
                 </div>
                 <input type="file" id="importFile" class="hidden" accept=".json" data-action="project-import-file">
@@ -10123,59 +10430,68 @@ window.updateAllHeaders = () => {
 
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
+        window.addEventListener('load', function() {
             navigator.serviceWorker.register('./sw.js?v=21', { scope: './', updateViaCache: 'none' })
-                .then(reg => {
+                .then(function(reg) {
                     console.log('SW Synchronization active:', reg.scope);
-                    reg.onupdatefound = () => {
-                        const installingWorker = reg.installing;
-                        installingWorker.onstatechange = () => {
+                    reg.onupdatefound = function() {
+                        var installingWorker = reg.installing;
+                        installingWorker.onstatechange = function() {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", () => {
+                                mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", function() {
                                     window.location.reload();
                                 });
                             }
                         };
                     };
                 })
-                .catch(err => console.log('Service Worker initialization failure:', err));
+                .catch(function(err) { console.log('Service Worker initialization failure:', err); });
         });
     }
 
 /* --- 2. ACTION REGISTRY (The Nervous System Configuration) --- */
     function registerCoreActions() {
-        // A. Header / Project Actions
-        mBT.core.action('project-switch', async (e, el) => {
+        /* A. Header / Project Actions */
+        mBT.core.action('project-switch', function(e, el) {
             if (e.type !== 'change') return;
             if (el.value) {
-                const originalText = el.options[el.selectedIndex].text;
+                var originalText = el.options[el.selectedIndex].text;
                 el.options[el.selectedIndex].text = "Loading...";
-                await mBT.data.load(el.value);
+                mBT.data.load(el.value);
             }
         });
 
-        mBT.core.action('project-new', () => showNewProjectModal());
-        mBT.core.action('project-duplicate', async () => await mBT.data.duplicate());
-        mBT.core.action('project-delete', async () => { if (currentProjectName) await mBT.data.deleteProject(currentProjectName); });
+        mBT.core.action('project-new', function() { showNewProjectModal(); });
+        mBT.core.action('project-duplicate', function() { mBT.data.duplicate(); });
+        mBT.core.action('project-delete', function() { if (currentProjectName) mBT.data.deleteProject(currentProjectName); });
+
+        /* Phase 87B Fix: Explicitly mapped File Menu Toggler */
+        mBT.core.action('file-menu-toggle', function() {
+            var dropdown = document.getElementById('fileMenuDropdown');
+            if (dropdown) dropdown.classList.toggle('hidden');
+        });
+
+        mBT.core.action('blueprint-save', function() { if(typeof mBT_saveAsBlueprint === 'function') mBT_saveAsBlueprint(); });
         
         // New File Menu Actions
-        mBT.core.action('project-recycle', () => { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
-        mBT.core.action('project-sync', () => { fetchExchangeRates(); mBTME.alert('Rates Updated', 'Exchange rates refreshed from network.'); });
-        mBT.core.action('template-manager', () => { openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
+        mBT.core.action('project-recycle', function() { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
+        mBT.core.action('project-sync', function() { fetchExchangeRates(); mBTME.alert('Rates Updated', 'Exchange rates refreshed from network.'); });
+        mBT.core.action('template-manager', function() { openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
+        mBT.core.action('project-import-trigger', function() { var input = document.getElementById('importFile'); if(input) input.click(); });
+        /* Phase 88: Open PO/Ledger tool — sole entry point per Phase 80 architecture */
+        mBT.core.action('open-payments-ledger', function() { openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
+        mBT.core.action('project-import-file', function(e, el) { if(e.type === 'change') mBT.data.importFile(el); });
 
-        mBT.core.action('project-import-trigger', () => { const input = document.getElementById('importFile'); if(input) input.click(); });
-        mBT.core.action('project-import-file', (e, el) => { if(e.type === 'change') mBT.data.importFile(el); });
+        /* B. Global Utilities */
 
-        // B. Global Utilities
-
-        mBT.core.action('backup-env', () => { if(typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
-        mBT.core.action('export-all-data', async () => {
+        mBT.core.action('backup-env', function() { if(typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
+        mBT.core.action('export-all-data', function() {
             if (!window.mBT || !window.mBT.storage) { mBTME.alert('Error', 'Storage not available.'); return; }
             try {
-                const json = await window.mBT.storage.exportAllData();
-                const blob = new Blob([json], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
+                var json = window.mBT.storage.exportAllData();
+                var blob = new Blob([json], { type: 'application/json' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
                 a.href = url;
                 a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.json';
                 document.body.appendChild(a);
@@ -10187,32 +10503,34 @@ window.updateAllHeaders = () => {
                 mBTME.alert('Export Failed', e.message);
             }
         });
-        mBT.core.action('print-pdf', () => window.print());
-        mBT.core.action('export-xlsx', () => mBTME.alert("Coming Soon", "Excel export is currently being built. All features will be free to use."));
-        mBT.core.action('publish-modal', () => showPublishModal());
-        
-        // C. Footer / Global Modals
-        mBT.core.action('stages-modal', () => showStagesModal());
-        mBT.core.action('docs-modal', () => showDocumentsModal());
-        mBT.core.action('settings-modal', () => showSettingsModal());
-        mBT.core.action('support-modal', () => showCoffeeWidget());
-        
-        // D. Budget Interaction (The Synapse)
-        mBT.core.action('section-toggle', (e, el) => handleToggleSection(el.dataset.id, el));
-        mBT.core.action('section-add', (e, el) => showItemSelectorModal(el.dataset.id));
-        mBT.core.action('row-delete', (e, el) => handleRemoveItem(el.dataset.section, el.dataset.id));
+        mBT.core.action('print-pdf', function() { window.print(); });
+        mBT.core.action('export-xlsx', function() { mBTME.alert("Coming Soon", "Excel export is currently being built. All features will be free to use."); });
+        mBT.core.action('publish-modal', function() { showPublishModal(); });
 
-        mBT.core.action('row-lock', (e, el) => {
-            const item = budget.sections[el.dataset.section]?.items.find(i => i.id === el.dataset.id);
+        /* C. Footer / Global Modals */
+        mBT.core.action('stages-modal', function() { showStagesModal(); });
+        mBT.core.action('docs-modal', function() { showDocumentsModal(); });
+        mBT.core.action('settings-modal', function() { showSettingsModal(); });
+        mBT.core.action('support-modal', function() { showCoffeeWidget(); });
+        /* Phase 92.1: Activity Feed toggle */
+        mBT.core.action('activity-feed', function() { if (typeof mBTSurfaceActivityFeed !== 'undefined') mBTSurfaceActivityFeed.toggle(); });
+
+        /* D. Budget Interaction (The Synapse) */
+        mBT.core.action('section-toggle', function(e, el) { handleToggleSection(el.dataset.id, el); });
+        mBT.core.action('section-add', function(e, el) { showItemSelectorModal(el.dataset.id); });
+        mBT.core.action('row-delete', function(e, el) { handleRemoveItem(el.dataset.section, el.dataset.id); });
+
+        mBT.core.action('row-lock', function(e, el) {
+            var item = budget.sections[el.dataset.section] && budget.sections[el.dataset.section].items.find(function(i) { return i.id === el.dataset.id; });
             if(item) {
                 item.rateType = item.rateType === 'fixed' ? 'negotiable' : 'fixed';
                 saveBudget();
-                render(); // Full render needed to swap icon state
+                render(); /* Full render needed to swap icon state */
             }
         });
 
         /* Phase 76: qualifying spend toggle */
-        mBT.core.action('item-qualifying-toggle', (e, el) => {
+        mBT.core.action('item-qualifying-toggle', function(e, el) {
             var _sec = el.dataset.section;
             var _id = el.dataset.id;
             if (!budget || !budget.sections[_sec]) return;
@@ -10232,17 +10550,17 @@ window.updateAllHeaders = () => {
             }
         });
 
-        // E. Personnel Actions
-        mBT.core.action('crew-toggle', (e, el) => {
-            const itemId = el.closest('tr')?.dataset.itemId || el.dataset.id;
-            const section = el.closest('tr')?.dataset.section || el.dataset.section;
-            
-            let item = null;
+        /* E. Personnel Actions */
+        mBT.core.action('crew-toggle', function(e, el) {
+            var itemId = (el.closest('tr') && el.closest('tr').dataset.itemId) || el.dataset.id;
+            var section = (el.closest('tr') && el.closest('tr').dataset.section) || el.dataset.section;
+
+            var item = null;
             if (section && budget.sections[section]) {
-                item = budget.sections[section].items.find(i => i.id === itemId);
+                item = budget.sections[section].items.find(function(i) { return i.id === itemId; });
             }
 
-            // Enhanced Interaction: If unassigned, go straight to Profile/Import
+            /* Enhanced Interaction: If unassigned, go straight to Profile/Import */
             if (!item || !item.crew || !item.crew.name) {
                 openCrewProfile(el, e, itemId, section);
             } else {
@@ -10250,6 +10568,84 @@ window.updateAllHeaders = () => {
             }
         });
         mBT.core.action('crew-profile', (e, el) => openCrewProfile(el, e, el.dataset.id, el.dataset.section));
+
+        /* --- Phase 87A: Quick-Pay --- */
+        mBT.core.action('quick-pay', async (e, el) => {
+            var contactId = el.dataset.contactId;
+            var itemId = el.dataset.itemId;
+            var sectionName = el.dataset.section;
+            if (!contactId) return;
+
+            /* Pre-flight: verify contact exists in mbt_contacts */
+            var contacts = [];
+            try {
+                if (typeof STORAGE !== 'undefined' && STORAGE.getAllContacts) {
+                    contacts = await STORAGE.getAllContacts();
+                } else if (typeof localforage !== 'undefined') {
+                    var raw = await localforage.getItem('mbt_contacts');
+                    contacts = raw || [];
+                }
+            } catch(err) { console.warn('[QuickPay] Contact lookup failed:', err); }
+
+            var contact = contacts.find(function(c) {
+                return c.id === contactId || (c.name && c.name.toLowerCase() === contactId.toLowerCase());
+            });
+
+            if (!contact) {
+                mBTME.alert('Contact Not Found', 'No contact found matching this item. Link a contact first.');
+                return;
+            }
+
+            /* Open Contacts tool with highlightId for tool-ready handshake */
+            var projectKey = storageKeyPrefix + (budget ? budget.projectName : '');
+            var toolUrl = './src/tools/contacts/index.html?projectKey=' + encodeURIComponent(projectKey) +
+                '&highlightId=' + encodeURIComponent(contact.id) +
+                '&currency=' + encodeURIComponent(displayCurrency || 'JMD');
+
+            /* Tool-ready handshake: listen for tool-ready postMessage instead of setTimeout */
+            var _toolReadyHandler = function(evt) {
+                if (evt.data && evt.data.type === 'mbt:tool-ready') {
+                    window.removeEventListener('message', _toolReadyHandler);
+                    /* Send payment context to the tool */
+                    var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                    if (toolIframe && toolIframe.contentWindow) {
+                        toolIframe.contentWindow.postMessage({
+                            type: 'mbt:quick-pay-context',
+                            payload: {
+                                contactId: contact.id,
+                                contactName: contact.name,
+                                itemId: itemId,
+                                sectionName: sectionName
+                            }
+                        }, '*');
+                    }
+                }
+            };
+            window.addEventListener('message', _toolReadyHandler);
+
+            /* Listen for payment completion toast from contacts tool */
+            var _paymentHandler = function(evt) {
+                if (evt.data && evt.data.type === 'mbt:toast' && evt.data.payload && evt.data.payload.source === 'quick-pay') {
+                    window.removeEventListener('message', _paymentHandler);
+                    /* Wire to Phase 65 Undo history */
+                    if (mBT.data && mBT.data.recorder) {
+                        mBT.data.recorder.snapshot('Quick Pay: ' + (evt.data.payload.contactName || 'Contact'));
+                    }
+                    /* Show toast in monolith */
+                    if (typeof mBTME !== 'undefined' && mBTME.alert) {
+                        mBTME.alert('Payment Logged', evt.data.payload.message || 'Payment recorded successfully.');
+                    }
+                }
+            };
+            window.addEventListener('message', _paymentHandler);
+
+            /* Open the tool */
+            if (typeof openTool === 'function') {
+                openTool(toolUrl);
+            } else {
+                window.open(toolUrl, '_blank');
+            }
+        });
 
         // --- NEW: Registry Expansion (Instruction Set 4) ---
         
@@ -10416,6 +10812,25 @@ window.updateAllHeaders = () => {
 
             mBT.core.action('command-palette', openPalette);
         }());
+
+        /* --- Phase 87C: Help Overlay --- */
+        mBT.core.action('help-overlay', function() {
+            var activeTool = (typeof mBTActiveTool !== 'undefined' && mBTActiveTool) ? mBTActiveTool : null;
+            if (typeof helpOverlayTemplate === 'function') {
+                var content = helpOverlayTemplate(activeTool);
+                mBTME.open('help-overlay', '', content, 'max-w-md', { 
+                    hideHeader: true, 
+                    noPadding: true 
+                });
+            } else {
+                /* Fallback if template function not loaded */
+                var fallbackContent = '<div class="p-6 text-center text-slate-400">' +
+                    '<p class="text-[10px] font-black uppercase tracking-widest">Help template not loaded</p>' +
+                    '<p class="text-[9px] mt-2">Press Ctrl+K for Command Palette</p>' +
+                    '</div>';
+                mBTME.open('help-overlay', '', fallbackContent, 'max-w-md', { hideHeader: true, noPadding: true });
+            }
+        });
     }
 
     /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
@@ -10459,6 +10874,11 @@ window.updateAllHeaders = () => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                     e.preventDefault();
                     if (mBT.core.actions['command-palette']) mBT.core.actions['command-palette']();
+                }
+                // Phase 87C: Help Overlay (? key, only when not typing)
+                if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && !e.target.isContentEditable) {
+                    e.preventDefault();
+                    if(mBT.core.actions['help-overlay']) mBT.core.actions['help-overlay']();
                 }
             });
 
@@ -10681,6 +11101,9 @@ window.updateAllHeaders = () => {
         }
 
         mBT.core.action('jurisdiction-modal', function() { showJurisdictionModal(); });
+        mBT.core.action('activity-feed', function() { 
+            if (typeof mBTSurfaceActivityFeed !== 'undefined') mBTSurfaceActivityFeed.toggle(); 
+        });
 
         /* Phase 76: Tax Incentive card click → jurisdiction modal */
         (function() {
@@ -10871,6 +11294,157 @@ window.updateAllHeaders = () => {
             return { apply: apply, show: show, hide: hide };
         })();
         mBTNavHUD.apply();
+
+        /* --- Feat 92.5. Pill Layout — Dynamic footer button rebalancer --- */
+        mBT.ui.footer = (function() {
+            var _ids = [
+                'stagesFooterBtn','docsFooterBtn','contactsFooterBtn',
+                'actualsToggleBtn','searchFooterBtn','toolsDrawerBtn',
+                'calendarFooterBtn','secondaryActionBtn','footerCoffeeBtn',
+                'footerHelpBtn','activityFeedBtn'
+            ];
+
+            function _getBtns() {
+                return _ids.map(function(id) { return document.getElementById(id); }).filter(Boolean);
+            }
+
+            function _restoreDefaults() {
+                var navLeft  = document.getElementById('nav-left');
+                var navRight = document.getElementById('nav-right');
+                var undoBtn  = document.getElementById('undoBtn');
+                var redoBtn  = document.getElementById('redoBtn');
+                /* Phase 92.6 Task 1: Anchor undoBtn to end of navLeft, redoBtn to front of navRight */
+                navLeft.appendChild(undoBtn);
+                navRight.insertBefore(redoBtn, navRight.firstChild);
+                _getBtns().forEach(function(btn) {
+                    if (btn.getAttribute('data-pill-side') === 'left') {
+                        navLeft.insertBefore(btn, undoBtn);
+                    } else {
+                        navRight.appendChild(btn);
+                    }
+                });
+            }
+
+            function rebalance() {
+                var navLeft  = document.getElementById('nav-left');
+                var navRight = document.getElementById('nav-right');
+                var undoBtn  = document.getElementById('undoBtn');
+                var redoBtn  = document.getElementById('redoBtn');
+                /* Phase 92.6 Task 2: Visibility pipeline — read hidden buttons from localStorage */
+                var hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
+                var hidden = [];
+                try { hidden = hiddenRaw ? JSON.parse(hiddenRaw) : []; } catch(e) { hidden = []; }
+                /* Apply visibility to all buttons first */
+                _getBtns().forEach(function(btn) {
+                    if (hidden.indexOf(btn.id) > -1) {
+                        btn.style.display = 'none';
+                    } else {
+                        btn.style.display = '';
+                    }
+                });
+                /* If pill layout is off, restore defaults and exit */
+                if (localStorage.getItem('mBT_pillLayout') !== 'true') {
+                    _restoreDefaults();
+                    if (typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();
+                    return;
+                }
+                /* Phase 92.6 Task 1: Anchor undoBtn to end of navLeft, redoBtn to front of navRight */
+                navLeft.appendChild(undoBtn);
+                navRight.insertBefore(redoBtn, navRight.firstChild);
+                /* Collect visible buttons only (offsetParent is null when display:none) */
+                var active = _getBtns().filter(function(el) { return el.offsetParent !== null; });
+                /* Sort by original DOM order for stable distribution */
+                active.sort(function(a, b) {
+                    return parseInt(a.getAttribute('data-pill-order'), 10) - parseInt(b.getAttribute('data-pill-order'), 10);
+                });
+                var mid = Math.ceil(active.length / 2);
+                active.forEach(function(btn, i) {
+                    if (i < mid) {
+                        navLeft.insertBefore(btn, undoBtn);
+                    } else {
+                        navRight.appendChild(btn);
+                    }
+                });
+                if (typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();
+            }
+
+            // Boot: apply saved preference now that mBTNavHUD is ready
+            rebalance();
+
+            return { rebalance: rebalance };
+        })();
+
+        /* ========= Phase 81: Accounting Export Generators ========= */
+        function escapeCSVField(field) {
+            if (field == null) return '';
+            var str = String(field);
+            /* If field contains comma, newline, or double-quote, wrap in quotes and escape internal quotes */
+            if (str.indexOf(',') > -1 || str.indexOf('\n') > -1 || str.indexOf('"') > -1) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        }
+
+        function generateWiseCSV(budget) {
+            var lines = [];
+            lines.push('Source Currency,Recipient Name,Amount,Reference');
+
+            if (!budget.ledgers || !budget.ledgers.pos) return lines.join('\n');
+
+            var currency = (budget.settings && budget.settings.displayCurrency) || 'USD';
+
+            budget.ledgers.pos.forEach(function(po) {
+                if (po.status !== 'Invoiced') return; /* Filter for Invoiced only */
+
+                var recipient = escapeCSVField(po.vendor || '—');
+                var amount = (parseFloat(po.amount) || 0).toFixed(2);
+                var reference = escapeCSVField(po.id || '');
+
+                lines.push(currency + ',' + recipient + ',' + amount + ',' + reference);
+            });
+
+            return lines.join('\n');
+        }
+
+        function generateQuickBooksCSV(budget) {
+            var lines = [];
+            lines.push('Date,Vendor,Amount,Category,Memo');
+
+            if (!budget.ledgers || !budget.ledgers.pos) return lines.join('\n');
+
+            budget.ledgers.pos.forEach(function(po) {
+                if (po.status !== 'Paid') return; /* Filter for Paid only */
+
+                var date = po.date || new Date().toISOString().split('T')[0];
+                var vendor = escapeCSVField(po.vendor || '—');
+                var amount = (parseFloat(po.amount) || 0).toFixed(2);
+
+                /* Resolve section name from budget.sections */
+                var category = po.sectionKey || 'Uncategorized';
+                if (budget.sections && budget.sections[po.sectionKey]) {
+                    category = budget.sections[po.sectionKey].name || po.sectionKey;
+                }
+                category = escapeCSVField(category);
+
+                var memo = escapeCSVField(po.id || '');
+
+                lines.push(date + ',' + vendor + ',' + amount + ',' + category + ',' + memo);
+            });
+
+            return lines.join('\n');
+        }
+
+        function triggerCSVDownload(csvContent, fileName) {
+            var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement('a');
+            var url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', fileName);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
 
         /* ========= Tool Bridge: unified event bus for cross-tool integration ========= */
         window.addEventListener('message', function(e) {
@@ -11148,6 +11722,24 @@ window.updateAllHeaders = () => {
                         console.error('[mBT] Rejection failed:', e);
                     });
                 }
+
+            /* --- Phase 81: export-accounting — generate and download accounting exports (Wise/QB) --- */
+            } else if (action === 'export-accounting' && payload.type && currentProjectName && budget) {
+                var exportType = payload.type; /* 'wise' or 'qb' */
+                var csvContent = '';
+
+                if (exportType === 'wise') {
+                    csvContent = generateWiseCSV(budget);
+                } else if (exportType === 'qb') {
+                    csvContent = generateQuickBooksCSV(budget);
+                } else {
+                    console.warn('[mBT] Unknown export type:', exportType);
+                    return;
+                }
+
+                /* Trigger download */
+                var fileName = 'mbt_export_' + exportType + '_' + new Date().toISOString().split('T')[0] + '.csv';
+                triggerCSVDownload(csvContent, fileName);
             }
         });
 
@@ -11274,6 +11866,171 @@ window.updateAllHeaders = () => {
         });
     }
 
+    /* ========= Phase 92.1: Activity Feed & Toast System ========= */
+    /* --- Activity Feed Drawer --- */
+    window.mBTSurfaceActivityFeed = (function() {
+        var _drawer = null;
+        var _list = null;
+        var _isOpen = false;
+
+        function _getElements() {
+            _drawer = _drawer || document.getElementById('activityFeedDrawer');
+            _list = _list || document.getElementById('activityFeedList');
+        }
+
+        function _open() {
+            _getElements();
+            if (!_drawer) return;
+            _isOpen = true;
+            _drawer.classList.remove('hidden');
+        }
+
+        function _close() {
+            _getElements();
+            if (!_drawer) return;
+            _isOpen = false;
+            _drawer.classList.add('hidden');
+        }
+
+        function _toggle() {
+            if (_isOpen) _close();
+            else _open();
+        }
+
+        /* Add an activity item to the feed list */
+        function _addItem(type, message, color) {
+            _getElements();
+            if (!_list) return;
+            var timeStr = 'Just now';
+            var safeMsg = mBT.ui.render.esc(message);
+            var safeType = mBT.ui.render.esc(type);
+            var safeColor = color || 'bg-blue-500';
+            var html = '<div class="p-3 bg-white/5 rounded-xl border border-white/5 animate-in fade-in slide-in-from-right-2 duration-200">' +
+                '<div class="flex items-center gap-2 mb-1">' +
+                '<div class="w-2 h-2 rounded-full ' + safeColor + '"></div>' +
+                '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + safeType + '</span>' +
+                '<span class="text-[8px] text-slate-500 ml-auto">' + timeStr + '</span>' +
+                '</div>' +
+                '<p class="text-[10px] text-slate-300 font-bold">' + safeMsg + '</p>' +
+                '</div>';
+            _list.insertAdjacentHTML('afterbegin', html);
+        }
+
+        /* Clear mock items and show empty state */
+        function _clearMocks() {
+            _getElements();
+            if (!_list) return;
+            _list.innerHTML = '<div class="text-center text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-10">No activity yet</div>';
+        }
+
+        return { open: _open, close: _close, toggle: _toggle, addItem: _addItem, clearMocks: _clearMocks };
+    })();
+
+    /* --- Toast Notification System --- */
+    window.mBTSurfaceToast = (function() {
+        var _container = null;
+        var _toasts = [];
+        var _idCounter = 0;
+
+        function _getContainer() {
+            _container = _container || document.getElementById('toastContainer');
+        }
+
+        /* Show a toast notification */
+        function _show(message, type, duration) {
+            _getContainer();
+            if (!_container) return;
+            var id = ++_idCounter;
+            var safeMsg = mBT.ui.render.esc(message);
+            var colorClass = 'bg-blue-500';
+            if (type === 'success') colorClass = 'bg-emerald-500';
+            else if (type === 'warning') colorClass = 'bg-amber-500';
+            else if (type === 'error') colorClass = 'bg-rose-500';
+
+            var toastHtml = '<div id="toast-' + id + '" class="pointer-events-auto bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl p-3 flex items-start gap-3 animate-in fade-in slide-in-from-right-2 duration-200" style="min-width:240px;">' +
+                '<div class="w-2 h-2 rounded-full ' + colorClass + ' mt-1.5 flex-shrink-0"></div>' +
+                '<div class="flex-grow min-w-0">' +
+                '<p class="text-[10px] text-white font-bold leading-relaxed">' + safeMsg + '</p>' +
+                '</div>' +
+                '<button onclick="window.mBTSurfaceToast.dismiss(' + id + ')" class="text-slate-400 hover:text-white transition-colors flex-shrink-0 p-0.5">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                '</button>' +
+                '</div>';
+
+            _container.insertAdjacentHTML('beforeend', toastHtml);
+            _toasts.push({ id: id, timer: null });
+
+            /* Auto-dismiss after duration */
+            var dur = duration || 4000;
+            var timer = setTimeout(function() { _dismiss(id); }, dur);
+            for (var i = 0; i < _toasts.length; i++) {
+                if (_toasts[i].id === id) { _toasts[i].timer = timer; break; }
+            }
+            return id;
+        }
+
+        /* Dismiss a specific toast */
+        function _dismiss(id) {
+            var el = document.getElementById('toast-' + id);
+            if (el) {
+                el.classList.add('opacity-0', 'translate-x-4');
+                el.style.transition = 'all 0.2s ease';
+                setTimeout(function() { el.remove(); }, 200);
+            }
+            for (var i = 0; i < _toasts.length; i++) {
+                if (_toasts[i].id === id) {
+                    if (_toasts[i].timer) clearTimeout(_toasts[i].timer);
+                    _toasts.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        /* Convenience wrappers */
+        function _info(msg, dur) { return _show(msg, 'info', dur); }
+        function _success(msg, dur) { return _show(msg, 'success', dur); }
+        function _warning(msg, dur) { return _show(msg, 'warning', dur); }
+        function _error(msg, dur) { return _show(msg, 'error', dur); }
+
+        return { show: _show, dismiss: _dismiss, info: _info, success: _success, warning: _warning, error: _error };
+    })();
+
+    /* --- Drawer Close Button Handler --- */
+    (function() {
+        var closeBtn = document.getElementById('activityFeedCloseBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+                if (typeof mBTSurfaceActivityFeed !== 'undefined') mBTSurfaceActivityFeed.close();
+            });
+        }
+    })();
+
+    /* --- Event Listeners for Activity Feed & Toasts --- */
+    /* mbt:activity-log — receives activity payloads from Supabase realtime */
+    window.addEventListener('mbt:activity-log', function(e) {
+        var detail = e.detail || {};
+        var type = detail.type || 'Activity';
+        var message = detail.message || '';
+        var color = detail.color || 'bg-blue-500';
+        if (message && typeof mBTSurfaceActivityFeed !== 'undefined') {
+            mBTSurfaceActivityFeed.addItem(type, message, color);
+        }
+        /* Also show a toast for important events */
+        if (detail.toast !== false && typeof mBTSurfaceToast !== 'undefined') {
+            mBTSurfaceToast.info(type + ': ' + message, 3000);
+        }
+    });
+
+    /* mbt:peer-typing-status — shows brief typing indicator toast */
+    window.addEventListener('mbt:peer-typing-status', function(e) {
+        var detail = e.detail || {};
+        var user = detail.displayName || 'Peer';
+        var field = detail.field || '';
+        if (typeof mBTSurfaceToast !== 'undefined') {
+            mBTSurfaceToast.info(user + ' is editing' + (field ? ' "' + field + '"' : ''), 2000);
+        }
+    });
+
     /* --- 5. GLOBAL BOOT TRIGGER --- */
     // Logic Resolution: Global Bridge Hooks for external calls
     window.showBinModal = () => { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('documents'); };
@@ -11298,14 +12055,16 @@ window.updateAllHeaders = () => {
     })();
 
     // System Start
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', function() {
         if (mBT.core && typeof mBT.core.init === 'function') {
-            mBT.core.init();
+            mBT.core.init().catch(function(err) {
+                console.error('[mBT] Critical init failure:', err);
+            });
         } else if (typeof init === 'function') {
             init(); // Fallback for safety
         }
         // Ensure Login UI reflects current connectivity
-        resolveConnectivityStatus();
+        if (typeof resolveConnectivityStatus === 'function') resolveConnectivityStatus();
         // Initialize undo/redo button states
         if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     });

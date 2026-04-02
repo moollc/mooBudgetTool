@@ -1,3 +1,9 @@
+/**
+ * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
+ * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * License: MIT
+ */
+
 /* mBT Phase 80: Finance Engine — Wallet Bridge
    Payment entry point moved to Contacts microservice (Wallet tab).
    Direct item.actual writes removed — Phase 77 actuals engine owns that field.

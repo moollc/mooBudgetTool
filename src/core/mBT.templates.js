@@ -1,4 +1,85 @@
 /* mBT Phase 47: Extracted Static Presets & Templates */
+/* Phase 87C: Help Overlay Template added */
+
+/**
+ * Phase 87C: Glassmorphic Keyboard Shortcut Cheat Sheet
+ * Returns HTML string for the help overlay modal.
+ * Context-aware: shows global shortcuts + active tool shortcuts.
+ */
+function helpOverlayTemplate(activeTool) {
+    var globalShortcuts = [
+        { keys: 'Ctrl + K', desc: 'Command Palette (Search)' },
+        { keys: 'Ctrl + Z', desc: 'Undo' },
+        { keys: 'Ctrl + Shift + Z', desc: 'Redo' },
+        { keys: '?', desc: 'This Help Overlay' },
+        { keys: 'Esc', desc: 'Close Topmost Modal' }
+    ];
+
+    var toolShortcuts = {
+        'stages': [
+            { keys: 'Drag', desc: 'Reorder items within stage' },
+            { keys: 'Click Cost', desc: 'Edit item rate/days' }
+        ],
+        'calendar': [
+            { keys: 'Click Event', desc: 'Edit event details' },
+            { keys: 'Drag', desc: 'Move event date' }
+        ],
+        'contacts': [
+            { keys: 'Click Card', desc: 'Expand wallet panel' },
+            { keys: 'Search', desc: 'Filter by name/dept' }
+        ],
+        'po': [
+            { keys: 'Click PO', desc: 'Edit purchase order' },
+            { keys: 'Status Dropdown', desc: 'Change PO lifecycle' }
+        ],
+        'publisher': [
+            { keys: 'Click Template', desc: 'Open document editor' },
+            { keys: 'Preview', desc: 'Generate PDF snapshot' }
+        ],
+        'fringes': [
+            { keys: 'Toggle', desc: 'Enable/disable fringe' },
+            { keys: 'Rate Input', desc: 'Edit percentage' }
+        ]
+    };
+
+    var activeToolShortcuts = (activeTool && toolShortcuts[activeTool]) ? toolShortcuts[activeTool] : [];
+
+    function renderRow(s) {
+        return '<div class="flex items-center justify-between py-2 border-b border-white/10 last:border-0">' +
+            '<span class="text-[10px] font-mono font-bold text-white/80 bg-white/10 px-2 py-0.5 rounded">' + s.keys + '</span>' +
+            '<span class="text-[10px] text-white/60 font-medium">' + s.desc + '</span>' +
+        '</div>';
+    }
+
+    var html = '<div class="p-6 space-y-5">' +
+        /* Global Shortcuts */
+        '<div>' +
+            '<h4 class="text-[9px] font-black uppercase tracking-widest text-white/40 mb-3">Global Shortcuts</h4>' +
+            '<div class="space-y-0">' +
+                globalShortcuts.map(renderRow).join('') +
+            '</div>' +
+        '</div>';
+
+    /* Tool-specific shortcuts (if active) */
+    if (activeToolShortcuts.length > 0) {
+        html += '<div>' +
+            '<h4 class="text-[9px] font-black uppercase tracking-widest text-white/40 mb-3">' + activeTool.toUpperCase() + ' Shortcuts</h4>' +
+            '<div class="space-y-0">' +
+                activeToolShortcuts.map(renderRow).join('') +
+            '</div>' +
+        '</div>';
+    }
+
+    html += '<div class="pt-2 text-center">' +
+        '<p class="text-[8px] text-white/30 font-bold uppercase tracking-widest">Press Esc to close</p>' +
+    '</div>' +
+    '</div>';
+
+    return html;
+}
+
+/* Expose on window for mBT/index.html access */
+window.helpOverlayTemplate = helpOverlayTemplate;
 
 /* --- 5. Production Presets (Industry standard stage ratios) --- */
 var STAGE_PRESETS = {
