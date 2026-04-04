@@ -8,12 +8,24 @@
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
-    <script src="../../scripts/storage.js"></script>
-    <script src="../../scripts/engine/mbtle.js"></script>
+    <script>
+        /* Theme Bridge: Instant Inheritance */
+        (function() {
+            var activeTheme = localStorage.getItem('mbt_active_theme') || 'light';
+            document.documentElement.className = 'mbt-theme-' + activeTheme;
+        })();
+    </script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Theme Bridge: Bilateral Architecture */
+        .mbt-theme-dark { background-color: #020617; color: white; }
+        .mbt-theme-dark .studio-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(24px); border-color: rgba(255, 255, 255, 0.1); }
+        .mbt-theme-dark .mbt-header { background-color: #0f172a; border-bottom-color: #1e293b; }
+        .mbt-theme-dark #panel-setup { background-color: rgba(15, 23, 42, 0.95); backdrop-filter: blur(24px); }
+        
         .studio-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; position: relative; z-index: 1; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-radius: 16px; }
         .burn-ring { transition: stroke-dashoffset 1s ease-out, stroke 0.5s ease; }
         .conflict-glow { box-shadow: 0 0 20px rgba(245,158,11,0.2); border-color: #f59e0b !important; animation: pulse-amber 2s infinite; }
@@ -50,7 +62,7 @@
 <body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
 
     <!-- Top Navigation Bar -->
-    <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0 z-50">
+    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0 z-50">
         <div class="flex items-center gap-4">
             <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
@@ -107,7 +119,7 @@
     <div id="studio-layout" class="hidden flex-grow flex overflow-x-auto no-scrollbar bg-slate-100 snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none">
 
         <!-- Setup Panel -->
-        <div id="panel-setup" class="studio-card min-w-[320px] w-[320px] bg-slate-900 text-white snap-start shrink-0">
+        <div id="panel-setup" class="studio-card min-w-[320px] w-[320px] snap-start shrink-0">
             <div class="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Configuration</span>
                 <button onclick="mBTStageStudio.syncFromDb()" aria-label="Sync from budget database" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">

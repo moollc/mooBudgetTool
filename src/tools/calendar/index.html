@@ -6,10 +6,31 @@
     <title>mBT — Production Calendar</title>
     <script src="../../lib/tailwind.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
+    <script>
+        /* Theme Bridge: Instant Inheritance */
+        (function() {
+            var activeTheme = localStorage.getItem('mbt_active_theme') || 'light';
+            document.documentElement.className = 'mbt-theme-' + activeTheme;
+        })();
+    </script>
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Theme Bridge: Bilateral Architecture */
+        .mbt-theme-dark { background-color: #020617; color: white; }
+        .mbt-theme-dark #date-summary,
+        .mbt-theme-dark #gantt-section,
+        .mbt-theme-dark #calendar-section,
+        .mbt-theme-dark #milestones-section,
+        .mbt-theme-dark #stage-table-section {
+            background-color: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(24px);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .mbt-theme-dark .mbt-header { background-color: #0f172a; border-bottom-color: #1e293b; }
+
         .gantt-bar { border-radius: 6px; height: 28px; display: flex; align-items: center; padding: 0 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; transition: filter .2s; }
         .gantt-bar:hover { filter: brightness(1.1); }
         .milestone-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
@@ -37,26 +58,26 @@
 <body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
 
     <!-- Header -->
-    <div class="h-12 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
+    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
         <div class="flex items-center gap-4">
-            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-600 mbt-theme-dark:hover:text-white transition-colors">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
-            <div class="h-4 w-px bg-slate-700"></div>
-            <span class="text-white text-[11px] font-black uppercase tracking-tight">Production Calendar</span>
+            <div class="h-4 w-px bg-slate-200 mbt-theme-dark:bg-slate-700"></div>
+            <span class="text-slate-900 mbt-theme-dark:text-white text-xl md:text-[11px] font-black uppercase tracking-tight">Production Calendar</span>
             <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading…</span>
         </div>
         <div class="flex items-center gap-2">
-            <select id="sel-work-week" onchange="mBTCalendar.setWorkWeek(this.value)" class="bg-slate-800 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border-none outline-none cursor-pointer" aria-label="Work week type">
+            <select id="sel-work-week" onchange="mBTCalendar.setWorkWeek(this.value)" class="bg-slate-200 mbt-theme-dark:bg-slate-800 text-slate-900 mbt-theme-dark:text-white text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border-none outline-none cursor-pointer" aria-label="Work week type">
                 <option value="5">5-Day</option>
                 <option value="6">6-Day</option>
                 <option value="7">7-Day</option>
             </select>
-            <div class="flex bg-slate-800 rounded-lg overflow-hidden">
+            <div class="flex bg-slate-200 mbt-theme-dark:bg-slate-800 rounded-lg overflow-hidden">
                 <button id="btn-view-timeline" onclick="mBTCalendar.setView('timeline')" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors bg-blue-600 text-white">Timeline</button>
-                <button id="btn-view-calendar" onclick="mBTCalendar.setView('calendar')" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-white/60 hover:text-white">Calendar</button>
+                <button id="btn-view-calendar" onclick="mBTCalendar.setView('calendar')" class="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-slate-500 mbt-theme-dark:text-white/60 hover:text-slate-900 mbt-theme-dark:hover:text-white">Calendar</button>
             </div>
-            <button id="btn-export-ics" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+            <button id="btn-export-ics" class="flex items-center gap-1.5 bg-slate-200 mbt-theme-dark:bg-slate-800 hover:bg-slate-300 mbt-theme-dark:hover:bg-slate-700 text-slate-900 mbt-theme-dark:text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export .ics
             </button>
@@ -71,10 +92,9 @@
             No project loaded. Open this tool from the budget editor to load a project.
         </div>
 
+
         <!-- Date Range Summary -->
         <div id="date-summary" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
-            <div class="flex items-center justify-between mb-1">
-                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Timeline Overview</span>
                 <span id="total-days-label" class="text-[9px] font-black text-slate-400 uppercase tracking-widest"></span>
             </div>
             <div class="flex gap-4 text-[10px] mt-2">

@@ -2,6 +2,12 @@
 (function () {
     'use strict';
 
+    /* --- mBT UI Sync Feedback Bridge (Phase 96) --- */
+    function _dispatchSyncStatus(status) {
+        /* status: 'syncing' | 'saved' | 'error' | 'offline' */
+        window.dispatchEvent(new CustomEvent('mbt:sync-status', { detail: { status: status } }));
+    }
+
     /* --- 1. SUPABASE REST API PRIMITIVES --- */
 
     function getHeaders() {
@@ -524,6 +530,7 @@
             return { synced: 0, errors: 0, reason: 'not_configured' };
         }
         _isSyncing = true;
+        _dispatchSyncStatus('syncing');
         try {
 
         var schema = window.mBTSupabaseSchema || {};
@@ -713,7 +720,9 @@
 
         try { await pushPreferences(); } catch (e) { console.warn('[mBTSync] Preferences push failed:', e); }
 
-        return { synced: totalSynced, errors: totalErrors, conflicts: conflicts };
+        var result = { synced: totalSynced, errors: totalErrors, conflicts: conflicts };
+        _dispatchSyncStatus(totalErrors > 0 ? 'error' : 'saved');
+        return result;
         } finally {
             _isSyncing = false;
         }
@@ -726,6 +735,7 @@
             return { pulled: 0, errors: 0, reason: 'not_configured' };
         }
         _isSyncing = true;
+        _dispatchSyncStatus('syncing');
         try {
 
         var schema = window.mBTSupabaseSchema || {};
@@ -829,10 +839,19 @@
 
         try { await pullPreferences(); } catch (e) { console.warn('[mBTSync] Preferences pull failed:', e); }
 
-        return { pulled: totalPulled, errors: totalErrors, conflicts: conflicts };
+        var result = { pulled: totalPulled, errors: totalErrors, conflicts: conflicts };
+        _dispatchSyncStatus(totalErrors > 0 ? 'error' : 'saved');
+        return result;
+        } catch (e) {
+            _dispatchSyncStatus('error');
+            throw e;
         } finally {
             _isSyncing = false;
         }
+    }
+
+    function _dispatchSyncStatus(status) {
+        window.dispatchEvent(new CustomEvent('mbt:sync-status', { detail: { status: status } }));
     }
 
     /* --- 4. EXPORT / IMPORT --- */

@@ -6383,8 +6383,8 @@ window.updateAllHeaders = () => {
         mBT.core.action('project-recycle', () => { if(typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
         mBT.core.action('project-sync', () => { fetchExchangeRates(); mBTME.alert("Coming Soon", "Cloud Sync infrastructure is currently in development. Local exchange rates have been refreshed."); });
 
-        mBT.core.action('project-import-trigger', () => { const input = document.getElementById('importFile'); if(input) input.click(); });
-        mBT.core.action('project-import-file', (e, el) => { if(e.type === 'change') mBT.data.importFile(el); });
+        mBT.core.action('project-import-trigger', function() { var input = document.getElementById('importFile'); if(input) input.click(); });
+        mBT.core.action('project-import-file', function(e, el) { if(e.type === 'change') mBT.data.importFile(el); });
 
         // B. Global Utilities
         mBT.core.action('set-currency', (e, el) => {

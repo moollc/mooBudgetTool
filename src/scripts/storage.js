@@ -25,34 +25,34 @@ var STORE_NAMES = {
 
 var mBTStorage = {
   // Phase 16: Monolith Bridge (Async Support for localforage)
-  getMonolithBudget: function() {
+  getMonolithBudget: function () {
     var prefix = 'prodBudget_v5_';
     var lastLoaded = localStorage.getItem(prefix + 'lastLoaded');
     if (!lastLoaded) return Promise.resolve(null);
     var projectKey = prefix + lastLoaded;
-    
-    var tryFallback = function() {
-        var raw = localStorage.getItem(projectKey);
-        if (raw) {
-          try { 
-            var data = JSON.parse(raw);
-            if (data && !data.id) data.id = data.projectName || 'default';
-            return data;
-          } catch(e) {}
-        }
-        return null;
+
+    var tryFallback = function () {
+      var raw = localStorage.getItem(projectKey);
+      if (raw) {
+        try {
+          var data = JSON.parse(raw);
+          if (data && !data.id) data.id = data.projectName || 'default';
+          return data;
+        } catch (e) { }
+      }
+      return null;
     };
 
     if (typeof localforage !== 'undefined') {
-       return localforage.getItem(projectKey).then(function(data) {
-          if (data) {
-            if (!data.id) data.id = data.projectName || 'default';
-            return data;
-          }
-          return tryFallback();
-       }).catch(tryFallback);
+      return localforage.getItem(projectKey).then(function (data) {
+        if (data) {
+          if (!data.id) data.id = data.projectName || 'default';
+          return data;
+        }
+        return tryFallback();
+      }).catch(tryFallback);
     } else {
-       return Promise.resolve(tryFallback());
+      return Promise.resolve(tryFallback());
     }
   },
 
@@ -80,7 +80,7 @@ var mBTStorage = {
       request.onerror = function () {
         var err = request.error;
         if (err && err.name === 'QuotaExceededError') {
-            window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: 'DB open' } }));
+          window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: 'DB open' } }));
         }
         reject(err);
       };
@@ -170,7 +170,7 @@ var mBTStorage = {
         request.onerror = function () {
           var err = request.error;
           if (err && err.name === 'QuotaExceededError') {
-              window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.PROJECTS } }));
+            window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.PROJECTS } }));
           }
           reject(err);
         };
@@ -260,7 +260,7 @@ var mBTStorage = {
 
   getAllProjects: function () {
     var self = this;
-    return this.getMonolithBudget().then(function(monolith) {
+    return this.getMonolithBudget().then(function (monolith) {
       return self._getDb().then(function (db) {
         var store = db.transaction(STORE_NAMES.PROJECTS, 'readonly').objectStore(STORE_NAMES.PROJECTS);
         return new Promise(function (resolve, reject) {
@@ -269,7 +269,7 @@ var mBTStorage = {
             var results = request.result || [];
             if (monolith) {
               // Merge monolith project, ensuring it's at the top and unique
-              results = [monolith].concat(results.filter(function(p) { return p.id !== monolith.id && p.name !== monolith.projectName; }));
+              results = [monolith].concat(results.filter(function (p) { return p.id !== monolith.id && p.name !== monolith.projectName; }));
             }
             resolve(results);
           };
@@ -305,7 +305,7 @@ var mBTStorage = {
         request.onerror = function () {
           var err = request.error;
           if (err && err.name === 'QuotaExceededError') {
-              window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.STAGES } }));
+            window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.STAGES } }));
           }
           reject(err);
         };
@@ -381,26 +381,26 @@ var mBTStorage = {
 
   getStagesByProject: function (projectId) {
     var self = this;
-    return this.getMonolithBudget().then(function(monolith) {
+    return this.getMonolithBudget().then(function (monolith) {
       return self._getDb().then(function (db) {
-          if (monolith && (projectId === monolith.id || projectId === monolith.projectName)) {
-            if (monolith.targetLock && monolith.targetLock.stages) {
-              var mStages = Object.entries(monolith.targetLock.stages)
-                .filter(function(entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
-                .map(function(entry) {
-                  return {
-                    id: 'monolith_' + entry[0],
-                    projectId: monolith.id,
-                    projectName: monolith.projectName,
-                    description: entry[0].toUpperCase(),
-                    amount: entry[1].subtotal || 0,
-                    budgeted: entry[1].totalCap || 0
-                  };
-                });
+        if (monolith && (projectId === monolith.id || projectId === monolith.projectName)) {
+          if (monolith.targetLock && monolith.targetLock.stages) {
+            var mStages = Object.entries(monolith.targetLock.stages)
+              .filter(function (entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
+              .map(function (entry) {
+                return {
+                  id: 'monolith_' + entry[0],
+                  projectId: monolith.id,
+                  projectName: monolith.projectName,
+                  description: entry[0].toUpperCase(),
+                  amount: entry[1].subtotal || 0,
+                  budgeted: entry[1].totalCap || 0
+                };
+              });
             return Promise.resolve(mStages);
           }
         }
-        
+
         var store = db.transaction(STORE_NAMES.STAGES, 'readonly').objectStore(STORE_NAMES.STAGES);
         var index = store.index('projectId');
         return new Promise(function (resolve, reject) {
@@ -418,7 +418,7 @@ var mBTStorage = {
 
   getAllStages: function () {
     var self = this;
-    return this.getMonolithBudget().then(function(monolith) {
+    return this.getMonolithBudget().then(function (monolith) {
       return self._getDb().then(function (db) {
         var store = db.transaction(STORE_NAMES.STAGES, 'readonly').objectStore(STORE_NAMES.STAGES);
         return new Promise(function (resolve, reject) {
@@ -427,8 +427,8 @@ var mBTStorage = {
             var results = request.result || [];
             if (monolith && monolith.targetLock && monolith.targetLock.stages) {
               var mStages = Object.entries(monolith.targetLock.stages)
-                .filter(function(entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
-                .map(function(entry) {
+                .filter(function (entry) { return entry[1] && (entry[1].days > 0 || entry[1].subtotal > 0); })
+                .map(function (entry) {
                   return {
                     id: 'monolith_' + entry[0],
                     projectId: monolith.id,
@@ -474,7 +474,7 @@ var mBTStorage = {
         request.onerror = function () {
           var err = request.error;
           if (err && err.name === 'QuotaExceededError') {
-              window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.EXECUTIONS } }));
+            window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: STORE_NAMES.EXECUTIONS } }));
           }
           reject(err);
         };
@@ -799,31 +799,31 @@ var mBTStorage = {
 
   /* --- Export: full IndexedDB snapshot as JSON string --- */
   exportAllData: function () {
-      var self = this;
-      return self._getDb().then(function (db) {
-          var storeNames = Object.values(STORE_NAMES);
-          var promises = storeNames.map(function (name) {
-              return new Promise(function (resolve) {
-                  try {
-                      var tx = db.transaction(name, 'readonly');
-                      var req = tx.objectStore(name).getAll();
-                      req.onsuccess = function () { resolve({ store: name, data: req.result || [] }); };
-                      req.onerror = function () { resolve({ store: name, data: [] }); };
-                  } catch (e) {
-                      resolve({ store: name, data: [] });
-                  }
-              });
-          });
-          return Promise.all(promises).then(function (results) {
-              var snapshot = {
-                  version: 1,
-                  exportedAt: new Date().toISOString(),
-                  stores: {}
-              };
-              results.forEach(function (r) { snapshot.stores[r.store] = r.data; });
-              return JSON.stringify(snapshot, null, 2);
-          });
+    var self = this;
+    return self._getDb().then(function (db) {
+      var storeNames = Object.values(STORE_NAMES);
+      var promises = storeNames.map(function (name) {
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(name, 'readonly');
+            var req = tx.objectStore(name).getAll();
+            req.onsuccess = function () { resolve({ store: name, data: req.result || [] }); };
+            req.onerror = function () { resolve({ store: name, data: [] }); };
+          } catch (e) {
+            resolve({ store: name, data: [] });
+          }
+        });
       });
+      return Promise.all(promises).then(function (results) {
+        var snapshot = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          stores: {}
+        };
+        results.forEach(function (r) { snapshot.stores[r.store] = r.data; });
+        return JSON.stringify(snapshot, null, 2);
+      });
+    });
   },
 };
 

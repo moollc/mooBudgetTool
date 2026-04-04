@@ -6,6 +6,12 @@
     "icon": "🤖"
   },
   {
+    "id": "calendar",
+    "name": "Calendar",
+    "path": "./src/tools/calendar/index.html",
+    "icon": "📅"
+  },
+  {
     "id": "contacts",
     "name": "Contacts",
     "path": "./src/tools/contacts/index.html",
@@ -16,6 +22,24 @@
     "name": "mBTDB Document Builder",
     "path": "./src/tools/db/index.html",
     "icon": "🗃️"
+  },
+  {
+    "id": "diff",
+    "name": "Conflict Resolution",
+    "path": "./src/tools/diff/index.html",
+    "icon": "⚖️"
+  },
+  {
+    "id": "fringes",
+    "name": "Fringes",
+    "path": "./src/tools/fringes/index.html",
+    "icon": "🎨"
+  },
+  {
+    "id": "po",
+    "name": "Purchase Orders",
+    "path": "./src/tools/po/index.html",
+    "icon": "🧾"
   },
   {
     "id": "publisher",
@@ -30,15 +54,21 @@
     "icon": "🛠️"
   },
   {
+    "id": "share",
+    "name": "Share Hub",
+    "path": "./src/tools/share/index.html",
+    "icon": "🤝"
+  },
+  {
     "id": "stages",
     "name": "Stages",
     "path": "./src/tools/stages/index.html",
     "icon": "📑"
   },
   {
-    "id": "supabase",
-    "name": "Supabase Sync",
-    "path": "./src/tools/supabase/index.html",
-    "icon": "☁️"
+    "id": "template",
+    "name": "Templates",
+    "path": "./src/tools/template/index.html",
+    "icon": "📋"
   }
 ]
