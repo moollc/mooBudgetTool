@@ -1,6 +1,6 @@
-/* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.1 ========= */
+/* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.2 ========= */
 
-const CACHE_NAME = 'mbt-monolith-cache-v21';
+const CACHE_NAME = 'mbt-monolith-cache-v22';
 
 const PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -52,6 +52,10 @@ const PRECACHE_ASSETS = [
     './src/core/services/Preflight.js',
     './src/core/services/Contacts.js',
     './src/core/services/Security.js',
+    './src/core/ui/Footer.js',
+    './src/core/ui/Toolbar.js',
+    './src/core/ui/Calendar.js',
+    './src/core/wasm_node/pkg/mbt_wasm.js',
 
     /* --- Config --- */
     './src/config/ai.js',
@@ -72,6 +76,7 @@ const PRECACHE_ASSETS = [
     './src/tools/calendar/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
+    './src/tools/diff/index.html',
     './src/tools/fringes/index.html',
     './src/tools/po/index.html',
     './src/tools/publisher/index.html',
@@ -155,3 +160,59 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+/* --- Phase 92.9: Background Sync — Activity Log Replay --- */
+self.addEventListener('sync', function(event) {
+    if (event.tag === 'mbt-activity-sync') {
+        event.waitUntil(_swDrainActivityQueue());
+    }
+});
+
+function _swDrainActivityQueue() {
+    return new Promise(function(resolve) {
+        var req = indexedDB.open('mBT_DB', 3);
+        req.onerror = resolve;
+        req.onsuccess = function(e) {
+            var db = e.target.result;
+            /* Read SW credentials */
+            var tx = db.transaction(['mbt_generic'], 'readonly');
+            var cfgReq = tx.objectStore('mbt_generic').get('mbt_supabase_config_for_sw');
+            cfgReq.onerror = resolve;
+            cfgReq.onsuccess = function(cfgE) {
+                var cfgRecord = cfgE.target.result;
+                if (!cfgRecord || !cfgRecord.value || !cfgRecord.value.api_url || !cfgRecord.value.auth_token) {
+                    resolve(); return;
+                }
+                var cfg = cfgRecord.value;
+                /* Read activity queue */
+                var tx2 = db.transaction(['mbt_generic'], 'readonly');
+                var qReq = tx2.objectStore('mbt_generic').get('activity_offline_queue');
+                qReq.onerror = resolve;
+                qReq.onsuccess = function(qE) {
+                    var qRecord = qE.target.result;
+                    var entries = (qRecord && Array.isArray(qRecord.value)) ? qRecord.value : [];
+                    if (!entries.length) { resolve(); return; }
+                    var posts = entries.map(function(entry) {
+                        return fetch(cfg.api_url + '/rest/v1/mbt_activity_log', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type':  'application/json',
+                                'apikey':        cfg.anon_key || '',
+                                'Authorization': 'Bearer ' + cfg.auth_token,
+                                'Prefer':        'return=minimal'
+                            },
+                            body: JSON.stringify(entry)
+                        });
+                    });
+                    Promise.all(posts).then(function() {
+                        /* Clear queue on full success */
+                        var writeTx = db.transaction(['mbt_generic'], 'readwrite');
+                        var delReq  = writeTx.objectStore('mbt_generic').delete('activity_offline_queue');
+                        delReq.onsuccess = resolve;
+                        delReq.onerror   = resolve;
+                    }).catch(resolve); /* Leave queue intact — SW will retry on next sync event */
+                };
+            };
+        };
+    });
+}

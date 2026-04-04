@@ -32,21 +32,37 @@
     'use strict';
 
     /* --- Internal state --- */
-    var _ws              = null;     /* WebSocket instance */
-    var _refCounter      = 0;        /* Auto-incrementing Phoenix message ref */
-    var _heartbeatTimer  = null;     /* setInterval handle for 30s heartbeat */
-    var _reconnectTimer  = null;     /* setTimeout handle for reconnect backoff */
-    var _reconnectDelay  = 5000;     /* Reconnect delay ms — doubles on failure */
-    var _channels        = {};       /* Active channel map { key: { topic, joinRef } } */
-    var _presenceState   = {};       /* { userId: { user_id, display_name, ... } } */
-    var _typingLocks     = {};       /* { fieldId: { userId, displayName } } */
+    var _ws = null;     /* WebSocket instance */
+    var _refCounter = 0;        /* Auto-incrementing Phoenix message ref */
+    var _heartbeatTimer = null;     /* setInterval handle for 30s heartbeat */
+    var _reconnectTimer = null;     /* setTimeout handle for reconnect backoff */
+    var _reconnectDelay = 5000;     /* Reconnect delay ms — doubles on failure */
+    var _channels = {};       /* Active channel map { key: { topic, joinRef } } */
+    var _presenceState = {};       /* { userId: { user_id, display_name, ... } } */
+    var _typingLocks = {};       /* { fieldId: { userId, displayName } } */
     var _activeProjectId = null;     /* projectId currently subscribed */
-    var _connected       = false;    /* WebSocket.OPEN state flag */
+    var _connected = false;    /* WebSocket.OPEN state flag */
     var _intentionalClose = false;   /* Suppress auto-reconnect on manual disconnect */
     /* --- Phase 92: Typing status debounce/release timers --- */
     var _typingStatusDebounce = null; /* Outgoing broadcast debounce (300ms) */
-    var _typingStatusRelease  = null; /* Auto-release timer (2s idle) */
-    var _lastTypingField      = '';   /* fieldLabel captured at last broadcastTypingStatus call */
+    var _typingStatusRelease = null; /* Auto-release timer (2s idle) */
+    var _lastTypingField = '';   /* fieldLabel captured at last broadcastTypingStatus call */
+    /* --- Phase 92.9: Offline activity queue keys --- */
+    var _ACTIVITY_QUEUE_KEY = 'activity_offline_queue';    /* IDB mbt_generic key for offline queue */
+    var _SW_CONFIG_KEY = 'mbt_supabase_config_for_sw'; /* IDB key for SW credential cache */
+
+    /* Write current Supabase credentials to IDB so the SW can drain the queue when the tab is closed */
+    function _syncCredsToIdb() {
+        var cfg = window.mBTSupabaseConfig;
+        if (!cfg || !cfg.API_URL || typeof window.mBTStorage === 'undefined') return;
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        if (!jwt) return;
+        window.mBTStorage.setItem(_SW_CONFIG_KEY, {
+            api_url: cfg.API_URL,
+            anon_key: cfg.ANON_KEY || '',
+            auth_token: jwt
+        }).catch(function () { });
+    }
 
     /* --- Phoenix protocol helpers --- */
 
@@ -69,7 +85,7 @@
         var base = cfg.API_URL || '';
         if (!base) return null;
         /* Convert https:// → wss:// */
-        var wsBase = base.replace(/^https?:\/\//, function(m) {
+        var wsBase = base.replace(/^https?:\/\//, function (m) {
             return m === 'https://' ? 'wss://' : 'ws://';
         });
         var apiKey = cfg.ANON_KEY || '';
@@ -98,6 +114,7 @@
             _reconnectDelay = 5000; /* Reset backoff on successful connect */
             console.log('[mBTRealtime] Connected to Supabase Realtime');
             _startHeartbeat();
+            _syncCredsToIdb();
             window.dispatchEvent(new CustomEvent('mbt:realtime-connected'));
             /* Re-subscribe to active project if we had one before reconnect */
             if (_activeProjectId) {
@@ -132,16 +149,16 @@
 
     function disconnect() {
         _intentionalClose = true;
-        if (_reconnectTimer)      { clearTimeout(_reconnectTimer);      _reconnectTimer      = null; }
-        if (_typingStatusDebounce){ clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
-        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
+        if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+        if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
+        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease); _typingStatusRelease = null; }
         _stopHeartbeat();
-        _channels        = {};
-        _presenceState   = {};
-        _typingLocks     = {};
+        _channels = {};
+        _presenceState = {};
+        _typingLocks = {};
         _activeProjectId = null;
         _lastTypingField = '';
-        _connected       = false;
+        _connected = false;
         if (_ws) {
             _ws.onclose = null; /* Prevent reconnect from manual disconnect */
             _ws.close();
@@ -179,8 +196,8 @@
     /* Phoenix message format: [join_ref, ref, topic, event, payload] */
     function _handleMessage(msg) {
         if (!Array.isArray(msg) || msg.length < 5) return;
-        var topic   = msg[2];
-        var event   = msg[3];
+        var topic = msg[2];
+        var event = msg[3];
         var payload = msg[4];
 
         switch (event) {
@@ -274,7 +291,7 @@
     function _handleBroadcast(topic, payload) {
         if (!payload) return;
         var event = payload.event;
-        var data  = payload.payload;
+        var data = payload.payload;
         if (!data) return;
 
         if (event === 'typing_lock') {
@@ -290,7 +307,7 @@
                 detail: { fieldId: data.field_id }
             }));
 
-        /* --- Phase 62: RBAC — admin broadcasts a role change for a specific user --- */
+            /* --- Phase 62: RBAC — admin broadcasts a role change for a specific user --- */
         } else if (event === 'auth_changed') {
             var myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
             /* Only act on messages addressed to this user */
@@ -300,7 +317,7 @@
                 }));
             }
 
-        /* --- Phase 68B: Approval verdict — Owner approved or rejected an Editor's pending edit --- */
+            /* --- Phase 68B: Approval verdict — Owner approved or rejected an Editor's pending edit --- */
         } else if (event === 'approval_verdict') {
             var myVerdictId = localStorage.getItem('mbt_supabase_user_id') || '';
             if (data.target_user_id && data.target_user_id === myVerdictId) {
@@ -309,23 +326,23 @@
                 }));
             }
 
-        /* --- Phase 92: Activity log — peer broadcast a persisted activity entry --- */
+            /* --- Phase 92: Activity log — peer broadcast a persisted activity entry --- */
         } else if (event === 'activity_log') {
             var myActId = localStorage.getItem('mbt_supabase_user_id') || '';
             /* Ignore own echoes — local dispatch already fired in broadcastActivity() */
             if (data.user_id && data.user_id === myActId) return;
             window.dispatchEvent(new CustomEvent('mbt:activity-log', { detail: data }));
 
-        /* --- Phase 92: Typing status — non-exclusive "peer is editing" indicator --- */
+            /* --- Phase 92: Typing status — non-exclusive "peer is editing" indicator --- */
         } else if (event === 'typing_status') {
             var myTsId = localStorage.getItem('mbt_supabase_user_id') || '';
             if (data.user_id && data.user_id === myTsId) return;
             window.dispatchEvent(new CustomEvent('mbt:peer-typing-status', {
                 detail: {
-                    userId:      data.user_id      || '',
+                    userId: data.user_id || '',
                     displayName: data.display_name || 'Peer',
-                    fieldLabel:  data.field_label  || '',
-                    active:      !!data.active
+                    fieldLabel: data.field_label || '',
+                    active: !!data.active
                 }
             }));
         }
@@ -359,20 +376,20 @@
             return;
         }
         _activeProjectId = projectId;
-        var jwt         = localStorage.getItem('mbt_supabase_auth_token') || '';
-        var userId      = localStorage.getItem('mbt_supabase_user_id') || '';
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
 
         /* --- DB Changes channel: subscribe to UPDATE events on public.projects table ---
            Sub-Phase 51.2 Task 9: Bind to JWT for RLS-level security so only rows
            the user owns (per RLS policy) will be delivered. */
-        var dbTopic  = 'realtime:public:projects';
+        var dbTopic = 'realtime:public:projects';
         var dbJoinRef = _nextRef();
         _channels['db_projects'] = { topic: dbTopic, joinRef: dbJoinRef };
         _send([dbJoinRef, dbJoinRef, dbTopic, 'phx_join', {
             config: {
-                broadcast:       { self: false },
-                presence:        { key: '' },
+                broadcast: { self: false },
+                presence: { key: '' },
                 postgres_changes: [{ event: 'UPDATE', schema: 'public', table: 'projects' }]
             },
             access_token: jwt
@@ -380,8 +397,8 @@
 
         /* --- Presence channel: one channel per project so collaborators on different
                projects don't bleed into each other's presence bars. --- */
-        var presenceTopic   = 'realtime:presence:budget:' + projectId;
-        var presJoinRef     = _nextRef();
+        var presenceTopic = 'realtime:presence:budget:' + projectId;
+        var presJoinRef = _nextRef();
         _channels['presence_' + projectId] = { topic: presenceTopic, joinRef: presJoinRef };
         _send([presJoinRef, presJoinRef, presenceTopic, 'phx_join', {
             config: { presence: { key: userId } },
@@ -394,10 +411,10 @@
             _send([null, _nextRef(), presenceTopic, 'presence', {
                 event: 'track',
                 payload: {
-                    user_id:      userId,
+                    user_id: userId,
                     display_name: displayName,
-                    project_id:   projectId,
-                    joined_at:    new Date().toISOString()
+                    project_id: projectId,
+                    joined_at: new Date().toISOString()
                 }
             }]);
         }, 600);
@@ -418,12 +435,12 @@
             delete _channels[presKey];
         }
         /* Clear state for this project */
-        _presenceState   = {};
-        _typingLocks     = {};
+        _presenceState = {};
+        _typingLocks = {};
         _activeProjectId = null;
         _lastTypingField = '';
         if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
-        if (_typingStatusRelease)  { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
+        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease); _typingStatusRelease = null; }
         _dispatchPresenceUpdate();
     }
 
@@ -432,10 +449,10 @@
     function broadcastTypingLock(fieldId) {
         if (!_activeProjectId || !_connected) return;
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
-        var userId        = localStorage.getItem('mbt_supabase_user_id') || '';
-        var displayName   = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'typing_lock',
+            event: 'typing_lock',
             payload: { field_id: fieldId, user_id: userId, display_name: displayName }
         }]);
     }
@@ -444,7 +461,7 @@
         if (!_activeProjectId || !_connected) return;
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'typing_release',
+            event: 'typing_release',
             payload: { field_id: fieldId }
         }]);
     }
@@ -454,15 +471,15 @@
     function broadcastRoleChange(targetUserId, newRole) {
         if (!_activeProjectId || !_connected) return;
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
-        var myUserId    = localStorage.getItem('mbt_supabase_user_id') || '';
+        var myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
         var displayName = localStorage.getItem('mbt_profile_display_name') || 'Admin';
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'auth_changed',
+            event: 'auth_changed',
             payload: {
                 target_user_id: targetUserId,
-                role:           newRole,
-                changed_by:     displayName,
-                changed_by_id:  myUserId
+                role: newRole,
+                changed_by: displayName,
+                changed_by_id: myUserId
             }
         }]);
     }
@@ -474,12 +491,12 @@
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
         var myUserId = localStorage.getItem('mbt_supabase_user_id') || '';
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'approval_verdict',
+            event: 'approval_verdict',
             payload: {
                 target_user_id: targetUserId,
-                project_id:     projectId,
-                verdict:        verdict,
-                decided_by:     myUserId
+                project_id: projectId,
+                verdict: verdict,
+                decided_by: myUserId
             }
         }]);
     }
@@ -489,10 +506,10 @@
     function broadcastFocus(toolName) {
         if (!_activeProjectId || !_connected) return;
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
-        var userId      = localStorage.getItem('mbt_supabase_user_id') || '';
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'tool_focus',
+            event: 'tool_focus',
             payload: { tool: toolName, user_id: userId, display_name: displayName }
         }]);
     }
@@ -503,10 +520,10 @@
     function _sendTypingStatus(fieldLabel, active) {
         if (!_activeProjectId || !_connected) return;
         var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
-        var userId        = localStorage.getItem('mbt_supabase_user_id') || '';
-        var displayName   = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
         _send([null, _nextRef(), presenceTopic, 'broadcast', {
-            event:   'typing_status',
+            event: 'typing_status',
             payload: { user_id: userId, display_name: displayName, field_label: fieldLabel, active: active }
         }]);
     }
@@ -518,11 +535,11 @@
         if (_typingStatusRelease) { clearTimeout(_typingStatusRelease); _typingStatusRelease = null; }
         /* Debounce outgoing broadcast to avoid flooding on rapid keystrokes */
         if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); }
-        _typingStatusDebounce = setTimeout(function() {
+        _typingStatusDebounce = setTimeout(function () {
             _typingStatusDebounce = null;
             _sendTypingStatus(_lastTypingField, true);
             /* Auto-release 2s after the debounced send fires with no further activity */
-            _typingStatusRelease = setTimeout(function() {
+            _typingStatusRelease = setTimeout(function () {
                 _typingStatusRelease = null;
                 _sendTypingStatus(_lastTypingField, false);
             }, 2000);
@@ -532,10 +549,62 @@
     /* Called on input focusout — immediately broadcasts inactive and clears timers */
     function broadcastTypingStatusRelease() {
         if (_typingStatusDebounce) { clearTimeout(_typingStatusDebounce); _typingStatusDebounce = null; }
-        if (_typingStatusRelease)  { clearTimeout(_typingStatusRelease);  _typingStatusRelease  = null; }
+        if (_typingStatusRelease) { clearTimeout(_typingStatusRelease); _typingStatusRelease = null; }
         _sendTypingStatus(_lastTypingField, false);
         _lastTypingField = '';
     }
+
+    /* --- Phase 92.9: Offline activity queue --- */
+
+    /* Append one entry to the IDB offline queue (capped at 200 entries) */
+    function _enqueueActivity(entry) {
+        if (typeof window.mBTStorage === 'undefined') return;
+        window.mBTStorage.getItem(_ACTIVITY_QUEUE_KEY).then(function (existing) {
+            var arr = Array.isArray(existing) ? existing : [];
+            arr.push(entry);
+            if (arr.length > 200) arr = arr.slice(-200);
+            return window.mBTStorage.setItem(_ACTIVITY_QUEUE_KEY, arr);
+        }).catch(function () { });
+    }
+
+    /* POST all queued entries to Supabase, clear queue on full success */
+    function drainActivityQueue() {
+        if (typeof window.mBTStorage === 'undefined') return;
+        var cfg = window.mBTSupabaseConfig;
+        if (!cfg || !cfg.API_URL) return;
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        if (!jwt) return;
+        window.mBTStorage.getItem(_ACTIVITY_QUEUE_KEY).then(function (arr) {
+            if (!Array.isArray(arr) || !arr.length) return;
+            var posts = arr.map(function (entry) {
+                return fetch(cfg.API_URL + '/rest/v1/mbt_activity_log', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': cfg.ANON_KEY || '',
+                        'Authorization': 'Bearer ' + jwt,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(entry)
+                });
+            });
+            return Promise.all(posts).then(function () {
+                return window.mBTStorage.removeItem(_ACTIVITY_QUEUE_KEY);
+            });
+        }).catch(function (e) {
+            console.warn('[mBTRealtime] Activity queue drain failed:', e);
+        });
+    }
+
+    /* On reconnect: drain page-level queue, then register SW Background Sync tag */
+    window.addEventListener('online', function () {
+        drainActivityQueue();
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            navigator.serviceWorker.ready.then(function (reg) {
+                return reg.sync.register('mbt-activity-sync');
+            }).catch(function () { });
+        }
+    });
 
     /* --- Phase 92: Activity Log Broadcast + DB Persist --- */
 
@@ -546,25 +615,31 @@
         var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
         if (!jwt) return;
         var body = {
-            project_id:   _activeProjectId,
-            user_id:      payload.user_id,
+            project_id: _activeProjectId,
+            user_id: payload.user_id,
             display_name: payload.display_name,
-            action_type:  payload.action_type,
-            section:      payload.section || '',
-            field:        payload.field   || '',
-            detail:       payload.detail  || ''
+            action_type: payload.action_type,
+            section: payload.section || '',
+            field: payload.field || '',
+            detail: payload.detail || '',
+            created_at: payload.created_at || new Date().toISOString()
         };
+        if (!navigator.onLine) {
+            _enqueueActivity(body);
+            return;
+        }
         fetch(cfg.API_URL + '/rest/v1/mbt_activity_log', {
-            method:  'POST',
+            method: 'POST',
             headers: {
-                'Content-Type':  'application/json',
-                'apikey':        cfg.ANON_KEY || '',
+                'Content-Type': 'application/json',
+                'apikey': cfg.ANON_KEY || '',
                 'Authorization': 'Bearer ' + jwt,
-                'Prefer':        'return=minimal'
+                'Prefer': 'return=minimal'
             },
             body: JSON.stringify(body)
-        }).catch(function(e) {
-            console.warn('[mBTRealtime] Activity log persist failed:', e);
+        }).catch(function (e) {
+            console.warn('[mBTRealtime] Activity log persist failed — queuing for replay:', e);
+            _enqueueActivity(body);
         });
     }
 
@@ -572,22 +647,22 @@
        actionType: 'field_edit' | 'tool_open' | 'field_lock' | 'budget_save'
        section, field, detail: human-readable context strings */
     function broadcastActivity(actionType, section, field, detail) {
-        var userId      = localStorage.getItem('mbt_supabase_user_id') || '';
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
         var displayName = localStorage.getItem('mbt_profile_display_name') || 'Collaborator';
         var payload = {
-            user_id:      userId,
+            user_id: userId,
             display_name: displayName,
-            action_type:  actionType || 'field_edit',
-            section:      section    || '',
-            field:        field      || '',
-            detail:       detail     || '',
-            created_at:   new Date().toISOString()
+            action_type: actionType || 'field_edit',
+            section: section || '',
+            field: field || '',
+            detail: detail || '',
+            created_at: new Date().toISOString()
         };
         /* Broadcast to all peers on the presence channel */
         if (_activeProjectId && _connected) {
             var presenceTopic = 'realtime:presence:budget:' + _activeProjectId;
             _send([null, _nextRef(), presenceTopic, 'broadcast', {
-                event:   'activity_log',
+                event: 'activity_log',
                 payload: payload
             }]);
         }
@@ -629,22 +704,23 @@
 
     /* --- Global exposure --- */
     window.mBTRealtime = {
-        connect:                    connect,
-        disconnect:                 disconnect,
-        subscribeToProject:         subscribeToProject,
-        unsubscribeFromProject:     unsubscribeFromProject,
-        broadcastTypingLock:        broadcastTypingLock,
-        broadcastTypingRelease:     broadcastTypingRelease,
-        broadcastTypingStatus:      broadcastTypingStatus,
+        connect: connect,
+        disconnect: disconnect,
+        subscribeToProject: subscribeToProject,
+        unsubscribeFromProject: unsubscribeFromProject,
+        broadcastTypingLock: broadcastTypingLock,
+        broadcastTypingRelease: broadcastTypingRelease,
+        broadcastTypingStatus: broadcastTypingStatus,
         broadcastTypingStatusRelease: broadcastTypingStatusRelease,
-        broadcastActivity:          broadcastActivity,
-        broadcastFocus:             broadcastFocus,
-        broadcastRoleChange:        broadcastRoleChange,
-        broadcastApproval:          broadcastApproval,
-        isFieldLocked:              isFieldLocked,
-        getLockedBy:                getLockedBy,
-        getPresencePeers:           getPresencePeers,
-        isConnected:                isConnected
+        broadcastActivity: broadcastActivity,
+        drainActivityQueue: drainActivityQueue,
+        broadcastFocus: broadcastFocus,
+        broadcastRoleChange: broadcastRoleChange,
+        broadcastApproval: broadcastApproval,
+        isFieldLocked: isFieldLocked,
+        getLockedBy: getLockedBy,
+        getPresencePeers: getPresencePeers,
+        isConnected: isConnected
     };
 
 })();

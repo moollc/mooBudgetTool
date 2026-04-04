@@ -4,7 +4,8 @@
  * License: MIT
  */
 
-window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
+(function() {
+    window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
             subTab = subTab || 'lineItems';
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             if (tabName === 'general') {
@@ -59,6 +60,18 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="zoomToggle" ${allowZoom ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.allowZoom = this.checked; saveBudget(); mBT.ui.updateViewport();" class="sr-only peer">
                                         <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Display Theme</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Toggle Premium Dark / Classic Light</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="themeToggle" ${localStorage.getItem('mbt_active_theme') === 'dark' ? 'checked' : ''} onchange="mBT.ui.setTheme(this.checked ? 'dark' : 'light');" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
                                     </label>
                                 </div>
                             </div>
@@ -125,45 +138,13 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
                             <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Pill Layout</h4>
-                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Distribute nav buttons equally between left and right sides</p>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Developer Mode</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Show advanced tools and logs</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" id="pillLayoutToggle" ${localStorage.getItem('mBT_pillLayout') === 'true' ? 'checked' : ''} onchange="localStorage.setItem('mBT_pillLayout', this.checked ? 'true' : 'false'); var _pg=document.getElementById('pillGridContainer'); if(_pg) _pg.classList.toggle('hidden', !this.checked); if(typeof mBT !== 'undefined' && mBT.ui && mBT.ui.footer) mBT.ui.footer.rebalance();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <input type="checkbox" onchange="localStorage.setItem('mBT_devMode', this.checked); location.reload();" ${localStorage.getItem('mBT_devMode') === 'true' ? 'checked' : ''} class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
                                     </label>
-                                </div>
-                                <!-- Phase 92.6 Task 3: Pill-toggle grid for hiding/showing footer buttons -->
-                                <div id="pillGridContainer" class="mt-3 pt-3 border-t border-slate-100 ${localStorage.getItem('mBT_pillLayout') === 'true' ? '' : 'hidden'}">
-                                    <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Toggle Button Visibility</p>
-                                    <div class="flex flex-wrap gap-1.5">
-                                        ${function() {
-                                            var btnDefs = [
-                                                { id: 'stagesFooterBtn', label: 'Stages' },
-                                                { id: 'docsFooterBtn', label: 'Docs' },
-                                                { id: 'contactsFooterBtn', label: 'Crew' },
-                                                { id: 'actualsToggleBtn', label: 'Actuals' },
-                                                { id: 'searchFooterBtn', label: 'Search' },
-                                                { id: 'toolsDrawerBtn', label: 'Tools' },
-                                                { id: 'calendarFooterBtn', label: 'Cal' },
-                                                { id: 'secondaryActionBtn', label: 'Publish' },
-                                                { id: 'footerCoffeeBtn', label: 'Support' },
-                                                { id: 'footerHelpBtn', label: 'Help' },
-                                                { id: 'activityFeedBtn', label: 'Activity' }
-                                            ];
-                                            var hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
-                                            var hidden = [];
-                                            try { hidden = hiddenRaw ? JSON.parse(hiddenRaw) : []; } catch(e) { hidden = []; }
-                                            return btnDefs.map(function(b) {
-                                                var isHidden = hidden.indexOf(b.id) > -1;
-                                                return '<button data-pill-toggle-btn="' + b.id + '" ' +
-                                                    'onclick="var _h=localStorage.getItem(\'mBT_footerHiddenBtns\'); var _a=[]; try{_a=_h?JSON.parse(_h):[];}catch(e){_a=[];} var _i=_a.indexOf(\'' + b.id + '\'); if(_i>-1){_a.splice(_i,1);}else{_a.push(\'' + b.id + '\');} localStorage.setItem(\'mBT_footerHiddenBtns\',JSON.stringify(_a)); this.classList.toggle(\'bg-slate-200\',_a.indexOf(\'' + b.id + '\')>-1); this.classList.toggle(\'text-slate-400\',_a.indexOf(\'' + b.id + '\')>-1); this.classList.toggle(\'bg-blue-100\',_a.indexOf(\'' + b.id + '\')===-1); this.classList.toggle(\'text-blue-700\',_a.indexOf(\'' + b.id + '\')===-1); if(typeof mBT!==\'undefined\'&&mBT.ui&&mBT.ui.footer) mBT.ui.footer.rebalance();" ' +
-                                                    'class="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ' +
-                                                    (isHidden ? 'bg-slate-200 text-slate-400 line-through' : 'bg-blue-100 text-blue-700') + '">' +
-                                                    b.label + '</button>';
-                                            }).join('');
-                                        }()}
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -388,7 +369,13 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
 
                         <!-- Project Backup + Sync -->
                         <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-0.5">Background Sync</h3>
+                            <div class="flex items-center justify-between mb-0.5">
+                                <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Background Sync</h3>
+                                <div id="sync-heartbeat-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    Status Check...
+                                </div>
+                            </div>
                             <p class="text-[9px] text-slate-400 font-bold mb-2">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-Sync Changes</span>
@@ -421,3 +408,22 @@ window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
             }
             return `<div class="p-8 text-center text-slate-300 font-bold uppercase tracking-widest">Logic Stream Not Found</div>`;
         };
+
+    /* --- mBT UI Theme Logic (Bridge Implementation) --- */
+    mBT.ui = mBT.ui || {};
+    mBT.ui.setTheme = function(themeName) {
+        themeName = themeName || 'dark';
+        localStorage.setItem('mbt_active_theme', themeName);
+        document.body.className = document.body.className.replace(/\bmbt-theme-\S+/g, '');
+        document.body.classList.add('mbt-theme-' + themeName);
+        if (themeName === 'dark') {
+            document.body.classList.add('bg-slate-950');
+            document.body.classList.remove('bg-slate-50');
+        } else {
+            document.body.classList.add('bg-slate-50');
+            document.body.classList.remove('bg-slate-950');
+        }
+        window.dispatchEvent(new CustomEvent('mbt:theme-changed', { detail: { theme: themeName } }));
+    };
+
+})();
