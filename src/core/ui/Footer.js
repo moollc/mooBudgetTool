@@ -73,10 +73,11 @@
 
                 '</div>', /* end nav-left */
 
-                /* Center anchor — always visible, sets the collapsed pill size */
-                '<button id="mainActionBtn" aria-label="Main Menu"',
-                '    class="w-12 h-12 flex-shrink-0 bg-blue-600 rounded-[18px] shadow-xl shadow-blue-500/20 flex items-center justify-center text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90">',
+                /* Center anchor — Settings keystone, always visible, sets the collapsed pill size */
+                '<button id="mainActionBtn" data-action="settings-modal" aria-label="Settings"',
+                '    class="flex-shrink-0 bg-blue-600 rounded-[18px] shadow-xl shadow-blue-500/20 flex flex-col items-center justify-center gap-0.5 text-white border-2 border-white/20 transition-all hover:bg-blue-500 active:scale-90 px-3 py-2 min-w-[48px]">',
                 '    <div id="icon-main-action" class="[&>svg]:w-6 [&>svg]:h-6"></div>',
+                '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-blue-200 whitespace-nowrap hidden md:block">Settings</span>',
                 '</button>',
 
                 /* Right button group — clips as pill shrinks right */
@@ -193,4 +194,4 @@
         }
     };
 
-})();
+})(window);

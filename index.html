@@ -303,16 +303,17 @@
 
 
     // --- MASTER NAMESPACE (Tier 1 Hoist) ---
-    // Logic Resolution: Capture pre-registered UI modules (Footer/Toolbar/Calendar load before this block),
-    // then reconstruct the full namespace without destroying them.
-    var _preUI = (window.mBT && window.mBT.ui) || {};
+    // Logic Resolution: Capture pre-registered UI and Feature modules (Footer/Toolbar/Calendar load before
+    // this block), then reconstruct the full namespace without destroying them.
+    var _preUI       = (window.mBT && window.mBT.ui)       || {};
+    var _preFeatures = (window.mBT && window.mBT.features) || {};
     window.mBT = {
-        config: { version: APP_VERSION },
-        core: {},    // Tier 1 (Kernel)
-        data: {},    // Tier 2
-        logic: {},   // Tier 3
-        ui: _preUI,
-        features: {} // Tier 5
+        config:   { version: APP_VERSION },
+        core:     {},    // Tier 1 (Kernel)
+        data:     {},    // Tier 2
+        logic:    {},    // Tier 3
+        ui:       _preUI,
+        features: _preFeatures  // Tier 5 — preserved across hoist for modular pre-registration
     };
     window.mBT.ui.render = window.mBT.ui.render || {};
     window.mBT.ui.render.esc = function (str) { var d = document.createElement('div'); d.textContent = String(str || ''); return d.innerHTML; };
@@ -477,7 +478,18 @@
                     });
                 });
             }).then(function () {
-                /* 7. UI Ignition */
+                /* 7. Toolbar Bootstrap — header render guard for paths that bypass loadBudget */
+                var _initApp = document.getElementById('app');
+                if (_initApp && !document.getElementById('projectName')) {
+                    if (mBT.ui && typeof mBT.ui._fullRender === 'function') {
+                        mBT.ui._fullRender(_initApp);
+                    }
+                }
+                if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') {
+                    mBT.ui.toolbar.renderProjectMgmt();
+                }
+
+                /* 7.1 UI Ignition — action registry and event wiring */
                 if (typeof bindAppEventListeners === 'function') bindAppEventListeners();
 
                 /* Sprint 1: Prune Legacy Logs */
@@ -2271,23 +2283,22 @@
 
             // --- TIER 5 UPGRADE: Phase 3.4 Risk Analyst (The Brain) ---
             analyzeRisk: function (metrics, timeline) {
-                // 1. Daily Burn Rate (Cash per Day)
-                // Use totalDays calculated in metrics (sum of all stage durations)
-                const dailyBurn = metrics.totalDays > 0 ? (metrics.grandTotal / metrics.totalDays) : 0;
+                // 1. Daily Burn Rate (Cash per Working Day, pre-calculated from working days in metrics)
+                var dailyBurn = metrics.dailyBurn || 0;
 
                 // 2. Variance (Days Late) from Timeline
                 // timeline._analysis might be undefined if no deadline set
-                const variance = (timeline && timeline._analysis) ? timeline._analysis.variance : 0;
+                var variance = (timeline && timeline._analysis) ? timeline._analysis.variance : 0;
 
                 // If early or on time (variance >= 0), no financial risk from time
                 if (variance >= 0) return null;
 
                 // 3. Cost of Delay (Daily Burn * Days Late)
-                const daysLate = Math.abs(variance);
-                const delayCost = dailyBurn * daysLate;
+                var daysLate = Math.abs(variance);
+                var delayCost = dailyBurn * daysLate;
 
                 // 4. Projected Total (Current Estimated + Cost of Delay)
-                const projectedTotal = metrics.grandTotal + delayCost;
+                var projectedTotal = metrics.grandTotal + delayCost;
 
                 // 5. The "Crash" Check
                 // Do we have enough Cap Room to absorb this delay?
@@ -7403,8 +7414,9 @@
             // Tier 5 Update: Manual Tab Construction for Event Delegation
             const tabs = [
                 { id: 'general', label: `General` },
-                { id: 'database', label: `OpenGate` },
+                { id: 'database', label: `DATABASE` },
                 { id: 'ai', label: `AI` },
+                { id: 'connections', label: `Connections` },
                 { id: 'cloud', label: `Cloud` }
             ];
 
@@ -7742,6 +7754,7 @@
 
             var totalSecured = 0;
             var totalLiquid = 0;
+            var liquidConfirmed = 0;
             var sumConfirmed = 0, sumPending = 0, sumLOI = 0;
 
             var currencyConfig = (typeof mBT !== 'undefined' && mBT.logic && mBT.logic.math && mBT.logic.math.config && mBT.logic.math.config.currencies) ? mBT.logic.math.config.currencies : { 'JMD': { rate: 1 }, 'USD': { rate: 1 }, 'GBP': { rate: 1 }, 'CAD': { rate: 1 }, 'EUR': { rate: 1 } };
@@ -7754,7 +7767,6 @@
 
                 var sc = sources[i].currency || baseDisplayCurrency;
                 var scRate = currencyConfig[sc] ? (currencyConfig[sc].rate || 1) : 1;
-                // e.g. If base is JMD(1) and source is USD(150), 10 USD = 1500 JMD
                 var multiplier = (scRate / baseRate);
 
                 var amt = rawAmt * multiplier;
@@ -7763,27 +7775,40 @@
                 totalSecured += amt;
                 totalLiquid += cash;
 
-                if (sources[i].status === 'Confirmed') sumConfirmed += amt;
-                else if (sources[i].status === 'LOI') sumLOI += amt;
+                if (sources[i].status === 'Confirmed') {
+                    sumConfirmed += amt;
+                    /* Track liquid portion of confirmed sources for deduplication */
+                    liquidConfirmed += cash;
+                } else if (sources[i].status === 'LOI') sumLOI += amt;
                 else sumPending += amt;
             }
-            var gap = grandTotal - totalSecured;
-            var pct = grandTotal > 0 ? Math.min(100, Math.round((totalSecured / grandTotal) * 100)) : 0;
-            var fullyFunded = gap <= 0;
+            /* Phase 107: totalCap acts as physics ceiling; fall back to grandTotal when unset */
+            var totalCap = (budget.targetLock && budget.targetLock.totalCap > 0) ? budget.targetLock.totalCap : 0;
+            var reference = totalCap > 0 ? totalCap : grandTotal;
 
-            var gapColor = fullyFunded ? 'text-emerald-600' : 'text-rose-500';
+            /* Phase 107.11: Deduplicated 3-tier HUD — Secured = Confirmed (includes its liquid), Pipeline = Pending + LOI, Gap = remainder */
+            var pipeline = sumPending + sumLOI;
+            var gap = reference - (sumConfirmed + pipeline);
+            var pct = reference > 0 ? Math.min(100, Math.max(0, Math.round(((sumConfirmed + pipeline) / reference) * 100))) : 0;
+            var fullyFunded = reference > 0 && gap <= 0;
+            var isInsolvent = totalCap > 0 && grandTotal > totalCap;
 
-            var pctConfirmed = grandTotal > 0 ? (sumConfirmed / grandTotal) * 100 : 0;
-            var pctPending = grandTotal > 0 ? (sumPending / grandTotal) * 100 : 0;
-            var pctLOI = grandTotal > 0 ? (sumLOI / grandTotal) * 100 : 0;
+            var gapColor = isInsolvent ? 'text-rose-600' : (fullyFunded ? 'text-emerald-600' : 'text-rose-500');
+
+            var pctConfirmed = reference > 0 ? (sumConfirmed / reference) * 100 : 0;
+            var pctPipeline = reference > 0 ? (pipeline / reference) * 100 : 0;
+            var pctGap = reference > 0 ? Math.max(0, (gap / reference) * 100) : 0;
+
+            /* Phase 107.10: Liquid Cash as percentage of reference, exclusive of confirmed */
+            var pctLiquid = reference > 0 ? (totalLiquid / reference) * 100 : 0;
 
             // Normalize if over 100 to prevent layout breakage
-            var totalPctFloat = pctConfirmed + pctPending + pctLOI;
+            var totalPctFloat = pctConfirmed + pctPipeline + pctLiquid;
             if (totalPctFloat > 100) {
                 var factor = 100 / totalPctFloat;
                 pctConfirmed *= factor;
-                pctPending *= factor;
-                pctLOI *= factor;
+                pctPipeline *= factor;
+                pctLiquid *= factor;
             }
 
             var esc = mBT.ui.render.esc;
@@ -7813,20 +7838,41 @@
                 '<div class="flex items-center justify-between mb-3">' +
                 '<div class="flex items-center gap-2">' +
                 (fullyFunded ? '<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div>' : '<div class="w-2 h-2 rounded-full bg-slate-300"></div>') +
+                '<div class="flex flex-col">' +
                 '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-700">Funding</h3>' +
-                '<span class="text-[9px] font-bold text-slate-400 ml-1">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
+                '<span class="text-[9px] font-bold text-slate-400">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
+                '</div>' +
+                '<div class="pl-4 ml-2 flex flex-col" onclick="event.stopPropagation()">' +
+                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Needed</span>' +
+                '<div class="flex items-center gap-0.5 border-b border-slate-300">' +
+                '<span class="text-[9px] text-slate-400">$</span>' +
+                '<input type="number" value="' + (totalCap > 0 ? totalCap : '') + '" placeholder="0" ' +
+                'onchange="mBT.features.funding.setTotalCap(this.value)" ' +
+                'onclick="event.stopPropagation()" ' +
+                'class="w-20 bg-transparent text-sm font-black text-slate-700 outline-none text-left no-spinner placeholder-slate-300">' +
+                '</div>' +
+                '</div>' +
+                '<div class="pl-4 flex flex-col" onclick="event.stopPropagation()">' +
+                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Work Week</span>' +
+                '<div class="flex items-center bg-slate-100 rounded-md overflow-hidden mt-[1px]">' +
+                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(5)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + (((budget.settings && budget.settings.workWeek) || 5) === 5 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">5</button>' +
+                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(6)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all border-x border-slate-200 ' + ((budget.settings && budget.settings.workWeek) === 6 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">6</button>' +
+                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(7)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + ((budget.settings && budget.settings.workWeek) === 7 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">7</button>' +
+                '</div>' +
+                '</div>' +
                 '</div>' +
                 '<button onclick="event.stopPropagation(); mBT.features.funding.openSourceModal(-1)" class="flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">' + mBTAssets.plus + ' Add Source</button>' +
                 '</div>' +
                 '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3 flex">' +
+                (pctLiquid > 0 ? '<div class="h-full transition-all duration-500 bg-blue-500" style="width:' + pctLiquid + '%"></div>' : '') +
                 (pctConfirmed > 0 ? '<div class="h-full transition-all duration-500 bg-emerald-500" style="width:' + pctConfirmed + '%"></div>' : '') +
-                (pctPending > 0 ? '<div class="h-full transition-all duration-500 bg-amber-400" style="width:' + pctPending + '%"></div>' : '') +
-                (pctLOI > 0 ? '<div class="h-full transition-all duration-500 bg-pink-400" style="width:' + pctLOI + '%"></div>' : '') +
+                (pctPipeline > 0 ? '<div class="h-full transition-all duration-500 bg-amber-400" style="width:' + pctPipeline + '%"></div>' : '') +
+                (pctGap > 0 ? '<div class="h-full transition-all duration-500 bg-rose-300" style="width:' + pctGap + '%"></div>' : '') +
                 '</div>' +
                 '<div class="flex gap-4">' +
-                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(totalSecured) + '</p></div>' +
-                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Liquid Cash</p><p class="text-sm font-black text-blue-600">' + fmt(totalLiquid) + '</p></div>' +
-                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">' + (fullyFunded ? 'Surplus' : 'Gap Remaining') + '</p><p class="text-sm font-black ' + gapColor + '">' + fmt(Math.abs(gap)) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(sumConfirmed + totalLiquid) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Pipeline</p><p class="text-sm font-black text-amber-600">' + fmt(pipeline) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Gap</p><p class="text-sm font-black ' + gapColor + '">' + (gap > 0 ? fmt(gap) : '-' + fmt(Math.abs(gap))) + '</p></div>' +
                 '<div class="ml-auto self-end">' +
                 (sources.length > 0 ? '<button onclick="event.stopPropagation(); mBT.features.funding.exportCredits()" class="text-[9px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors">Export Credits</button>' : '') +
                 '</div>' +
@@ -8069,6 +8115,41 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        },
+
+        /* --- Phase 107: Hub-First Funding — set Budget Cap and trigger physics check --- */
+        setTotalCap: function (rawVal) {
+            if (!budget) return;
+            if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
+            var val = parseFloat(rawVal) || 0;
+            budget.targetLock.totalCap = val;
+            saveBudget();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            mBT.features.funding.updateCard();
+            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+            /* Cross-PWA Sync: push new totalCap to any open tool iframe */
+            var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+            if (toolIframe && toolIframe.contentWindow) {
+                toolIframe.contentWindow.postMessage({ type: 'mbt:totalCap', totalCap: val }, '*');
+            }
+        },
+
+        /* --- Phase 107.6: Global Physics Hub — set Work Week and trigger global reconciliation --- */
+        setWorkWeek: function (days) {
+            if (!budget) return;
+            if (!budget.settings) budget.settings = {};
+            budget.settings.workWeek = days;
+            saveBudget();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            mBT.features.funding.updateCard();
+            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+            /* Cross-PWA Sync: push workWeek change to Stages tool and other open iframes */
+            var toolIframes = document.querySelectorAll('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+            for (var i = 0; i < toolIframes.length; i++) {
+                if (toolIframes[i].contentWindow) {
+                    toolIframes[i].contentWindow.postMessage({ type: 'mbt:workWeek', workWeek: days }, '*');
+                }
+            }
         }
     };
 
@@ -10311,7 +10392,6 @@
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar_benchmark/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'toolsDrawerBtn') { var _td = document.getElementById('toolsDrawer'); if (_td) _td.classList.toggle('hidden'); }
-                else if (btn.id === 'mainActionBtn') mBT.core.actions['settings-modal']();
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
             });
@@ -10626,6 +10706,7 @@
             function rebalance() {
                 var navLeft = document.getElementById('nav-left');
                 var navRight = document.getElementById('nav-right');
+                if (!navLeft || !navRight) return;
                 var undoBtn = document.getElementById('undoBtn');
                 var redoBtn = document.getElementById('redoBtn');
                 /* Phase 92.6 Task 2: Visibility pipeline — read hidden buttons from localStorage */
@@ -11157,8 +11238,7 @@
     }
 
     function injectFooterIcons() {
-        const mapping = {
-            'icon-stages': mBTAssets.grid,
+        var mapping = {
             'icon-docs': mBTAssets.file,
             'icon-main-action': mBTAssets.gear,
             'icon-secondary-action': mBTAssets.paperPlane,
