@@ -4,7 +4,8 @@
  * License: MIT
  */
 
-(function() {
+(function(window) {
+    'use strict';
     window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
             subTab = subTab || 'lineItems';
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -244,7 +245,38 @@
                         </div>
                     </div>`;
             }
+            if (tabName === 'connections') {
+                var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
+
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
+                        <div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 class="text-[10px] font-black uppercase tracking-widest text-emerald-400">Production Cloud</h3>
+                                    <p class="text-[9px] text-slate-500 font-bold mt-0.5">Upstream Data Bridge</p>
+                                </div>
+                                <div class="text-slate-700">${mBTAssets.cloud}</div>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Webhook Endpoint</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="cloudWebhookInput" value="${esc(webhookUrl)}" onchange="localStorage.setItem('${storageKeyPrefix}cloudWebhook', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.studio.com/ingest...">
+                                        <button onclick="var url=document.getElementById('cloudWebhookInput').value; if(!url) return mBTME.alert('Error', 'No URL'); mBTME.showLoader('Pinging...'); fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({test:true, source:'MooBudget', project:budget.projectName, ts:new Date().toISOString()})}).then(function(r){ mBTME.hideLoader(); if(r.ok) mBTME.alert('Success','Endpoint Reachable'); else mBTME.alert('Error', 'Status: '+r.status); }).catch(function(e){ mBTME.hideLoader(); mBTME.alert('Connection Failed', e.message); })" class="px-3 bg-emerald-900/50 text-emerald-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-900 border border-emerald-800 transition-colors">Test</button>
+                                    </div>
+                                    <p class="text-[8px] text-slate-600 mt-2">Destination for "Cloud Dispatch". Accepts JSON payloads containing Ledger and Budget totals.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            }
             if (tabName === 'cloud') {
+                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+                var _c  = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
+                var _i  = isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-800';
+                var _h  = isDark ? 'text-slate-200' : 'text-slate-800';
+                var _sep = isDark ? 'border-slate-700' : 'border-slate-50';
                 var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
                 var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
                 var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
@@ -258,7 +290,7 @@
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
 
                         <!-- Authentication Section -->
-                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all duration-300">
+                        <div class="${_c} p-4 rounded-2xl shadow-sm transition-all duration-300">
                             ${isSignedIn ? `
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3">
@@ -275,29 +307,29 @@
                                 </div>
                                 <button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-1.5 text-slate-400 hover:text-rose-500 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all">Sign Out</button>
                             </div>` : `
-                            <div class="flex gap-4 border-b border-slate-50 mb-3">
+                            <div class="flex gap-4 border-b ${_sep} mb-3">
                                 <button onclick="localStorage.setItem('mbt_auth_view', 'login'); mBT.features.settings.open('cloud');" class="pb-2 text-[9px] font-black uppercase tracking-widest transition-all ${authView === 'login' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-300 hover:text-slate-400'}">Sign In</button>
                                 <button onclick="localStorage.setItem('mbt_auth_view', 'signup'); mBT.features.settings.open('cloud');" class="pb-2 text-[9px] font-black uppercase tracking-widest transition-all ${authView === 'signup' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-300 hover:text-slate-400'}">Sign Up</button>
                             </div>
                             <div class="space-y-2">
                                 ${authView === 'forgot' ? `
                                     <h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Reset Password</h4>
-                                    <input type="email" id="cloudEmail" placeholder="Your account email" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    <input type="email" id="cloudEmail" placeholder="Your account email" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                     <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden px-1"></div>
                                     <button onclick="mBT.features.settings.cloudForgotPassword()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">Send recovery email</button>
                                     <button onclick="localStorage.setItem('mbt_auth_view', 'login'); mBT.features.settings.open('cloud');" class="w-full text-center text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-400 transition-colors">Back to sign in</button>
                                 ` : authView === 'signup' ? `
                                     <div class="grid grid-cols-1 gap-2">
-                                        <input type="text" id="cloudUsername" placeholder="Unique Username" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                                        <input type="email" id="cloudEmail" placeholder="Email Address" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
-                                        <input type="password" id="cloudPassword" placeholder="Strong Password" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="new-password">
+                                        <input type="text" id="cloudUsername" placeholder="Unique Username" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                        <input type="email" id="cloudEmail" placeholder="Email Address" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
+                                        <input type="password" id="cloudPassword" placeholder="Strong Password" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="new-password">
                                     </div>
                                     <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden px-1"></div>
                                     <button onclick="mBT.features.settings.cloudSignUp()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">Create Free Account</button>
                                 ` : `
                                     <div class="grid grid-cols-1 gap-2">
-                                        <input type="email" id="cloudEmail" placeholder="Email Address" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
-                                        <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
+                                        <input type="email" id="cloudEmail" placeholder="Email Address" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="email">
+                                        <input type="password" id="cloudPassword" placeholder="Password" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" autocomplete="current-password">
                                     </div>
                                     <div id="cloudAuthError" class="text-[9px] text-red-500 font-bold hidden px-1"></div>
                                     <div class="flex flex-col gap-2">
@@ -320,42 +352,42 @@
 
                         <!-- User Profile (visible when signed in) -->
                         ${isSignedIn ? `
-                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                        <div class="${_c} p-4 rounded-2xl shadow-sm space-y-3">
                             <div>
-                                <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-0.5">Profile Identity</h3>
-                                <p class="text-[9px] text-slate-400 font-bold">Public identity used for OpenGate contributions.</p>
+                                <h3 class="text-[10px] font-black uppercase tracking-widest ${_h} mb-0.5">Profile Identity</h3>
+                                <p class="text-[9px] text-slate-400 font-bold">Public identity used for community database contributions.</p>
                             </div>
                             <div class="grid grid-cols-1 gap-2">
                                 <div class="space-y-1.5">
                                     <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Name</label>
-                                    <input type="text" id="profileDisplayName" placeholder="e.g. Maverick J." value="${esc(profileName)}" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    <input type="text" id="profileDisplayName" placeholder="e.g. Maverick J." value="${esc(profileName)}" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                 </div>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div class="space-y-1.5">
                                         <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Home Market</label>
-                                        <select id="profileRegion" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">
+                                        <select id="profileRegion" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">
                                             ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
                                         </select>
                                     </div>
                                     <div class="space-y-1.5">
                                         <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Standard Role</label>
-                                        <input type="text" id="profileRole" placeholder="Producer / DP" value="${esc(profileRole)}" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                        <input type="text" id="profileRole" placeholder="Producer / DP" value="${esc(profileRole)}" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                     </div>
                                 </div>
                             </div>
-                            <div class="pt-3 border-t border-slate-50">
+                            <div class="pt-3 border-t ${_sep}">
                                 <button onclick="var el=document.getElementById('passwordChangeSect'); el.classList.toggle('hidden');" class="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors">Change Password?</button>
                                 <div id="passwordChangeSect" class="hidden space-y-2 animate-in slide-in-from-top-2 duration-300">
-                                    <input type="password" id="newPasswordInput" placeholder="New Secret Password" class="w-full px-3 py-2 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    <input type="password" id="newPasswordInput" placeholder="New Secret Password" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">
                                     <button onclick="mBT.features.settings.cloudChangePassword()" class="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Update Security</button>
                                 </div>
                             </div>
                             <button onclick="mBT.features.settings.saveProfile()" class="w-full py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all active:scale-95">Synchronize Profile</button>
                         </div>` : ''}
 
-                        <!-- OpenGate Community Rates -->
-                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-0.5">OpenGate Community Rates</h3>
+                        <!-- DATABASE Community Rates -->
+                        <div class="${_c} p-4 rounded-2xl shadow-sm">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest ${_h} mb-0.5">Community Rates</h3>
                             <p class="text-[9px] text-slate-400 font-bold mb-2">Pull updated industry rates from the shared community database. No account required.</p>
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
@@ -364,13 +396,13 @@
                                     <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                                 </label>
                             </div>
-                            <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('OpenGate', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('OpenGate', 'Engine not available.'); }" class="w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
+                            <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('DATABASE', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('DATABASE', 'Engine not available.'); }" class="w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
                         </div>
 
                         <!-- Project Backup + Sync -->
-                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="${_c} p-4 rounded-2xl shadow-sm">
                             <div class="flex items-center justify-between mb-0.5">
-                                <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Background Sync</h3>
+                                <h3 class="text-[10px] font-black uppercase tracking-widest ${_h}">Background Sync</h3>
                                 <div id="sync-heartbeat-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400">
                                     <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
                                     Status Check...
@@ -426,4 +458,4 @@
         window.dispatchEvent(new CustomEvent('mbt:theme-changed', { detail: { theme: themeName } }));
     };
 
-})();
+})(window);

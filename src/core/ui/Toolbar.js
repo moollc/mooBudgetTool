@@ -21,10 +21,6 @@
                 '        <input type="text" id="projectName" value="' + budget.projectName + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
                 '        <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>' +
                 '        <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>' +
-                '        <div id="sync-status-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">' +
-                '            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>' +
-                '            Saved' +
-                '        </div>' +
                 '    </div>' +
                 '    <div id="project-management-container" class="w-full md:w-auto flex-shrink-0 max-w-full"></div>' +
                 '</header>';
@@ -40,6 +36,7 @@
             var renderBudgetSections = window.renderBudgetSections || function() { return ''; };
             
             return '<div id="summary" class="mb-4 space-y-2">' +
+                '<div id="fundingCard" class="mb-2"></div>' +
                 '    <!-- Primary Metrics Group (Est, Actual) -->' +
                 '    <div class="flex flex-wrap gap-2 items-stretch">' +
                 '        <div class="flex-[10_1_240px] bg-blue-600 text-white px-5 py-2.5 rounded-2xl shadow-xl flex flex-col justify-center relative overflow-hidden group min-h-[60px]">' +
@@ -119,7 +116,6 @@
                 '        <p id="summaryBurn" class="text-lg sm:text-xl font-black text-rose-600 leading-tight text-right truncate max-w-[50%] pl-2">--</p>' +
                 '    </div>' +
                 '</div>' +
-                '<div id="fundingCard" class="mb-4"></div>' +
                 '<main id="budget-sections" class="space-y-3">' + renderBudgetSections() + '</main>' +
                 '<div class="mt-6 py-1.5 px-4 bg-slate-900 rounded-xl text-[11px] text-slate-400 font-bold uppercase tracking-widest border border-black shadow-2xl">' +
                 '    <span class="opacity-50">Intelligence:</span> Industrial personnel rates based on 2025 verified logic. Regional data resolution applied.' +
@@ -191,23 +187,10 @@
                 _actualsBtn.classList.toggle('text-slate-400', !budget.actualsMode);
             }
 
-            // Burn Rate update
-            var totalDays = 0;
-            if (budget.targetLock && budget.targetLock.stages) {
-                ['dev', 'pre', 'prod', 'post', 'dist'].forEach(function(k) {
-                    if (budget.targetLock.stages[k]) totalDays += (parseFloat(budget.targetLock.stages[k].days) || 0);
-                });
-            }
-            if (totalDays === 0 && budget.startDate && budget.deliveryDate) {
-                var start = new Date(budget.startDate);
-                var end = new Date(budget.deliveryDate);
-                var diff = end - start;
-                if (diff > 0) totalDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
-            }
-
-            if (totalDays > 0) {
-                var dailyBurn = budget.grandTotal / totalDays;
-                setTxt('summaryBurn', fmt(dailyBurn) + '/day');
+            // Burn Rate (working days, delegated to Stages Engine)
+            var _burnMetrics = window.mBTStagesEngine ? window.mBTStagesEngine.getMetrics() : null;
+            if (_burnMetrics && _burnMetrics.dailyBurn > 0) {
+                setTxt('summaryBurn', fmt(_burnMetrics.dailyBurn) + '/day');
             } else {
                 setTxt('summaryBurn', 'Set Schedule');
             }

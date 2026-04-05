@@ -11,6 +11,7 @@
     window.mBT.core = window.mBT.core || {};
     window.mBT.core.actions = {};
     window.mBT.core.routes = { handlers: {} };
+    window.mBT.features = window.mBT.features || {};
 
     // === Configuration ===
     var DEFAULT_ROUTE = 'db';
@@ -254,12 +255,16 @@
         }
     }
 
+    window.mBT.features.settings = {
+        open: function () { populateSettings(); }
+    };
+
     // === Cloud Sync Actions ===
     window.mBT.core.actions.toggleSync = function () {
         var active = localStorage.getItem('mbt_supabase_sync') === 'true';
         localStorage.setItem('mbt_supabase_sync', !active);
         alert('Cloud Sync ' + (!active ? 'Enabled' : 'Disabled'));
-        populateSettings();
+        window.mBT.features.settings.open();
         if (!active) window.mBT.core.actions.pushToCloud();
     };
 
@@ -298,7 +303,7 @@
         var isDark = document.body.classList.contains('dark-theme');
         localStorage.setItem(THEME_KEY, isDark ? 'light' : 'dark');
         applyTheme(!isDark);
-        populateSettings();
+        window.mBT.features.settings.open();
     };
 
     // === Nav Position ===
@@ -358,7 +363,7 @@
     window.mBT.core.actions.setNavPos = function (pos) {
         localStorage.setItem(NAV_POS_KEY, pos);
         applyNavPos(pos);
-        populateSettings();
+        window.mBT.features.settings.open();
     };
 
     // === Public API ===
@@ -367,6 +372,7 @@
     window.mBT.core.routes.register = function (route, handler) {
         window.mBT.core.routes.handlers[route] = handler;
     };
+    window.mBT.core.routes.register('settings', window.mBT.features.settings.open);
 
     // =========================================
     // 6. BOOTSTRAP
@@ -386,7 +392,6 @@
         loadNavPos();
         initSidebar();
         updateStatus();
-        populateSettings();
         applyRoute();
 
         window.addEventListener('hashchange', applyRoute);

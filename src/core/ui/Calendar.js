@@ -17,16 +17,17 @@
             var metrics = window.mBTStagesEngine.getMetrics();
             var risk = window.mBTStagesEngine.analyzeRisk(metrics, timeline);
 
-            // 1. Delivery date input border coloring (risk-driven)
+            // 1. Delivery date input border coloring (timeline status drives color)
             var deliveryInput = document.querySelector('input[onchange*="budget.deliveryDate"]');
-            if (deliveryInput && risk) {
+            if (deliveryInput) {
+                var timeStatus = (timeline._analysis) ? timeline._analysis.status : null;
                 deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
-                if (risk.status === 'CRITICAL') {
+                if (timeStatus === 'OVERDUE' || (risk && risk.status === 'CRITICAL')) {
                     deliveryInput.classList.add('border-rose-500');
-                } else if (risk.status === 'WARNING') {
+                } else if (timeStatus === 'Tight' || (risk && risk.status === 'WARNING')) {
                     deliveryInput.classList.add('border-amber-500');
                 } else {
-                    deliveryInput.classList.add('border-emerald-500');
+                    deliveryInput.classList.add('border-slate-700');
                 }
             }
 
