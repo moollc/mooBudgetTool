@@ -7795,20 +7795,20 @@
 
             var gapColor = isInsolvent ? 'text-rose-600' : (fullyFunded ? 'text-emerald-600' : 'text-rose-500');
 
-            var pctConfirmed = reference > 0 ? (sumConfirmed / reference) * 100 : 0;
+            /* Phase 107.11: Deduplicated bar segments — liquid / confirmed-non-liquid / pipeline / gap */
+            var pctLiquid = reference > 0 ? (totalLiquid / reference) * 100 : 0;
+            var pctConfirmedNonLiquid = reference > 0 ? Math.max(0, ((sumConfirmed - liquidConfirmed) / reference) * 100) : 0;
             var pctPipeline = reference > 0 ? (pipeline / reference) * 100 : 0;
             var pctGap = reference > 0 ? Math.max(0, (gap / reference) * 100) : 0;
 
-            /* Phase 107.10: Liquid Cash as percentage of reference, exclusive of confirmed */
-            var pctLiquid = reference > 0 ? (totalLiquid / reference) * 100 : 0;
-
-            // Normalize if over 100 to prevent layout breakage
-            var totalPctFloat = pctConfirmed + pctPipeline + pctLiquid;
+            /* Normalize all 4 segments if total exceeds 100 */
+            var totalPctFloat = pctLiquid + pctConfirmedNonLiquid + pctPipeline + pctGap;
             if (totalPctFloat > 100) {
                 var factor = 100 / totalPctFloat;
-                pctConfirmed *= factor;
-                pctPipeline *= factor;
                 pctLiquid *= factor;
+                pctConfirmedNonLiquid *= factor;
+                pctPipeline *= factor;
+                pctGap *= factor;
             }
 
             var esc = mBT.ui.render.esc;
@@ -7843,7 +7843,7 @@
                 '<span class="text-[9px] font-bold text-slate-400">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
                 '</div>' +
                 '<div class="pl-4 ml-2 flex flex-col" onclick="event.stopPropagation()">' +
-                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Needed</span>' +
+                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Budget Cap</span>' +
                 '<div class="flex items-center gap-0.5 border-b border-slate-300">' +
                 '<span class="text-[9px] text-slate-400">$</span>' +
                 '<input type="number" value="' + (totalCap > 0 ? totalCap : '') + '" placeholder="0" ' +
@@ -7852,25 +7852,17 @@
                 'class="w-20 bg-transparent text-sm font-black text-slate-700 outline-none text-left no-spinner placeholder-slate-300">' +
                 '</div>' +
                 '</div>' +
-                '<div class="pl-4 flex flex-col" onclick="event.stopPropagation()">' +
-                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Work Week</span>' +
-                '<div class="flex items-center bg-slate-100 rounded-md overflow-hidden mt-[1px]">' +
-                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(5)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + (((budget.settings && budget.settings.workWeek) || 5) === 5 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">5</button>' +
-                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(6)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all border-x border-slate-200 ' + ((budget.settings && budget.settings.workWeek) === 6 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">6</button>' +
-                '<button onclick="event.stopPropagation(); mBT.features.funding.setWorkWeek(7)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + ((budget.settings && budget.settings.workWeek) === 7 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">7</button>' +
-                '</div>' +
-                '</div>' +
                 '</div>' +
                 '<button onclick="event.stopPropagation(); mBT.features.funding.openSourceModal(-1)" class="flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">' + mBTAssets.plus + ' Add Source</button>' +
                 '</div>' +
                 '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3 flex">' +
                 (pctLiquid > 0 ? '<div class="h-full transition-all duration-500 bg-blue-500" style="width:' + pctLiquid + '%"></div>' : '') +
-                (pctConfirmed > 0 ? '<div class="h-full transition-all duration-500 bg-emerald-500" style="width:' + pctConfirmed + '%"></div>' : '') +
+                (pctConfirmedNonLiquid > 0 ? '<div class="h-full transition-all duration-500 bg-emerald-500" style="width:' + pctConfirmedNonLiquid + '%"></div>' : '') +
                 (pctPipeline > 0 ? '<div class="h-full transition-all duration-500 bg-amber-400" style="width:' + pctPipeline + '%"></div>' : '') +
                 (pctGap > 0 ? '<div class="h-full transition-all duration-500 bg-rose-300" style="width:' + pctGap + '%"></div>' : '') +
                 '</div>' +
                 '<div class="flex gap-4">' +
-                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(sumConfirmed + totalLiquid) + '</p></div>' +
+                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(sumConfirmed) + '</p></div>' +
                 '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Pipeline</p><p class="text-sm font-black text-amber-600">' + fmt(pipeline) + '</p></div>' +
                 '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Gap</p><p class="text-sm font-black ' + gapColor + '">' + (gap > 0 ? fmt(gap) : '-' + fmt(Math.abs(gap))) + '</p></div>' +
                 '<div class="ml-auto self-end">' +
@@ -9101,20 +9093,21 @@
     window.updateStageDuration = function (stageKey, value) {
         if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
 
-        // 1. Update Data Model
+        // 1. Update Data Model — create key if Stages tool hasn't visited it yet
         const days = parseFloat(value) || 0;
-        if (budget.targetLock.stages[stageKey]) {
-            budget.targetLock.stages[stageKey].days = days;
-
-            // 2. Persist
-            saveBudget();
-
-            // 3. Trigger Temporal Engine (Updates Dates instantly)
-            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
-
-            // 4. Update Logic Engine (Burn Rates)
-            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+        if (!budget.targetLock.stages[stageKey]) {
+            budget.targetLock.stages[stageKey] = { label: stageKey.toUpperCase(), ratio: 20, days: 0, locked: false };
         }
+        budget.targetLock.stages[stageKey].days = days;
+
+        // 2. Persist
+        saveBudget();
+
+        // 3. Trigger Temporal Engine (Updates Dates instantly)
+        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+
+        // 4. Update Logic Engine (Burn Rates)
+        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
     };
 
     // --- TIER 5 UPGRADE: Smart Sync Controller ---
@@ -9844,6 +9837,7 @@
         mBT.core.action('project-new', function () { showNewProjectModal(); });
         mBT.core.action('project-duplicate', function () { mBT.data.duplicate(); });
         mBT.core.action('project-delete', function () { if (currentProjectName) mBT.data.deleteProject(currentProjectName); });
+        mBT.core.action('project-export', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveBundle(budget, function (key) { return mBT.data.storage.loadBlob(key); }); });
 
         /* Phase 87B Fix: Explicitly mapped File Menu Toggler */
         mBT.core.action('file-menu-toggle', function () {

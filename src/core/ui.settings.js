@@ -148,6 +148,30 @@
                                     </label>
                                 </div>
                             </div>
+                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Show Funding Bar</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Secured / Gap funding meter</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" ${(budget.settings && budget.settings.showFundingBar === false) ? '' : 'checked'} onchange="if(!budget.settings) budget.settings={}; budget.settings.showFundingBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Show Timeline Bar</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Stages sparkline HUD</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" ${(budget.settings && budget.settings.showTimelineBar === false) ? '' : 'checked'} onchange="if(!budget.settings) budget.settings={}; budget.settings.showTimelineBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2">
                              <a href="https://raw.githubusercontent.com/jaysonmy/moobudget/refs/heads/main/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-colors">${mBTAssets.cloud} Get Beta</a>
