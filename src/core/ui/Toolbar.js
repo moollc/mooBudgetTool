@@ -37,6 +37,7 @@
             
             return '<div id="summary" class="mb-4 space-y-2">' +
                 '<div id="fundingCard" class="mb-2"></div>' +
+                '<div id="stagesHorizontalBar" class="mb-2"></div>' +
                 '    <!-- Primary Metrics Group (Est, Actual) -->' +
                 '    <div class="flex flex-wrap gap-2 items-stretch">' +
                 '        <div class="flex-[10_1_240px] bg-blue-600 text-white px-5 py-2.5 rounded-2xl shadow-xl flex flex-col justify-center relative overflow-hidden group min-h-[60px]">' +
@@ -155,6 +156,72 @@
             if (document.getElementById('fundingCard') && window.mBT && window.mBT.features && window.mBT.features.funding) {
                 window.mBT.features.funding.updateCard();
             }
+
+            /* Phase 108: HUD bar visibility toggles */
+            var showFunding = !(budget.settings && budget.settings.showFundingBar === false);
+            var showTimeline = !(budget.settings && budget.settings.showTimelineBar === false);
+            var _fundingCard = document.getElementById('fundingCard');
+            if (_fundingCard) _fundingCard.classList.toggle('hidden', !showFunding);
+
+            /* Phase 108: Timeline Sparkline Bar — stage day inputs + proportional bar */
+            var _stagesBar = document.getElementById('stagesHorizontalBar');
+            if (_stagesBar) {
+                _stagesBar.classList.toggle('hidden', !showTimeline);
+                if (showTimeline) {
+                    var tl = (budget.targetLock && budget.targetLock.stages) ? budget.targetLock.stages : {};
+                    var STAGE_KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+                    var STAGE_COLORS = { dev: 'bg-emerald-400', pre: 'bg-blue-400', prod: 'bg-amber-400', post: 'bg-rose-400', dist: 'bg-violet-400' };
+                    var STAGE_SHORT  = { dev: 'Dev', pre: 'Pre', prod: 'Prod', post: 'Post', dist: 'Dist' };
+                    var workWeekVal  = (budget.settings && budget.settings.workWeek) || 5;
+
+                    /* Build day-input pills */
+                    var inputsHtml = '';
+                    var totalStageDays = 0;
+                    STAGE_KEYS.forEach(function (k) { totalStageDays += parseFloat((tl[k] && tl[k].days) || 0); });
+
+                    STAGE_KEYS.forEach(function (k) {
+                        var d = parseFloat((tl[k] && tl[k].days) || 0);
+                        inputsHtml += '<div class="flex flex-col items-center gap-0.5">' +
+                            '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">' + STAGE_SHORT[k] + '</span>' +
+                            '<div class="flex items-center bg-slate-100 rounded-md px-1.5 py-0.5 border-b border-slate-300">' +
+                            '<input type="number" min="0" value="' + (d || '') + '" placeholder="0" ' +
+                            'onchange="updateStageDuration(\'' + k + '\', this.value); mBT.ui.toolbar.update();" ' +
+                            'class="w-8 bg-transparent text-[10px] font-black text-slate-700 outline-none text-center no-spinner placeholder-slate-300">' +
+                            '<span class="text-[8px] text-slate-400 font-bold">d</span>' +
+                            '</div>' +
+                            '</div>';
+                    });
+
+                    /* Build proportional bar segments */
+                    var segsHtml = '';
+                    if (totalStageDays > 0) {
+                        STAGE_KEYS.forEach(function (k) {
+                            var d = parseFloat((tl[k] && tl[k].days) || 0);
+                            if (d > 0) {
+                                var pct = (d / totalStageDays) * 100;
+                                segsHtml += '<div class="h-full transition-all duration-500 ' + STAGE_COLORS[k] + '" style="width:' + pct + '%"></div>';
+                            }
+                        });
+                    } else {
+                        segsHtml = '<div class="h-full w-full bg-slate-200 rounded-full"></div>';
+                    }
+
+                    _stagesBar.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 pt-3 pb-2">' +
+                        '<div class="flex items-end justify-between gap-2 mb-2">' +
+                        '<div class="flex items-end gap-3 flex-wrap">' + inputsHtml + '</div>' +
+                        '<div class="shrink-0 flex flex-col items-end gap-0.5">' +
+                        '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Work Week</span>' +
+                        '<div class="flex items-center bg-slate-100 rounded-md overflow-hidden">' +
+                        '<button onclick="mBT.features.funding.setWorkWeek(5)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + (workWeekVal === 5 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">5</button>' +
+                        '<button onclick="mBT.features.funding.setWorkWeek(6)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all border-x border-slate-200 ' + (workWeekVal === 6 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">6</button>' +
+                        '<button onclick="mBT.features.funding.setWorkWeek(7)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + (workWeekVal === 7 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">7</button>' +
+                        '</div>' +
+                        '</div>' +
+                        '</div>' +
+                        '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex cursor-pointer" onclick="mBT.ui.toolbar.handleSparklineTap()">' + segsHtml + '</div>' +
+                        '</div>';
+                }
+            }
             setTxt('summaryDiscount', fmt(-discount));
             setTxt('summaryContingency', fmt(contingency));
             setTxt('summaryTax', fmt(tax));
@@ -196,6 +263,20 @@
             }
         },
 
+        /* Phase 108: Triple-tap state for sparkline navigation */
+        _tapCount: 0,
+        _tapTimer: null,
+        handleSparklineTap: function () {
+            mBT.ui.toolbar._tapCount++;
+            clearTimeout(mBT.ui.toolbar._tapTimer);
+            if (mBT.ui.toolbar._tapCount >= 3) {
+                mBT.ui.toolbar._tapCount = 0;
+                openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+            } else {
+                mBT.ui.toolbar._tapTimer = setTimeout(function () { mBT.ui.toolbar._tapCount = 0; }, 600);
+            }
+        },
+
         /* State Bridge (Phase 100): self-registers on mBT.core.events so the toolbar
            reactively updates when budget data changes. Supplements the mBT.ui.paint() path. */
         init: function () {
@@ -221,6 +302,7 @@
                     { label: 'Template Manager', icon: mBTAssets.grid, color: 'text-violet-600', bg: 'hover:bg-violet-50', action: 'template-manager' },
                     { label: 'Sync Rates', icon: mBTAssets.cloud, color: 'text-sky-600', bg: 'hover:bg-sky-50', action: 'project-sync' },
                     { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
+                    { label: 'Export Budget (.mbt)', icon: mBTAssets.save, color: 'text-teal-600', bg: 'hover:bg-teal-50', action: 'project-export' },
                     { label: 'Payments / Ledger', icon: mBTAssets.wallet, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'open-payments-ledger' },
                     { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
                     { divider: true },
