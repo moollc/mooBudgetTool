@@ -353,11 +353,18 @@
 
             // 2. Match the action
             const actionName = el.dataset.action;
+
+            // Phase 115: Block write actions in Client/Review mode
+            var CLIENT_BLOCKED = ['section-cap', 'section-add', 'row-delete', 'row-lock', 'item-qualifying-toggle', 'crew-toggle', 'crew-profile', 'quick-pay'];
+            if (window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false) {
+                if (CLIENT_BLOCKED.indexOf(actionName) !== -1) { e.preventDefault(); return true; }
+            }
+
             const handler = this.actions[actionName];
 
             // 3. Execute
             if (handler) {
-                // Prevent default for clicks to stop form submissions or link jumps, 
+                // Prevent default for clicks to stop form submissions or link jumps,
                 // but allow 'change' events to propagate if needed.
                 if (e.type === 'click' || e.type === 'submit') e.preventDefault();
                 handler(e, el);
@@ -463,9 +470,15 @@
                     /* 6. Structural Resolution */
                     var bootP;
                     if (!projectToLoad) {
-                        bootP = (typeof handleNewProject === 'function')
-                            ? Promise.resolve(handleNewProject(false)).then(function (res) { return (res instanceof Promise) ? res : Promise.resolve(); })
-                            : Promise.resolve();
+                        /* Empty State Anchor (Phase 112): present template picker on first launch */
+                        if (typeof showNewProjectModal === 'function') {
+                            showNewProjectModal();
+                            bootP = Promise.resolve();
+                        } else if (typeof handleNewProject === 'function') {
+                            bootP = Promise.resolve(handleNewProject(false)).then(function (res) { return (res instanceof Promise) ? res : Promise.resolve(); });
+                        } else {
+                            bootP = Promise.resolve();
+                        }
                     } else {
                         bootP = (typeof loadBudget === 'function')
                             ? Promise.resolve(loadBudget(projectToLoad)).then(function (res) { return (res instanceof Promise) ? res : Promise.resolve(); })
@@ -491,6 +504,15 @@
 
                 /* 7.1 UI Ignition — action registry and event wiring */
                 if (typeof bindAppEventListeners === 'function') bindAppEventListeners();
+
+                /* Phase 115: Client/Review mode — detect ?role=client URL param or budget.role */
+                (function () {
+                    var _roleParam = new URLSearchParams(window.location.search).get('role');
+                    var _isClient = (_roleParam === 'client') || (budget && budget.role === 'client');
+                    if (!mBT.ui.state) mBT.ui.state = {};
+                    mBT.ui.state.isEditing = !_isClient;
+                    if (_isClient && typeof render === 'function') render();
+                })();
 
                 /* Sprint 1: Prune Legacy Logs */
                 if (budget && budget.activityLog && budget.activityLog.length > 200) {
@@ -993,7 +1015,7 @@
                 var cleanData = JSON.parse(JSON.stringify(budget));
                 cleanData.updated_at = new Date().toISOString();
                 return self.storage.save(projectKey, cleanData).then(function () {
-                    localStorage.setItem(storageKeyPrefix + 'lastLoaded', budget.projectName);
+                    localStorage.setItem(storageKeyPrefix + 'lastLoaded', JSON.stringify({ name: budget.projectName, ts: Date.now() }));
                     if (window.mBTSync && window.mBTSync.scheduleAutoSync) window.mBTSync.scheduleAutoSync();
                 }).catch(function (e) {
                     console.error('Save Failed:', e);
@@ -1066,7 +1088,34 @@
             });
         },
 
-        newProject: function (force, type) {
+        /* Phase 109: One-time scavenger for legacy mbt_v2_ and prodBudget_v[1-4]_ keys */
+        scavengeOrphans: function () {
+            if (localStorage.getItem('mbt_scavenge_done')) return;
+            var self = this;
+            var legacyPattern = /^(mbt_v2_|prodBudget_v[1-4]_)/;
+            self.storage.keys().then(function (keys) {
+                var orphans = keys.filter(function (k) { return legacyPattern.test(k); });
+                if (orphans.length === 0) { localStorage.setItem('mbt_scavenge_done', '1'); return; }
+                var migrations = orphans.map(function (oldKey) {
+                    return self.storage.load(oldKey).then(function (data) {
+                        if (!data || !data.projectName) return;
+                        var newKey = storageKeyPrefix + data.projectName;
+                        return self.storage.keys().then(function (currentKeys) {
+                            if (currentKeys.indexOf(newKey) === -1) {
+                                return self.storage.save(newKey, data);
+                            }
+                        });
+                    });
+                });
+                return Promise.all(migrations).then(function () {
+                    localStorage.setItem('mbt_scavenge_done', '1');
+                    mBTME.alert('Budget Recovery', orphans.length + ' legacy budget(s) recovered and re-indexed.');
+                });
+            }).catch(function () { localStorage.setItem('mbt_scavenge_done', '1'); });
+        },
+
+        newProject: function (force, type, withRates) {
+            withRates = (withRates !== false); // default true; pass false to create scaffold-only (zero rates)
             force = force || false;
             type = type || 'Commercial';
             var self = this;
@@ -1091,7 +1140,7 @@
                 if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
                     var tmpl = BUDGET_TEMPLATES[type];
                     baseLabel = tmpl.label;
-                    var rateDb = (typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+                    var rateDb = (withRates && typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
                     tmpl.structure.forEach(function (s) {
                         sections[s.name] = {
                             id: s.id,
@@ -1231,6 +1280,7 @@
 
         deleteProject: function (name) {
             var self = this;
+            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
             mBTME.confirm('Delete Project', 'Are you sure you want to move "' + name + '" to the Recycle Bin?', function () {
                 self.storage.load(storageKeyPrefix + name).then(function (data) {
                     if (!data) {
@@ -1443,7 +1493,10 @@
     // Logic Resolution: Ensures all existing calls in Tier 3-6 continue to function.
     window.mBTState = mBT.data.state;
     window.mBTStorage = mBT.data.storage;
-    window.saveBudget = mBT.data.save.bind(mBT.data);
+    window.saveBudget = function () {
+        if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
+        return mBT.data.save.apply(mBT.data, arguments);
+    };
     window.loadBudget = mBT.data.load.bind(mBT.data);
     window.handleNewProject = mBT.data.newProject.bind(mBT.data);
     window.handleDuplicateProject = mBT.data.duplicate.bind(mBT.data);
@@ -2212,50 +2265,57 @@
 
             // --- TIER 3 UPGRADE: Temporal Projection Engine (Phase 1 + 3.3 Overrun Logic) ---
             calculateTimeline: function () {
-                const timeline = {};
+                var timeline = {};
+                /* Phase 109.1: Weekend-skipping helper — mirrors Stages tool addWorkDays */
+                var _addWorkDays = function (startDate, days, workWeek) {
+                    var date = new Date(startDate);
+                    var count = 0;
+                    while (count < days) {
+                        date.setDate(date.getDate() + 1);
+                        var dow = date.getDay();
+                        var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) || (workWeek === 6 && dow === 0);
+                        if (!isWeekend) count++;
+                    }
+                    return date;
+                };
+                var _workWeek = (budget.settings && budget.settings.workWeek) || 7;
+
                 // Default to today if start date is missing
-                let cursor = new Date(budget.startDate || new Date());
+                var cursor = new Date(budget.startDate || new Date());
                 // Handle Timezone offset for pure dates (prevent "yesterday" bugs)
                 cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
 
-                const stages = ['dev', 'pre', 'prod', 'post', 'dist'];
+                var stages = ['dev', 'pre', 'prod', 'post', 'dist'];
 
-                stages.forEach(k => {
-                    const days = (budget.targetLock && budget.targetLock.stages[k])
+                stages.forEach(function (k) {
+                    var days = (budget.targetLock && budget.targetLock.stages[k])
                         ? (parseFloat(budget.targetLock.stages[k].days) || 0)
                         : 0;
 
-                    const start = new Date(cursor);
-                    // Add days (milliseconds)
-                    const end = new Date(start.getTime() + (days * 24 * 60 * 60 * 1000));
+                    var start = new Date(cursor);
+                    var end = (days > 0 && _workWeek < 7) ? _addWorkDays(start, days, _workWeek) : new Date(start.getTime() + (days * 24 * 60 * 60 * 1000));
 
-                    // Format: "Jan 1 - Jan 15"
-                    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    var fmt = function (d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
 
                     timeline[k] = {
                         start: start,
                         end: end,
-                        // If 0 days, show TBD, otherwise show range
-                        label: days > 0 ? `${fmt(start)} - ${fmt(end)}` : 'SCHEDULE TBD'
+                        label: days > 0 ? (fmt(start) + ' - ' + fmt(end)) : 'SCHEDULE TBD'
                     };
 
-                    // Move cursor to end of this stage for next stage start
                     cursor = end;
                 });
 
                 // --- Phase 3.3: Overrun Calculation ---
                 if (budget.deliveryDate) {
-                    const target = new Date(budget.deliveryDate);
-                    // Normalize target timezone to match cursor
-                    const targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+                    var target = new Date(budget.deliveryDate);
+                    var targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+                    var diffTime = targetAdj - cursor;
+                    var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                    // Diff in days (Target Date - Projected End Date)
-                    const diffTime = targetAdj - cursor;
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    let status = 'On Track';
-                    let statusColor = 'text-emerald-500';
-                    let ringColor = 'border-slate-100'; // Default Gray Ring
+                    var status = 'On Track';
+                    var statusColor = 'text-emerald-500';
+                    var ringColor = 'border-slate-100';
 
                     if (diffDays < 0) {
                         status = 'OVERDUE';
@@ -2497,7 +2557,45 @@
         });
     }
 
-    /* --- 4. Neural Link Bridge (AI API Utilities) --- */
+    /* --- 4. Sonic Handshake (Phase 111.1: Audio Feedback Service) --- */
+    mBT.audio = (function () {
+        var _ctx = null;
+        function _getCtx() {
+            if (!_ctx) {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                _ctx = new AC();
+            }
+            if (_ctx.state === 'suspended') _ctx.resume();
+            return _ctx;
+        }
+        function _tone(freq, duration, vol, type, delay) {
+            var ctx = _getCtx();
+            if (!ctx) return;
+            var t = ctx.currentTime + (delay || 0);
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(vol || 0.08, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + duration);
+        }
+        return {
+            play: function (type) {
+                try {
+                    if (type === 'success') { _tone(880, 0.12, 0.06, 'sine', 0); _tone(1100, 0.15, 0.06, 'sine', 0.08); }
+                    else if (type === 'alert') { _tone(440, 0.15, 0.08, 'triangle', 0); _tone(330, 0.2, 0.08, 'triangle', 0.12); }
+                    else if (type === 'delete') { _tone(330, 0.1, 0.06, 'square', 0); _tone(220, 0.15, 0.06, 'square', 0.06); }
+                } catch (e) { /* Silent fail — audio is non-critical */ }
+            },
+            _ctx: function () { return _getCtx(); }
+        };
+    })();
+
+    /* --- 5. Neural Link Bridge (AI API Utilities) --- */
     mBT.features.ai = {
         // Configuration Defaults
         config: {
@@ -3031,6 +3129,17 @@
         if (mBT.ui.calendar && typeof mBT.ui.calendar.update === 'function') {
             mBT.ui.calendar.update();
         }
+        /* Phase 115 Step 2: Client/Review Mode — inject readonly on all inputs */
+        if (mBT.ui.state && mBT.ui.state.isEditing === false) {
+            var _appEl = document.getElementById('app');
+            if (_appEl) {
+                var _lockInputs = _appEl.querySelectorAll('input, textarea, select');
+                for (var _li = 0; _li < _lockInputs.length; _li++) {
+                    _lockInputs[_li].setAttribute('readonly', 'readonly');
+                    if (_lockInputs[_li].tagName === 'SELECT') _lockInputs[_li].setAttribute('disabled', 'disabled');
+                }
+            }
+        }
         /* Line item surgical updates (section totals + per-item cells) */
         var fmt = mBTLE.format.currency;
         var isMobile = window.innerWidth < 768;
@@ -3039,6 +3148,17 @@
             var safeKey = sectionKey.replace(/"/g, '\\"');
             var sectionTotalEl = document.querySelector('[data-section-total="' + safeKey + '"]');
             if (sectionTotalEl) sectionTotalEl.textContent = fmt(section.total);
+            /* Phase 114: targetCap overage — red badge when section total exceeds cap */
+            var capBadge = document.querySelector('[data-section-cap-badge="' + safeKey + '"]');
+            if (capBadge) {
+                var sectionCap = section.targetCap || 0;
+                if (sectionCap > 0 && section.total > sectionCap) {
+                    capBadge.textContent = '+' + fmt(section.total - sectionCap);
+                    capBadge.classList.remove('hidden');
+                } else {
+                    capBadge.classList.add('hidden');
+                }
+            }
             section.items.forEach(function (item) {
                 var calc = calculateItem(item);
                 var estimated = calc.estimated;
@@ -3417,7 +3537,13 @@
                             <div class="flex items-center gap-3 pointer-events-none">
                                 <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">${safeName}</h2>
                             </div>
-                            <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono flex-shrink-0 pointer-events-none">${total}</span>
+                            <div class="flex items-center gap-1.5 flex-shrink-0">
+                                <span data-section-cap-badge="${safeName}" class="hidden text-[8px] font-black text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none pointer-events-none"></span>
+                                <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono pointer-events-none">${total}</span>
+                                <button data-action="section-cap" data-id="${rawId}" title="Set section spending cap" class="pointer-events-auto w-5 h-5 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors rounded">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="section-content ${isOpen ? '' : 'hidden'} animate-in fade-in slide-in-from-top-1 duration-200">
@@ -3971,6 +4097,7 @@
     }
 
     /* --- Phase 94.2: ES5 .then() conversion of showNewProjectModal --- */
+    /* Phase 116: Studio Hub styling — 4-col grid, premium dark branding, rates toggle polish */
     window.showNewProjectModal = function () {
         /* Show modal immediately with loading skeleton, then swap content once blueprints load */
         var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
@@ -3982,7 +4109,7 @@
             /* 1. Industry Standards */
             var standardsHtml = Object.keys(BUDGET_TEMPLATES).map(function (key) {
                 var t = BUDGET_TEMPLATES[key];
-                return '<button onclick="mBT.data.newProject(false,\'' + key + '\'); mBTME.close(\'newProject\');"' +
+                return '<button onclick="mBT.data.newProject(false,\'' + key + '\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');"' +
                     ' class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full h-full">' +
                     '<div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">' +
                     (mBTAssets[t.icon] || mBTAssets.file) + '</div>' +
@@ -4007,7 +4134,7 @@
                 var desc = t.desc || (Array.isArray(t.structure) ? t.structure.length + ' Sections' : 'Custom Blueprint');
                 var safeKey = key.replace(/'/g, "\\'");
                 return '<div class="group relative flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-white hover:shadow-md transition-all">' +
-                    '<button onclick="mBT.data.newProject(false,\'' + safeKey + '\'); mBTME.close(\'newProject\');"' +
+                    '<button onclick="mBT.data.newProject(false,\'' + safeKey + '\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');"' +
                     ' class="text-left w-full">' +
                     '<div class="flex items-center justify-between w-full mb-1">' +
                     '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 truncate pr-2 group-hover:text-indigo-600">' + label + '</div>' +
@@ -4022,16 +4149,48 @@
             }).join('');
 
             /* 3. Compose final layout */
+            /* Rates Toggle: persist user preference; show OpenGate sync status */
+            var _ogSync = localStorage.getItem('moo_og_last_sync');
+            var _syncLabel = _ogSync ? 'Rates synced' : 'Local rates';
+            var _injectDefault = localStorage.getItem('mbt_inject_rates_default') !== 'false';
+            var toggleHtml =
+                '<div class="mb-5 shrink-0">' +
+                '<label class="flex items-center justify-between cursor-pointer bg-gradient-to-r from-slate-50 to-white rounded-xl px-5 py-3 border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all">' +
+                '<div class="flex items-center gap-3">' +
+                '<div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' +
+                '</div>' +
+                '<div>' +
+                '<span class="text-[10px] font-black uppercase tracking-widest text-slate-700 block leading-tight">Inject Live Community Rates</span>' +
+                '<span class="text-[8px] text-slate-400 font-bold">Pull OpenGate industry-standard rates into your blueprint</span>' +
+                '</div>' +
+                '</div>' +
+                '<div class="flex items-center gap-3 shrink-0">' +
+                '<div class="relative inline-flex">' +
+                '<input type="checkbox" id="mbt-inject-rates" class="sr-only peer" ' + (_injectDefault ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_inject_rates_default\',this.checked)">' +
+                '<div class="w-10 h-5 rounded-full bg-slate-200 peer-checked:bg-blue-600 after:content-[\'\'] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-5 shadow-inner"></div>' +
+                '</div>' +
+                '<div class="text-[8px] font-bold ' + (_ogSync ? 'text-sky-500' : 'text-slate-300') + '">' +
+                (_ogSync ? 'Synced' : 'Local') + '</div>' +
+                '</div>' +
+                '</label></div>';
+
             var content =
-                '<div class="p-8 bg-slate-50 min-h-[500px] flex flex-col">' +
-                '<div class="text-center mb-8 shrink-0">' +
-                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">Start Production</h2>' +
-                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Select a blueprint to initialize budget</p></div>' +
+                '<div class="p-8 bg-gradient-to-b from-slate-50 to-white min-h-[500px] flex flex-col">' +
+                '<div class="text-center mb-5 shrink-0">' +
+                '<div class="inline-flex items-center gap-2 mb-1">' +
+                '<div class="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/></svg>' +
+                '</div>' +
+                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">MooBudget Studio</h2>' +
+                '</div>' +
+                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
+                toggleHtml +
                 '<div class="flex-grow overflow-y-auto no-scrollbar pr-2">' +
                 '<div class="mb-3 flex items-center gap-3">' +
                 '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>' +
                 '<div class="h-px bg-slate-200 flex-grow"></div></div>' +
-                '<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">' + standardsHtml + '</div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">' + standardsHtml + '</div>' +
                 (customHtml ?
                     '<div class="mb-3 flex items-center gap-3">' +
                     '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>' +
@@ -4040,7 +4199,7 @@
                     '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' + customHtml + '</div>' : '') +
                 '</div>' +
                 '<div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4 flex items-center justify-center gap-4">' +
-                '<button onclick="mBT.data.newProject(false,\'Blank\'); mBTME.close(\'newProject\');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">Skip &amp; Create Blank</button>' +
+                '<button onclick="mBT.data.newProject(false,\'Blank\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">Skip &amp; Create Blank</button>' +
                 (budget ? '<button onclick="mBT_saveAsBlueprint();" class="text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors hover:bg-indigo-50 px-4 py-2 rounded-lg">Save Current as Blueprint</button>' : '') +
                 '</div></div>';
 
@@ -4249,6 +4408,7 @@
         /* --- System: Non-blocking Alert Modal --- */
         alert: function (title, message, onOk) {
             var self = this;
+            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('alert');
             var content =
                 '<div class="p-8 text-center flex flex-col items-center justify-center">' +
                 '<div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-4 shadow-sm">' +
@@ -6342,8 +6502,134 @@
 
                 mBTME.alert("Success", `Blueprint "${name}" saved! It is now available in the New Project menu.`);
             });
+        },
+
+        /* Phase 116 — The Universal Studio Hub: Unified AI & Blueprint Portal */
+        showStudioHub: function () {
+            const self = this;
+            const content = `
+                <div class="flex flex-col h-[75vh] bg-slate-900 text-white font-sans">
+                    <!-- Top Section: Quick Setup Tiles -->
+                    <div class="p-6 border-b border-white/5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                    MooBudget Studio
+                                </h3>
+                                <p class="text-[10px] text-white/40 font-bold uppercase tracking-tight">Select a starting blueprint or use the AI Assistant below</p>
+                            </div>
+                            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">
+                                    <div class="w-8 h-4 bg-slate-700 rounded-full relative transition-colors peer-checked:bg-blue-600">
+                                        <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                                    </div>
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Inject Rates</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <button onclick="mBT.features.blueprints.applyFromHub('commercial')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Standard</span>
+                                <span class="block text-xs font-black text-white">TV Commercial</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('documentary')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Run & Gun</span>
+                                <span class="block text-xs font-black text-white">Documentary</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('live_stream')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Technical</span>
+                                <span class="block text-xs font-black text-white">Live Broadcast</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('music_video')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Creative</span>
+                                <span class="block text-xs font-black text-white">Music Video</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Section: AI Assistant Iframe -->
+                    <div class="flex-1 relative bg-black/20">
+                        <iframe id="mbtHubAiIframe" src="src/tools/ai/index.html?embedded=true" class="w-full h-full border-none"></iframe>
+                    </div>
+                </div>
+            `;
+            
+            mBTME.openCustom('studio-hub', 'Studio Center', content, 'max-w-4xl', { 
+                hideHeader: true, 
+                noPadding: true,
+                onClose: () => { /* Clean up if needed */ }
+            });
+        },
+
+        /* Phase 116: Hub tile trigger — maps lowercase hub key to BUDGET_TEMPLATES title-case key */
+        applyFromHub: function (templateName) {
+            var withRates = !!(document.getElementById('mbtHubRatesToggle') || {checked: true}).checked;
+            var KEY_MAP = { commercial: 'Commercial', documentary: 'Documentary', live_stream: 'Live Stream', music_video: 'Music Video' };
+            var tmplKey = KEY_MAP[templateName] || templateName;
+            mBT.features.blueprints.applyTemplate(tmplKey, withRates, true);
+        },
+
+        /* Phase 116 Step 2: Programmatic bridge — called by Hub tiles and postMessage handler */
+        applyTemplate: function (tmplKey, withRates, askConfirm) {
+            var tmpl = (typeof BUDGET_TEMPLATES !== 'undefined') ? BUDGET_TEMPLATES[tmplKey] : null;
+            if (!tmpl || !tmpl.structure) {
+                if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Blueprint not found: ' + tmplKey);
+                return;
+            }
+            var label = tmpl.label || tmplKey;
+            function doApply() {
+                var rateDb = (withRates && typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+                var regionMult = (withRates && typeof mBT.opengate !== 'undefined') ? (mBT.opengate.settings.regionMultiplier || 1) : 1;
+                var newSections = {};
+                tmpl.structure.forEach(function (s) {
+                    newSections[s.name] = {
+                        id: s.id,
+                        isOpen: true,
+                        items: s.items.map(function (desc, idx) {
+                            var match = null;
+                            for (var ri = 0; ri < rateDb.length; ri++) {
+                                if (rateDb[ri] && rateDb[ri].description && rateDb[ri].description.toLowerCase() === desc.toLowerCase()) { match = rateDb[ri]; break; }
+                            }
+                            return {
+                                id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+                                description: desc,
+                                quantity: 1,
+                                unit: match ? match.unit : 'Day',
+                                rate: match ? Math.round(match.rate * regionMult) : 0,
+                                multiplier: 1,
+                                actual: 0,
+                                notes: '',
+                                stageData: {}
+                            };
+                        })
+                    };
+                });
+                budget.sections = newSections;
+                if (typeof saveBudget === 'function') saveBudget();
+                if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+                if (typeof render === 'function') render();
+                if (typeof mBTME !== 'undefined') {
+                    mBTME.close('studio-hub');
+                    mBTME.alert('Blueprint Applied', '"' + label + '" structure loaded' + (withRates ? ' with industry rates.' : '.'));
+                }
+            }
+            if (askConfirm && typeof mBTME !== 'undefined') {
+                mBTME.confirm('Apply Blueprint?', '"' + label + '" will replace current sections. Continue?', doApply);
+            } else {
+                doApply();
+            }
+        },
+
+        openTool: function () {
+            this.showStudioHub();
         }
     };
+
+    /* Phase 114: expose mBT.blueprints alias so onclick="mBT.blueprints.openTool()" resolves */
+    mBT.blueprints = mBT.features.blueprints;
 
     // Core Action Binding for Blueprint
     mBT.core.action('blueprint-save', () => mBT.features.blueprints.saveCurrentAsBlueprint());
@@ -7231,6 +7517,7 @@
 
         // --- External Hooks ---
         trashDocument: function (docId) {
+            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
             mBTME.confirm("Archive Document", "Move this document to the Recycle Bin?", () => {
                 const idx = budget.documents.findIndex(d => d.id === docId);
                 if (idx > -1) {
@@ -7420,11 +7707,11 @@
                 { id: 'cloud', label: `Cloud` }
             ];
 
-            const tabNavHTML = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+            const tabNavHTML = `<div class="flex border-b border-slate-200 rounded-t-xl overflow-hidden select-none settings-tab-bar">
                 ${tabs.map(t => {
                 const isActive = t.id === tab;
-                const activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
-                const inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                const activeClass = "settings-tab-active";
+                const inactiveClass = "settings-tab-inactive";
                 return `<button data-action="nav-settings" data-tab="${t.id}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
                         ${t.label}
                     </button>`;
@@ -7442,8 +7729,8 @@
             }
 
             const fullContent = `
-                <div class="flex flex-col h-[80vh] max-h-[700px] bg-slate-50/50">
-                    <div id="settingsTabNav" class="shrink-0 bg-white">
+                <div class="flex flex-col h-[80vh] max-h-[700px] settings-modal-shell">
+                    <div id="settingsTabNav" class="shrink-0 settings-tab-nav">
                         ${tabNavHTML}
                     </div>
                     <div id="settingsContentArea" class="flex-grow flex flex-col relative overflow-hidden">
@@ -8080,6 +8367,7 @@
 
         /* --- Delete a funding source by index --- */
         deleteSource: function (index) {
+            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
             mBTME.confirm('Remove Source', 'Remove this funding source?', function () {
                 if (!budget.fundingSources) return;
                 budget.fundingSources.splice(index, 1);
@@ -9856,6 +10144,18 @@
         mBT.core.action('open-payments-ledger', function () { openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
         mBT.core.action('project-import-file', function (e, el) { if (e.type === 'change') mBT.data.importFile(el); });
 
+        /* Phase 109: Cross-tab sync — reload when another tab saves the same or different project */
+        window.addEventListener('storage', function (e) {
+            if (e.key === storageKeyPrefix + 'lastLoaded' && e.newValue) {
+                try {
+                    var d = JSON.parse(e.newValue);
+                    if (d && d.name) mBT.data.load(d.name);
+                } catch (ex) {
+                    if (e.newValue) mBT.data.load(e.newValue);
+                }
+            }
+        });
+
         /* B. Global Utilities */
 
         mBT.core.action('backup-env', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
@@ -9893,6 +10193,25 @@
         mBT.core.action('section-toggle', function (e, el) { handleToggleSection(el.dataset.id, el); });
         mBT.core.action('section-add', function (e, el) { showItemSelectorModal(el.dataset.id); });
         mBT.core.action('row-delete', function (e, el) { handleRemoveItem(el.dataset.section, el.dataset.id); });
+
+        /* Phase 114: Section spending cap — target icon opens a cap input modal */
+        mBT.core.action('section-cap', function (e, el) {
+            e.stopPropagation();
+            var sectionName = el.dataset.id;
+            if (!budget || !budget.sections[sectionName]) return;
+            var currentCap = budget.sections[sectionName].targetCap || 0;
+            window._mBT_pendingCapSection = sectionName;
+            var capContent =
+                '<div class="p-5 space-y-3">' +
+                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Set a spending limit. Section total exceeding this cap will show a red overage badge.</p>' +
+                '<input type="number" id="sectionCapInput" min="0" step="1000" value="' + (currentCap || '') + '" placeholder="No cap (0 = off)"' +
+                ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none font-black">' +
+                '<div class="flex gap-2 pt-1">' +
+                '<button onclick="mBTME.close(\'sectionCapModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+                '<button onclick="(function(){var v=parseFloat((document.getElementById(\'sectionCapInput\')||{}).value)||0;if(budget&&budget.sections&&window._mBT_pendingCapSection&&budget.sections[window._mBT_pendingCapSection]){budget.sections[window._mBT_pendingCapSection].targetCap=v;saveBudget();mBT.ui.paint();}mBTME.close(\'sectionCapModal\');})();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all">Set Cap</button>' +
+                '</div></div>';
+            mBTME.open('sectionCapModal', 'Section Cap \u2014 ' + sectionName, capContent, 'max-w-xs');
+        });
 
         mBT.core.action('row-lock', function (e, el) {
             var item = budget.sections[el.dataset.section] && budget.sections[el.dataset.section].items.find(function (i) { return i.id === el.dataset.id; });
@@ -10041,8 +10360,15 @@
         mBT.core.action('nav-settings', (e, el) => mBT.features.settings.open(el.dataset.tab));
 
         // 3. Studio Engine
-        mBT.core.action('studio-undo', () => { if (mBTDB.undo) mBTDB.undo(); });
-        mBT.core.action('studio-redo', () => { if (mBTDB.redo) mBTDB.redo(); });
+        mBT.core.action('studio-undo', function () { if (typeof handleUndo === 'function') handleUndo(); });
+        mBT.core.action('studio-redo', function () { if (typeof handleRedo === 'function') handleRedo(); });
+        mBT.core.action('studio-set-paper', function (e, el) {
+            if (e.type !== 'change') return;
+            var docId = mBTDB && mBTDB.state && mBTDB.state.currentDocId;
+            if (!docId) return;
+            mBTDB.updateData(docId, 'meta.paperSize', el.value);
+            mBTDB.renderFrame();
+        });
         mBT.core.action('studio-sync', () => mBTDB.syncFromBudget());
         mBT.core.action('studio-sync-prev', () => mBTDB.syncFromPrevious());
         mBT.core.action('studio-preview', () => mBTDB.openPreviewSelector());
@@ -10213,6 +10539,7 @@
 
         // Initialize Registry
         registerCoreActions();
+        mBT.data.scavengeOrphans();
 
         if (!document.body.dataset.listenersBound) {
             document.body.dataset.listenersBound = 'true';
@@ -10222,7 +10549,7 @@
                 if (mBT.core.route(e)) return;
                 const target = e.target;
                 if (target.closest('#loginBtn')) handleLogin();
-                if (target.closest('#openAiToolsBtn')) showAIToolsModal();
+                if (target.closest('#openAiToolsBtn')) mBT.blueprints.openTool();
             };
 
             document.body.addEventListener('click', router);
@@ -11119,6 +11446,16 @@
                 /* Trigger download */
                 var fileName = 'mbt_export_' + exportType + '_' + new Date().toISOString().split('T')[0] + '.csv';
                 triggerCSVDownload(csvContent, fileName);
+
+                /* --- Phase 116 Step 5: apply-template — Template Manager routes blueprint + rate injection via monolith --- */
+            } else if (action === 'apply-template' && budget) {
+                var _tmplKey = payload.templateKey;
+                var _withRates = !!payload.withRates;
+                if (_tmplKey && mBT.features.blueprints && typeof mBT.features.blueprints.applyTemplate === 'function') {
+                    mBT.features.blueprints.applyTemplate(_tmplKey, _withRates, false);
+                }
+                if (typeof mBTME !== 'undefined') mBTME.close('tool-window');
+                mBTActiveTool = null;
             }
         });
 

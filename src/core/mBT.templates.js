@@ -134,5 +134,16 @@ var BUDGET_TEMPLATES = {
             { id: 'conn', name: 'Connectivity', items: ['Dedicated Internet Line', '4G/5G Backup Data', 'IT Support'] },
             { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] }
         ]
+    },
+    'Music Video': {
+        icon: 'music',
+        label: 'Music Video',
+        desc: 'Visual-first production. Heavy art direction, performance staging, and cinematic color grading.',
+        structure: [
+            { id: 'atl', name: 'Creative & Direction', items: ['Director', 'Producer', 'Cinematographer', 'Art Director', 'Choreographer'] },
+            { id: 'prod', name: 'Production', items: ['Camera Operator', 'Gaffer', 'Key Grip', 'Dolly Grip', 'Steadicam Op', 'Makeup Artist', 'Stylist'] },
+            { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Title/Motion Graphics'] },
+            { id: 'other', name: 'Location & Logistics', items: ['Location Manager', 'Set Design', 'Props', 'Catering', 'Transport'] }
+        ]
     }
 };

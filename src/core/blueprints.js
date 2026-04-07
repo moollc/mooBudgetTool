@@ -13,7 +13,7 @@
     var CATEGORY_DEFINITIONS = {
         labor: {
             name: 'Labor',
-            subcategories: ['director', 'cinematographer', 'producer', 'crew', 'above_the_line'],
+            subcategories: ['director', 'cinematographer', 'producer', 'crew', 'above_the_line', 'mixer', 'boom', 'utility'],
             defaultRate: 1000,
             description: 'Personnel costs'
         },
@@ -47,6 +47,33 @@
             defaultRate: 100,
             description: 'Other costs'
         }
+    };
+
+    /* --- Synonym Registry: maps internal subcategory keys to OpenGate description strings --- */
+    /* Used by generateBudgetFromTemplate(withRates=true) to query mBTOG.rates */
+    var SYNONYM_REGISTRY = {
+        /* Labor */
+        director:        'Director',
+        cinematographer: 'Director of Photography (DP)',
+        producer:        'Producer',
+        crew:            'Camera Operator',
+        above_the_line:  'Line Producer',
+        mixer:           'Sound Mixer',
+        boom:            'Boom Operator',
+        utility:         'Sound Utility',
+        /* Equipment */
+        camera:          'Camera Operator',
+        lighting:        'Gaffer',
+        sound:           'Sound Mixer',
+        arsenal:         'Key Grip',
+        vfx:             'VFX Artist',
+        /* Location */
+        studio:          'Location Manager',
+        outside:         'Location Scout',
+        permits:         'Legal - Rights & Clearances',
+        /* Post */
+        editor:          'Editor',
+        colorist:        'Colorist'
     };
 
     // Budget templates for different production types
@@ -117,11 +144,20 @@
      * Generate a new budget from template
      * @param {string} templateName - Template key
      * @param {number} totalBudget - Total budget amount
-     * @returns {Object} Budget structure
+     * @param {boolean} [withRates] - When true, injects live rates from mBTOG per subcategory
+     * @returns {Object} Budget structure with optional line items
      */
-    function generateBudgetFromTemplate(templateName, totalBudget) {
+    function generateBudgetFromTemplate(templateName, totalBudget, withRates) {
         var template = TEMPLATES[templateName] || TEMPLATES.commercial;
         var categories = Object.entries(template.categories);
+
+        /* Rate source: pull from OpenGate when withRates is true and mBTOG is available */
+        var rateDb = [];
+        var regionMult = 1;
+        if (withRates && typeof window.mBTOG !== 'undefined') {
+            rateDb = window.mBTOG.rates || [];
+            regionMult = window.mBTOG.settings.regionMultiplier || 1;
+        }
 
         var budget = {
             project_title: 'New Project',
@@ -132,12 +168,41 @@
         };
 
         categories.forEach(function(entry) {
+            var catKey = entry[0];
+            var catDef = CATEGORY_DEFINITIONS[catKey] || {};
             var amount = totalBudget * entry[1].allocation;
-            budget.categories[entry[0]] = {
-                name: entry[1].name,
+            var subcats = catDef.subcategories || [];
+            var defaultRate = catDef.defaultRate || 0;
+
+            /* Option A Population: generate actual line items when withRates is enabled */
+            var items = [];
+            if (withRates && subcats.length > 0) {
+                subcats.forEach(function (subcat) {
+                    var longName = SYNONYM_REGISTRY[subcat] || subcat.replace(/_/g, ' ');
+                    var match = null;
+                    var q = longName.toLowerCase();
+                    for (var ri = 0; ri < rateDb.length; ri++) {
+                        if ((rateDb[ri].description || '').toLowerCase() === q) {
+                            match = rateDb[ri];
+                            break;
+                        }
+                    }
+                    var rate = match ? Math.round(match.rate * regionMult) : defaultRate;
+                    items.push({
+                        name: longName,
+                        unit: match ? match.unit : 'Day',
+                        unit_price: rate,
+                        quantity: 1,
+                        amount: rate
+                    });
+                });
+            }
+
+            budget.categories[catKey] = {
+                name: entry[1].name || catDef.name,
                 description: entry[1].description,
                 amount: amount,
-                items: []
+                items: items
             };
         });
 
@@ -304,5 +369,6 @@
     window.mBT.blueprints.addSampleLineItems = addSampleLineItems;
     window.mBT.blueprints.TEMPLATES = TEMPLATES;
     window.mBT.blueprints.CATEGORY_DEFINITIONS = CATEGORY_DEFINITIONS;
+    window.mBT.blueprints.SYNONYM_REGISTRY = SYNONYM_REGISTRY;
 
 })();

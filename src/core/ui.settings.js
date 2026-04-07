@@ -10,6 +10,13 @@
             subTab = subTab || 'lineItems';
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             if (tabName === 'general') {
+                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+                var _t1 = isDark ? 'text-slate-200' : 'text-slate-800';
+                var _t2 = isDark ? 'text-slate-400' : 'text-slate-400';
+                var _sw = isDark ? 'bg-slate-600' : 'bg-slate-200';
+                var _inp = isDark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800';
+                var _btnBg = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+                var _btnRose = isDark ? 'bg-rose-900/30 text-rose-400 hover:bg-rose-900/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100';
                 var currentDateFormat = getProjectDateFormat();
                 var currentSeparator = getProjectNameSeparator();
                 var isCompact = (budget.settings && budget.settings.compactMode) || false;
@@ -21,29 +28,29 @@
 
                 return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
-                        <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                        <div class="settings-card flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">${mBTAssets.appLogo}</div>
                             <div>
-                                <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">MooBudget Studio</h3>
+                                <h3 class="text-xs font-black uppercase tracking-widest ${_t1}">MooBudget Studio</h3>
                                 <p class="text-[9px] text-slate-400 font-bold">Build v${APP_VERSION} &bull; ${navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>'}</p>
                             </div>
                         </div>
-                        <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="settings-card">
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Date Format</label>
-                                    <select id="dateFormatSelect" onchange="localStorage.setItem('${projectDateFormatKey}', this.value)" class="w-full text-[10px] p-2 bg-slate-50 border-none rounded-lg font-bold outline-none cursor-pointer">
+                                    <select id="dateFormatSelect" onchange="localStorage.setItem('${projectDateFormatKey}', this.value)" class="w-full text-[10px] p-2 ${_inp} border-none rounded-lg font-bold outline-none cursor-pointer">
                                         <option value="YYYYMMDD" ${currentDateFormat === 'YYYYMMDD' ? 'selected' : ''}>YYYY-MM-DD</option>
                                         <option value="MMDDYYYY" ${currentDateFormat === 'MMDDYYYY' ? 'selected' : ''}>MM-DD-YYYY</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Separator</label>
-                                    <input type="text" id="separatorInput" maxlength="1" value="${currentSeparator}" onchange="localStorage.setItem('${projectNameSeparatorKey}', this.value)" class="w-full text-[10px] p-2 bg-slate-50 border-none rounded-lg font-bold text-center outline-none">
+                                    <input type="text" id="separatorInput" maxlength="1" value="${currentSeparator}" onchange="localStorage.setItem('${projectNameSeparatorKey}', this.value)" class="w-full text-[10px] p-2 ${_inp} border-none rounded-lg font-bold text-center outline-none">
                                 </div>
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Decimals</label>
-                                    <select id="decimalPlacesSelect" onchange="if(!budget.settings) budget.settings={}; budget.settings.decimalPlaces=parseInt(this.value); saveBudget(); if(typeof mBTLE!=='undefined') mBTLE.reconcile(); render();" class="w-full text-[10px] p-2 bg-slate-50 border-none rounded-lg font-bold outline-none cursor-pointer">
+                                    <select id="decimalPlacesSelect" onchange="if(!budget.settings) budget.settings={}; budget.settings.decimalPlaces=parseInt(this.value); saveBudget(); if(typeof mBTLE!=='undefined') mBTLE.reconcile(); render();" class="w-full text-[10px] p-2 ${_inp} border-none rounded-lg font-bold outline-none cursor-pointer">
                                         <option value="0" ${decimalPlaces === 0 ? 'selected' : ''}>0 — 1,500</option>
                                         <option value="1" ${decimalPlaces === 1 ? 'selected' : ''}>1 — 1,500.0</option>
                                         <option value="2" ${decimalPlaces === 2 ? 'selected' : ''}>2 — 1,500.00</option>
@@ -52,130 +59,130 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Allow Page Zoom</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Allow Page Zoom</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Enable pinch-to-zoom gestures</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="zoomToggle" ${allowZoom ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.allowZoom = this.checked; saveBudget(); mBT.ui.updateViewport();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Display Theme</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Display Theme</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Toggle Premium Dark / Classic Light</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="themeToggle" ${localStorage.getItem('mbt_active_theme') === 'dark' ? 'checked' : ''} onchange="mBT.ui.setTheme(this.checked ? 'dark' : 'light');" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Compact View</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Compact View</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="compactModeToggle" ${isCompact ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Classic Theme</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Classic Theme</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Legacy visual style (Pre-v19.54)</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="classicThemeToggle" ${isClassic ? 'checked' : ''} onchange="if(!budget.settings) budget.settings={}; budget.settings.classicTheme = this.checked; saveBudget(); render();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Open Tools In-App</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Open Tools In-App</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Stages, Publish etc. open inside main window</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="navPrefToggle" ${JSON.parse(localStorage.getItem('mBT_openToolsInternal') ?? 'true') ? 'checked' : ''} onchange="localStorage.setItem('mBT_openToolsInternal', this.checked);" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Auto-Fetch Rates</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Auto-Fetch Rates</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Refresh exchange rates on startup</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="autoFetchRatesToggle" ${autoFetchRates ? 'checked' : ''} onchange="localStorage.setItem('${storageKeyPrefix}auto_fetch_rates', this.checked);" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Auto-Hide Nav</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Auto-Hide Nav</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">HUD slides away when idle</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="autoHideNavToggle" ${autoHideNav ? 'checked' : ''} onchange="localStorage.setItem('mBT_autoHideNav', this.checked); if(typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Developer Mode</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Developer Mode</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Show advanced tools and logs</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" onchange="localStorage.setItem('mBT_devMode', this.checked); location.reload();" ${localStorage.getItem('mBT_devMode') === 'true' ? 'checked' : ''} class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Show Funding Bar</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Show Funding Bar</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Secured / Gap funding meter</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" ${(budget.settings && budget.settings.showFundingBar === false) ? '' : 'checked'} onchange="if(!budget.settings) budget.settings={}; budget.settings.showFundingBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                                     </label>
                                 </div>
                             </div>
-                            <div class="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-800">Show Timeline Bar</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Show Timeline Bar</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Stages sparkline HUD</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" ${(budget.settings && budget.settings.showTimelineBar === false) ? '' : 'checked'} onchange="if(!budget.settings) budget.settings={}; budget.settings.showTimelineBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                     </label>
                                 </div>
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2">
-                             <a href="https://raw.githubusercontent.com/jaysonmy/moobudget/refs/heads/main/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-colors">${mBTAssets.cloud} Get Beta</a>
-                             <button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-rose-100 transition-colors">${mBTAssets.zap} Fix Bugs</button>
+                             <a href="https://raw.githubusercontent.com/jaysonmy/moobudget/refs/heads/main/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnBg} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.cloud} Get Beta</a>
+                             <button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnRose} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.zap} Fix Bugs</button>
                              <button onclick="mBTME.close('settingsModal'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 py-2 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] uppercase tracking-widest hover:opacity-90 transition-opacity">${mBTAssets.coffee} Support</button>
                         </div>
                     </div>`;
@@ -246,7 +253,7 @@
                                 <div class="flex items-center gap-3 py-0.5">
                                     <div class="relative flex items-center">
                                         <input type="checkbox" id="aiContextToggle" ${saveHistory ? 'checked' : ''} onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:''}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                                        <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                                     </div>
                                     <label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>
                                 </div>
@@ -322,7 +329,7 @@
                                         ${signedInEmail.charAt(0)}
                                     </div>
                                     <div>
-                                        <div class="text-[10px] font-black text-slate-800 tracking-tight leading-none mb-1">${esc(signedInEmail)}</div>
+                                        <div class="text-[10px] font-black ${_h} tracking-tight leading-none mb-1">${esc(signedInEmail)}</div>
                                         <div class="flex items-center gap-1.5">
                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                             <span class="text-[8px] text-slate-400 uppercase tracking-widest font-black">Connected to Cloud</span>
@@ -417,7 +424,7 @@
                                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" id="ogCloudSyncToggle" ${ogCloudOn ? 'checked' : ''} onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                                 </label>
                             </div>
                             <button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('DATABASE', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('DATABASE', 'Engine not available.'); }" class="w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>
@@ -437,7 +444,7 @@
                                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-Sync Changes</span>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" id="syncOnReconnectToggle" ${syncOnReconnect ? 'checked' : ''} onchange="localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                 </label>
                             </div>
                             <button onclick="if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }" class="w-full py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>

@@ -16,9 +16,15 @@
          */
         renderHeader: function () {
             if (!budget) return '';
+            /* Phase 115 Step 4: Show "Review Only" pill when client mode is active */
+            var isClient = window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false;
+            var reviewPill = isClient
+                ? '        <span class="flex-shrink-0 bg-rose-500 text-white text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full">Review Only</span>'
+                : '';
             return '<header class="mb-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3">' +
                 '    <div class="flex items-center gap-4 w-full md:w-auto flex-grow min-w-0">' +
                 '        <input type="text" id="projectName" value="' + budget.projectName + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
+                reviewPill +
                 '        <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>' +
                 '        <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>' +
                 '    </div>' +
