@@ -413,6 +413,19 @@
             };
         }
 
+        /* Phase 109.1: Weekend-skipping day counter — respects workWeek setting */
+        function addWorkDays(startDate, days, workWeek) {
+            var date = new Date(startDate);
+            var count = 0;
+            while (count < days) {
+                date.setDate(date.getDate() + 1);
+                var dow = date.getDay();
+                var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) || (workWeek === 6 && dow === 0);
+                if (!isWeekend) count++;
+            }
+            return date;
+        }
+
         /* --- calculateTimeline (Phase 3.3 overrun + TZ fix + Phase 50C offsetDays) --- */
         function calculateTimeline(b) {
             var timeline = {};
@@ -446,7 +459,8 @@
                     start.setDate(start.getDate() + offsetDays);
                 }
 
-                var end   = new Date(start.getTime() + days * 86400000);
+                var workWeek = (b.settings && b.settings.workWeek) || 7;
+                var end = (days > 0 && workWeek < 7) ? addWorkDays(start, days, workWeek) : new Date(start.getTime() + days * 86400000);
                 var fmtD  = function(d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
                 timeline[k] = { start: start, end: end, label: days > 0 ? (fmtD(start) + ' – ' + fmtD(end)) : 'SCHEDULE TBD' };
 

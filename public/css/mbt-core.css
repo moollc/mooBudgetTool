@@ -148,9 +148,33 @@ body {
 }
 
 /* --- 11. Form Utilities (Spinner Removal) --- */
-.no-spinner::-webkit-inner-spin-button, 
+.no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spinner { -moz-appearance: textfield; appearance: none; }
+
+/* --- 11.5 Settings Modal Theme-Aware Cards (Phase 110.1) --- */
+.settings-card { background: var(--bg-settings-card, #ffffff); border-color: var(--border-settings-card, #f1f5f9); }
+.settings-card-alt { background: var(--bg-settings-card-alt, #f8fafc); border-color: var(--border-settings-card-alt, #e2e8f0); }
+.settings-text-primary { color: var(--text-settings-primary, #1e293b); }
+.settings-text-secondary { color: var(--text-settings-secondary, #475569); }
+.settings-text-muted { color: var(--text-settings-muted, #94a3b8); }
+.settings-text-link { color: var(--text-settings-link, #3b82f6); }
+.settings-border { border-color: var(--border-settings, #e2e8f0); }
+.settings-border-light { border-color: var(--border-settings-light, #f1f5f9); }
+
+/* Dark Theme Overrides */
+.mbt-theme-dark {
+    --bg-settings-card: #1e293b;
+    --border-settings-card: #334155;
+    --bg-settings-card-alt: #0f172a;
+    --border-settings-card-alt: #1e293b;
+    --text-settings-primary: #f1f5f9;
+    --text-settings-secondary: #94a3b8;
+    --text-settings-muted: #64748b;
+    --text-settings-link: #60a5fa;
+    --border-settings: #334155;
+    --border-settings-light: #1e293b;
+}
 
 /* --- 12. Crew Contact Popups (Adapted Legacy Logic) --- */
 .crew-wrapper { 
@@ -504,6 +528,18 @@ body {
 .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
 .cursor-pointer { cursor: pointer; }
 .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+
+/* --- 17. Settings Card System --- */
+:root { --bg-settings: #ffffff; }
+.mbt-theme-dark { --bg-settings: #1e293b; }
+.settings-card {
+    background-color: var(--bg-settings);
+    padding: 0.75rem;
+    border-radius: 1rem;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+.mbt-theme-dark .settings-card { border-color: #334155; }
 
 /* GridStack Offline Fallback (Vertical Stack) */
 .no-gridstack .grid-stack { display: flex !important; flex-direction: column !important; height: auto !important; padding: 10px !important; }

@@ -91,7 +91,12 @@
   <div id="apply-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
       <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-900 mb-2">Apply Template?</h3>
-      <p class="text-[11px] text-slate-500 mb-5">This will replace the current budget sections with this template's structure. Project name, dates, and settings are preserved.</p>
+      <p class="text-[11px] text-slate-500 mb-4">This will replace the current budget sections with this template's structure. Project name, dates, and settings are preserved.</p>
+      <!-- Phase 116 Step 5: Rates injection — only shown for built-in templates -->
+      <label id="apply-rates-label" class="hidden items-center gap-2 mb-5 cursor-pointer select-none">
+        <input type="checkbox" id="apply-inject-rates" class="w-4 h-4 rounded accent-violet-600">
+        <span class="text-[10px] font-black text-slate-600 uppercase tracking-widest">Inject Industry Rates (OpenGate)</span>
+      </label>
       <div class="flex gap-2">
         <button id="apply-confirm" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors">Apply</button>
         <button id="apply-cancel" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors">Cancel</button>
@@ -291,11 +296,24 @@
         }
 
         /* --- Apply a built-in template to the current project --- */
-        function applyBuiltInTemplate(key) {
+        /* Phase 116 Step 5: Routes via monolith postMessage so rate injection stays server-side */
+        function applyBuiltInTemplate(key, withRates) {
             if (!state.projectKey) { snack('No project loaded.'); return; }
             var t = BUILT_IN[key];
             if (!t || !t.structure) { snack('Template not found.'); return; }
 
+            /* Route via parent monolith when running inside iframe (normal case) */
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'mbt:tool-action',
+                    action: 'apply-template',
+                    payload: { templateKey: key, withRates: !!withRates }
+                }, '*');
+                snack('Blueprint applied' + (withRates ? ' with industry rates.' : '.'));
+                return;
+            }
+
+            /* Fallback: standalone (not in iframe) — direct localforage write without rates */
             localforage.getItem(state.projectKey).then(function(project) {
                 if (!project) { snack('Budget not found in storage.'); return; }
 
@@ -325,10 +343,6 @@
                 return localforage.setItem(state.projectKey, project);
             }).then(function() {
                 snack('Template applied. Reload budget to see changes.');
-                /* Notify parent to reconcile */
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
-                }
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
 
@@ -444,8 +458,12 @@
             document.getElementById('apply-confirm').addEventListener('click', function() {
                 document.getElementById('apply-modal').classList.add('hidden');
                 if (!state.pendingApplyKey) return;
-                if (state.pendingApplyType === 'builtin') applyBuiltInTemplate(state.pendingApplyKey);
+                var withRates = !!(document.getElementById('apply-inject-rates') || {}).checked;
+                if (state.pendingApplyType === 'builtin') applyBuiltInTemplate(state.pendingApplyKey, withRates);
                 else applyCustomTemplate(state.pendingApplyKey);
+                /* Reset rates label */
+                var ratesLabel = document.getElementById('apply-rates-label');
+                if (ratesLabel) { ratesLabel.classList.add('hidden'); ratesLabel.classList.remove('flex'); }
                 state.pendingApplyKey = null;
                 state.pendingApplyType = null;
             });
@@ -453,6 +471,8 @@
             /* Apply modal: cancel */
             document.getElementById('apply-cancel').addEventListener('click', function() {
                 document.getElementById('apply-modal').classList.add('hidden');
+                var ratesLabel = document.getElementById('apply-rates-label');
+                if (ratesLabel) { ratesLabel.classList.add('hidden'); ratesLabel.classList.remove('flex'); }
                 state.pendingApplyKey = null;
                 state.pendingApplyType = null;
             });
@@ -463,6 +483,17 @@
                 if (applyBtn && state.projectKey) {
                     state.pendingApplyKey = applyBtn.dataset.applyKey;
                     state.pendingApplyType = applyBtn.dataset.applyType;
+                    /* Phase 116 Step 5: Show rates toggle only for built-in templates */
+                    var ratesLabel = document.getElementById('apply-rates-label');
+                    if (ratesLabel) {
+                        if (state.pendingApplyType === 'builtin') {
+                            ratesLabel.classList.remove('hidden');
+                            ratesLabel.classList.add('flex');
+                        } else {
+                            ratesLabel.classList.add('hidden');
+                            ratesLabel.classList.remove('flex');
+                        }
+                    }
                     document.getElementById('apply-modal').classList.remove('hidden');
                     return;
                 }

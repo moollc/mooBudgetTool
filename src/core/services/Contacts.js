@@ -39,6 +39,55 @@
             });
         },
 
+        /* Phase 113/114 — "Me" Card: designate one contact as the current user */
+        setMe: function (contactId) {
+            var self = this;
+            return self.getAll().then(function (contacts) {
+                var saves = contacts.map(function (c) {
+                    c.isMe = (c.id === contactId);
+                    return self.save(c);
+                });
+                return Promise.all(saves);
+            });
+        },
+
+        getMe: function () {
+            return this.getAll().then(function (contacts) {
+                return contacts.find(function (c) { return c.isMe === true; }) || null;
+            });
+        },
+
+        /* Phase 113/114 — Device Bridge: import contacts via navigator.contacts (PWA-native) */
+        /* Degrades gracefully: resolves with empty array if API unavailable */
+        importFromDevice: function () {
+            var self = this;
+            if (!navigator.contacts || !navigator.contacts.select) {
+                return Promise.resolve({ imported: 0, error: 'navigator.contacts API not available on this device or browser.' });
+            }
+            return navigator.contacts.select(['name', 'email', 'tel'], { multiple: true }).then(function (results) {
+                if (!results || results.length === 0) return { imported: 0 };
+                var saves = results.map(function (r, i) {
+                    var name = (r.name && r.name[0]) ? r.name[0] : 'Unknown';
+                    var email = (r.email && r.email[0]) ? r.email[0] : '';
+                    var phone = (r.tel && r.tel[0]) ? r.tel[0] : '';
+                    var contact = {
+                        id: 'device_' + Date.now() + '_' + i,
+                        name: name,
+                        email: email,
+                        phone: phone,
+                        category: 'Crew',
+                        role: '',
+                        isMe: false,
+                        source: 'device'
+                    };
+                    return self.save(contact);
+                });
+                return Promise.all(saves).then(function () { return { imported: results.length }; });
+            }).catch(function (err) {
+                return { imported: 0, error: err.message || 'Device contact access denied.' };
+            });
+        },
+
         seedDefaults: function () {
             var defaults = [
                 { id: 'jm_lead', name: 'Jayson M.Y', role: 'Lead Architect', category: 'Crew', email: 'jayson@example.com' },

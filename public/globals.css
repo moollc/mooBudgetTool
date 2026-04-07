@@ -511,4 +511,18 @@
         .no-gridstack .grid-stack-item-content { height: auto !important; min-height: 200px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
         .no-gridstack .widget-body { height: 300px; overflow-y: auto; }
         .no-gridstack .ui-resizable-handle { display: none !important; }
+
+/* --- 13. Settings Modal Theme-Aware Shell (Phase 110.1) --- */
+        .settings-modal-shell { background: #f8fafc; border-radius: 0.75rem; }
+        .settings-tab-nav { background: #ffffff; border-radius: 0.75rem 0.75rem 0 0; }
+        .settings-tab-active { background: #ffffff; color: #2563eb; border-bottom: 2px solid #2563eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .settings-tab-inactive { background: #f8fafc; color: #94a3b8; }
+        .settings-tab-inactive:hover { background: #f1f5f9; color: #64748b; }
+
+/* Phase 110.1: Dark Theme Overrides for Settings Modal */
+        .mbt-theme-dark .settings-modal-shell { background: #0f172a; }
+        .mbt-theme-dark .settings-tab-nav { background: #1e293b; }
+        .mbt-theme-dark .settings-tab-active { background: #334155; color: #60a5fa; border-bottom-color: #3b82f6; }
+        .mbt-theme-dark .settings-tab-inactive { background: #1e293b; color: #64748b; }
+        .mbt-theme-dark .settings-tab-inactive:hover { background: #334155; color: #94a3b8; }
     
