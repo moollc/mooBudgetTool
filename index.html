@@ -256,6 +256,12 @@
     </div>
 </body>
 
+<!-- Phase 121: Event Router — global event bus extracted from monolith -->
+<script src="./src/core/logic/EventRouter.js"></script>
+
+<!-- Phase 60.A: AI Module — AI engine extracted from monolith -->
+<script src="./src/core/logic/AIModule.js"></script>
+
 <script>
     /* ================= v19.54 TIER 1: Environment Configuration ================= */
 
@@ -431,7 +437,7 @@
 
                 /* 4. Brain Handshake */
                 if (typeof fetchExchangeRates === 'function' && localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false') fetchExchangeRates();
-                if (typeof injectFooterIcons === 'function') injectFooterIcons();
+                if (mBT.router && typeof mBT.router.injectFooterIcons === 'function') mBT.router.injectFooterIcons();
 
                 /* 5. Persistence Recovery */
 
@@ -1278,40 +1284,64 @@
             });
         },
 
-        deleteProject: function (name) {
+        deleteProject: function (names) {
             var self = this;
-            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
-            mBTME.confirm('Delete Project', 'Are you sure you want to move "' + name + '" to the Recycle Bin?', function () {
-                self.storage.load(storageKeyPrefix + name).then(function (data) {
-                    if (!data) {
-                        var raw = localStorage.getItem(storageKeyPrefix + name);
-                        if (raw) data = JSON.parse(raw);
-                    }
-                    if (data) {
-                        var trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
-                        trashed.push(data);
-                        localStorage.setItem(trashKey, JSON.stringify(trashed));
-                        /* Write tombstone so cloud sync can propagate the delete */
-                        var projectId = data.id || data.projectName || name;
-                        if (window.mBTStorage && typeof window.mBTStorage._getDb === 'function') {
-                            window.mBTStorage._getDb().then(function (db) {
-                                if (db.objectStoreNames.contains('mbt_tombstones')) {
-                                    var tx = db.transaction(['mbt_tombstones'], 'readwrite');
-                                    tx.objectStore('mbt_tombstones').put({ id: projectId, store: 'mbt_projects', deleted_at: new Date().toISOString() });
-                                }
-                            }).catch(function (e) { console.warn('[mBT] Tombstone write failed', e); });
+            /* Phase 125: polymorphic — string (single) or string[] (batch) */
+            var isBatch = Array.isArray(names);
+            var nameList = isBatch ? names : [names];
+
+            var execute = function () {
+                if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
+                /* Load all project data in parallel */
+                var loadPromises = nameList.map(function (n) {
+                    return self.storage.load(storageKeyPrefix + n).then(function (data) {
+                        if (!data) {
+                            var raw = localStorage.getItem(storageKeyPrefix + n);
+                            if (raw) data = JSON.parse(raw);
                         }
-                    }
-                    return self.storage.remove(storageKeyPrefix + name).then(function () {
-                        localStorage.removeItem(storageKeyPrefix + name);
-                        return self.getList();
-                    }).then(function (list) {
-                        return list.length ? self.load(list[0]) : self.newProject();
-                    }).then(function () {
-                        if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                        return { name: n, data: data };
                     });
                 });
-            });
+                Promise.all(loadPromises).then(function (results) {
+                    /* Atomic trash update: read once, push all, write once */
+                    var trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
+                    results.forEach(function (r) {
+                        if (r.data) {
+                            trashed.push(r.data);
+                            /* Write tombstone so cloud sync can propagate the delete */
+                            var projectId = r.data.id || r.data.projectName || r.name;
+                            if (window.mBTStorage && typeof window.mBTStorage._getDb === 'function') {
+                                window.mBTStorage._getDb().then(function (db) {
+                                    if (db.objectStoreNames.contains('mbt_tombstones')) {
+                                        var tx = db.transaction(['mbt_tombstones'], 'readwrite');
+                                        tx.objectStore('mbt_tombstones').put({ id: projectId, store: 'mbt_projects', deleted_at: new Date().toISOString() });
+                                    }
+                                }).catch(function (e) { console.warn('[mBT] Tombstone write failed', e); });
+                            }
+                        }
+                    });
+                    localStorage.setItem(trashKey, JSON.stringify(trashed));
+                    /* Remove all storage entries */
+                    var removePromises = nameList.map(function (n) {
+                        return self.storage.remove(storageKeyPrefix + n).then(function () {
+                            localStorage.removeItem(storageKeyPrefix + n);
+                        });
+                    });
+                    return Promise.all(removePromises);
+                }).then(function () {
+                    return self.getList();
+                }).then(function (list) {
+                    return list.length ? self.load(list[0]) : self.newProject();
+                }).then(function () {
+                    if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                });
+            };
+
+            if (isBatch) {
+                execute();
+            } else {
+                mBTME.confirm('Delete Project', 'Are you sure you want to move "' + names + '" to the Recycle Bin?', execute);
+            }
         },
 
         importFile: function (input) {
@@ -2019,7 +2049,10 @@
             .then(function (data) {
                 if (!data.rates) return;
                 exchangeRates = Object.assign({ USD: 1.0 }, data.rates);
-                localStorage.setItem(storageKeyPrefix + 'rates', JSON.stringify(exchangeRates));
+                /* Phase 118: do not overwrite locked snapshot with live data */
+                if (localStorage.getItem(storageKeyPrefix + 'ratesLocked') !== 'true') {
+                    localStorage.setItem(storageKeyPrefix + 'rates', JSON.stringify(exchangeRates));
+                }
                 Object.keys(exchangeRates).forEach(function (code) {
                     if (mBT.logic.math.config.currencies[code]) {
                         mBT.logic.math.config.currencies[code].rate = exchangeRates[code];
@@ -2409,6 +2442,54 @@
     /* --- Tier 5 Handshake Polyfill --- */
     mBT.utils = { formatCurrency: mBT.logic.math.format.currency };
 
+    /* ========= Phase 118: Universal Currency Perspective Engine ========= */
+    mBT.logic.currency = {
+        /* Returns effective rate table — locked snapshot or live cache */
+        _getRates: function () {
+            if (localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true') {
+                var snap = localStorage.getItem(storageKeyPrefix + 'ratesLockedSnap');
+                if (snap) { try { return JSON.parse(snap); } catch (e) {} }
+            }
+            return exchangeRates;
+        },
+        /* Convert val from budget base currency to displayCurrency (display-only, non-destructive) */
+        convert: function (val) {
+            var from = (budget && budget.currency) || displayCurrency || 'JMD';
+            var to = displayCurrency || 'JMD';
+            if (from === to) return parseFloat(val) || 0;
+            var rates = this._getRates();
+            var fromRate = rates[from] || 1;
+            var toRate = rates[to] || 1;
+            return (parseFloat(val) || 0) / fromRate * toRate;
+        },
+        isLocked: function () {
+            return localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true';
+        },
+        /* Snapshot current rates and freeze conversions */
+        lock: function () {
+            localStorage.setItem(storageKeyPrefix + 'ratesLocked', 'true');
+            localStorage.setItem(storageKeyPrefix + 'ratesLockedSnap', JSON.stringify(exchangeRates));
+            if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+        },
+        /* Unfreeze and re-fetch live rates */
+        unlock: function () {
+            localStorage.setItem(storageKeyPrefix + 'ratesLocked', 'false');
+            fetchExchangeRates();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+            if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+        },
+        /* Manually override a single rate while locked */
+        setRate: function (code, rate) {
+            var snap = localStorage.getItem(storageKeyPrefix + 'ratesLockedSnap');
+            var rates = snap ? JSON.parse(snap) : Object.assign({}, exchangeRates);
+            rates[code] = parseFloat(rate) || 1;
+            localStorage.setItem(storageKeyPrefix + 'ratesLockedSnap', JSON.stringify(rates));
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+        }
+    };
+
     // --- Aliases for Backward Compatibility ---
     window.mBTLE = mBT.logic.math;
     window.mBTStagesEngine = mBT.logic.stages;
@@ -2595,400 +2676,17 @@
         };
     })();
 
-    /* --- 5. Neural Link Bridge (AI API Utilities) --- */
-    mBT.features.ai = {
-        // Configuration Defaults
-        config: {
-            // Logic Resolution: Updated to the official production model.
-            geminiModel: "gemini-2.5-flash",
-            openAiModel: "gpt-4o-mini",
-            deepSeekModel: "deepseek-chat",
-            grokModel: "grok-beta",
-            claudeModel: "claude-sonnet-4-6",
-            lmstudioModel: 'local-model',
-            lmstudioEndpoint: 'http://localhost:1234/v1/chat/completions',
-            // Logic Resolution: Extremely strict prompt to eliminate "yapping" and force data-first output.
-            systemContext: "ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates."
-        },
+    /* --- 5. AI Module Bridge (Phase 60.A: Extracted to src/core/logic/AIModule.js) --- */
+    mBT.features.ai = window.mBTAIModule;
 
-        // Storage Accessors
-        getStoredApiKey: (provider) => localStorage.getItem(`${storageKeyPrefix}${provider}ApiKey`) || '',
-        saveStoredApiKey: (provider, key) => localStorage.setItem(`${storageKeyPrefix}${provider}ApiKey`, key),
-        getSelectedProvider: () => localStorage.getItem(`${storageKeyPrefix}selectedAiProvider`) || 'gemini',
-        getSystemPrompt: () => localStorage.getItem(`${storageKeyPrefix}aiSystemPrompt`) || '',
-        saveSystemPrompt: (val) => localStorage.setItem(`${storageKeyPrefix}aiSystemPrompt`, val),
+    /* --- 6. Event Router Bridge (Phase 121: Extracted to src/core/logic/EventRouter.js) --- */
+    mBT.router = window.mBTRouter;
 
-        /**
-         * Centralized Intelligence Dispatcher
-         * Handles routing to specific providers (Gemini/OpenAI/DeepSeek/Grok) and standardizes the response.
-         */
-        callUnifiedAI: async function (provider, apiKey, prompt, customSystemMsg = "") {
-            // Logic Resolution: Combine base strictness with user-defined constraints
-            const userConstraints = this.getSystemPrompt();
-            const baseInstruction = customSystemMsg || this.config.systemContext;
-            const systemInstruction = userConstraints ? `${baseInstruction} USER CONSTRAINTS: ${userConstraints}` : baseInstruction;
-
-            try {
-                // 1. Google Gemini Strategy
-                if (provider === 'gemini') {
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.config.geminiModel}:generateContent?key=${apiKey}`;
-
-                    const payload = {
-                        contents: [{ parts: [{ text: prompt }] }],
-                        systemInstruction: { parts: [{ text: systemInstruction }] }
-                    };
-
-                    const response = await fetch(url, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const err = await response.json().catch(() => ({}));
-                        throw new Error(`Gemini Error ${response.status}: ${err.error?.message || response.statusText}`);
-                    }
-
-                    const data = await response.json();
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Assistant: No analysis generated.";
-                }
-
-                // 2. OpenAI Compatible Strategy (OpenAI, DeepSeek, Grok)
-                else {
-                    let url, model;
-
-                    if (provider === 'openai') {
-                        url = 'https://api.openai.com/v1/chat/completions';
-                        model = this.config.openAiModel;
-                    } else if (provider === 'deepseek') {
-                        url = 'https://api.deepseek.com/chat/completions';
-                        model = this.config.deepSeekModel;
-                    } else if (provider === 'grok') {
-                        url = 'https://api.x.ai/v1/chat/completions';
-                        model = this.config.grokModel;
-                    } else if (provider === 'lmstudio') {
-                        url = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || this.config.lmstudioEndpoint;
-                        model = localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || this.config.lmstudioModel;
-                    } else if (provider === 'anthropic') {
-                        /* Anthropic Messages API — different header/body structure from OpenAI */
-                        const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-api-key': apiKey,
-                                'anthropic-version': '2023-06-01'
-                            },
-                            body: JSON.stringify({
-                                model: this.config.claudeModel,
-                                max_tokens: 4096,
-                                system: systemInstruction,
-                                messages: [{ role: 'user', content: prompt }]
-                            })
-                        });
-                        if (!anthropicResponse.ok) {
-                            const err = await anthropicResponse.json().catch(() => ({}));
-                            throw new Error(`Anthropic Error ${anthropicResponse.status}: ${err.error?.message || anthropicResponse.statusText}`);
-                        }
-                        const anthropicData = await anthropicResponse.json();
-                        return anthropicData.content?.[0]?.text || 'Assistant: No analysis generated.';
-                    } else {
-                        throw new Error(`Provider '${provider}' not supported.`);
-                    }
-
-                    const response = await fetch(url, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                { role: "system", content: systemInstruction },
-                                { role: "user", content: prompt }
-                            ]
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const err = await response.json().catch(() => ({}));
-                        throw new Error(`${provider.toUpperCase()} Error ${response.status}: ${err.error?.message || response.statusText}`);
-                    }
-
-                    const data = await response.json();
-                    return data.choices?.[0]?.message?.content || "Assistant: No analysis generated.";
-                }
-
-            } catch (error) {
-                console.error("mBT AI Failure:", error);
-                return `Analysis Failed: ${error.message}`;
-            }
-        },
-
-        // Helper: Quick analysis of current budget state (Budget Analysis)
-        analyzeCurrentBudget: async function () {
-            const provider = this.getSelectedProvider();
-            const apiKey = this.getStoredApiKey(provider);
-
-            if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings.");
-
-            // Logic Resolution: Enhanced Context Gathering (Broad Access)
-            // Includes budget numbers, active documents, attached files, and crew status.
-            const context = {
-                project: budget.projectName,
-                total: budget.grandTotal,
-                currency: displayCurrency,
-                sections: Object.keys(budget.sections).map(k => ({
-                    name: k,
-                    total: budget.sections[k].total,
-                    itemCount: budget.sections[k].items.length
-                })),
-                documents: (budget.documents || []).map(d => ({ type: d.type, label: d.label })),
-                attachments: (budget.attachments || []).map(a => a.name),
-                crewSummary: Object.values(budget.sections).reduce((acc, sec) => acc + sec.items.filter(i => i.crew?.name).length, 0) + " assigned",
-                previousAnalysis: (budget.aiContext?.analysis || "").substring(0, 1000) // Feedback loop: Awareness of past diagnosis
-            };
-
-            const prompt = `Analyze this budget data: ${JSON.stringify(context)}. Review financials, logistics (documents), and staffing. Identify 3 risks and 3 savings opportunities. Be concise.`;
-
-            if (mBTME.showLoader) mBTME.showLoader("Neural Analysis in progress...");
-
-            const result = await this.callUnifiedAI(provider, apiKey, prompt);
-
-            if (mBTME.hideLoader) mBTME.hideLoader();
-
-            // Logic Resolution: Save analysis to state so Chat can reference it later
-            if (!budget.aiContext) budget.aiContext = { chat: [], analysis: "" };
-            budget.aiContext.analysis = result;
-            saveBudget();
-
-            // Logic Resolution: Render Markdown properly using 'marked' library
-            const formattedResult = (typeof marked !== 'undefined') ? marked.parse(result) : result;
-
-            // Logic Resolution: UI Renamed to 'Budget Analysis'
-            mBTME.open('aiAnalysis', 'Budget Analysis', `
-                <div class="p-6 text-sm leading-relaxed text-slate-700 max-h-[60vh] overflow-y-auto prose prose-sm prose-slate max-w-none">
-                    ${formattedResult}
-                </div>`, 'max-w-2xl');
-        },
-
-        // --- Context Management Utilities ---
-        clearContext: function () {
-            mBTME.confirm("Clear Memory", "Clear AI memory and chat history? This cannot be undone.", () => {
-                budget.aiContext = { chat: [], analysis: "" };
-                saveBudget();
-                // Refresh the chat view if open
-                const history = document.getElementById('aiChatHistory');
-                if (history) history.innerHTML = '<div class="text-center text-slate-400 text-xs mt-10">Memory Cleared. Start fresh.</div>';
-                const count = document.getElementById('aiMsgCount');
-                if (count) count.textContent = "Context: 0 msgs";
-            });
-        },
-
-        exportChat: function () {
-            if (!budget.aiContext?.chat?.length) return mBTME.alert("Export Error", "No chat history to export.");
-            const text = budget.aiContext.chat.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n-------------------\n\n');
-            const blob = new Blob([text], { type: 'text/plain' });
-            if (typeof mBTPublisher !== 'undefined' && mBTPublisher.io) {
-                mBTPublisher.io.forceDownload(blob, `${budget.projectName}_AI_Chat.txt`);
-            }
-        },
-
-        /* --- Phase 60: AI Oracle Bridge — generate full budget from natural language prompt --- */
-        // Logic Resolution: Restored Chat Interface (Assistant)
-        openChat: function () {
-            if (!budget.aiContext) budget.aiContext = { chat: [], analysis: "" };
-
-            const renderMessages = () => {
-                return budget.aiContext.chat.map(msg => {
-                    // Logic Resolution: Parse Markdown for AI, strict escape for User
-                    const contentHtml = msg.role === 'assistant'
-                        ? (typeof marked !== 'undefined' ? marked.parse(msg.content) : msg.content)
-                        : mBT.ui.render.esc(msg.content);
-
-                    return `
-                    <div class="ai-message ${msg.role} mb-4 p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-50 ml-8 text-right' : 'bg-white border border-slate-100 mr-8'}">
-                        <strong class="block text-[9px] uppercase tracking-widest text-slate-400 mb-1">${msg.role === 'user' ? 'You' : 'Assistant'}</strong>
-                        <div class="text-xs leading-relaxed text-slate-700 prose prose-sm max-w-none ${msg.role === 'user' ? '' : 'prose-headings:text-slate-800 prose-strong:text-slate-900'}">${contentHtml}</div>
-                    </div>`;
-                }).join('');
-            };
-
-            const content = `
-                <div class="flex flex-col h-[500px] bg-slate-50">
-                    <!-- Chat Toolbar -->
-                    <div class="flex justify-between items-center px-4 py-2 bg-white border-b border-slate-100 shrink-0">
-                        <span id="aiMsgCount" class="text-[9px] font-black uppercase tracking-widest text-slate-400">Context: ${budget.aiContext.chat.length} msgs</span>
-                        <div class="flex gap-2">
-                            <button onclick="mBT.features.ai.exportChat()" title="Export Discussion" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">${mBTAssets.file}</button>
-                            <button onclick="mBT.features.ai.clearContext()" title="Clear Memory" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all">${mBTAssets.trash}</button>
-                        </div>
-                    </div>
-                    
-                    <div id="aiChatHistory" class="flex-grow overflow-y-auto p-4 space-y-2">
-                        ${budget.aiContext.chat.length ? renderMessages() : '<div class="text-center text-slate-400 text-xs mt-10">Start a conversation...</div>'}
-                    </div>
-                    
-                    <div class="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0">
-                        <input type="text" id="aiChatInput" class="flex-grow p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" placeholder="Ask about rates, logistics, or risks..." onkeydown="if(event.key==='Enter') document.getElementById('aiChatSendBtn').click()">
-                        <button id="aiChatSendBtn" class="p-3 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-500 transition-all w-12 flex items-center justify-center shrink-0">
-                            ${mBTAssets.paperPlane || '->'} 
-                        </button>
-                    </div>
-                </div>`;
-
-            mBTME.open('aiChat', 'Discussions', content, 'max-w-lg', { noPadding: true });
-
-            // Scroll to bottom
-            const historyEl = document.getElementById('aiChatHistory');
-            if (historyEl) setTimeout(() => historyEl.scrollTop = historyEl.scrollHeight, 10);
-
-            // Attach listener
-            setTimeout(() => {
-                const btn = document.getElementById('aiChatSendBtn');
-                const input = document.getElementById('aiChatInput');
-                if (btn && input) {
-                    btn.onclick = async () => {
-                        const text = input.value.trim();
-                        if (!text) return;
-
-                        // Add User Msg
-                        budget.aiContext.chat.push({ role: 'user', content: text });
-                        saveBudget();
-                        input.value = '';
-
-                        // Re-render immediate
-                        const history = document.getElementById('aiChatHistory');
-                        history.innerHTML = renderMessages() + `<div class="ai-message assistant animate-pulse p-3 bg-white border border-slate-100 mr-8 rounded-lg"><div class="text-xs text-slate-400">Analyzing...</div></div>`;
-                        history.scrollTop = history.scrollHeight;
-
-                        const count = document.getElementById('aiMsgCount');
-                        if (count) count.textContent = `Context: ${budget.aiContext.chat.length} msgs`;
-
-                        // Call AI
-                        const provider = this.getSelectedProvider();
-                        const apiKey = this.getStoredApiKey(provider);
-
-                        if (!apiKey) {
-                            history.lastElementChild.innerHTML = "<div class='text-rose-500 text-xs'>Error: API Key missing. Check Settings.</div>";
-                            return;
-                        }
-
-                        // Context Injection: Add rich context including docs, attachments, and previous analysis
-                        const docList = (budget.documents || []).map(d => d.label).join(', ');
-                        const attachList = (budget.attachments || []).map(a => a.name).join(', ');
-                        const prevAnalysis = (budget.aiContext.analysis || "None").substring(0, 500); // Truncate to save tokens
-
-                        // Construct hidden System Context
-                        const contextSummary = `[SYSTEM CONTEXT: Project="${budget.projectName}", Total=${displayCurrency} ${budget.grandTotal}, Docs=[${docList}], Attachments=[${attachList}], Last Analysis Summary="${prevAnalysis}"]`;
-
-                        // Only inject context if it's the start of a conversation to save tokens later
-                        const finalPrompt = budget.aiContext.chat.length < 2 ? `${contextSummary} \n\n User Query: ${text}` : text;
-
-                        const response = await this.callUnifiedAI(provider, apiKey, finalPrompt);
-
-                        // Update with response
-                        budget.aiContext.chat.push({ role: 'assistant', content: response });
-                        saveBudget();
-                        history.innerHTML = renderMessages();
-                        history.scrollTop = history.scrollHeight;
-                        if (count) count.textContent = `Context: ${budget.aiContext.chat.length} msgs`;
-                    };
-                    input.focus();
-                }
-            }, 50);
-        },
-
-        /* --- Phase 58.2: Quick-Access Persona & Constraints Modal --- */
-        openPersonaModal: function () {
-            var current = this.getSystemPrompt();
-            var provider = this.getSelectedProvider();
-            var self = this;
-            var content = `
-                <div class="p-5 space-y-4">
-                    <div class="bg-slate-900 rounded-xl p-4 space-y-3">
-                        <div>
-                            <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Persona & Behavioral Rules</label>
-                            <textarea id="personaPromptInput" class="w-full bg-slate-800 text-white border-none rounded-lg p-3 text-[10px] outline-none focus:ring-1 focus:ring-indigo-500 resize-none h-28 placeholder-slate-600" placeholder="e.g. You are a Jamaican film producer. Focus only on Below The Line costs. Always use JMD. Be concise.">${mBT.ui.render.esc(current)}</textarea>
-                        </div>
-                        <p class="text-[8px] text-slate-500 font-bold">These rules are prepended to every AI request as system-level constraints. Leave blank for default behavior.</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="mBT.features.ai.saveSystemPrompt(document.getElementById('personaPromptInput').value); mBTME.close('personaModal'); mBTME.alert('Saved', 'Persona rules updated.');" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-indigo-500 transition-all">Save Rules</button>
-                        <button onclick="document.getElementById('personaPromptInput').value=''; mBT.features.ai.saveSystemPrompt(''); mBTME.close('personaModal'); mBTME.alert('Cleared', 'AI persona reset to default.');" class="px-4 bg-slate-100 text-slate-500 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-slate-200 transition-all">Reset</button>
-                    </div>
-                </div>`;
-            mBTME.open('persona', 'AI Persona', content, 'max-w-sm');
-        },
-
-        // Logic Resolution: Restored UI Menu for the Dashboard Button
-        openTools: function () {
-            const provider = this.getSelectedProvider();
-            const apiKey = this.getStoredApiKey(provider);
-            const statusColor = apiKey ? 'text-emerald-500' : 'text-rose-500';
-            const statusText = apiKey ? 'Online' : 'Offline';
-
-            const content = `
-                <div class="grid grid-cols-2 gap-4 p-4">
-                    <button onclick="mBT.features.ai.analyzeCurrentBudget(); mBTME.close('aiToolsModal');" class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex flex-col items-center gap-2 hover:bg-indigo-100 transition-all group">
-                        <div class="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-all">${mBTAssets.doctor}</div>
-                        <div class="text-center">
-                            <h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Budget Analysis</h4>
-                            <p class="text-[8px] text-slate-400 font-bold">Deep Scan</p>
-                        </div>
-                    </button>
-
-                    <button onclick="mBT.features.ai.openChat(); mBTME.close('aiToolsModal');" class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col items-center gap-2 hover:bg-emerald-100 transition-all group">
-                        <div class="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-all">${mBTAssets.chat}</div>
-                        <div class="text-center">
-                            <h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Discussions</h4>
-                            <p class="text-[8px] text-slate-400 font-bold">Chat & Consult</p>
-                        </div>
-                    </button>
-
-                    <button onclick="mBTME.close('aiToolsModal'); openTool('./src/tools/ai/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&mode=generate');" class="col-span-2 p-4 bg-violet-50 border border-violet-200 rounded-2xl flex items-center gap-3 hover:bg-violet-100 transition-all group">
-                        <div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-violet-500 group-hover:scale-110 transition-all">${mBTAssets.wand}</div>
-                        <div class="text-left">
-                            <h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Generate Budget</h4>
-                            <p class="text-[8px] text-slate-400 font-bold">Describe a production — AI builds the full structure</p>
-                        </div>
-                    </button>
-                </div>
-                
-                <div class="px-4 pb-4 space-y-2">
-                    <button onclick="mBT.features.ai.openPersonaModal(); mBTME.close('aiToolsModal');" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-between hover:border-indigo-500 transition-all group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 bg-indigo-900/50 rounded-full flex items-center justify-center text-indigo-400">${mBTAssets.wand}</div>
-                            <div class="text-left">
-                                <h4 class="font-black text-[9px] uppercase tracking-widest text-white">Persona & Rules</h4>
-                                <p class="text-[8px] font-bold text-slate-500 mt-0.5">Customize AI behavior &amp; constraints</p>
-                            </div>
-                        </div>
-                        <span class="text-slate-600 group-hover:text-indigo-400">→</span>
-                    </button>
-                    <button onclick="showSettingsModal('ai'); mBTME.close('aiToolsModal');" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between hover:bg-white transition-all group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center text-slate-400">${mBTAssets.gear}</div>
-                            <div class="text-left">
-                                <h4 class="font-black text-[9px] uppercase tracking-widest text-slate-700">Configuration</h4>
-                                <p class="text-[8px] font-bold ${statusColor} mt-0.5">${statusText}</p>
-                            </div>
-                        </div>
-                        <span class="text-slate-300 group-hover:text-blue-500">→</span>
-                    </button>
-                </div>`;
-
-            mBTME.open('aiTools', 'Assistant', content, 'max-w-sm');
-        }
-    };
-
-    // Logic Resolution: Global Aliases for Backward Compatibility (Preserves Tier 5 Settings UI)
-    // Note: Bind 'this' to ensure internal config access works when called globally
-    const getStoredApiKey = mBT.features.ai.getStoredApiKey.bind(mBT.features.ai);
-    const saveStoredApiKey = mBT.features.ai.saveStoredApiKey.bind(mBT.features.ai);
-    const getSelectedProvider = mBT.features.ai.getSelectedProvider.bind(mBT.features.ai);
-    const callUnifiedAI = mBT.features.ai.callUnifiedAI.bind(mBT.features.ai);
-    // Logic Resolution: Restore global access for the main dashboard button
+    // Global Aliases for Backward Compatibility (Preserves Tier 5 Settings UI)
+    var getStoredApiKey     = mBT.features.ai.getStoredApiKey.bind(mBT.features.ai);
+    var saveStoredApiKey    = mBT.features.ai.saveStoredApiKey.bind(mBT.features.ai);
+    var getSelectedProvider = mBT.features.ai.getSelectedProvider.bind(mBT.features.ai);
+    var callUnifiedAI       = mBT.features.ai.callUnifiedAI.bind(mBT.features.ai);
     window.showAIToolsModal = mBT.features.ai.openTools.bind(mBT.features.ai);
 
     // Logic Resolution: Handles renaming projects.
@@ -3141,7 +2839,9 @@
             }
         }
         /* Line item surgical updates (section totals + per-item cells) */
-        var fmt = mBTLE.format.currency;
+        /* Phase 118: wrap format with perspective conversion */
+        var _conv = (mBT.logic && mBT.logic.currency) ? function (v) { return mBT.logic.currency.convert(v); } : function (v) { return parseFloat(v) || 0; };
+        var fmt = function (v) { return mBTLE.format.currency(_conv(v)); };
         var isMobile = window.innerWidth < 768;
         Object.keys(budget.sections).forEach(function (sectionKey) {
             var section = budget.sections[sectionKey];
@@ -3630,7 +3330,7 @@
                     </td>
 
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="${safeId}">
-                        ${isMobile ? formatAbbreviated(estimated, displayCurrency) : mBTLE.format.currency(estimated)}
+                        ${isMobile ? formatAbbreviated((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated, displayCurrency) : mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated)}
                     </td>
 
                     ${isActuals ? `
@@ -3801,7 +3501,7 @@
 
             return RenderEngine.section({
                 name: name,
-                total: mBTLE.format.currency(section.total),
+                total: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(section.total) : section.total),
                 isOpen: section.isOpen,
                 content: bodyContent
             });
@@ -4093,7 +3793,7 @@
 
     // Logic Resolution: Updates UI based on connectivity.
     function updateOnlineStatus() {
-        if (typeof resolveConnectivityStatus === 'function') resolveConnectivityStatus();
+        if (mBT.router && typeof mBT.router.resolveConnectivityStatus === 'function') mBT.router.resolveConnectivityStatus();
     }
 
     /* --- Phase 94.2: ES5 .then() conversion of showNewProjectModal --- */
@@ -4182,7 +3882,7 @@
                 '<div class="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/></svg>' +
                 '</div>' +
-                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">MooBudget Studio</h2>' +
+                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">moo Budget Tool</h2>' +
                 '</div>' +
                 '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
                 toggleHtml +
@@ -6515,7 +6215,7 @@
                             <div>
                                 <h3 class="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                                    MooBudget Studio
+                                    moo Budget Tool
                                 </h3>
                                 <p class="text-[10px] text-white/40 font-bold uppercase tracking-tight">Select a starting blueprint or use the AI Assistant below</p>
                             </div>
@@ -6557,11 +6257,7 @@
                 </div>
             `;
             
-            mBTME.openCustom('studio-hub', 'Studio Center', content, 'max-w-4xl', { 
-                hideHeader: true, 
-                noPadding: true,
-                onClose: () => { /* Clean up if needed */ }
-            });
+            mBTME.open('studio-hub', 'Studio Center', content, 'max-w-4xl', { hideHeader: true, noPadding: true });
         },
 
         /* Phase 116: Hub tile trigger — maps lowercase hub key to BUDGET_TEMPLATES title-case key */
@@ -7687,6 +7383,52 @@
                         </div>
                     </div>`;
             }
+            /* Phase 125: Projects sub-tab — multi-select + batch delete */
+            if (subTab === 'projects') {
+                var _sPrefix = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                var _allKeys = [];
+                try {
+                    for (var _ki = 0; _ki < localStorage.length; _ki++) {
+                        var _k = localStorage.key(_ki);
+                        if (_k.indexOf(_sPrefix) === 0) _allKeys.push(_k.replace(_sPrefix, ''));
+                    }
+                } catch(e) {}
+                /* Filter out non-project keys */
+                var _ignoreKeys = ['lastLoaded', 'currency', 'rates', 'auto_fetch_rates', 'projectDateFormat', 'projectNameSeparator', 'projectStorageProtocol', 'trash', 'globalItems', 'templates', 'lmstudioEndpoint', 'lmstudioModel', 'selectedAiProvider', 'openToolsInternal', 'showFundingBar', 'showTimelineBar', 'ratesLocked', 'ratesLockedSnap', 'autoHideNav', 'devMode', 'cloudWebhook'];
+                var projects = _allKeys.filter(function(k) { return _ignoreKeys.indexOf(k) === -1; });
+                projects.sort().reverse();
+
+                var _sel = mBT.features.settings._selectedProjects || new Set();
+                var _selCount = _sel.size;
+                var _hasItems = projects.length > 0;
+
+                var _listHtml = _hasItems ? projects.map(function(pName) {
+                    var _checked = _sel.has(pName) ? 'checked' : '';
+                    return '<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer" data-action="project-select-toggle" data-name="' + mBT.ui.render.esc(pName) + '">' +
+                        '<div class="flex items-center gap-3 overflow-hidden flex-grow">' +
+                        '<input type="checkbox" ' + _checked + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none flex-shrink-0">' +
+                        '<div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-blue-500 group-hover:shadow-sm transition-all text-lg shrink-0">' + mBTAssets.folder + '</div>' +
+                        '<div class="overflow-hidden min-w-0">' +
+                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + mBT.ui.render.esc(pName) + '</div>' +
+                        '<div class="text-[9px] text-slate-400 font-bold truncate">Budget Project</div>' +
+                        '</div></div>' +
+                        '<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">' +
+                        '<button onclick="event.stopPropagation(); mBT.data.load(\'' + mBT.ui.render.esc(pName).replace(/'/g, "\\'") + '\');" class="p-2 text-slate-300 hover:text-emerald-500 transition-colors" title="Open">' + mBTAssets.edit + '</button>' +
+                        '</div></div>';
+                }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.folder, message: 'No Projects Found' });
+
+                return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                    '<div class="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-10">' +
+                    '<div class="flex items-center gap-2">' +
+                    '<input type="checkbox" id="projectSelectAll" data-action="project-select-all" ' + (_hasItems && _selCount === projects.length ? 'checked' : '') + ' ' + (!_hasItems ? 'disabled' : '') + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">' +
+                    '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + _selCount + ' Selected</span>' +
+                    '</div>' +
+                    '<div class="flex gap-2">' +
+                    (_selCount > 0 ? '<button onclick="mBT.features.settings.trashSelectedProjects()" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">' + mBTAssets.trash + ' Move to Trash</button>' : '') +
+                    '</div></div>' +
+                    '<div id="projectListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">' + _listHtml + '</div>' +
+                    '</div>';
+            }
             return '';
         },
 
@@ -7809,6 +7551,108 @@
                     this.open('database', 'contacts'); // Refresh
                 }
             });
+        },
+
+        // --- Phase 125: Project Selection & Batch Delete ---
+        _selectedProjects: new Set(),
+        toggleProjectSelection: function (name) {
+            if (this._selectedProjects.has(name)) this._selectedProjects.delete(name);
+            else this._selectedProjects.add(name);
+            this.open('database', 'projects');
+        },
+        toggleAllProjects: function (checked) {
+            this._selectedProjects.clear();
+            if (checked) {
+                var _sPrefix = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                var _ignoreKeys = ['lastLoaded', 'currency', 'rates', 'auto_fetch_rates', 'projectDateFormat', 'projectNameSeparator', 'projectStorageProtocol', 'trash', 'globalItems', 'templates', 'lmstudioEndpoint', 'lmstudioModel', 'selectedAiProvider', 'openToolsInternal', 'showFundingBar', 'showTimelineBar', 'ratesLocked', 'ratesLockedSnap', 'autoHideNav', 'devMode', 'cloudWebhook'];
+                try {
+                    for (var _ki = 0; _ki < localStorage.length; _ki++) {
+                        var _k = localStorage.key(_ki);
+                        if (_k.indexOf(_sPrefix) === 0) {
+                            var _name = _k.replace(_sPrefix, '');
+                            if (_ignoreKeys.indexOf(_name) === -1) this._selectedProjects.add(_name);
+                        }
+                    }
+                } catch(e) {}
+            }
+            this.open('database', 'projects');
+        },
+        trashSelectedProjects: function () {
+            var self = this;
+            var selected = Array.from(this._selectedProjects);
+            if (selected.length === 0) return;
+            var label = selected.length === 1 ? '"' + selected[0] + '"' : selected.length + ' projects';
+            mBTME.confirm('Move to Trash', 'Move ' + label + ' to the Recycle Bin?', function () {
+                mBT.data.deleteProject(selected).then(function () {
+                    self._selectedProjects.clear();
+                    self.open('database', 'projects');
+                    mBTME.alert('Success', label + ' moved to trash.');
+                }).catch(function (e) {
+                    mBTME.alert('Error', 'Failed to move projects: ' + e.message);
+                });
+            });
+        },
+
+        // --- Phase 126: Navigation Visibility ---
+        openFooterVisModal: function () {
+            var _hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
+            var _hidden = [];
+            try { _hidden = _hiddenRaw ? JSON.parse(_hiddenRaw) : []; } catch (e) { _hidden = []; }
+
+            var _items = [
+                { id: 'stagesFooterBtn',    label: 'Stages Tool',     icon: mBTAssets.film       || '🎞️' },
+                { id: 'docsFooterBtn',      label: 'Documents Hub',   icon: mBTAssets.file       || '📄' },
+                { id: 'contactsFooterBtn',  label: 'Contacts Tool',   icon: mBTAssets.user       || '👤' },
+                { id: 'actualsToggleBtn',   label: 'Actuals Mode',    icon: mBTAssets.money      || '💰' },
+                { id: 'searchFooterBtn',    label: 'Global Search',   icon: mBTAssets.search     || '🔍' },
+                { id: 'toolsDrawerBtn',     label: 'Tools Drawer',    icon: mBTAssets.grid       || '📦' },
+                { id: 'calendarFooterBtn',  label: 'Calendar',        icon: mBTAssets.calendar   || '📅' },
+                { id: 'secondaryActionBtn', label: 'Publish Menu',    icon: mBTAssets.paperPlane || '📤' },
+                { id: 'footerCoffeeBtn',    label: 'Support',         icon: mBTAssets.coffee     || '☕' },
+                { id: 'footerHelpBtn',      label: 'Help',            icon: mBTAssets.help       || '❓' },
+                { id: 'activityFeedBtn',    label: 'Activity Feed',   icon: mBTAssets.bell       || '🔔' },
+                { id: 'sync-status-pill',   label: 'Sync Status',     icon: mBTAssets.sync       || '🔄' }
+            ];
+
+            var _checkboxes = _items.map(function (item) {
+                var isChecked = _hidden.indexOf(item.id) === -1;
+                return '<div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">' +
+                    '<div class="flex items-center gap-3">' +
+                    '<div class="w-8 h-8 rounded-lg bg-white text-slate-500 flex items-center justify-center text-lg shadow-sm">' + item.icon + '</div>' +
+                    '<div>' +
+                    '<h5 class="text-[10px] font-black uppercase tracking-widest text-slate-700">' + item.label + '</h5>' +
+                    '<p class="text-[8px] text-slate-400 font-bold truncate">' + item.id + '</p>' +
+                    '</div></div>' +
+                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                    '<input type="checkbox" class="footer-vis-toggle sr-only peer" data-btn-id="' + item.id + '" ' + (isChecked ? 'checked' : '') + '>' +
+                    '<div class="w-10 h-5 rounded-full bg-slate-200 peer-checked:bg-blue-600 after:content-[\'\'] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-5"></div>' +
+                    '</label></div>';
+            }).join('');
+
+            var content = '<div class="p-6 space-y-4">' +
+                '<h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Navigation Visibility</h3>' +
+                '<p class="text-[9px] text-slate-400 font-bold mb-2">Toggle the buttons you want to see in the footer HUD.</p>' +
+                '<div class="space-y-2 max-h-[60vh] overflow-y-auto no-scrollbar pr-2">' + _checkboxes + '</div>' +
+                '<div class="flex gap-2 pt-2">' +
+                '<button onclick="mBTME.close(\'footerVisModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Done</button>' +
+                '<button onclick="mBT.features.settings.applyFooterVis();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all shadow-sm">Apply Changes</button>' +
+                '</div></div>';
+
+            mBTME.open('footerVisModal', 'Manage HUD Buttons', content, 'max-w-md', { noPadding: true });
+        },
+
+        applyFooterVis: function () {
+            var _toggles = document.querySelectorAll('.footer-vis-toggle');
+            var _hidden = [];
+            _toggles.forEach(function (cb) {
+                if (!cb.checked) _hidden.push(cb.getAttribute('data-btn-id'));
+            });
+            localStorage.setItem('mBT_footerHiddenBtns', JSON.stringify(_hidden));
+            if (mBT.ui && mBT.ui.footer && typeof mBT.ui.footer.rebalance === 'function') {
+                mBT.ui.footer.rebalance();
+            }
+            mBTME.close('footerVisModal');
+            mBTME.alert('Applied', 'Navigation visibility updated.');
         },
 
         // --- 6. Database Tools (Tier 5 Additions) ---
@@ -9813,6 +9657,9 @@
         // Safety check
         if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
 
+        /* Phase 118.5: perspective converter — display-only, non-destructive */
+        const conv = (v) => (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(v) : (parseFloat(v) || 0);
+
         const metrics = mBTStagesEngine.getMetrics();
         let burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
 
@@ -9842,8 +9689,8 @@
         const ovGrandTotal = document.getElementById('ovGrandTotal');
         const ovTotalCap = document.getElementById('ovTotalCap');
 
-        if (ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(metrics.grandTotal);
-        if (ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(metrics.totalCap);
+        if (ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(conv(metrics.grandTotal));
+        if (ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(conv(metrics.totalCap));
 
         // Update Burn Ring
         const ring = document.getElementById('burnRateRing');
@@ -9913,8 +9760,8 @@
             // D. Update Card Stats
             const totalEl = document.getElementById(`total-${k}`);
             const limitEl = document.getElementById(`limit-${k}`);
-            if (totalEl) totalEl.innerText = mBTLE.format.currency(stageCost);
-            if (limitEl) limitEl.innerText = `Cap: ${mBTLE.format.currency(stageCap)}`;
+            if (totalEl) totalEl.innerText = mBTLE.format.currency(conv(stageCost));
+            if (limitEl) limitEl.innerText = `Cap: ${mBTLE.format.currency(conv(stageCap))}`;
         });
     };
 
@@ -9983,6 +9830,7 @@
 
         var pop = document.getElementById('currencyPopover');
         if (!pop) return;
+        var _isLocked = mBT.logic && mBT.logic.currency && mBT.logic.currency.isLocked();
         pop.innerHTML = FILM_CURRENCIES.map(function (c) {
             var isActive = c.code === displayCurrency;
             var badge =
@@ -9997,7 +9845,15 @@
                 badge +
                 '<span class="text-[10px] font-black uppercase tracking-widest ' + (isActive ? 'text-white' : 'text-slate-400') + '">' + c.code + '</span>' +
                 '</button>';
-        }).join('');
+        }).join('') +
+        /* Phase 118: Rate lock toggle */
+        '<div class="h-px bg-white/10 my-1"></div>' +
+        '<button onclick="if(mBT.logic&&mBT.logic.currency){mBT.logic.currency.isLocked()?mBT.logic.currency.unlock():mBT.logic.currency.lock();}" ' +
+        'class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-all text-left hover:bg-white/10">' +
+        '<span class="text-[10px] font-black uppercase tracking-widest ' + (_isLocked ? 'text-amber-400' : 'text-slate-400') + '">' +
+        (_isLocked ? 'Rates: Locked' : 'Rates: Live') + '</span>' +
+        '<span class="ml-auto text-[8px] font-black uppercase ' + (_isLocked ? 'text-amber-300' : 'text-emerald-400') + '">' + (_isLocked ? 'Unlock' : 'Lock') + '</span>' +
+        '</button>';
     }
 
     function handleUndo() {
@@ -10394,6 +10250,13 @@
         mBT.core.action('trash-bulk', (e, el) => mBT.features.trash.performAction(el.dataset.type));
         mBT.core.action('trash-single', (e, el) => mBT.features.trash.singleAction(el.dataset.type, el.dataset.id));
 
+        // Phase 125: Project batch selection
+        mBT.core.action('project-select-toggle', (e, el) => mBT.features.settings.toggleProjectSelection(el.dataset.name));
+        mBT.core.action('project-select-all', (e, el) => {
+            var cb = document.getElementById('projectSelectAll');
+            if (cb) mBT.features.settings.toggleAllProjects(cb.checked);
+        });
+
         // F. Stage Actions
         mBT.core.action('stage-update', (e, el) => {
             updateStageItem(el.dataset.id, el.dataset.section, el.dataset.stage, el.dataset.field, el.value);
@@ -10548,7 +10411,7 @@
             const router = (e) => {
                 if (mBT.core.route(e)) return;
                 const target = e.target;
-                if (target.closest('#loginBtn')) handleLogin();
+                if (target.closest('#loginBtn')) mBT.router.handleLogin();
                 if (target.closest('#openAiToolsBtn')) mBT.blueprints.openTool();
             };
 
@@ -10586,7 +10449,7 @@
             // --- Real-time Input Handling ---
             document.body.addEventListener('input', (e) => {
                 const input = e.target;
-                if (input.id === 'projectName') { handleProjectNameChange(e); return; }
+                if (input.id === 'projectName') return; /* handled by change listener in EventRouter */
                 if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                     budget[input.id] = parseFloat(input.value) || 0;
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -10822,821 +10685,27 @@
             });
         })();
 
-        /* --- Currency Popover: toggle, select, outside-click dismiss --- */
-        document.addEventListener('click', function (e) {
-            var container = document.getElementById('currencyContainer');
-            var popover = document.getElementById('currencyPopover');
-            var btn = e.target.closest('#currencyBtn');
-            var choice = e.target.closest('[data-currency-code]');
-
-            if (choice) {
-                displayCurrency = choice.dataset.currencyCode;
-                localStorage.setItem(storageKeyPrefix + 'currency', displayCurrency);
-                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                render();
-                renderCurrencyBtn();
-                if (popover) popover.classList.add('hidden');
-                return;
-            }
-
-            if (btn) {
-                if (popover) {
-                    renderCurrencyBtn();
-                    popover.classList.toggle('hidden');
-                }
-                return;
-            }
-
-            if (popover && container && !container.contains(e.target)) {
-                popover.classList.add('hidden');
-            }
-        });
-
-        window.addEventListener('online', function () { resolveConnectivityStatus(); fetchExchangeRates(); });
-        window.addEventListener('offline', resolveConnectivityStatus);
-        /* Phase 50C.8 Step C: Broadcast editor focus when the main window regains focus */
-        window.addEventListener('focus', function () {
-            if (window.mBTRealtime && mBTRealtime.isConnected()) {
-                mBTRealtime.broadcastFocus('Budget Editor');
-            }
-        });
-
-        /* ========= Phase 59: Auto-Hide Navigation HUD ========= */
-        window.mBTNavHUD = (function () {
-            var hideTimer = null;
-            var _left = null, _right = null, _nav = null;
-            var _expandedW = 0;
-            var _collapsed = false;
-            var _active = false;
-
-            function els() {
-                _left = _left || document.getElementById('nav-left');
-                _right = _right || document.getElementById('nav-right');
-                _nav = _nav || document.getElementById('footer-nav');
-            }
-
-            /* Measure natural expanded width with all buttons visible */
-            function measure() {
-                els();
-                if (!_nav) return;
-                var prevTransition = _nav.style.transition;
-                var prevLT = _left.style.transition;
-                var prevRT = _right.style.transition;
-                _nav.style.transition = 'none';
-                _left.style.transition = 'none';
-                _right.style.transition = 'none';
-                _left.style.maxWidth = '400px';
-                _left.style.opacity = '1';
-                _right.style.maxWidth = '400px';
-                _right.style.opacity = '1';
-                _nav.style.width = 'fit-content';
-                _nav.offsetHeight; /* force reflow */
-                _expandedW = _nav.offsetWidth; /* offsetWidth includes border under box-sizing:border-box */
-                _nav.style.transition = prevTransition;
-                _left.style.transition = prevLT;
-                _right.style.transition = prevRT;
-            }
-
-            /* Collapse pill to exact settings button footprint */
-            function hide() {
-                els();
-                if (!_nav || _collapsed) return;
-                _collapsed = true;
-                _left.style.maxWidth = '0';
-                _left.style.opacity = '0';
-                _left.style.pointerEvents = 'none';
-                _right.style.maxWidth = '0';
-                _right.style.opacity = '0';
-                _right.style.pointerEvents = 'none';
-                /* 48px btn + 4px padding each side = 56px; match button's border-radius */
-                _nav.style.width = '56px';
-                _nav.style.padding = '4px';
-                _nav.style.borderRadius = '18px';
-            }
-
-            /* Expand pill to full nav width */
-            function show() {
-                els();
-                if (!_nav) return;
-                clearTimeout(hideTimer);
-                _collapsed = false;
-                _left.style.maxWidth = '400px';
-                _left.style.opacity = '1';
-                _left.style.pointerEvents = '';
-                _right.style.maxWidth = '400px';
-                _right.style.opacity = '1';
-                _right.style.pointerEvents = '';
-                _nav.style.width = _expandedW + 'px';
-                _nav.style.padding = '6px 16px';
-                _nav.style.borderRadius = '28px';
-                if (_active) {
-                    hideTimer = setTimeout(hide, 3000);
-                }
-            }
-
-            /* Capture-phase click: if collapsed, first tap expands — don't open settings */
-            function onNavClick(e) {
-                if (_collapsed) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    show();
-                }
-            }
-
-            /* Tap outside pill collapses it (mobile) */
-            function onDocClick(e) {
-                if (!_collapsed && _nav && !_nav.contains(e.target)) {
-                    hide();
-                }
-            }
-
-            function onLeave() {
-                clearTimeout(hideTimer);
-                hideTimer = setTimeout(hide, 400);
-            }
-
-            function apply() {
-                els();
-                if (!_nav) return;
-                _active = localStorage.getItem('mBT_autoHideNav') === 'true';
-                if (_active) {
-                    measure();
-                    show();
-                    _nav.addEventListener('mouseenter', show);
-                    _nav.addEventListener('mouseleave', onLeave);
-                    _nav.addEventListener('click', onNavClick, true);
-                    document.addEventListener('click', onDocClick);
-                } else {
-                    clearTimeout(hideTimer);
-                    _collapsed = false;
-                    _nav.style.width = '';
-                    _nav.style.padding = '';
-                    _nav.style.borderRadius = '';
-                    _left.style.maxWidth = '';
-                    _left.style.opacity = '';
-                    _left.style.pointerEvents = '';
-                    _right.style.maxWidth = '';
-                    _right.style.opacity = '';
-                    _right.style.pointerEvents = '';
-                    _nav.removeEventListener('mouseenter', show);
-                    _nav.removeEventListener('mouseleave', onLeave);
-                    _nav.removeEventListener('click', onNavClick, true);
-                    document.removeEventListener('click', onDocClick);
-                }
-            }
-
-            window.addEventListener('resize', function () {
-                if (_active && !_collapsed) measure();
-            });
-
-            return { apply: apply, show: show, hide: hide };
-        })();
-        mBTNavHUD.apply();
-
-        /* --- Feat 92.5. Pill Layout — Dynamic footer button rebalancer --- */
-        /* Phase 100.1: Use Object.assign to extend mBT.ui.footer, preserving render() from Footer.js */
-        mBT.ui.footer = Object.assign(mBT.ui.footer || {}, (function () {
-            var _ids = [
-                'stagesFooterBtn', 'docsFooterBtn', 'contactsFooterBtn',
-                'actualsToggleBtn', 'searchFooterBtn', 'toolsDrawerBtn',
-                'calendarFooterBtn', 'secondaryActionBtn', 'footerCoffeeBtn',
-                'footerHelpBtn', 'activityFeedBtn'
-            ];
-
-            function _getBtns() {
-                return _ids.map(function (id) { return document.getElementById(id); }).filter(Boolean);
-            }
-
-            function _restoreDefaults() {
-                var navLeft = document.getElementById('nav-left');
-                var navRight = document.getElementById('nav-right');
-                var undoBtn = document.getElementById('undoBtn');
-                var redoBtn = document.getElementById('redoBtn');
-                /* Phase 92.6 Task 1: Anchor undoBtn to end of navLeft, redoBtn to front of navRight */
-                navLeft.appendChild(undoBtn);
-                navRight.insertBefore(redoBtn, navRight.firstChild);
-                _getBtns().forEach(function (btn) {
-                    if (btn.getAttribute('data-pill-side') === 'left') {
-                        navLeft.insertBefore(btn, undoBtn);
-                    } else {
-                        navRight.appendChild(btn);
-                    }
-                });
-            }
-
-            function rebalance() {
-                var navLeft = document.getElementById('nav-left');
-                var navRight = document.getElementById('nav-right');
-                if (!navLeft || !navRight) return;
-                var undoBtn = document.getElementById('undoBtn');
-                var redoBtn = document.getElementById('redoBtn');
-                /* Phase 92.6 Task 2: Visibility pipeline — read hidden buttons from localStorage */
-                var hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
-                var hidden = [];
-                try { hidden = hiddenRaw ? JSON.parse(hiddenRaw) : []; } catch (e) { hidden = []; }
-                /* Apply visibility to all buttons first */
-                _getBtns().forEach(function (btn) {
-                    if (hidden.indexOf(btn.id) > -1) {
-                        btn.style.display = 'none';
-                    } else {
-                        btn.style.display = '';
-                    }
-                });
-                /* If pill layout is off, restore defaults and exit */
-                if (localStorage.getItem('mBT_pillLayout') !== 'true') {
-                    _restoreDefaults();
-                    if (typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();
-                    return;
-                }
-                /* Phase 92.6 Task 1: Anchor undoBtn to end of navLeft, redoBtn to front of navRight */
-                navLeft.appendChild(undoBtn);
-                navRight.insertBefore(redoBtn, navRight.firstChild);
-                /* Collect visible buttons only (offsetParent is null when display:none) */
-                var active = _getBtns().filter(function (el) { return el.offsetParent !== null; });
-                /* Sort by original DOM order for stable distribution */
-                active.sort(function (a, b) {
-                    return parseInt(a.getAttribute('data-pill-order'), 10) - parseInt(b.getAttribute('data-pill-order'), 10);
-                });
-                var mid = Math.ceil(active.length / 2);
-                active.forEach(function (btn, i) {
-                    if (i < mid) {
-                        navLeft.insertBefore(btn, undoBtn);
-                    } else {
-                        navRight.appendChild(btn);
-                    }
-                });
-                if (typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();
-            }
-
-            // Boot: apply saved preference now that mBTNavHUD is ready
-            rebalance();
-
-            return { rebalance: rebalance };
-        })());
-
-        /* ========= Phase 81: Accounting Export Generators ========= */
-        function escapeCSVField(field) {
-            if (field == null) return '';
-            var str = String(field);
-            /* If field contains comma, newline, or double-quote, wrap in quotes and escape internal quotes */
-            if (str.indexOf(',') > -1 || str.indexOf('\n') > -1 || str.indexOf('"') > -1) {
-                return '"' + str.replace(/"/g, '""') + '"';
-            }
-            return str;
-        }
-
-        function generateWiseCSV(budget) {
-            var lines = [];
-            lines.push('Source Currency,Recipient Name,Amount,Reference');
-
-            if (!budget.ledgers || !budget.ledgers.pos) return lines.join('\n');
-
-            var currency = (budget.settings && budget.settings.displayCurrency) || 'USD';
-
-            budget.ledgers.pos.forEach(function (po) {
-                if (po.status !== 'Invoiced') return; /* Filter for Invoiced only */
-
-                var recipient = escapeCSVField(po.vendor || '—');
-                var amount = (parseFloat(po.amount) || 0).toFixed(2);
-                var reference = escapeCSVField(po.id || '');
-
-                lines.push(currency + ',' + recipient + ',' + amount + ',' + reference);
-            });
-
-            return lines.join('\n');
-        }
-
-        function generateQuickBooksCSV(budget) {
-            var lines = [];
-            lines.push('Date,Vendor,Amount,Category,Memo');
-
-            if (!budget.ledgers || !budget.ledgers.pos) return lines.join('\n');
-
-            budget.ledgers.pos.forEach(function (po) {
-                if (po.status !== 'Paid') return; /* Filter for Paid only */
-
-                var date = po.date || new Date().toISOString().split('T')[0];
-                var vendor = escapeCSVField(po.vendor || '—');
-                var amount = (parseFloat(po.amount) || 0).toFixed(2);
-
-                /* Resolve section name from budget.sections */
-                var category = po.sectionKey || 'Uncategorized';
-                if (budget.sections && budget.sections[po.sectionKey]) {
-                    category = budget.sections[po.sectionKey].name || po.sectionKey;
-                }
-                category = escapeCSVField(category);
-
-                var memo = escapeCSVField(po.id || '');
-
-                lines.push(date + ',' + vendor + ',' + amount + ',' + category + ',' + memo);
-            });
-
-            return lines.join('\n');
-        }
-
-        function triggerCSVDownload(csvContent, fileName) {
-            var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            var link = document.createElement('a');
-            var url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', fileName);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        /* ========= Tool Bridge: unified event bus for cross-tool integration ========= */
-        window.addEventListener('message', function (e) {
-            if (!e.data || e.data.type !== 'mbt:tool-action') return;
-            var action = e.data.action;
-            var payload = e.data.payload || {};
-
-            /* --- reconcile: reload budget from storage (Stages, Calendar, etc.) --- */
-            if (action === 'reconcile' && currentProjectName) {
-                mBT.data.load(currentProjectName);
-
-                /* --- Phase 73: update-fringes — Fringes tool routes save through monolith to avoid BroadcastChannel alarm --- */
-            } else if (action === 'update-fringes' && currentProjectName && budget) {
-                budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
-                saveBudget();
-                window.mBT_Finance.reconcile(budget); /* Phase 94: explicit call to extracted engine */
-
-                /* --- Phase 78: update-ledgers — PO tool routes ledger saves through monolith --- */
-            } else if (action === 'update-ledgers' && currentProjectName && budget) {
-                if (!budget.ledgers) budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
-                if (Array.isArray(payload.pos)) budget.ledgers.pos = payload.pos;
-                if (Array.isArray(payload.pettyCash)) budget.ledgers.pettyCash = payload.pettyCash;
-                if (payload.poCounter != null) budget.ledgers.poCounter = payload.poCounter;
-                saveBudget();
-                window.mBT_Finance.reconcile(budget); /* Phase 94: explicit call to extracted engine */
-                if (typeof render === 'function') render();
-                /* Phase 80: relay to PO sibling iframe if it is the currently open tool */
-                if (typeof mBTActiveTool !== 'undefined' && mBTActiveTool === 'po') {
-                    var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                    if (_poIframe && _poIframe.contentWindow) {
-                        _poIframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }, '*');
-                    }
-                }
-
-                /* --- close-tool: dismiss tool modal and lifecycle sync --- */
-            } else if (action === 'close-tool') {
-                if (typeof mBTME !== 'undefined' && mBTME.close) mBTME.close('tool-window');
-                mBTActiveTool = null; /* Phase 73B */
-                /* Phase 50C.8 Step C: Re-broadcast editor focus when tool is dismissed */
-                if (window.mBTRealtime && mBTRealtime.isConnected()) {
-                    mBTRealtime.broadcastFocus('Budget Editor');
-                }
-                /* Lifecycle sync: push any changes made inside the tool back to cloud.
-                   Sub-Phase 51.2 Task 8: Skip if realtime is live (changes already propagated). */
-                var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
-                if (!_rtLiveClose && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
-                    mBTSync.pushAll().catch(function (e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
-                }
-
-                /* --- inject-contact: push a contact as a crew line item into the budget --- */
-            } else if (action === 'inject-contact' && currentProjectName) {
-                if (payload.name && budget) {
-                    var crewItem = {
-                        id: 'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                        description: payload.name,
-                        rate: payload.rate || 0,
-                        qty: 1,
-                        unit: 'day',
-                        contact_id: payload.email || null,
-                        contact_name: payload.name,
-                        contact_phone: payload.phone || null,
-                        contact_email: payload.email || null
-                    };
-                    if (!budget.globalItems) budget.globalItems = [];
-                    budget.globalItems.push(crewItem);
-                    saveBudget();
-                    if (typeof window.mBT_Finance !== 'undefined' && window.mBT_Finance.reconcile) {
-                        window.mBT_Finance.reconcile(budget); /* Phase 94: explicit call to extracted engine */
-                    }
-                    console.log('[mBT] Injected contact:', payload.name);
-                }
-
-                /* --- calendar-updated: reload milestones from localforage --- */
-            } else if (action === 'calendar-updated' && currentProjectName) {
-                mBT.data.load(currentProjectName);
-
-                /* --- update-contact-rate: sync edited CRM rate to matching budget line items --- */
-            } else if (action === 'update-contact-rate' && budget) {
-                var crName = (payload.name || '').toLowerCase();
-                var crRate = parseFloat(payload.rate);
-                if (crName && crRate && budget.globalItems) {
-                    var crUpdated = false;
-                    for (var ci = 0; ci < budget.globalItems.length; ci++) {
-                        if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
-                            budget.globalItems[ci].rate = crRate;
-                            crUpdated = true;
-                        }
-                    }
-                    if (crUpdated) {
-                        saveBudget();
-                        if (typeof window.mBT_Finance !== 'undefined' && window.mBT_Finance.reconcile) {
-                            window.mBT_Finance.reconcile(budget); /* Phase 94: explicit call to extracted engine */
-                        }
-                        console.log('[mBT] Contact rate synced:', payload.name, crRate);
-                    }
-                }
-
-                /* --- user-focus-changed: peripheral tool reports active focus — relay to presence channel --- */
-            } else if (action === 'user-focus-changed') {
-                if (window.mBTRealtime && mBTRealtime.isConnected()) {
-                    mBTRealtime.broadcastFocus(payload.tool || 'unknown');
-                }
-
-                /* --- og-rate-changed: update matching line items with new rate --- */
-            } else if (action === 'og-rate-changed' && budget) {
-                var desc = (payload.description || '').toLowerCase();
-                var newRate = payload.rate;
-                if (desc && newRate && budget.globalItems) {
-                    var updated = false;
-                    for (var ri = 0; ri < budget.globalItems.length; ri++) {
-                        if ((budget.globalItems[ri].description || '').toLowerCase() === desc) {
-                            budget.globalItems[ri].rate = newRate;
-                            updated = true;
-                        }
-                    }
-                    if (updated) {
-                        saveBudget();
-                        if (typeof window.mBT_Finance !== 'undefined' && window.mBT_Finance.reconcile) {
-                            window.mBT_Finance.reconcile(budget); /* Phase 94: explicit call to extracted engine */
-                        }
-                        console.log('[mBT] Rate updated for:', payload.description);
-                    }
-                }
-
-                /* --- Phase 64: Share Hub Peer Roster Request --- */
-            } else if (action === 'get-peers') {
-                if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
-                    event.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }, '*');
-                } else {
-                    event.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
-                }
-
-                /* --- Phase 64: Share Hub Role Management --- */
-            } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
-                if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
-
-                /* --- Phase 64: Share Hub Link Revocation --- */
-            } else if (action === 'revoke-link' || action === 'revoke-user') {
-                window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { evictAll: action === 'revoke-link', userId: payload.userId } }));
-
-                /* --- load-budget: receive AI-generated .moo payload from Oracle iframe --- */
-            } else if (action === 'load-budget' && payload.budgetData) {
-                /* Defense-in-depth sanitization — iframe already sanitized, monolith sanitizes again */
-                function sanitizeBudgetNode(node) {
-                    if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
-                    if (Array.isArray(node)) return node.map(sanitizeBudgetNode);
-                    if (node && typeof node === 'object') {
-                        var c = {};
-                        Object.keys(node).forEach(function (k) { c[k] = sanitizeBudgetNode(node[k]); });
-                        return c;
-                    }
-                    return node;
-                }
-                var lbSanitized = sanitizeBudgetNode(payload.budgetData);
-
-                if (!lbSanitized.projectName || typeof lbSanitized.sections !== 'object') {
-                    mBTME.alert('Invalid Budget', 'The AI returned an incomplete structure. Try again with more detail.');
-                    return;
-                }
-
-                Object.keys(lbSanitized.sections).forEach(function (sName) {
-                    var sec = lbSanitized.sections[sName];
-                    if (!sec.id) sec.id = sName.toLowerCase().replace(/\s+/g, '_').substring(0, 20);
-                    if (sec.isOpen === undefined) sec.isOpen = true;
-                    if (!Array.isArray(sec.items)) { sec.items = []; return; }
-                    sec.items = sec.items
-                        .filter(function (it) { return it && typeof it.description === 'string'; })
-                        .map(function (it, idx) {
-                            it.id = it.id || ('item_' + idx + '_' + Math.random().toString(36).substr(2, 4));
-                            it.quantity = Number(it.quantity) || 1;
-                            it.rate = Number(it.rate) || 0;
-                            it.multiplier = Number(it.multiplier) || 1;
-                            it.actual = Number(it.actual) || 0;
-                            it.unit = it.unit || 'Flat';
-                            it.rateType = it.rateType || 'negotiable';
-                            it.crew = it.crew || {};
-                            return it;
-                        });
-                });
-
-                lbSanitized.company = lbSanitized.company || 'Independent';
-                lbSanitized.startDate = lbSanitized.startDate || new Date().toISOString().split('T')[0];
-                lbSanitized.contingencyPercentage = Number(lbSanitized.contingencyPercentage) || 10;
-                lbSanitized.salesTaxPercentage = Number(lbSanitized.salesTaxPercentage) || 0;
-                lbSanitized.discountPercentage = Number(lbSanitized.discountPercentage) || 0;
-                lbSanitized.documents = Array.isArray(lbSanitized.documents) ? lbSanitized.documents : [];
-                lbSanitized.attachments = Array.isArray(lbSanitized.attachments) ? lbSanitized.attachments : [];
-                lbSanitized.globalItems = Array.isArray(lbSanitized.globalItems) ? lbSanitized.globalItems : [];
-                lbSanitized.aiContext = lbSanitized.aiContext || { chat: [], analysis: '' };
-                lbSanitized.activityLog = lbSanitized.activityLog || [];
-
-                var lbBase = lbSanitized.projectName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'AI Budget';
-                lbSanitized.projectName = lbBase + ' ' + new Date().toISOString().split('T')[0];
-
-                budget = mBT.data.state.wrap(lbSanitized);
-                currentProjectName = lbSanitized.projectName;
-                mBT.data.save().then(function () { mBT.data.load(lbSanitized.projectName); });
-                mBTME.close('tool-window');
-                mBTActiveTool = null; /* Phase 73B */
-                mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
-
-                /* --- Phase 63: resolve-diff — user resolved conflict in diff iframe --- */
-            } else if (action === 'resolve-diff' && payload.mergedSections) {
-                _diffActive = false;
-                _unsealRealtimeRenderer();
-                mBTME.close('tool-window');
-                mBTActiveTool = null; /* Phase 73B */
-
-                /* Apply merged sections to the live budget */
-                if (budget) {
-                    budget.sections = payload.mergedSections;
-                    budget.updated_at = new Date().toISOString();
-                    mBT.data.save().then(function () {
-                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                        /* Force-push the resolved state to Supabase, bypassing conflict check */
-                        if (window.mBTSync && budget) {
-                            var budgetId = budget.id || budget.projectName;
-                            mBTSync.forcePushProject(budgetId, budget).catch(function (e) {
-                                console.warn('[mBT] Force-push after diff resolution failed:', e);
-                            });
-                        }
-                    });
-                    _diffPendingRecord = null;
-                    mBTME.alert('Conflict Resolved', 'Merged budget saved and pushed to cloud.');
-                }
-
-                /* --- Phase 63: abort-diff — user chose to discard and cancel sync --- */
-            } else if (action === 'abort-diff') {
-                _diffActive = false;
-                _diffPendingRecord = null;
-                _unsealRealtimeRenderer();
-                mBTME.close('tool-window');
-                mBTActiveTool = null; /* Phase 73B */
-                mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
-
-                /* --- Phase 64: role-change — Share Hub changed a peer's role --- */
-            } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
-                if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) {
-                    mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
-                }
-
-                /* --- Phase 64: revoke-link / revoke-user — Share Hub burned the link or evicted a user --- */
-            } else if (action === 'revoke-link' || action === 'revoke-user') {
-                /* Broadcast auth-changed event to evict all viewers or a specific user */
-                var evt = new CustomEvent('mbt:auth-changed', {
-                    detail: { evictAll: action === 'revoke-link', userId: payload.userId }
-                });
-                window.dispatchEvent(evt);
-
-                /* --- Phase 68B: approve-pending-edit — Owner approves an Editor proposal --- */
-            } else if (action === 'approve-pending-edit' && payload.editId) {
-                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
-                    mBTSync.sbPatchPendingEdit(payload.editId, {
-                        status: 'approved',
-                        updated_at: new Date().toISOString()
-                    }).then(function () {
-                        if (payload.projectId && payload.budgetSnapshot) {
-                            return mBTSync.forcePushProject(payload.projectId, payload.budgetSnapshot);
-                        }
-                    }).then(function () {
-                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) {
-                            mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'approved');
-                        }
-                        if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
-                    }).catch(function (e) {
-                        console.error('[mBT] Approval failed:', e);
-                    });
-                }
-
-                /* --- Phase 68B: reject-pending-edit — Owner rejects an Editor proposal --- */
-            } else if (action === 'reject-pending-edit' && payload.editId) {
-                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
-                    mBTSync.sbPatchPendingEdit(payload.editId, {
-                        status: 'rejected',
-                        updated_at: new Date().toISOString()
-                    }).then(function () {
-                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) {
-                            mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'rejected');
-                        }
-                    }).catch(function (e) {
-                        console.error('[mBT] Rejection failed:', e);
-                    });
-                }
-
-                /* --- Phase 81: export-accounting — generate and download accounting exports (Wise/QB) --- */
-            } else if (action === 'export-accounting' && payload.type && currentProjectName && budget) {
-                var exportType = payload.type; /* 'wise' or 'qb' */
-                var csvContent = '';
-
-                if (exportType === 'wise') {
-                    csvContent = generateWiseCSV(budget);
-                } else if (exportType === 'qb') {
-                    csvContent = generateQuickBooksCSV(budget);
-                } else {
-                    console.warn('[mBT] Unknown export type:', exportType);
-                    return;
-                }
-
-                /* Trigger download */
-                var fileName = 'mbt_export_' + exportType + '_' + new Date().toISOString().split('T')[0] + '.csv';
-                triggerCSVDownload(csvContent, fileName);
-
-                /* --- Phase 116 Step 5: apply-template — Template Manager routes blueprint + rate injection via monolith --- */
-            } else if (action === 'apply-template' && budget) {
-                var _tmplKey = payload.templateKey;
-                var _withRates = !!payload.withRates;
-                if (_tmplKey && mBT.features.blueprints && typeof mBT.features.blueprints.applyTemplate === 'function') {
-                    mBT.features.blueprints.applyTemplate(_tmplKey, _withRates, false);
-                }
-                if (typeof mBTME !== 'undefined') mBTME.close('tool-window');
-                mBTActiveTool = null;
-            }
-        });
-
-        /* --- Phase 63 / Phase 62 bridge: relay RBAC eviction into open diff iframe --- */
-        window.addEventListener('mbt:auth-changed', function (evictEvt) {
-            if (!_diffActive) return;
-            var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-            if (modal && modal.contentWindow) {
-                modal.contentWindow.postMessage({ type: 'mbt:rbac-eviction' }, '*');
-            }
-            /* Also immediately abort on the monolith side */
-            _diffActive = false;
-            _diffPendingRecord = null;
-            _unsealRealtimeRenderer();
+        /* --- Phase 121: Event Router Bridge (extracted to src/core/logic/EventRouter.js) --- */
+        mBT.router.init({
+            storageKeyPrefix:        storageKeyPrefix,
+            getBudget:               function () { return budget; },
+            setBudget:               function (b) { budget = b; },
+            getCurrentProjectName:   function () { return currentProjectName; },
+            setCurrentProjectName:   function (n) { currentProjectName = n; },
+            getDisplayCurrency:      function () { return displayCurrency; },
+            setDisplayCurrency:      function (v) { displayCurrency = v; },
+            getMBTActiveTool:        function () { return mBTActiveTool; },
+            setMBTActiveTool:        function (v) { mBTActiveTool = v; },
+            getDiffActive:           function () { return _diffActive; },
+            setDiffActive:           function (v) { _diffActive = v; },
+            getDiffPendingRecord:    function () { return _diffPendingRecord; },
+            setDiffPendingRecord:    function (v) { _diffPendingRecord = v; },
+            handleProjectNameChange: handleProjectNameChange,
+            renderCurrencyBtn:       renderCurrencyBtn,
+            fetchExchangeRates:      fetchExchangeRates,
+            unsealRealtimeRenderer:  _unsealRealtimeRenderer
         });
     }
-
-    /* --- 4. INFRASTRUCTURE TELEMETRY --- */
-    function resolveConnectivityStatus() {
-        const isOnline = navigator.onLine;
-        const isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
-        const btn = document.getElementById('loginBtn');
-        if (btn) {
-            btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ${isSignedIn ? 'border-blue-400 bg-blue-50 text-blue-600' : (isOnline ? 'border-emerald-400 bg-emerald-50 text-emerald-600' : 'border-rose-400 bg-rose-50 text-rose-600')}`;
-            btn.title = isSignedIn ? "Signed In" : (isOnline ? "Studio Online" : "Studio Offline");
-            btn.innerHTML = mBTAssets.user;
-        }
-        const aiBtn = document.getElementById('openAiToolsBtn');
-        if (aiBtn) {
-            aiBtn.className = `p-3 text-white rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center ${isOnline ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed'}`;
-            if (!isOnline) aiBtn.title = "AI Consultant Offline";
-        }
-    }
-
-    // --- NEW: Support Widget (Buy Me a Coffee) ---
-    function showCoffeeWidget() {
-        const content = `
-            <div class="text-center p-6 bg-yellow-50 min-h-[300px] flex flex-col items-center justify-center">
-                <div class="w-20 h-20 bg-[#FFDD00] rounded-3xl flex items-center justify-center text-4xl shadow-xl mb-4 text-black border-4 border-white animate-bounce [&>svg]:w-10 [&>svg]:h-10">
-                    ${mBTAssets.coffee}
-                </div>
-                <h3 class="text-xl font-black uppercase tracking-tighter text-slate-900 mb-2">Fuel the Code</h3>
-                <p class="text-xs font-bold text-slate-500 mb-6 max-w-xs leading-relaxed">
-                    mooBudget is free, offline-first, and built for the Caribbean industry. If it saves you time, consider buying a coffee for the dev team.
-                </p>
-                <div class="space-y-3 w-full max-w-xs">
-                    <a href="https://buymeacoffee.com/jaysonmy" target="_blank" class="flex items-center justify-center gap-2 w-full py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-transform active:scale-95">
-                        Open Support Page
-                    </a>
-                    <button onclick="mBTME.close('coffeeModal')" class="w-full py-3 bg-white border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">
-                        Maybe Later
-                    </button>
-                </div>
-            </div>`;
-        mBTME.open('coffee', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
-    }
-
-    // --- NEW: Distribution Share Selector (Preview Handler) ---
-    window.openDocumentShareSelector = function (docId) {
-        const doc = budget.documents.find(d => d.id === docId);
-        if (!doc) return;
-
-        // Generate Share Message
-        const shareText = (typeof mBTPublisher !== 'undefined' && mBTPublisher.comm)
-            ? mBTPublisher.comm.generateShareSheet(doc)
-            : `Reviewing ${doc.label}`;
-
-        // Platform Links
-        const waLink = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-        const mailLink = `mailto:?subject=${encodeURIComponent("Document Review: " + doc.label)}&body=${encodeURIComponent(shareText)}`;
-
-        const content = `
-            <div class="p-6 bg-white">
-                <div class="text-center mb-6">
-                    <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-xl">
-                        ${mBTAssets.paperPlane}
-                    </div>
-                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-900">Distribute Document</h3>
-                    <p class="text-[10px] text-slate-400 font-bold mt-1">${doc.label}</p>
-                </div>
-                
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <a href="${waLink}" target="_blank" class="flex flex-col items-center gap-2 p-4 bg-[#25D366]/10 border border-[#25D366]/20 rounded-xl hover:bg-[#25D366]/20 transition-all group no-underline">
-                        <div class="text-[#25D366] text-2xl group-hover:scale-110 transition-transform">${mBTAssets.wa}</div>
-                        <span class="text-[9px] font-black uppercase tracking-widest text-[#25D366] group-hover:text-[#128c7e]">WhatsApp</span>
-                    </a>
-                    <a href="${mailLink}" target="_blank" class="flex flex-col items-center gap-2 p-4 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-all group no-underline">
-                        <div class="text-blue-500 text-2xl group-hover:scale-110 transition-transform">${mBTAssets.mail}</div>
-                        <span class="text-[9px] font-black uppercase tracking-widest text-blue-600">Email</span>
-                    </a>
-                </div>
-                
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Quick Copy Message</label>
-                    <div class="flex gap-2">
-                        <input type="text" value="${shareText}" class="flex-grow bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none" readonly>
-                        <button onclick="navigator.clipboard.writeText('${shareText.replace(/'/g, "\\'")}'); this.innerHTML='Copied!';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>
-                    </div>
-                </div>
-            </div>`;
-
-        mBTME.open('shareSelector', 'Share', content, 'max-w-sm', { hideHeader: true, noPadding: true });
-    };
-
-    function handleLogin() {
-        if (typeof mBT !== 'undefined' && mBT.features && mBT.features.settings) {
-            mBT.features.settings.open('cloud');
-        } else {
-            mBTME.alert("Cloud Engine", "Cloud settings module not found.");
-        }
-    }
-
-    function injectFooterIcons() {
-        var mapping = {
-            'icon-docs': mBTAssets.file,
-            'icon-main-action': mBTAssets.gear,
-            'icon-secondary-action': mBTAssets.paperPlane,
-            'icon-coffee': mBTAssets.coffee
-        };
-        Object.entries(mapping).forEach(([id, svg]) => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = svg;
-        });
-    }
-
-    /* ========= Phase 96: Sync Status Badge Listener ========= */
-    window.addEventListener('mbt:sync-status', function (e) {
-        var pill = document.getElementById('sync-status-pill');
-        if (!pill) return;
-        var status = e.detail && e.detail.status || 'offline';
-        var dot = pill.querySelector('span');
-        if (status === 'syncing') {
-            pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20';
-            if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse';
-            pill.lastChild.textContent = 'Syncing';
-        } else if (status === 'saved') {
-            pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-            if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
-            pill.lastChild.textContent = 'Saved';
-        } else if (status === 'error') {
-            pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20';
-            if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-400';
-            pill.lastChild.textContent = 'Error';
-        } else {
-            pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-500/10 text-slate-400 border border-slate-500/20';
-            pill.lastChild.textContent = 'Offline';
-        }
-    });
-
-    /* ========= Phase 96: Empty State Guards (Standalone Launch) ========= */
-    var _origPostMessageHandler = null;
-
-    /* ========= Phase 96: Toast System ========= */
-    /* Phase 92.8: forwards to Hub iframe when open; drives unread badge when closed */
-    window.addEventListener('mbt:activity-log', function (e) {
-        var detail = e.detail || {};
-        var type = detail.type || 'Activity';
-        var message = detail.message || '';
-        /* Forward to Hub iframe when Share Hub is the active tool */
-        var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-        if (toolIframe && toolIframe.contentWindow && typeof mBTActiveTool !== 'undefined' && mBTActiveTool === 'share') {
-            toolIframe.contentWindow.postMessage({ type: 'mbt:activity-log', payload: detail }, '*');
-        } else {
-            /* Hub is closed — increment unread badge */
-            if (typeof mBTAddActivityBadge === 'function') mBTAddActivityBadge();
-        }
-        /* Toast for important events */
-        if (detail.toast !== false && typeof mBTSurfaceToast !== 'undefined') {
-            mBTSurfaceToast.info(type + ': ' + message, 3000);
-        }
-    });
-
-    /* mbt:peer-typing-status — shows brief typing indicator toast */
-    window.addEventListener('mbt:peer-typing-status', function (e) {
-        var detail = e.detail || {};
-        var user = detail.displayName || 'Peer';
-        var field = detail.field || '';
-        if (typeof mBTSurfaceToast !== 'undefined') {
-            mBTSurfaceToast.info(user + ' is editing' + (field ? ' "' + field + '"' : ''), 2000);
-        }
-    });
 
     /* --- 5. GLOBAL BOOT TRIGGER --- */
     // Logic Resolution: Global Bridge Hooks for external calls
@@ -11671,7 +10740,7 @@
             init(); // Fallback for safety
         }
         // Ensure Login UI reflects current connectivity
-        if (typeof resolveConnectivityStatus === 'function') resolveConnectivityStatus();
+        if (mBT.router && typeof mBT.router.resolveConnectivityStatus === 'function') mBT.router.resolveConnectivityStatus();
         // Initialize undo/redo button states
         if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     });

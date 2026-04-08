@@ -153,7 +153,7 @@ body {
 .no-spinner { -moz-appearance: textfield; appearance: none; }
 
 /* --- 11.5 Settings Modal Theme-Aware Cards (Phase 110.1) --- */
-.settings-card { background: var(--bg-settings-card, #ffffff); border-color: var(--border-settings-card, #f1f5f9); }
+.settings-card { background: var(--bg-settings-card, #ffffff); border: 1px solid; border-color: var(--border-settings-card, #f1f5f9); padding: 0.75rem; border-radius: 1rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
 .settings-card-alt { background: var(--bg-settings-card-alt, #f8fafc); border-color: var(--border-settings-card-alt, #e2e8f0); }
 .settings-text-primary { color: var(--text-settings-primary, #1e293b); }
 .settings-text-secondary { color: var(--text-settings-secondary, #475569); }
@@ -175,6 +175,20 @@ body {
     --border-settings: #334155;
     --border-settings-light: #1e293b;
 }
+
+/* --- 11.6 Settings Tab System (Phase 128 T2 Refactor: semantic class restoration) --- */
+.settings-modal-shell { background-color: rgba(248, 250, 252, 0.5); }
+.settings-tab-nav     { background-color: #ffffff; }
+.settings-tab-bar     { border-color: #e2e8f0; }
+.settings-tab-active  { background-color: #ffffff; color: #2563eb; border-bottom: 2px solid #2563eb; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+.settings-tab-inactive { color: #94a3b8; }
+.settings-tab-inactive:hover { color: #475569; background-color: rgba(241, 245, 249, 0.5); }
+
+.mbt-theme-dark .settings-modal-shell  { background-color: rgba(15, 23, 42, 0.5); }
+.mbt-theme-dark .settings-tab-nav      { background-color: #1e293b; }
+.mbt-theme-dark .settings-tab-active   { background-color: #1e293b; color: #60a5fa; border-bottom-color: #60a5fa; }
+.mbt-theme-dark .settings-tab-inactive { color: #64748b; }
+.mbt-theme-dark .settings-tab-inactive:hover { color: #94a3b8; background-color: rgba(30, 41, 59, 0.5); }
 
 /* --- 12. Crew Contact Popups (Adapted Legacy Logic) --- */
 .crew-wrapper { 
@@ -324,9 +338,6 @@ body {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); outline: none; 
 }
 .studio-input:hover:not(:focus) { border-color: #cbd5e1; background-color: #f1f5f9; }
-
-/* [CLEANUP] Removed duplicate .grid-stack-item-content definitions here. */
-/* Visual Hardening" above for the active rules. */
 
 /* Interior Refinement - Header & Body Polish */
 .widget-header {
@@ -529,21 +540,55 @@ body {
 .cursor-pointer { cursor: pointer; }
 .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
 
-/* --- 17. Settings Card System --- */
-:root { --bg-settings: #ffffff; }
-.mbt-theme-dark { --bg-settings: #1e293b; }
-.settings-card {
-    background-color: var(--bg-settings);
-    padding: 0.75rem;
-    border-radius: 1rem;
-    border: 1px solid #f1f5f9;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-}
-.mbt-theme-dark .settings-card { border-color: #334155; }
-
 /* GridStack Offline Fallback (Vertical Stack) */
 .no-gridstack .grid-stack { display: flex !important; flex-direction: column !important; height: auto !important; padding: 10px !important; }
 .no-gridstack .grid-stack-item { position: relative !important; width: 100% !important; top: auto !important; left: auto !important; height: auto !important; margin-bottom: 20px; }
 .no-gridstack .grid-stack-item-content { height: auto !important; min-height: 200px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
 .no-gridstack .widget-body { height: 300px; overflow-y: auto; }
 .no-gridstack .ui-resizable-handle { display: none !important; }
+
+/* --- 18. Phase 128: Premium Dark Contrast (Curb-Hardened) --- */
+
+/* Task 1: Token Spectrum Overrides — captures modal surface tokens used in index.html */
+.mbt-theme-dark .bg-slate-50    { background-color: #1e293b !important; }
+.mbt-theme-dark .bg-slate-100   { background-color: #334155 !important; }
+.mbt-theme-dark .bg-slate-200   { background-color: #475569 !important; }
+.mbt-theme-dark .border-slate-100 { border-color: #334155 !important; }
+.mbt-theme-dark .border-slate-200 { border-color: #475569 !important; }
+.mbt-theme-dark .text-slate-400 { color: #94a3b8 !important; }
+.mbt-theme-dark .text-slate-500 { color: #cbd5e1 !important; }
+.mbt-theme-dark .text-slate-600 { color: #f1f5f9 !important; }
+.mbt-theme-dark .text-slate-700 { color: #f8fafc !important; }
+.mbt-theme-dark .text-slate-800 { color: #ffffff !important; }
+
+/* Task 3: Negative Constraints — No Light Mode edits. No New Classes. */
+
+/* --- 19. Phase 129.C: Premium Dock Centering (Pill Authority) --- */
+
+/* Task 1 (Design Refinement): offline-safe centering for the footer pill wrapper.
+   #footer-hud is fixed left-0 right-0 — flex + justify-center replaces
+   mx-auto dependence on CDN, centering the pill reliably at all viewport widths. */
+#footer-hud {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+/* Pill glass aesthetic: CDN-independent fallback for bg-slate-900/95,
+   backdrop-blur-2xl, shadow-2xl, and ring-1 ring-black/20 Tailwind utilities. */
+#footer-nav {
+    background-color: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.2);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    border-radius: 28px;
+}
+
+/* Task 2 (Synchronization): Phase 128.Log rebalance loop sets equal minWidth on both flanks;
+   CSS orients buttons toward the center keystone to complete bilateral symmetry.
+   No maxWidth or minWidth overrides here — JS owns those values. */
+#nav-left  { justify-content: flex-end;   }
+#nav-right { justify-content: flex-start; }
+#nav-left,
+#nav-right  { margin: 0; padding: 0; }

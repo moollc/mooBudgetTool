@@ -137,7 +137,12 @@
             if (!window.budget) return;
             var budget = window.budget;
             var mBTLE = window.mBTLE || {};
-            var fmt = (mBTLE.format && mBTLE.format.currency) || function(v) { return v; };
+            /* Phase 118: apply perspective conversion before formatting */
+            var _cur = (window.mBT && window.mBT.logic && window.mBT.logic.currency) ? window.mBT.logic.currency : null;
+            var fmt = function (v) {
+                var converted = _cur ? _cur.convert(v) : (parseFloat(v) || 0);
+                return mBTLE.format && mBTLE.format.currency ? mBTLE.format.currency(converted) : converted;
+            };
 
             // 1. Surgical update of Project Name Header
             var projNameInput = document.getElementById('projectName');

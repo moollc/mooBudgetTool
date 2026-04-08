@@ -91,12 +91,19 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Save All
       </button>
+      <button id="btn-import-contacts" class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import
+      </button>
       <button id="btn-add-contact" class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add Contact
       </button>
     </div>
   </div>
+
+  <!-- Phase 127.B: Hidden Import Bridge -->
+  <input type="file" id="contact-import-input" accept=".vcf,.json" class="hidden">
 
   <!-- View Tabs: DB vs Budget Crew -->
   <div id="tab-bar" class="shrink-0 bg-slate-900 border-b border-slate-800 px-4 flex items-end">
@@ -984,6 +991,98 @@ var mBTContacts = (function () {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
     });
 
+    /* --- Phase 127.B: Contact Import --- */
+    function parseVCard(text) {
+        var contacts = [];
+        var blocks = text.split(/BEGIN:VCARD/i);
+        for (var i = 1; i < blocks.length; i++) {
+            var block = blocks[i];
+            var fnMatch    = block.match(/^FN[^:]*:(.+)$/m);
+            var telMatch   = block.match(/^TEL[^:]*:(.+)$/m);
+            var emailMatch = block.match(/^EMAIL[^:]*:(.+)$/m);
+            if (!fnMatch) continue;
+            contacts.push({
+                name:  fnMatch[1].trim(),
+                phone: telMatch   ? telMatch[1].trim()   : null,
+                email: emailMatch ? emailMatch[1].trim() : null
+            });
+        }
+        return contacts;
+    }
+
+    function parseJSON(text) {
+        var data;
+        try { data = JSON.parse(text); } catch (e) { return []; }
+        var arr = Array.isArray(data) ? data : [data];
+        return arr.filter(function (item) {
+            return item && (item.name || item.FN || item.full_name);
+        }).map(function (item) {
+            return {
+                name:       (item.name || item.FN || item.full_name || '').trim(),
+                phone:      item.phone || item.tel || item.TEL || item.telephone || null,
+                email:      item.email || item.EMAIL || null,
+                department: item.department || item.dept || '',
+                role:       item.role || item.department || item.dept || ''
+            };
+        });
+    }
+
+    function importContacts(file) {
+        if (!file) return;
+        var ext = file.name.split('.').pop().toLowerCase();
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            var text = ev.target.result;
+            var parsed = (ext === 'vcf') ? parseVCard(text) : parseJSON(text);
+            if (!parsed.length) { walletSnack('No contacts found in file.'); return; }
+
+            var existingNames  = {};
+            var existingEmails = {};
+            state.dbContacts.forEach(function (c) {
+                if (c.name)  existingNames[c.name.toLowerCase()]   = true;
+                if (c.email) existingEmails[c.email.toLowerCase()] = true;
+            });
+
+            var toAdd = parsed.filter(function (c) {
+                if (c.name  && existingNames[c.name.toLowerCase()])   return false;
+                if (c.email && existingEmails[c.email.toLowerCase()]) return false;
+                return true;
+            });
+
+            if (!toAdd.length) { walletSnack('All contacts already exist — nothing imported.'); return; }
+
+            var chain = Promise.resolve();
+            toAdd.forEach(function (c) {
+                chain = chain.then(function () {
+                    return STORAGE.saveContact({
+                        name:                c.name,
+                        department:          c.department || '',
+                        role:                c.role || c.department || '',
+                        category:            c.department || '',
+                        email:               c.email || null,
+                        phone:               c.phone || null,
+                        rate:                null,
+                        dietaryRestrictions: null,
+                        allergies:           null,
+                        walletType:          null,
+                        walletAddress:       null
+                    });
+                });
+            });
+            chain.then(function () {
+                return STORAGE.getAllContacts();
+            }).then(function (all) {
+                state.dbContacts = all || [];
+                render();
+                walletSnack('Imported ' + toAdd.length + ' contact' + (toAdd.length !== 1 ? 's' : '') + '.');
+            }).catch(function (e) {
+                console.error('[mBTContacts] Import error:', e);
+                walletSnack('Import failed — see console.');
+            });
+        };
+        reader.readAsText(file);
+    }
+
     /* ========= Init ========= */
     dom.getElementById('btn-back').addEventListener('click', function () {
         if (window.parent && window.parent !== window) {
@@ -995,6 +1094,21 @@ var mBTContacts = (function () {
     });
 
     dom.getElementById('btn-add-contact').addEventListener('click', function () { showAddContactModal(); });
+
+    /* Phase 127.B: Contact Import Bridge Wiring */
+    var importBtn = dom.getElementById('btn-import-contacts');
+    var importInput = dom.getElementById('contact-import-input');
+    if (importBtn && importInput) {
+        importBtn.addEventListener('click', function () {
+            importInput.value = ''; /* Reset so same file can be re-selected */
+            importInput.click();
+        });
+        importInput.addEventListener('change', function (e) {
+            if (e.target.files && e.target.files.length > 0 && typeof mBTContacts !== 'undefined') {
+                mBTContacts.importContacts(e.target.files[0]);
+            }
+        });
+    }
     dom.getElementById('btn-save-all').addEventListener('click', saveAllBudgetContacts);
     dom.getElementById('btn-catering').addEventListener('click', openCateringSummary);
     dom.getElementById('btn-print').addEventListener('click', printDirectory);
@@ -1014,7 +1128,8 @@ var mBTContacts = (function () {
         setDept: setDept,
         showAddContactModal: showAddContactModal,
         editContact: editContact,
-        render: render
+        render: render,
+        importContacts: importContacts
     };
 })();
 </script>
