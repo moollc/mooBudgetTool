@@ -31,7 +31,7 @@
                         <div class="settings-card flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">${mBTAssets.appLogo}</div>
                             <div>
-                                <h3 class="text-xs font-black uppercase tracking-widest ${_t1}">MooBudget Studio</h3>
+                                <h3 class="text-xs font-black uppercase tracking-widest ${_t1}">moo Budget Tool</h3>
                                 <p class="text-[9px] text-slate-400 font-bold">Build v${APP_VERSION} &bull; ${navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>'}</p>
                             </div>
                         </div>
@@ -141,6 +141,15 @@
                                         <input type="checkbox" id="autoHideNavToggle" ${autoHideNav ? 'checked' : ''} onchange="localStorage.setItem('mBT_autoHideNav', this.checked); if(typeof mBTNavHUD !== 'undefined') mBTNavHUD.apply();" class="sr-only peer">
                                         <div class="w-11 h-6 ${_sw} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                                     </label>
+                                </div>
+                            </div>
+                            <div class="settings-card">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Navigation Visibility</h4>
+                                        <p class="text-[9px] text-slate-400 font-bold mt-0.5">Show/Hide HUD buttons</p>
+                                    </div>
+                                    <button onclick="mBT.features.settings.openFooterVisModal()" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center gap-1">${mBTAssets.eye} Manage</button>
                                 </div>
                             </div>
                             <div class="settings-card">
@@ -456,6 +465,7 @@
                     items: [
                         { id: 'lineItems', label: 'Line Items' },
                         { id: 'contacts', label: 'Contacts' },
+                        { id: 'projects', label: 'Projects' },
                         { id: 'templates', label: 'Templates' }
                     ],
                     activeId: subTab,

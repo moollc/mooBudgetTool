@@ -4024,7 +4024,7 @@ _renderTalent: function(docId, d) {
                         <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center gap-3">
                             <div class="w-16 h-16 rounded-2xl shadow-lg border-2 border-slate-50 overflow-hidden bg-[#fdba35]">${mBTAssets.appLogo}</div>
                             <div>
-                                <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">MooBudget Studio</h3>
+                                <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">moo Budget Tool</h3>
                                 <p class="text-[9px] text-slate-400 font-bold mt-1">Build v${APP_VERSION} • ${navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>'}</p>
                             </div>
                         </div>
