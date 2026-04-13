@@ -285,6 +285,274 @@ window.mBTRouter = (function () {
         if (window.mBTME) mBTME.open('export-choice', 'Export File', content, 'max-w-sm');
     }
 
+    /* --- Phase 133: persist helper — reconcile totals, save async, ACK source on commit --- */
+    function _persistBudget(source, actionName, budget) {
+        if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
+        if (window.saveBudget) {
+            saveBudget().then(function () {
+                if (source) {
+                    try { source.postMessage({ type: 'mbt:tool-ack', action: actionName, status: 'success' }, '*'); } catch (er) {}
+                }
+            });
+        }
+    }
+
+    /* --- Phase 133: centralized postMessage dispatcher extracted from inline listener --- */
+    function _handleToolAction(e) {
+        if (!e.data || e.data.type !== 'mbt:tool-action') return;
+        var action  = e.data.action;
+        var payload = e.data.payload || {};
+        var budget             = _ctx.getBudget();
+        var currentProjectName = _ctx.getCurrentProjectName();
+
+        /* --- reconcile: reload budget from storage --- */
+        if (action === 'reconcile' && currentProjectName) {
+            mBT.data.load(currentProjectName);
+
+        /* --- Phase 73/78: update-fringes + update-ledgers (consolidated save path) --- */
+        } else if ((action === 'update-fringes' || action === 'update-ledgers') && currentProjectName && budget) {
+            if (action === 'update-fringes') {
+                budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
+            } else {
+                if (!budget.ledgers) budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+                if (Array.isArray(payload.pos))        budget.ledgers.pos        = payload.pos;
+                if (Array.isArray(payload.pettyCash))  budget.ledgers.pettyCash  = payload.pettyCash;
+                if (payload.poCounter != null)         budget.ledgers.poCounter  = payload.poCounter;
+                if (window.render) render();
+                if (_ctx.getMBTActiveTool() === 'po') {
+                    var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                    if (_poIframe && _poIframe.contentWindow) {
+                        _poIframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }, '*');
+                    }
+                }
+            }
+            _persistBudget(e.source, action, budget);
+
+        /* --- close-tool: dismiss tool modal and lifecycle sync --- */
+        } else if (action === 'close-tool') {
+            if (window.mBTME && mBTME.close) mBTME.close('tool-window');
+            _ctx.setMBTActiveTool(null);
+            if (window.mBTRealtime && mBTRealtime.isConnected()) mBTRealtime.broadcastFocus('Budget Editor');
+            var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
+            if (!_rtLiveClose && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
+                mBTSync.pushAll().catch(function (e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
+            }
+
+        /* --- inject-contact: push a contact as a crew line item --- */
+        } else if (action === 'inject-contact' && currentProjectName) {
+            if (payload.name && budget) {
+                var crewItem = {
+                    id:            'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    description:   payload.name,
+                    rate:          payload.rate || 0,
+                    qty:           1,
+                    unit:          'day',
+                    contact_id:    payload.email || null,
+                    contact_name:  payload.name,
+                    contact_phone: payload.phone || null,
+                    contact_email: payload.email || null
+                };
+                if (!budget.globalItems) budget.globalItems = [];
+                budget.globalItems.push(crewItem);
+                _persistBudget(e.source, action, budget);
+                console.log('[mBT] Injected contact:', payload.name);
+            }
+
+        /* --- calendar-updated: reload milestones --- */
+        } else if (action === 'calendar-updated' && currentProjectName) {
+            mBT.data.load(currentProjectName);
+
+        /* --- update-contact-rate: sync edited CRM rate to matching budget line items --- */
+        } else if (action === 'update-contact-rate' && budget) {
+            var crName = (payload.name || '').toLowerCase();
+            var crRate = parseFloat(payload.rate);
+            if (crName && crRate && budget.globalItems) {
+                var crUpdated = false;
+                for (var ci = 0; ci < budget.globalItems.length; ci++) {
+                    if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
+                        budget.globalItems[ci].rate = crRate;
+                        crUpdated = true;
+                    }
+                }
+                if (crUpdated) {
+                    _persistBudget(e.source, action, budget);
+                    console.log('[mBT] Contact rate synced:', payload.name, crRate);
+                }
+            }
+
+        /* --- user-focus-changed: peripheral tool reports focus --- */
+        } else if (action === 'user-focus-changed') {
+            if (window.mBTRealtime && mBTRealtime.isConnected()) mBTRealtime.broadcastFocus(payload.tool || 'unknown');
+
+        /* --- og-rate-changed: update matching line items with new rate --- */
+        } else if (action === 'og-rate-changed' && budget) {
+            var ogDesc = (payload.description || '').toLowerCase();
+            var newRate = payload.rate;
+            if (ogDesc && newRate && budget.globalItems) {
+                var ogUpdated = false;
+                for (var ri = 0; ri < budget.globalItems.length; ri++) {
+                    if ((budget.globalItems[ri].description || '').toLowerCase() === ogDesc) {
+                        budget.globalItems[ri].rate = newRate;
+                        ogUpdated = true;
+                    }
+                }
+                if (ogUpdated) {
+                    _persistBudget(e.source, action, budget);
+                    console.log('[mBT] Rate updated for:', payload.description);
+                }
+            }
+
+        /* --- Phase 64: Share Hub Peer Roster Request --- */
+        } else if (action === 'get-peers') {
+            if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
+                e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }, '*');
+            } else {
+                e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
+            }
+
+        /* --- Phase 64: Share Hub Role Management --- */
+        } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
+            if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
+
+        /* --- Phase 64: Share Hub Link Revocation --- */
+        } else if (action === 'revoke-link' || action === 'revoke-user') {
+            window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { evictAll: action === 'revoke-link', userId: payload.userId } }));
+
+        /* --- Phase 68B: approve-pending-edit --- */
+        } else if (action === 'approve-pending-edit' && payload.editId) {
+            if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
+                mBTSync.sbPatchPendingEdit(payload.editId, { status: 'approved', updated_at: new Date().toISOString() })
+                    .then(function () {
+                        if (payload.projectId && payload.budgetSnapshot) return mBTSync.forcePushProject(payload.projectId, payload.budgetSnapshot);
+                    })
+                    .then(function () {
+                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'approved');
+                        if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
+                    })
+                    .catch(function (err) { console.error('[mBT] Approval failed:', err); });
+            }
+
+        /* --- Phase 68B: reject-pending-edit --- */
+        } else if (action === 'reject-pending-edit' && payload.editId) {
+            if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
+                mBTSync.sbPatchPendingEdit(payload.editId, { status: 'rejected', updated_at: new Date().toISOString() })
+                    .then(function () {
+                        if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'rejected');
+                    })
+                    .catch(function (err) { console.error('[mBT] Rejection failed:', err); });
+            }
+
+        /* --- Phase 81: export-accounting --- */
+        } else if (action === 'export-accounting' && payload.type && currentProjectName && budget) {
+            var csvContent = '';
+            if (payload.type === 'wise')      csvContent = generateWiseCSV(budget);
+            else if (payload.type === 'qb')   csvContent = generateQuickBooksCSV(budget);
+            else { console.warn('[mBT] Unknown export type:', payload.type); return; }
+            triggerCSVDownload(csvContent, 'mbt_export_' + payload.type + '_' + new Date().toISOString().split('T')[0] + '.csv');
+
+        /* --- Phase 116 Step 5: apply-template --- */
+        } else if (action === 'apply-template' && budget) {
+            if (payload.templateKey && mBT.features.blueprints && typeof mBT.features.blueprints.applyTemplate === 'function') {
+                mBT.features.blueprints.applyTemplate(payload.templateKey, !!payload.withRates, false);
+            }
+            if (window.mBTME) mBTME.close('tool-window');
+            _ctx.setMBTActiveTool(null);
+
+        /* --- Phase 117 Step 4: export-file — Publisher blob via postMessage --- */
+        } else if (action === 'export-file' && payload.data && payload.filename) {
+            var _arr  = payload.data.split(',');
+            var _bstr = atob(_arr[1] || '');
+            var _n    = _bstr.length;
+            var _u8   = new Uint8Array(_n);
+            while (_n--) _u8[_n] = _bstr.charCodeAt(_n);
+            showExportChoice(new Blob([_u8], { type: payload.mimeType || 'application/octet-stream' }), payload.filename);
+
+        /* --- load-budget: AI-generated .moo payload from Oracle iframe --- */
+        } else if (action === 'load-budget' && payload.budgetData) {
+            function sanitizeBudgetNode(node) {
+                if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
+                if (Array.isArray(node)) return node.map(sanitizeBudgetNode);
+                if (node && typeof node === 'object') {
+                    var c = {};
+                    Object.keys(node).forEach(function (k) { c[k] = sanitizeBudgetNode(node[k]); });
+                    return c;
+                }
+                return node;
+            }
+            var lbSanitized = sanitizeBudgetNode(payload.budgetData);
+            if (!lbSanitized.projectName || typeof lbSanitized.sections !== 'object') {
+                if (window.mBTME) mBTME.alert('Invalid Budget', 'The AI returned an incomplete structure. Try again with more detail.');
+                return;
+            }
+            Object.keys(lbSanitized.sections).forEach(function (sName) {
+                var sec = lbSanitized.sections[sName];
+                if (!sec.id) sec.id = sName.toLowerCase().replace(/\s+/g, '_').substring(0, 20);
+                if (sec.isOpen === undefined) sec.isOpen = true;
+                if (!Array.isArray(sec.items)) { sec.items = []; return; }
+                sec.items = sec.items
+                    .filter(function (it) { return it && typeof it.description === 'string'; })
+                    .map(function (it, idx) {
+                        it.id         = it.id || ('item_' + idx + '_' + Math.random().toString(36).substr(2, 4));
+                        it.quantity   = Number(it.quantity)   || 1;
+                        it.rate       = Number(it.rate)       || 0;
+                        it.multiplier = Number(it.multiplier) || 1;
+                        it.actual     = Number(it.actual)     || 0;
+                        it.unit       = it.unit     || 'Flat';
+                        it.rateType   = it.rateType || 'negotiable';
+                        it.crew       = it.crew     || {};
+                        return it;
+                    });
+            });
+            lbSanitized.company                = lbSanitized.company                || 'Independent';
+            lbSanitized.startDate              = lbSanitized.startDate              || new Date().toISOString().split('T')[0];
+            lbSanitized.contingencyPercentage  = Number(lbSanitized.contingencyPercentage)  || 10;
+            lbSanitized.salesTaxPercentage     = Number(lbSanitized.salesTaxPercentage)     || 0;
+            lbSanitized.discountPercentage     = Number(lbSanitized.discountPercentage)     || 0;
+            lbSanitized.documents              = Array.isArray(lbSanitized.documents)    ? lbSanitized.documents    : [];
+            lbSanitized.attachments            = Array.isArray(lbSanitized.attachments)  ? lbSanitized.attachments  : [];
+            lbSanitized.globalItems            = Array.isArray(lbSanitized.globalItems)  ? lbSanitized.globalItems  : [];
+            lbSanitized.aiContext              = lbSanitized.aiContext    || { chat: [], analysis: '' };
+            lbSanitized.activityLog            = lbSanitized.activityLog  || [];
+            var lbBase = lbSanitized.projectName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'AI Budget';
+            lbSanitized.projectName = lbBase + ' ' + new Date().toISOString().split('T')[0];
+            _ctx.setBudget(mBT.data.state.wrap(lbSanitized));
+            _ctx.setCurrentProjectName(lbSanitized.projectName);
+            mBT.data.save().then(function () { mBT.data.load(lbSanitized.projectName); });
+            if (window.mBTME) mBTME.close('tool-window');
+            _ctx.setMBTActiveTool(null);
+            if (window.mBTME) mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
+
+        /* --- Phase 63: resolve-diff --- */
+        } else if (action === 'resolve-diff' && payload.mergedSections) {
+            _ctx.setDiffActive(false);
+            _ctx.unsealRealtimeRenderer();
+            if (window.mBTME) mBTME.close('tool-window');
+            _ctx.setMBTActiveTool(null);
+            if (budget) {
+                budget.sections    = payload.mergedSections;
+                budget.updated_at  = new Date().toISOString();
+                mBT.data.save().then(function () {
+                    if (window.mBTLE) mBTLE.reconcile();
+                    if (window.mBTSync && budget) {
+                        mBTSync.forcePushProject(budget.id || budget.projectName, budget)
+                            .catch(function (er) { console.warn('[mBT] Force-push after diff resolution failed:', er); });
+                    }
+                });
+                _ctx.setDiffPendingRecord(null);
+                if (window.mBTME) mBTME.alert('Conflict Resolved', 'Merged budget saved and pushed to cloud.');
+            }
+
+        /* --- Phase 63: abort-diff --- */
+        } else if (action === 'abort-diff') {
+            _ctx.setDiffActive(false);
+            _ctx.setDiffPendingRecord(null);
+            _ctx.unsealRealtimeRenderer();
+            if (window.mBTME) mBTME.close('tool-window');
+            _ctx.setMBTActiveTool(null);
+            if (window.mBTME) mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
+        }
+    }
+
     /* ============================================================
        INIT — accepts ctx object, binds all event listeners
        ============================================================ */
@@ -518,266 +786,7 @@ window.mBTRouter = (function () {
         })());
 
         /* ========= Tool Bridge: unified event bus for cross-tool integration ========= */
-        window.addEventListener('message', function (e) {
-            if (!e.data || e.data.type !== 'mbt:tool-action') return;
-            var action  = e.data.action;
-            var payload = e.data.payload || {};
-            var budget             = _ctx.getBudget();
-            var currentProjectName = _ctx.getCurrentProjectName();
-
-            /* --- reconcile: reload budget from storage --- */
-            if (action === 'reconcile' && currentProjectName) {
-                mBT.data.load(currentProjectName);
-
-            /* --- Phase 73: update-fringes --- */
-            } else if (action === 'update-fringes' && currentProjectName && budget) {
-                budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
-                if (window.saveBudget) saveBudget();
-                if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
-
-            /* --- Phase 78: update-ledgers --- */
-            } else if (action === 'update-ledgers' && currentProjectName && budget) {
-                if (!budget.ledgers) budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
-                if (Array.isArray(payload.pos))        budget.ledgers.pos        = payload.pos;
-                if (Array.isArray(payload.pettyCash))  budget.ledgers.pettyCash  = payload.pettyCash;
-                if (payload.poCounter != null)         budget.ledgers.poCounter  = payload.poCounter;
-                if (window.saveBudget) saveBudget();
-                if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
-                if (window.render) render();
-                if (_ctx.getMBTActiveTool() === 'po') {
-                    var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                    if (_poIframe && _poIframe.contentWindow) {
-                        _poIframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }, '*');
-                    }
-                }
-
-            /* --- close-tool: dismiss tool modal and lifecycle sync --- */
-            } else if (action === 'close-tool') {
-                if (window.mBTME && mBTME.close) mBTME.close('tool-window');
-                _ctx.setMBTActiveTool(null);
-                if (window.mBTRealtime && mBTRealtime.isConnected()) mBTRealtime.broadcastFocus('Budget Editor');
-                var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
-                if (!_rtLiveClose && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
-                    mBTSync.pushAll().catch(function (e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
-                }
-
-            /* --- inject-contact: push a contact as a crew line item --- */
-            } else if (action === 'inject-contact' && currentProjectName) {
-                if (payload.name && budget) {
-                    var crewItem = {
-                        id:            'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                        description:   payload.name,
-                        rate:          payload.rate || 0,
-                        qty:           1,
-                        unit:          'day',
-                        contact_id:    payload.email || null,
-                        contact_name:  payload.name,
-                        contact_phone: payload.phone || null,
-                        contact_email: payload.email || null
-                    };
-                    if (!budget.globalItems) budget.globalItems = [];
-                    budget.globalItems.push(crewItem);
-                    if (window.saveBudget) saveBudget();
-                    if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
-                    console.log('[mBT] Injected contact:', payload.name);
-                }
-
-            /* --- calendar-updated: reload milestones --- */
-            } else if (action === 'calendar-updated' && currentProjectName) {
-                mBT.data.load(currentProjectName);
-
-            /* --- update-contact-rate: sync edited CRM rate to matching budget line items --- */
-            } else if (action === 'update-contact-rate' && budget) {
-                var crName = (payload.name || '').toLowerCase();
-                var crRate = parseFloat(payload.rate);
-                if (crName && crRate && budget.globalItems) {
-                    var crUpdated = false;
-                    for (var ci = 0; ci < budget.globalItems.length; ci++) {
-                        if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
-                            budget.globalItems[ci].rate = crRate;
-                            crUpdated = true;
-                        }
-                    }
-                    if (crUpdated) {
-                        if (window.saveBudget) saveBudget();
-                        if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
-                        console.log('[mBT] Contact rate synced:', payload.name, crRate);
-                    }
-                }
-
-            /* --- user-focus-changed: peripheral tool reports focus --- */
-            } else if (action === 'user-focus-changed') {
-                if (window.mBTRealtime && mBTRealtime.isConnected()) mBTRealtime.broadcastFocus(payload.tool || 'unknown');
-
-            /* --- og-rate-changed: update matching line items with new rate --- */
-            } else if (action === 'og-rate-changed' && budget) {
-                var ogDesc = (payload.description || '').toLowerCase();
-                var newRate = payload.rate;
-                if (ogDesc && newRate && budget.globalItems) {
-                    var ogUpdated = false;
-                    for (var ri = 0; ri < budget.globalItems.length; ri++) {
-                        if ((budget.globalItems[ri].description || '').toLowerCase() === ogDesc) {
-                            budget.globalItems[ri].rate = newRate;
-                            ogUpdated = true;
-                        }
-                    }
-                    if (ogUpdated) {
-                        if (window.saveBudget) saveBudget();
-                        if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
-                        console.log('[mBT] Rate updated for:', payload.description);
-                    }
-                }
-
-            /* --- Phase 64: Share Hub Peer Roster Request --- */
-            } else if (action === 'get-peers') {
-                if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
-                    e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }, '*');
-                } else {
-                    e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
-                }
-
-            /* --- Phase 64: Share Hub Role Management --- */
-            } else if (action === 'role-change' && payload.targetUserId && payload.newRole) {
-                if (window.mBTRealtime && mBTRealtime.broadcastRoleChange) mBTRealtime.broadcastRoleChange(payload.targetUserId, payload.newRole);
-
-            /* --- Phase 64: Share Hub Link Revocation --- */
-            } else if (action === 'revoke-link' || action === 'revoke-user') {
-                window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { evictAll: action === 'revoke-link', userId: payload.userId } }));
-
-            /* --- Phase 68B: approve-pending-edit --- */
-            } else if (action === 'approve-pending-edit' && payload.editId) {
-                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
-                    mBTSync.sbPatchPendingEdit(payload.editId, { status: 'approved', updated_at: new Date().toISOString() })
-                        .then(function () {
-                            if (payload.projectId && payload.budgetSnapshot) return mBTSync.forcePushProject(payload.projectId, payload.budgetSnapshot);
-                        })
-                        .then(function () {
-                            if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'approved');
-                            if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
-                        })
-                        .catch(function (err) { console.error('[mBT] Approval failed:', err); });
-                }
-
-            /* --- Phase 68B: reject-pending-edit --- */
-            } else if (action === 'reject-pending-edit' && payload.editId) {
-                if (window.mBTSync && window.mBTSync.sbPatchPendingEdit) {
-                    mBTSync.sbPatchPendingEdit(payload.editId, { status: 'rejected', updated_at: new Date().toISOString() })
-                        .then(function () {
-                            if (window.mBTRealtime && window.mBTRealtime.broadcastApproval && payload.editorUserId) mBTRealtime.broadcastApproval(payload.editorUserId, payload.projectId, 'rejected');
-                        })
-                        .catch(function (err) { console.error('[mBT] Rejection failed:', err); });
-                }
-
-            /* --- Phase 81: export-accounting --- */
-            } else if (action === 'export-accounting' && payload.type && currentProjectName && budget) {
-                var csvContent = '';
-                if (payload.type === 'wise')      csvContent = generateWiseCSV(budget);
-                else if (payload.type === 'qb')   csvContent = generateQuickBooksCSV(budget);
-                else { console.warn('[mBT] Unknown export type:', payload.type); return; }
-                triggerCSVDownload(csvContent, 'mbt_export_' + payload.type + '_' + new Date().toISOString().split('T')[0] + '.csv');
-
-            /* --- Phase 116 Step 5: apply-template --- */
-            } else if (action === 'apply-template' && budget) {
-                if (payload.templateKey && mBT.features.blueprints && typeof mBT.features.blueprints.applyTemplate === 'function') {
-                    mBT.features.blueprints.applyTemplate(payload.templateKey, !!payload.withRates, false);
-                }
-                if (window.mBTME) mBTME.close('tool-window');
-                _ctx.setMBTActiveTool(null);
-
-            /* --- Phase 117 Step 4: export-file — Publisher blob via postMessage --- */
-            } else if (action === 'export-file' && payload.data && payload.filename) {
-                var _arr  = payload.data.split(',');
-                var _bstr = atob(_arr[1] || '');
-                var _n    = _bstr.length;
-                var _u8   = new Uint8Array(_n);
-                while (_n--) _u8[_n] = _bstr.charCodeAt(_n);
-                showExportChoice(new Blob([_u8], { type: payload.mimeType || 'application/octet-stream' }), payload.filename);
-
-            /* --- load-budget: AI-generated .moo payload from Oracle iframe --- */
-            } else if (action === 'load-budget' && payload.budgetData) {
-                function sanitizeBudgetNode(node) {
-                    if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
-                    if (Array.isArray(node)) return node.map(sanitizeBudgetNode);
-                    if (node && typeof node === 'object') {
-                        var c = {};
-                        Object.keys(node).forEach(function (k) { c[k] = sanitizeBudgetNode(node[k]); });
-                        return c;
-                    }
-                    return node;
-                }
-                var lbSanitized = sanitizeBudgetNode(payload.budgetData);
-                if (!lbSanitized.projectName || typeof lbSanitized.sections !== 'object') {
-                    if (window.mBTME) mBTME.alert('Invalid Budget', 'The AI returned an incomplete structure. Try again with more detail.');
-                    return;
-                }
-                Object.keys(lbSanitized.sections).forEach(function (sName) {
-                    var sec = lbSanitized.sections[sName];
-                    if (!sec.id) sec.id = sName.toLowerCase().replace(/\s+/g, '_').substring(0, 20);
-                    if (sec.isOpen === undefined) sec.isOpen = true;
-                    if (!Array.isArray(sec.items)) { sec.items = []; return; }
-                    sec.items = sec.items
-                        .filter(function (it) { return it && typeof it.description === 'string'; })
-                        .map(function (it, idx) {
-                            it.id         = it.id || ('item_' + idx + '_' + Math.random().toString(36).substr(2, 4));
-                            it.quantity   = Number(it.quantity)   || 1;
-                            it.rate       = Number(it.rate)       || 0;
-                            it.multiplier = Number(it.multiplier) || 1;
-                            it.actual     = Number(it.actual)     || 0;
-                            it.unit       = it.unit     || 'Flat';
-                            it.rateType   = it.rateType || 'negotiable';
-                            it.crew       = it.crew     || {};
-                            return it;
-                        });
-                });
-                lbSanitized.company                = lbSanitized.company                || 'Independent';
-                lbSanitized.startDate              = lbSanitized.startDate              || new Date().toISOString().split('T')[0];
-                lbSanitized.contingencyPercentage  = Number(lbSanitized.contingencyPercentage)  || 10;
-                lbSanitized.salesTaxPercentage     = Number(lbSanitized.salesTaxPercentage)     || 0;
-                lbSanitized.discountPercentage     = Number(lbSanitized.discountPercentage)     || 0;
-                lbSanitized.documents              = Array.isArray(lbSanitized.documents)    ? lbSanitized.documents    : [];
-                lbSanitized.attachments            = Array.isArray(lbSanitized.attachments)  ? lbSanitized.attachments  : [];
-                lbSanitized.globalItems            = Array.isArray(lbSanitized.globalItems)  ? lbSanitized.globalItems  : [];
-                lbSanitized.aiContext              = lbSanitized.aiContext    || { chat: [], analysis: '' };
-                lbSanitized.activityLog            = lbSanitized.activityLog  || [];
-                var lbBase = lbSanitized.projectName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'AI Budget';
-                lbSanitized.projectName = lbBase + ' ' + new Date().toISOString().split('T')[0];
-                _ctx.setBudget(mBT.data.state.wrap(lbSanitized));
-                _ctx.setCurrentProjectName(lbSanitized.projectName);
-                mBT.data.save().then(function () { mBT.data.load(lbSanitized.projectName); });
-                if (window.mBTME) mBTME.close('tool-window');
-                _ctx.setMBTActiveTool(null);
-                if (window.mBTME) mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
-
-            /* --- Phase 63: resolve-diff --- */
-            } else if (action === 'resolve-diff' && payload.mergedSections) {
-                _ctx.setDiffActive(false);
-                _ctx.unsealRealtimeRenderer();
-                if (window.mBTME) mBTME.close('tool-window');
-                _ctx.setMBTActiveTool(null);
-                if (budget) {
-                    budget.sections    = payload.mergedSections;
-                    budget.updated_at  = new Date().toISOString();
-                    mBT.data.save().then(function () {
-                        if (window.mBTLE) mBTLE.reconcile();
-                        if (window.mBTSync && budget) {
-                            mBTSync.forcePushProject(budget.id || budget.projectName, budget)
-                                .catch(function (er) { console.warn('[mBT] Force-push after diff resolution failed:', er); });
-                        }
-                    });
-                    _ctx.setDiffPendingRecord(null);
-                    if (window.mBTME) mBTME.alert('Conflict Resolved', 'Merged budget saved and pushed to cloud.');
-                }
-
-            /* --- Phase 63: abort-diff --- */
-            } else if (action === 'abort-diff') {
-                _ctx.setDiffActive(false);
-                _ctx.setDiffPendingRecord(null);
-                _ctx.unsealRealtimeRenderer();
-                if (window.mBTME) mBTME.close('tool-window');
-                _ctx.setMBTActiveTool(null);
-                if (window.mBTME) mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
-            }
-        });
+        window.addEventListener('message', _handleToolAction);
 
         /* --- Phase 63 / Phase 62 bridge: relay RBAC eviction into open diff iframe --- */
         window.addEventListener('mbt:auth-changed', function () {
@@ -837,6 +846,13 @@ window.mBTRouter = (function () {
             if (typeof mBTSurfaceToast !== 'undefined') {
                 mBTSurfaceToast.info(user + ' is editing' + (field ? ' "' + field + '"' : ''), 2000);
             }
+        });
+
+        /* --- Phase 130.A: Command Palette action bridge ---
+           openPalette lives in the monolith IIFE; exposed via mBT.features.search (Phase 130.B).
+           Registration here overrides any stale monolith registration set before router.init(). */
+        mBT.core.action('command-palette', function () {
+            if (window.mBT && mBT.features && mBT.features.search) mBT.features.search.open();
         });
     }
 

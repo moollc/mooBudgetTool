@@ -1,0 +1,10829 @@
+    /* ================= v19.54 TIER 1: Environment Configuration ================= */
+
+    /* --- 1. Global System Identity --- */
+    var APP_VERSION = "19.54";
+    var storageKeyPrefix = 'prodBudget_v5_';
+    var trashKey = storageKeyPrefix + 'trash';
+    var globalItemsKey = storageKeyPrefix + 'globalItems';
+    var templatesKey = storageKeyPrefix + 'templates';
+    var projectDateFormatKey = storageKeyPrefix + 'projectDateFormat';
+    var projectNameSeparatorKey = storageKeyPrefix + 'projectNameSeparator';
+    var projectStorageProtocolKey = storageKeyPrefix + 'projectStorageProtocol';
+
+    /* Core physics and hydration state */
+    var budget = null;
+    var currentProjectName = null;
+    var historyStack = [];
+    var historyIndex = -1;
+    var MAX_HISTORY = 20;
+    var mBTActiveTool = null; /* Phase 73B: tracks which tool iframe is currently open */
+
+    /* --- 2. Dynamic Multi-Currency Logic --- */
+    var displayCurrency = localStorage.getItem(storageKeyPrefix + 'currency') || 'JMD';
+
+    /* Base Rates (Defaults for offline endurance) */
+    var exchangeRates = JSON.parse(localStorage.getItem(storageKeyPrefix + 'rates')) || {
+        'USD': 1.0, 'JMD': 157.50, 'GBP': 0.79, 'CAD': 1.36, 'EUR': 0.92,
+        'AUD': 1.52, 'NZD': 1.63, 'ZAR': 18.50, 'INR': 83.00, 'JPY': 150.00, 'CNY': 7.20
+    };
+
+    var FILM_CURRENCIES = [
+        // bg=button color, c1=first letter, c2=second letter
+        { code: 'JMD', cc: 'JM', bg: '#0b0b0b', c1: '#009b3a', c2: '#ffd700' }, // Jamaica: black btn, green J, gold M
+        { code: 'USD', cc: 'US', bg: '#b22234', c1: '#ffffff', c2: '#3c3b6e' },  // USA: red btn, white U, navy S
+        { code: 'GBP', cc: 'GB', bg: '#012169', c1: '#ffffff', c2: '#c8102e' },  // UK: navy btn, white G, red B
+        { code: 'CAD', cc: 'CA', bg: '#d52b1e', c1: '#ffffff', c2: '#ffffff' },  // Canada: red btn, white C, white A
+        { code: 'EUR', cc: 'EU', bg: '#003399', c1: '#ffcc00', c2: '#ffcc00' },  // EU: navy btn, gold E, gold U
+        { code: 'AUD', cc: 'AU', bg: '#00008b', c1: '#ffcc00', c2: '#ffffff' },  // Australia: navy btn, gold A, white U
+        { code: 'NZD', cc: 'NZ', bg: '#00247d', c1: '#ffffff', c2: '#cc142b' },  // NZ: navy btn, white N, red Z
+        { code: 'ZAR', cc: 'ZA', bg: '#007a4d', c1: '#ffb612', c2: '#de3831' },  // S.Africa: green btn, gold Z, red A
+        { code: 'INR', cc: 'IN', bg: '#ff9933', c1: '#ffffff', c2: '#138808' },  // India: saffron btn, white I, green N
+        { code: 'CNY', cc: 'CN', bg: '#de2910', c1: '#ffde00', c2: '#ffde00' },  // China: red btn, yellow C, yellow N
+        { code: 'JPY', cc: 'JP', bg: '#bc002d', c1: '#ffffff', c2: '#ffffff' },  // Japan: crimson btn, white J, white P
+    ];
+
+
+    // --- MASTER NAMESPACE (Tier 1 Hoist) ---
+    // Logic Resolution: Capture pre-registered UI and Feature modules (Footer/Toolbar/Calendar load before
+    // this block), then reconstruct the full namespace without destroying them.
+    var _preUI = (window.mBT && window.mBT.ui) || {};
+    var _preFeatures = (window.mBT && window.mBT.features) || {};
+    var _preRegistry = (window.mBT && window.mBT.registry) || {};
+    window.mBT = {
+        config: { version: APP_VERSION },
+        core: {},    // Tier 1 (Kernel)
+        data: {},    // Tier 2
+        logic: {},    // Tier 3
+        ui: _preUI,
+        features: _preFeatures,  // Tier 5 — preserved across hoist for modular pre-registration
+        registry: _preRegistry   // Phase 137 Stabilization: global registry hoisted from IIFE scope
+    };
+    window.mBT.ui.render = window.mBT.ui.render || {};
+    window.mBT.ui.render.esc = function (str) { var d = document.createElement('div'); d.textContent = String(str || ''); return d.innerHTML; };
+
+    /* ========= v19.54 TIER 1.5: THE KERNEL (mBTCore) ========= */
+    // Logic Resolution: Central Event Bus and Initialization Handler
+    mBT.core = {
+        // Pub/Sub Event Bus
+        events: {
+            listeners: {},
+            on: function (event, callback) {
+                if (!this.listeners[event]) this.listeners[event] = [];
+                this.listeners[event].push(callback);
+            },
+            emit: function (event, data) {
+                if (this.listeners[event]) {
+                    this.listeners[event].forEach(function (cb) { return cb(data); });
+                }
+            },
+            off: function (event, callback) {
+                if (!this.listeners[event]) return;
+                this.listeners[event] = this.listeners[event].filter(function (cb) { return cb !== callback; });
+            }
+        },
+
+        // --- NEW: Action Registry (The Nervous System) ---
+        actions: {},
+
+        // Register an action (e.g., core.action('save', function() { ... }))
+        action: function (name, fn) { this.actions[name] = fn; },
+
+        // Router: Finds the closest action and executes it
+        route: function (e) {
+            // 1. Find the trigger
+            var el = e.target.closest('[data-action]');
+            if (!el) return false;
+
+            // 2. Match the action
+            var actionName = el.dataset.action;
+
+            // Phase 115: Block write actions in Client/Review mode
+            var CLIENT_BLOCKED = ['section-cap', 'section-add', 'row-delete', 'row-lock', 'item-qualifying-toggle', 'crew-toggle', 'crew-profile', 'quick-pay'];
+            if (window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false) {
+                if (CLIENT_BLOCKED.indexOf(actionName) !== -1) { e.preventDefault(); return true; }
+            }
+
+            var handler = this.actions[actionName];
+
+            // 3. Execute
+            if (handler) {
+                // Prevent default for clicks to stop form submissions or link jumps,
+                // but allow 'change' events to propagate if needed.
+                if (e.type === 'click' || e.type === 'submit') e.preventDefault();
+                handler(e, el);
+                return true;
+            }
+            return false;
+        },
+
+        /* --- System Bootstrap (Phase 94.1: ES5 .then() conversion) --- */
+        init: function () {
+            /* 0. Render Footer Nav (Phase 100.1: extracted component) */
+            if (mBT.ui && mBT.ui.footer && typeof mBT.ui.footer.render === 'function') {
+                mBT.ui.footer.render();
+            }
+
+            /* 0.1 Init Toolbar Component (Phase 100.2: wires budget:updated self-subscription) */
+            if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.init === 'function') {
+                mBT.ui.toolbar.init();
+            }
+
+            /* 0.2 Calendar Component boot (Phase 101: temporal projections) */
+            if (mBT.ui && mBT.ui.calendar && typeof mBT.ui.calendar.update === 'function') {
+                mBT.ui.calendar.update();
+            }
+
+            /* 1. Establish The Reactive Loop */
+            this.events.on('budget:updated', function () {
+                if (mBT.ui && typeof mBT.ui.refresh === 'function') {
+                    mBT.ui.refresh();
+                }
+            });
+
+            /* 2. Document Identity */
+            document.title = 'mooBudgetTool v' + APP_VERSION;
+
+            /* 3. State Hydration */
+            displayCurrency = localStorage.getItem(storageKeyPrefix + 'currency') || 'JMD';
+
+            /* 3.5 Database Pre-flight */
+            var openGateP = (mBT.opengate && typeof mBT.opengate.init === 'function')
+                ? mBT.opengate.init()
+                : Promise.resolve();
+
+            return openGateP.then(function () {
+                /* 3.7 Phase 69: Immunity Protocol + OPFS Bootstrap */
+                if (typeof mBTOPFS === 'undefined') return Promise.resolve();
+                return mBTOPFS.requestPersistence().then(function () {
+                    return mBTOPFS.init();
+                }).then(function (opfsReady) {
+                    if (opfsReady) mBTOPFS.migrate(localforage);
+                });
+            }).then(function () {
+                /* 3.6 Background cloud tasks (non-blocking) */
+                if (mBT.opengate && typeof mBT.opengate.fetchRateAverages === 'function') {
+                    mBT.opengate.fetchRateAverages(mBT.opengate.settings && mBT.opengate.settings.location).catch(function () { });
+                }
+                /* Restore cached user profile region into OpenGate if user is signed in */
+                if (localStorage.getItem('mbt_supabase_auth_token') && localStorage.getItem('mbt_profile_region')) {
+                    if (mBT.opengate && mBT.opengate.settings) {
+                        mBT.opengate.settings.location = localStorage.getItem('mbt_profile_region');
+                        localStorage.setItem('moo_og_loc', mBT.opengate.settings.location);
+                    }
+                }
+
+                /* 4. Brain Handshake */
+                if (typeof fetchExchangeRates === 'function' && localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false') fetchExchangeRates();
+                if (mBT.router && typeof mBT.router.injectFooterIcons === 'function') mBT.router.injectFooterIcons();
+
+                /* 5. Persistence Recovery */
+
+                /* --- Phase 64: Anonymous Session Tagging --- */
+                var urlParams = new URLSearchParams(window.location.search);
+                var inviteToken = urlParams.get('invite');
+                if (inviteToken) {
+                    var isAuthed = localStorage.getItem('mbt_supabase_auth_token');
+                    if (!isAuthed && (!localStorage.getItem('mbt_profile_display_name') || !localStorage.getItem('mbt_supabase_user_id') || String(localStorage.getItem('mbt_supabase_user_id')).indexOf('anon_') !== 0)) {
+                        var fallbackName = prompt("You've been invited to collaborate! Please enter a Display Name:", "Guest User");
+                        if (fallbackName) {
+                            localStorage.setItem('mbt_profile_display_name', fallbackName);
+                            localStorage.setItem('mbt_supabase_user_id', 'anon_' + Date.now() + '_' + Math.floor(Math.random() * 10000));
+                            if (window.mBTRealtime && window.mBTRealtime.isConnected()) window.mBTRealtime.disconnect();
+                        }
+                    }
+                    var pKey = urlParams.get('projectKey');
+                    if (pKey) {
+                        localStorage.setItem(storageKeyPrefix + 'lastLoaded', pKey.replace(storageKeyPrefix, ''));
+                    }
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+
+                var projectToLoad = localStorage.getItem(storageKeyPrefix + 'lastLoaded');
+
+                /* Resolve project list — supports both Promise and Array returns */
+                var listP = (typeof getProjectList === 'function')
+                    ? Promise.resolve().then(function () { return getProjectList(); }).catch(function (e) { console.warn('Project list unavailable:', e); return []; })
+                    : Promise.resolve([]);
+
+                return listP.then(function (projectList) {
+                    if (!projectToLoad || projectList.indexOf(projectToLoad) === -1) {
+                        projectToLoad = projectList.length > 0 ? projectList[0] : null;
+                    }
+
+                    /* 6. Structural Resolution */
+                    var bootP;
+                    if (!projectToLoad) {
+                        /* Empty State Anchor (Phase 112): present template picker on first launch */
+                        if (typeof showNewProjectModal === 'function') {
+                            showNewProjectModal();
+                            bootP = Promise.resolve();
+                        } else if (typeof handleNewProject === 'function') {
+                            bootP = Promise.resolve(handleNewProject(false)).then(function (res) { return (res instanceof Promise) ? res : Promise.resolve(); });
+                        } else {
+                            bootP = Promise.resolve();
+                        }
+                    } else {
+                        bootP = (typeof loadBudget === 'function')
+                            ? Promise.resolve(loadBudget(projectToLoad)).then(function (res) { return (res instanceof Promise) ? res : Promise.resolve(); })
+                            : Promise.resolve();
+                    }
+
+                    return bootP.catch(function (bootErr) {
+                        console.error('Boot Critical Failure:', bootErr);
+                        if (typeof mBT.data.newProject === 'function') return mBT.data.newProject(true);
+                    });
+                });
+            }).then(function () {
+                /* 7. Toolbar Bootstrap — header render guard for paths that bypass loadBudget */
+                var _initApp = document.getElementById('app');
+                if (_initApp && !document.getElementById('projectName')) {
+                    if (mBT.ui && typeof mBT.ui._fullRender === 'function') {
+                        mBT.ui._fullRender(_initApp);
+                    }
+                }
+                if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') {
+                    mBT.ui.toolbar.renderProjectMgmt();
+                }
+
+                /* 7.1 UI Ignition — action registry and event wiring */
+                if (typeof bindAppEventListeners === 'function') bindAppEventListeners();
+
+                /* Phase 115: Client/Review mode — detect ?role=client URL param or budget.role */
+                (function () {
+                    var _roleParam = new URLSearchParams(window.location.search).get('role');
+                    var _isClient = (_roleParam === 'client') || (budget && budget.role === 'client');
+                    if (!mBT.ui.state) mBT.ui.state = {};
+                    mBT.ui.state.isEditing = !_isClient;
+                    if (_isClient && typeof render === 'function') render();
+                })();
+
+                /* Sprint 1: Prune Legacy Logs */
+                if (budget && budget.activityLog && budget.activityLog.length > 200) {
+                    var count = budget.activityLog.length;
+                    budget.activityLog = budget.activityLog.slice(-50);
+                    console.log('mBTCore: Optimizing storage. Pruned ' + (count - 50) + ' legacy audit logs.');
+                }
+
+                if (mBT.ui && typeof mBT.ui.updateViewport === 'function') mBT.ui.updateViewport();
+
+                mBT.core.events.emit('budget:updated');
+                console.log('Studio Core v' + APP_VERSION + ' Synchronized via mBTCore.');
+            });
+        }
+    };
+
+
+
+    /* ========= v19.54 TIER 2: State Proxy & Storage Engine ========= */
+
+    /* --- 1. mBT.data: THE MODEL (Unified Data Architecture) --- */
+    mBT.data = {
+        // --- A. State Governor (Reactivity) ---
+        state: {
+            _timer: null,      // Fast Timer: Math & UI
+            _saveTimer: null,  // Slow Timer: Storage
+            _logBuffer: {},    // Tier 2: Audit Debounce Map
+            _isInitialLoad: true,
+            _isAuditing: false, // Prevents recursive loops during audit writes
+            _subscribers: [],
+
+            subscribe: function (callback) { this._subscribers.push(callback); },
+
+            /* --- Tier 2: Audit Recording Engine --- */
+            audit: function (action, targetName, meta) {
+                meta = meta || {};
+                if (this._isInitialLoad || !budget || !budget.activityLog) return;
+
+                /* Sprint 1: Optimize Storage (Truncation) */
+                if (meta.diff) {
+                    var trunc = function (v) { return (typeof v === 'string' && v.length > 100) ? v.substring(0, 100) + '... [Truncated]' : v; };
+                    meta.diff.newValue = trunc(meta.diff.newValue);
+                    meta.diff.oldValue = trunc(meta.diff.oldValue);
+                }
+
+                var entry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+                    ts: new Date().toISOString(),
+                    user: 'Local User',
+                    action: action,
+                    target: targetName,
+                    section: meta.section || 'General',
+                    diff: meta.diff || null,
+                    itemId: meta.itemId || null
+                };
+
+                // Guard against recursion when modifying activityLog
+                this._isAuditing = true;
+                try {
+                    // Cap log size to prevent storage bloat
+                    if (budget.activityLog.length >= 200) budget.activityLog.shift();
+                    budget.activityLog.push(entry);
+                } finally {
+                    this._isAuditing = false;
+                }
+            },
+
+            /* --- PROXY EXCEPTION: Authorized ES2015 — required for deep reactivity --- */
+            handler: {
+                /* Sprint 1: Recursive Trap */
+                get: function (target, prop, receiver) {
+                    var value = Reflect.get(target, prop, receiver);
+                    if (typeof value === 'object' && value !== null) {
+                        return new Proxy(value, mBT.data.state.handler);
+                    }
+                    return value;
+                },
+
+                set: function (target, prop, value) {
+                    if (mBT.data.state._isAuditing) return Reflect.set(target, prop, value);
+
+                    if (target[prop] === value) return true;
+
+                    /* Tier 2 Audit Logic: Trap Changes */
+                    var pKey = prop.toString();
+                    var isInternal = pKey.indexOf('_') === 0 || pKey === 'activityLog' || pKey === 'isOpen';
+
+                    if (!mBT.data.state._isInitialLoad && !isInternal) {
+                        var itemId = target.id || (target.projectName ? 'Project' : 'Root');
+                        var label = target.description || target.name || target.projectName || pKey;
+                        var debounceId = itemId + '_' + pKey;
+                        var diff = { field: pKey, oldValue: target[prop], newValue: value };
+
+                        /* Debounce Strings (typing), Immediate Numbers/Bools */
+                        if (typeof value === 'string') {
+                            clearTimeout(mBT.data.state._logBuffer[debounceId]);
+                            mBT.data.state._logBuffer[debounceId] = setTimeout(function () {
+                                mBT.data.state.audit('UPDATE', label, { diff: diff, itemId: itemId });
+                                delete mBT.data.state._logBuffer[debounceId];
+                            }, 800);
+                        } else {
+                            mBT.data.state.audit('UPDATE', label, { diff: diff, itemId: itemId });
+                        }
+                    }
+
+                    target[prop] = value;
+                    if (!mBT.data.state._isInitialLoad) mBT.data.state.requestReconciliation();
+                    return true;
+                }
+            },
+
+            requestReconciliation: function () {
+                /* Stream A: Logic & Visuals (Fast Debounce) */
+                clearTimeout(this._timer);
+                var subs = this._subscribers;
+                this._timer = setTimeout(function () {
+                    if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    mBT.core.events.emit('budget:updated');
+                    subs.forEach(function (cb) { try { cb(budget); } catch (e) { } });
+                }, 50);
+
+                /* Stream B: Persistence (Slow Debounce) */
+                clearTimeout(this._saveTimer);
+                this._saveTimer = setTimeout(function () {
+                    if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Field Edit');
+                    mBT.data.save().then(function () {
+                        var statusMsg = document.getElementById('statusBarMessage');
+                        if (statusMsg) {
+                            var originalText = statusMsg.textContent;
+                            statusMsg.textContent = 'Saved to disk.';
+                            setTimeout(function () { statusMsg.textContent = originalText; }, 2000);
+                        }
+                    });
+                }, 1000);
+            },
+
+            wrap: function (data) {
+                /* Phase 94.1 Persistence Guard: fallback for runtimes without Proxy */
+                if (typeof Proxy === 'undefined') {
+                    this._isInitialLoad = false;
+                    return data;
+                }
+                this._isInitialLoad = true;
+                var proxied = new Proxy(data, this.handler);
+                this._isInitialLoad = false;
+                return proxied;
+            }
+        },
+
+        /* --- History Namespace (Tier 2 Architecture Alignment) --- */
+        history: {
+            /* 1. Granular Revert (Activity Log Logic) */
+            revert: function (logId) {
+                var entry = null;
+                for (var li = 0; li < budget.activityLog.length; li++) {
+                    if (budget.activityLog[li].id === logId) { entry = budget.activityLog[li]; break; }
+                }
+                if (!entry || !entry.diff || !entry.itemId) return mBTME.alert('Error', 'Cannot revert this change (Missing Data).');
+
+                var itemId = entry.itemId;
+                var diff = entry.diff;
+
+                /* Locate the item in the live budget */
+                var targetItem = null;
+                if (itemId === 'Project' || itemId === 'Root') {
+                    targetItem = budget;
+                } else {
+                    Object.values(budget.sections).forEach(function (sec) {
+                        if (!targetItem) {
+                            for (var si = 0; si < sec.items.length; si++) {
+                                if (sec.items[si].id === itemId) { targetItem = sec.items[si]; break; }
+                            }
+                        }
+                    });
+                }
+
+                if (targetItem) {
+                    var entryTarget = entry.target;
+                    mBTME.confirm('Revert Change', 'Revert "' + entryTarget + '" to previous value?', function () {
+                        targetItem[diff.field] = diff.oldValue;
+                        mBTLE.reconcile();
+                        if (typeof mBT.ui.paint === 'function') mBT.ui.paint();
+                        mBT.data.state.audit('REVERT', entryTarget, {
+                            diff: { field: diff.field, oldValue: diff.newValue, newValue: diff.oldValue },
+                            itemId: itemId
+                        });
+                        mBTME.alert('Success', 'Value restored.');
+                        if (document.getElementById('activityLogModal')) mBT.features.history.open();
+                });
+            } else {
+                mBTME.alert('Error', 'Original item no longer exists.');
+            }
+        },
+
+        /* 2. Global Snapshot Logic */
+        undoSnapshot: function () {
+            if (historyIndex > 0) {
+                historyIndex--;
+                var snapshot = historyStack[historyIndex];
+                budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
+                if (mBT.data.state && mBT.data.state.audit) {
+                    mBT.data.state.audit('RESTORE', 'Undo: ' + (snapshot.description || 'System State'), { section: 'System' });
+                }
+                if (typeof render === 'function') render();
+                if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+            }
+        },
+        redoSnapshot: function () {
+            if (historyIndex < historyStack.length - 1) {
+                historyIndex++;
+                var snapshot = historyStack[historyIndex];
+                budget = mBT.data.state.wrap(JSON.parse(JSON.stringify(snapshot.budget)));
+                if (mBT.data.state && mBT.data.state.audit) {
+                    mBT.data.state.audit('RESTORE', 'Redo: ' + (snapshot.description || 'System State'), { section: 'System' });
+                }
+                if (typeof render === 'function') render();
+                if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+            }
+        }
+    },
+
+        // --- C. Template Manager (Formerly mBTDBM) ---
+        // Logic Resolution: Manages custom user budget templates.
+        /* --- Phase 61: Advanced Template Registry (IndexedDB-backed) --- */
+        templates: {
+        /* Current schema version — bump this when the .moo structure changes */
+        SCHEMA_VERSION: 1,
+            /* localforage key for the custom blueprint registry */
+            STORE_KEY: 'mbt_custom_templates',
+
+                /* Load all custom blueprints from IndexedDB. Returns Promise<object>. */
+                load: function () {
+                    var storeKey = this.STORE_KEY;
+                    return mBT.data.storage.load(storeKey).then(function (raw) {
+                        return (raw && typeof raw === 'object') ? raw : {};
+                    }).catch(function () {
+                        try { return JSON.parse(localStorage.getItem('mBT_templates') || '{}'); } catch (_) { return {}; }
+                    });
+                },
+
+        /* Persist the full custom registry to IndexedDB. Returns Promise. */
+        _save: function (registry) {
+            return mBT.data.storage.save(this.STORE_KEY, registry);
+        },
+
+        /* Validate a stored template against the current schema version. */
+        _validate: function (tmpl, name) {
+            if (!tmpl || typeof tmpl !== 'object') return null;
+            var hasStructure = Array.isArray(tmpl.structure) || Array.isArray(tmpl.items);
+            if (!hasStructure) return null;
+            if (tmpl.schema_version && tmpl.schema_version > this.SCHEMA_VERSION) {
+                console.warn('[mBT] Template "' + name + '" schema v' + tmpl.schema_version + ' is newer than engine v' + this.SCHEMA_VERSION + ' — skipped.');
+                return null;
+            }
+            return tmpl;
+        },
+
+        /* Save current budget as a custom blueprint. Returns Promise<name>. */
+        saveFromProject: function (projectData, customName, customDesc) {
+            var self = this;
+            var structure = [];
+            var sections = projectData.sections || {};
+            Object.keys(sections).forEach(function (key) {
+                var sec = sections[key];
+                var items = (sec.items || []).map(function (i) {
+                    var item = JSON.parse(JSON.stringify(i));
+                    item.actual = 0;
+                    item.crew = {};
+                    if (item.unit === 'Day' || item.unit === 'Week') item.quantity = 1;
+                    if (item.stageData) Object.keys(item.stageData).forEach(function (k) { item.stageData[k].days = 1; });
+                    return item;
+                });
+                structure.push({ id: sec.id, name: key, items: items });
+            });
+            var name = (customName || (projectData.projectName + ' (Blueprint)')).trim();
+            return self.load().then(function (registry) {
+                registry[name] = {
+                    schema_version: self.SCHEMA_VERSION,
+                    label: name,
+                    desc: customDesc || 'Saved from "' + projectData.projectName + '"',
+                    icon: 'file',
+                    structure: structure,
+                    saved_at: new Date().toISOString()
+                };
+                return self._save(registry);
+            }).then(function () { return name; });
+        },
+
+        /* Upsert a raw template record (used by template tool postMessage). Returns Promise. */
+        saveTemplate: function (name, data) {
+            var self = this;
+            return self.load().then(function (registry) {
+                registry[name] = Object.assign({ schema_version: self.SCHEMA_VERSION }, data);
+                return self._save(registry);
+            });
+        },
+
+        /* Delete a custom template by name. System keys are protected. Returns Promise<bool>. */
+        deleteTemplate: function (name) {
+            var self = this;
+            var systemKeys = Object.keys(typeof BUDGET_TEMPLATES !== 'undefined' ? BUDGET_TEMPLATES : {});
+            if (systemKeys.indexOf(name) !== -1) {
+                mBTME.alert('System Error', 'Cannot delete built-in templates.');
+                return Promise.resolve(false);
+            }
+            return self.load().then(function (registry) {
+                if (!registry[name]) return false;
+                delete registry[name];
+                return self._save(registry).then(function () { return true; });
+            });
+        },
+
+        /* Rename a custom template. Returns Promise<bool>. */
+        renameTemplate: function (oldName, newName) {
+            var self = this;
+            newName = newName.trim();
+            if (!newName || oldName === newName) return Promise.resolve(false);
+            return self.load().then(function (registry) {
+                if (!registry[oldName]) return false;
+                registry[newName] = Object.assign({}, registry[oldName], { label: newName });
+                delete registry[oldName];
+                return self._save(registry).then(function () { return true; });
+            });
+        },
+
+        /* Synchronous read of legacy localStorage key (backward compat). */
+        getTemplates: function () {
+            var defaults = {
+                'Commercial': { items: [{ description: 'Director', rate: 1500, unit: 'Day' }, { description: 'DOP', rate: 1200, unit: 'Day' }] },
+                'Music Video': { items: [{ description: 'Director', rate: 800, unit: 'Day' }, { description: 'Editor', rate: 600, unit: 'Flat' }] }
+            };
+            try { var stored = JSON.parse(localStorage.getItem('mBT_templates') || '{}'); return Object.assign({}, defaults, stored); }
+            catch (_) { return defaults; }
+        },
+
+        renderTemplateOptions: function (selected) {
+            return Object.keys(this.getTemplates()).map(function (k) {
+                return '<option value="' + k + '" ' + (k === selected ? 'selected' : '') + '>' + k + '</option>';
+            }).join('');
+        }
+    },
+
+    /* --- STORAGE & PERSISTENCE ---
+       Phase 69: mBTOPFS added as primary tier for prodBudget_v5_* keys. Dual-write keeps
+       localforage in sync so tool iframes that call localforage directly continue unmodified.
+       Phase 94.1: Converted async/await to .then() chains. Write-Lock added. */
+    storage: {
+        _ready: function () { return typeof localforage !== 'undefined'; },
+
+        /* --- Phase 94.1: Write-Lock — serializes concurrent save/remove calls --- */
+        _writeQueue: null,
+            _enqueueWrite: function (fn) {
+                if (!this._writeQueue) this._writeQueue = Promise.resolve();
+                this._writeQueue = this._writeQueue.then(fn).catch(function (e) { console.warn('[mBT] Write-Lock caught error:', e); });
+                return this._writeQueue;
+            },
+
+        /* Phase 94.1: Storage Auditor — compares OPFS vs localforage for all budget keys */
+        _auditStorageParity: function () {
+            var self = this;
+            var opfsKeysP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                ? mBTOPFS.keys().catch(function () { return []; }) : Promise.resolve([]);
+            var forageKeysP = self._ready()
+                ? localforage.keys().catch(function () { return []; }) : Promise.resolve([]);
+
+            return Promise.all([opfsKeysP, forageKeysP]).then(function (results) {
+                var opfsKeys = results[0];
+                var forageKeys = results[1];
+                var budgetPrefix = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                var report = { inSync: [], opfsOnly: [], forageOnly: [], mismatched: [] };
+                var allKeys = {};
+                opfsKeys.forEach(function (k) { if (k.indexOf(budgetPrefix) === 0) allKeys[k] = true; });
+                forageKeys.forEach(function (k) { if (k.indexOf(budgetPrefix) === 0) allKeys[k] = true; });
+
+                var checks = Object.keys(allKeys).map(function (key) {
+                    var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) ? mBTOPFS.load(key).catch(function () { return null; }) : Promise.resolve(null);
+                    var forageP = self._ready() ? localforage.getItem(key).catch(function () { return null; }) : Promise.resolve(null);
+                    return Promise.all([opfsP, forageP]).then(function (vals) {
+                        var o = vals[0], f = vals[1];
+                        if (o && f) {
+                            if ((o.updated_at || '') === (f.updated_at || '')) report.inSync.push(key);
+                            else report.mismatched.push({ key: key, opfsTs: o.updated_at, forageTs: f.updated_at });
+                        } else if (o) { report.opfsOnly.push(key); }
+                        else if (f) { report.forageOnly.push(key); }
+                    });
+                });
+
+                return Promise.all(checks).then(function () {
+                    console.table(report);
+                    return report;
+                });
+            });
+        },
+
+        /* save: dual-write OPFS + localforage via Write-Lock */
+        save: function (key, data) {
+            var self = this;
+            return self._enqueueWrite(function () {
+                var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? mBTOPFS.save(key, data) : Promise.resolve();
+                var storageP = self._ready()
+                    ? localforage.setItem(key, data)
+                    : Promise.resolve(localStorage.setItem(key, JSON.stringify(data)));
+                return Promise.all([opfsP, storageP]);
+            });
+        },
+
+        /* load: read OPFS and localforage in parallel, prefer newer updated_at */
+        load: function (key) {
+            var self = this;
+            var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                ? mBTOPFS.load(key).catch(function () { return null; })
+                : Promise.resolve(null);
+            var forageP = self._ready()
+                ? localforage.getItem(key).catch(function () { return null; })
+                : Promise.resolve(null);
+
+            return Promise.all([opfsP, forageP]).then(function (results) {
+                var opfsData = results[0];
+                var forageData = results[1];
+                if (opfsData && forageData) {
+                    return ((forageData.updated_at || '') > (opfsData.updated_at || ''))
+                        ? forageData : opfsData;
+                }
+                if (opfsData) return opfsData;
+                if (forageData) {
+                    /* Lazy migration: localforage has data, OPFS does not — write through */
+                    if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) {
+                        mBTOPFS.save(key, forageData).catch(function () { });
+                    }
+                    return forageData;
+                }
+                var raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : null;
+            });
+        },
+
+        /* remove: remove from OPFS and localforage via Write-Lock */
+        remove: function (key) {
+            var self = this;
+            return self._enqueueWrite(function () {
+                var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? mBTOPFS.remove(key).catch(function () { }) : Promise.resolve();
+                var storageP = self._ready()
+                    ? localforage.removeItem(key) : Promise.resolve();
+                localStorage.removeItem(key);
+                return Promise.all([opfsP, storageP]);
+            });
+        },
+
+        /* keys: merged deduped key list from OPFS + localforage */
+        keys: function () {
+            var self = this;
+            var opfsKeysP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                ? mBTOPFS.keys().catch(function () { return []; }) : Promise.resolve([]);
+            var storageKeysP = self._ready()
+                ? localforage.keys() : Promise.resolve(Object.keys(localStorage));
+
+            return Promise.all([opfsKeysP, storageKeysP]).then(function (results) {
+                var combined = {};
+                results[0].concat(results[1]).forEach(function (k) { combined[k] = true; });
+                return Object.keys(combined);
+            });
+        },
+
+        /* saveBlob: OPFS primary + localforage secondary via Write-Lock */
+        saveBlob: function (key, blob) {
+            var self = this;
+            return self._enqueueWrite(function () {
+                var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                    ? mBTOPFS.saveBlob(key, blob) : Promise.resolve();
+                var forageP = self._ready() ? localforage.setItem(key, blob) : Promise.resolve();
+                return Promise.all([opfsP, forageP]).then(function () { return true; });
+            }).catch(function (e) { console.error('Blob Storage Error:', e); return false; });
+        },
+
+        /* loadBlob: OPFS first, falls back to localforage */
+        loadBlob: function (key) {
+            var self = this;
+            var opfsP = (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady())
+                ? mBTOPFS.loadBlob(key).catch(function () { return null; })
+                : Promise.resolve(null);
+
+            return opfsP.then(function (opfsBlob) {
+                if (opfsBlob) return URL.createObjectURL(opfsBlob);
+                if (!self._ready()) return null;
+                return localforage.getItem(key).then(function (blob) {
+                    return (blob instanceof Blob) ? URL.createObjectURL(blob) : null;
+                });
+            }).catch(function (e) { console.error('Blob Retrieval Error:', e); return null; });
+        }
+    },
+
+    /* save: strip Proxy, stamp updated_at, dual-write via storage layer */
+    save: function () {
+        if (!budget) return Promise.resolve();
+        var projectKey = storageKeyPrefix + budget.projectName;
+        var self = this;
+        try {
+            var cleanData = JSON.parse(JSON.stringify(budget));
+            cleanData.updated_at = new Date().toISOString();
+            return self.storage.save(projectKey, cleanData).then(function () {
+                localStorage.setItem(storageKeyPrefix + 'lastLoaded', JSON.stringify({ name: budget.projectName, ts: Date.now() }));
+                if (window.mBTSync && window.mBTSync.scheduleAutoSync) window.mBTSync.scheduleAutoSync();
+            }).catch(function (e) {
+                console.error('Save Failed:', e);
+                var fallbackData = Object.assign({}, budget);
+                return self.storage.save(projectKey, fallbackData);
+            });
+        } catch (e) {
+            console.error('Save Failed (JSON stringify):', e);
+            return Promise.resolve();
+        }
+    },
+
+    /* load: read from dual storage, wrap in Proxy, trigger render + realtime */
+    load: function (projectName) {
+        var projectKey = storageKeyPrefix + projectName;
+        var self = this;
+        return self.storage.load(projectKey).then(function (data) {
+            /* Lazy Migration: if not in storage, check localStorage and upgrade */
+            if (!data) {
+                var raw = localStorage.getItem(projectKey);
+                if (raw) {
+                    try {
+                        data = JSON.parse(raw);
+                        self.storage.save(projectKey, data).catch(function () { });
+                        console.log('Migrated ' + projectName + ' to Async Storage');
+                    } catch (e) { console.error('Migration failed', e); }
+                }
+            }
+            if (data) {
+                budget = mBT.data.state.wrap(data);
+                currentProjectName = budget.projectName;
+                if (typeof render === 'function') render();
+                if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                /* Sub-Phase 51.2: Subscribe to realtime when project loads */
+                if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
+                    var rtProjectId = data.id || data.projectName;
+                    if (rtProjectId) {
+                        mBTRealtime.subscribeToProject(rtProjectId);
+                        _rtFetchActivityHistory(rtProjectId);
+                    }
+                }
+                /* Phase 63.5: Negotiate multi-tab mutex for this project */
+                if (typeof mBTTabLock !== 'undefined') {
+                    mBTTabLock.negotiate(storageKeyPrefix + budget.projectName);
+                }
+            }
+        });
+    },
+
+    /* getList: merge storage + localStorage keys, filter to project names only */
+    getList: function () {
+        var self = this;
+        return self.storage.keys().then(function (fKeys) {
+            var lKeys = Object.keys(localStorage);
+            var combined = {};
+            fKeys.concat(lKeys).forEach(function (k) { combined[k] = true; });
+            return Object.keys(combined).filter(function (k) {
+                return k.indexOf(storageKeyPrefix) === 0 &&
+                    k.indexOf('_trash') === -1 &&
+                    k.indexOf('_globalItems') === -1 &&
+                    k.indexOf('_templates') === -1 &&
+                    k.slice(-8) !== 'currency' &&
+                    k.slice(-5) !== 'rates' &&
+                    k.slice(-10) !== 'lastLoaded' &&
+                    k.slice(-6) !== 'ApiKey' &&
+                    k.slice(-19) !== 'selectedAiProvider' &&
+                    k.slice(-17) !== 'projectDateFormat' &&
+                    k.slice(-20) !== 'projectNameSeparator';
+            }).map(function (k) { return k.replace(storageKeyPrefix, ''); });
+        });
+    },
+
+    /* Phase 109: One-time scavenger for legacy mbt_v2_ and prodBudget_v[1-4]_ keys */
+    scavengeOrphans: function () {
+        if (localStorage.getItem('mbt_scavenge_done')) return;
+        var self = this;
+        var legacyPattern = /^(mbt_v2_|prodBudget_v[1-4]_)/;
+        self.storage.keys().then(function (keys) {
+            var orphans = keys.filter(function (k) { return legacyPattern.test(k); });
+            if (orphans.length === 0) { localStorage.setItem('mbt_scavenge_done', '1'); return; }
+            var migrations = orphans.map(function (oldKey) {
+                return self.storage.load(oldKey).then(function (data) {
+                    if (!data || !data.projectName) return;
+                    var newKey = storageKeyPrefix + data.projectName;
+                    return self.storage.keys().then(function (currentKeys) {
+                        if (currentKeys.indexOf(newKey) === -1) {
+                            return self.storage.save(newKey, data);
+                        }
+                    });
+                });
+            });
+            return Promise.all(migrations).then(function () {
+                localStorage.setItem('mbt_scavenge_done', '1');
+                mBTME.alert('Budget Recovery', orphans.length + ' legacy budget(s) recovered and re-indexed.');
+            });
+        }).catch(function () { localStorage.setItem('mbt_scavenge_done', '1'); });
+    },
+
+    newProject: function (force, type, withRates) {
+        withRates = (withRates !== false); // default true; pass false to create scaffold-only (zero rates)
+        force = force || false;
+        type = type || 'Commercial';
+        var self = this;
+
+        var executeCreate = function () {
+            var now = new Date();
+            var yyyy = now.getFullYear();
+            var mm = String(now.getMonth() + 1).padStart(2, '0');
+            var dd = String(now.getDate()).padStart(2, '0');
+
+            var dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
+            var dateStr = dateFmt === 'MMDDYYYY' ? (mm + dd + yyyy) : (yyyy + mm + dd);
+
+            var storedSep = localStorage.getItem(projectNameSeparatorKey);
+            var sep = storedSep !== null ? storedSep : ' ';
+
+            /* --- Template Resolution Engine --- */
+            var sections = {};
+            var baseLabel = 'Project';
+
+            /* 1. System Templates (Tier 1) */
+            if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
+                var tmpl = BUDGET_TEMPLATES[type];
+                baseLabel = tmpl.label;
+                var rateDb = (withRates && typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+                tmpl.structure.forEach(function (s) {
+                    sections[s.name] = {
+                        id: s.id,
+                        isOpen: true,
+                        items: s.items.map(function (desc, idx) {
+                            var match = null;
+                            for (var ri = 0; ri < rateDb.length; ri++) {
+                                if (rateDb[ri] && rateDb[ri].description && desc && rateDb[ri].description.toLowerCase() === desc.toLowerCase()) { match = rateDb[ri]; break; }
+                            }
+                            var regionMult = (typeof mBT.opengate !== 'undefined') ? mBT.opengate.settings.regionMultiplier : 1;
+                            return {
+                                id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+                                description: desc,
+                                quantity: 1,
+                                unit: match ? match.unit : 'Day',
+                                rate: match ? Math.round(match.rate * regionMult) : 0,
+                                multiplier: 1,
+                                actual: 0,
+                                rateType: 'negotiable',
+                                crew: {}
+                            };
+                        })
+                    };
+                });
+            }
+            /* 2. User Templates (Tier 2 Custom) */
+            else if (mBT.data.templates.getTemplates()[type]) {
+                var customTmpl = mBT.data.templates.getTemplates()[type];
+                baseLabel = type;
+                if (customTmpl.structure) {
+                    customTmpl.structure.forEach(function (s) {
+                        sections[s.name] = {
+                            id: s.id,
+                            isOpen: true,
+                            items: s.items.map(function (i, idx) {
+                                return Object.assign({}, i, {
+                                    id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+                                    quantity: 1, multiplier: 1, actual: 0, crew: {}
+                                });
+                            })
+                        };
+                    });
+                } else {
+                    /* Legacy Flat List Fallback */
+                    sections['Production'] = {
+                        id: 'prod', isOpen: true,
+                        items: customTmpl.items ? customTmpl.items.map(function (i, idx) {
+                            return Object.assign({}, i, { id: 'item_' + Date.now() + '_' + idx, quantity: 1, multiplier: 1, actual: 0, crew: {} });
+                        }) : []
+                    };
+                    sections['Above The Line'] = { id: 'atl', isOpen: true, items: [] };
+                    sections['Post-Production'] = { id: 'post', isOpen: true, items: [] };
+                }
+            }
+            /* 3. Fallback Default */
+            else {
+                sections = {
+                    'Above The Line': { id: 'atl', isOpen: true, items: [] },
+                    'Production': { id: 'prod', isOpen: true, items: [] },
+                    'Post-Production': { id: 'post', isOpen: true, items: [] },
+                    'Other': { id: 'other', isOpen: true, items: [] }
+                };
+            }
+
+            /* --- Collision Detection: find a unique project name --- */
+            var proposedName = baseLabel + sep + dateStr;
+
+            /* Recursive .then() loop to check name uniqueness */
+            var findUniqueName = function (name, counter) {
+                return self.storage.load(storageKeyPrefix + name).then(function (existing) {
+                    if (!existing && !localStorage.getItem(storageKeyPrefix + name)) {
+                        return name;
+                    }
+                    var next = proposedName + '_' + counter;
+                    return findUniqueName(next, counter + 1);
+                });
+            };
+
+            return findUniqueName(proposedName, 1).then(function (uniqueName) {
+                var newBudget = {
+                    projectName: uniqueName,
+                    company: 'Independent',
+                    startDate: new Date().toISOString().split('T')[0],
+                    sections: sections,
+                    grandTotal: 0,
+                    subtotal: 0,
+                    actualTotal: 0,
+                    contingencyPercentage: 10,
+                    salesTaxPercentage: 0,
+                    discountPercentage: 0,
+                    fringes: [],
+                    documents: [],
+                    attachments: [],
+                    aiContext: { chat: [], analysis: '' },
+                    activityLog: [],
+                    mediaRoot: null,
+                    storageProtocol: 'internal',
+                    projectLocation: '',
+                    projectCompany: '',
+                    shootDate: '',
+                    jurisdiction: { name: '', incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
+                    ledgers: { poCounter: 1, pos: [], pettyCash: [] },
+                    actualsMode: false
+                };
+
+                budget = mBT.data.state.wrap(newBudget);
+                currentProjectName = budget.projectName;
+                return self.save().then(function () {
+                    if (typeof render === 'function') render();
+                    if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                    var projectSelect = document.getElementById('projectSelect');
+                    if (projectSelect) projectSelect.value = uniqueName;
+                });
+            }).catch(function (err) {
+                console.error('Critical Failure in New Project Logic:', err);
+                mBTME.alert('Error', 'Could not create project. Check console.');
+            });
+        };
+
+        if (force) {
+            mBTME.confirm('Create Project', 'Start a new budget? Unsaved changes will be lost.', executeCreate);
+        } else {
+            executeCreate();
+        }
+    },
+
+    duplicate: function () {
+        if (!budget) return;
+        var copy = JSON.parse(JSON.stringify(budget));
+        copy.projectName = copy.projectName + ' (Copy)';
+        budget = mBT.data.state.wrap(copy);
+        var self = this;
+        return self.save().then(function () {
+            if (typeof render === 'function') render();
+        });
+    },
+
+    deleteProject: function (names) {
+        var self = this;
+        /* Phase 125: polymorphic — string (single) or string[] (batch) */
+        var isBatch = Array.isArray(names);
+        var nameList = isBatch ? names : [names];
+
+        var execute = function () {
+            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
+            /* Load all project data in parallel */
+            var loadPromises = nameList.map(function (n) {
+                return self.storage.load(storageKeyPrefix + n).then(function (data) {
+                    if (!data) {
+                        var raw = localStorage.getItem(storageKeyPrefix + n);
+                        if (raw) data = JSON.parse(raw);
+                    }
+                    return { name: n, data: data };
+                });
+            });
+            Promise.all(loadPromises).then(function (results) {
+                /* Atomic trash update: read once, push all, write once */
+                var trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
+                results.forEach(function (r) {
+                    if (r.data) {
+                        trashed.push(r.data);
+                        /* Write tombstone so cloud sync can propagate the delete */
+                        var projectId = r.data.id || r.data.projectName || r.name;
+                        if (window.mBTStorage && typeof window.mBTStorage._getDb === 'function') {
+                            window.mBTStorage._getDb().then(function (db) {
+                                if (db.objectStoreNames.contains('mbt_tombstones')) {
+                                    var tx = db.transaction(['mbt_tombstones'], 'readwrite');
+                                    tx.objectStore('mbt_tombstones').put({ id: projectId, store: 'mbt_projects', deleted_at: new Date().toISOString() });
+                                }
+                            }).catch(function (e) { console.warn('[mBT] Tombstone write failed', e); });
+                        }
+                    }
+                });
+                localStorage.setItem(trashKey, JSON.stringify(trashed));
+                /* Remove all storage entries */
+                var removePromises = nameList.map(function (n) {
+                    return self.storage.remove(storageKeyPrefix + n).then(function () {
+                        localStorage.removeItem(storageKeyPrefix + n);
+                    });
+                });
+                return Promise.all(removePromises);
+            }).then(function () {
+                return self.getList();
+            }).then(function (list) {
+                return list.length ? self.load(list[0]) : self.newProject();
+            }).then(function () {
+                if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+            });
+        };
+
+        if (isBatch) {
+            execute();
+        } else {
+            mBTME.confirm('Delete Project', 'Are you sure you want to move "' + names + '" to the Recycle Bin?', execute);
+        }
+    },
+
+    importFile: function (input) {
+        var file = input.files[0];
+        if (!file) return;
+        var self = this;
+
+        /* Shared finalizer: wrap, save, load, alert */
+        var finalizeImport = function (data, assetReport) {
+            assetReport = assetReport || null;
+            if (!data.projectName) { mBTME.alert('Import Failed', 'Invalid file structure'); return; }
+            var projectKey = storageKeyPrefix + data.projectName;
+            self.storage.load(projectKey).then(function (existing) {
+                var existingOrLocal = existing || localStorage.getItem(projectKey);
+                var execute = function () {
+                    budget = mBT.data.state.wrap(data);
+                    self.save().then(function () {
+                        return self.load(data.projectName);
+                    }).then(function () {
+                        if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                        var msg = 'Project restored successfully.';
+                        if (assetReport) {
+                            msg += '\nAssets: ' + assetReport.restored + '/' + assetReport.total + ' rehydrated.';
+                            if (assetReport.missing > 0) mBTME.alert('Integrity Warning', msg + '\n' + assetReport.missing + ' files were missing from the bundle.');
+                            else mBTME.alert('Import Complete', msg);
+                        } else {
+                            mBTME.alert('Import Successful', msg);
+                        }
+                    });
+                };
+                if (existingOrLocal) mBTME.confirm('Overwrite', 'Overwrite existing project "' + data.projectName + '"?', execute);
+                else execute();
+            }).catch(function (err) { mBTME.alert('Import Failed', err.message); });
+            input.value = '';
+        };
+
+        /* Intent Gatekeeper modal */
+        var askUserIntent = function (data, assetReport) {
+            assetReport = assetReport || null;
+            var content =
+                '<div class="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">' +
+                '<button id="btnImportResume" class="flex flex-col items-center gap-4 p-6 bg-emerald-50 border border-emerald-100 rounded-2xl hover:border-emerald-500 hover:shadow-xl transition-all group text-center">' +
+                '<div class="w-14 h-14 bg-white text-emerald-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform shadow-sm">' + mBTAssets.wand + '</div>' +
+                '<div><h4 class="font-black text-xs uppercase tracking-widest text-emerald-900">Resume Project</h4>' +
+                '<p class="text-[9px] text-emerald-600 font-bold mt-1">Load Budget &amp; Assets</p></div></button>' +
+                '<button id="btnImportBlueprint" class="flex flex-col items-center gap-4 p-6 bg-indigo-50 border border-indigo-100 rounded-2xl hover:border-indigo-500 hover:shadow-xl transition-all group text-center">' +
+                '<div class="w-14 h-14 bg-white text-indigo-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform shadow-sm">' + mBTAssets.copy + '</div>' +
+                '<div><h4 class="font-black text-xs uppercase tracking-widest text-indigo-900">Save as Blueprint</h4>' +
+                '<p class="text-[9px] text-indigo-600 font-bold mt-1">Extract Structure Only</p></div></button>' +
+                '</div><div class="px-6 pb-4 text-center">' +
+                '<p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Source: ' + mBT.ui.render.esc(data.projectName) + '</p></div>';
+
+            mBTME.open('importIntent', 'Import Strategy', content, 'max-w-lg', { noPadding: true });
+
+            setTimeout(function () {
+                var resume = document.getElementById('btnImportResume');
+                var blueprint = document.getElementById('btnImportBlueprint');
+                if (resume) resume.onclick = function () {
+                    mBTME.close('importIntentModal');
+                    finalizeImport(data, assetReport);
+                };
+                if (blueprint) blueprint.onclick = function () {
+                    mBTME.close('importIntentModal');
+                    mBT.data.templates.saveFromProject(data);
+                    mBTME.alert('Success', 'Structure extracted to My Blueprints.', function () {
+                        if (typeof showNewProjectModal === 'function') showNewProjectModal();
+                    });
+                };
+            }, 50);
+        };
+
+        /* --- Universal Loader: Zip first → JSON text fallback --- */
+        mBTME.showLoader('Analyzing Container...');
+
+        JSZip.loadAsync(file).then(function (zip) {
+            /* PATH A: Valid Bundle (.moo or .zip) */
+            var zipFiles = Object.values(zip.files);
+            var mooFile = null;
+            for (var zi = 0; zi < zipFiles.length; zi++) {
+                if (zipFiles[zi].name.slice(-4) === '.moo' && zipFiles[zi].name.indexOf('__MACOSX') !== 0) { mooFile = zipFiles[zi]; break; }
+            }
+            if (!mooFile) throw new Error('Invalid Bundle: No .moo manifest found.');
+
+            return mooFile.async('string').then(function (jsonStr) {
+                var data = JSON.parse(jsonStr);
+                var stats = { total: 0, restored: 0, missing: 0 };
+                if (!data.documents) {
+                    mBTME.hideLoader();
+                    askUserIntent(data, stats);
+                    return;
+                }
+
+                /* Sequential asset rehydration using .then() chain */
+                var docs = data.documents;
+                var docsPromise = Promise.resolve();
+                for (var di = 0; di < docs.length; di++) {
+                    (function (doc) {
+                        docsPromise = docsPromise.then(function () {
+                            if (!doc.attachments) return;
+                            var attPromise = Promise.resolve();
+                            for (var ai = 0; ai < doc.attachments.length; ai++) {
+                                (function (att, idx) {
+                                    if (att.location !== 'internal' || !att.key) return;
+                                    stats.total++;
+                                    var safeName = (att.name || 'file').replace(/[^a-z0-9.]/gi, '_');
+                                    var zipPath = 'assets/' + doc.id + '_' + idx + '_' + safeName;
+                                    var assetFile = zip.file(zipPath);
+                                    if (assetFile) {
+                                        attPromise = attPromise.then(function () {
+                                            return assetFile.async('blob').then(function (blob) {
+                                                return mBT.data.storage.saveBlob(att.key, blob).then(function () { stats.restored++; });
+                                            }).catch(function (e) { console.error('Asset Write Fail:', att.name, e); stats.missing++; });
+                                        });
+                                    } else { stats.missing++; }
+                                })(doc.attachments[ai], ai);
+                            }
+                            return attPromise;
+                        });
+                    })(docs[di]);
+                }
+                return docsPromise.then(function () {
+                    mBTME.hideLoader();
+                    askUserIntent(data, stats);
+                });
+            });
+        }).catch(function () {
+            /* PATH B: Legacy Text Import (JSON) */
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                mBTME.hideLoader();
+                try {
+                    var json = JSON.parse(e.target.result);
+                    askUserIntent(json);
+                } catch (_) {
+                    mBTME.alert('Import Error', 'File format not recognized. (Not a valid Bundle or Legacy JSON)');
+                }
+            };
+            reader.onerror = function () {
+                mBTME.hideLoader();
+                mBTME.alert('System Error', 'Could not read file.');
+            };
+            reader.readAsText(file);
+        });
+    },
+
+    recorder: {
+        snapshot: function (actionDescription) {
+            if (!budget) return;
+            /* Prune future history if we are in the middle of a stack */
+            if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
+            try {
+                var cleanState = JSON.parse(JSON.stringify(budget));
+                historyStack.push({
+                    id: 'snap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    description: actionDescription,
+                    timestamp: new Date().toISOString(),
+                    budget: cleanState
+                });
+                if (historyStack.length > MAX_HISTORY) historyStack.shift();
+                historyIndex = historyStack.length - 1;
+                if (typeof renderStatusBar === 'function') renderStatusBar();
+                if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+            } catch(e) {
+                console.error('Snapshot failed: ', e);
+            }
+        },
+
+        // Alias for back-compatibility (mapped to recorder)
+        pushHistory: function (desc) { this.recorder.snapshot(desc); }
+    }
+    };
+
+    /* ========= TIER 2.5: OPEN GATE BRIDGE ========= */
+    /* mBTOG is the shared Open Gate engine loaded from src/scripts/engine/opengate.js */
+    /* This alias wires it into the mBT namespace for the Budget Editor. */
+    mBT.opengate = window.mBTOG;
+
+    // --- 4. BACKWARD COMPATIBILITY ALIASES (The Bridge) ---
+    // Logic Resolution: Ensures all existing calls in Tier 3-6 continue to function.
+    window.mBTState = mBT.data.state;
+    window.mBTStorage = mBT.data.storage;
+    window.saveBudget = function () {
+        if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
+        return mBT.data.save.apply(mBT.data, arguments);
+    };
+    window.loadBudget = mBT.data.load.bind(mBT.data);
+    window.handleNewProject = mBT.data.newProject.bind(mBT.data);
+    window.handleDuplicateProject = mBT.data.duplicate.bind(mBT.data);
+    window.deleteProject = mBT.data.deleteProject.bind(mBT.data);
+    window.handleImportFile = mBT.data.importFile.bind(mBT.data);
+    window.getProjectList = mBT.data.getList.bind(mBT.data);
+    window.pushToHistory = mBT.data.pushHistory.bind(mBT.data);
+
+    // --- 5. Global Aliases for Migrated Globals ---
+    /* window.mBTOG is set by src/scripts/engine/opengate.js — mBT.opengate points to the same object */
+    window.mBTDBM = mBT.data.templates; // Database Manager (Templates)
+
+    /* Sub-Phase 51.1 Group C: Wire budget.settings hooks so supabase-sync can push/pull preferences
+       without directly accessing the Budget Editor's IIFE-scoped budget variable. */
+    if (window.mBTSync) {
+        window.mBTSync._getBudgetSettings = function () {
+            return (typeof budget !== 'undefined' && budget && budget.settings)
+                ? JSON.parse(JSON.stringify(budget.settings))
+                : null;
+        };
+        window.mBTSync._setBudgetSettings = function (s) {
+            if (typeof budget !== 'undefined' && budget) {
+                budget.settings = Object.assign(budget.settings || {}, s);
+                if (typeof saveBudget === 'function') saveBudget();
+            }
+        };
+    }
+
+    /* ========= Sub-Phase 51.2: Real-time Multiplayer Wiring ========= */
+
+    /* --- Task 2: Presence bar renderer --- */
+    function _rtHashColor(str) {
+        var colors = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
+        var hash = 0;
+        for (var i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) & 0xffffffff;
+        return colors[Math.abs(hash) % colors.length];
+    }
+
+    function renderPresenceBar(peers) {
+        var bar = document.getElementById('presence-bar');
+        if (!bar) return;
+        if (!peers || !peers.length) { bar.innerHTML = ''; return; }
+        bar.innerHTML = peers.map(function (p) {
+            var initials = (p.display_name || '?').substring(0, 2).toUpperCase();
+            var color = _rtHashColor(p.user_id || p.display_name || '');
+            return '<div title="' + esc(p.display_name || 'Collaborator') + ' — live" ' +
+                'class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shadow-md flex-shrink-0 ring-2 ring-white transition-all" ' +
+                'style="background:' + color + '">' + esc(initials) + '</div>';
+        }).join('');
+    }
+
+    /* --- Phase 92: Activity Feed & Typing Status helpers --- */
+    var _focusedFieldSnapshot = null; /* { value, itemId } captured at focusin for change detection */
+
+    /* Find the section/category name for a budget item by item id */
+    function _rtFindSection(itemId) {
+        if (!itemId || typeof budget === 'undefined' || !budget || !budget.categories) return '';
+        var cats = budget.categories;
+        for (var ci = 0; ci < cats.length; ci++) {
+            var cat = cats[ci];
+            var items = cat.items || cat.lineItems || [];
+            for (var li = 0; li < items.length; li++) {
+                if (String(items[li].id) === String(itemId)) {
+                    return cat.name || cat.label || '';
+                }
+            }
+        }
+        return '';
+    }
+
+    /* Prepend an activity log entry to #activityFeed [data-feed-list] — element built by Cline */
+    function _rtAppendActivity(entry) {
+        var feed = document.getElementById('activityFeed');
+        if (!feed) return;
+        var list = feed.querySelector('[data-feed-list]');
+        if (!list) return;
+        var time = entry.created_at
+            ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '';
+        var actionLabel = entry.field
+            ? esc(entry.action_type || '') + ' ' + esc(entry.field) + (entry.section ? ' in ' + esc(entry.section) : '')
+            : esc(entry.detail || entry.action_type || '');
+        var item = document.createElement('div');
+        item.setAttribute('class', 'feed-entry');
+        item.innerHTML = '<span class="feed-user">' + esc(entry.display_name || 'Collaborator') + '</span>' +
+            ' <span class="feed-action">' + actionLabel + '</span>' +
+            ' <span class="feed-time">' + esc(time) + '</span>';
+        list.insertBefore(firstChild);
+        while (list.children.length > 50) { list.removeChild(list.lastChild); }
+    }
+
+    /* Show or hide the peer typing toast #peerTypingToast — element built by Cline */
+    function _rtShowTypingStatus(displayName, fieldLabel, active) {
+        var toast = document.getElementById('peerTypingToast');
+        if (!toast) return;
+        if (!active) {
+            toast.style.display = 'none';
+            toast.textContent = '';
+            return;
+        }
+        toast.textContent = displayName + ' is editing' + (fieldLabel ? ' \u2014 ' + fieldLabel : '');
+        toast.style.display = '';
+    }
+
+    /* Fetch last 50 activity entries for projectId from mbt_activity_log and seed the feed */
+    function _rtFetchActivityHistory(projectId) {
+        if (!projectId) return;
+        var cfg = window.mBTSupabaseConfig;
+        if (!cfg || !cfg.API_URL) return;
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+        if (!jwt) return;
+        fetch(
+            cfg.API_URL + '/rest/v1/mbt_activity_log?project_id=eq.' + encodeURIComponent(String(projectId)) +
+            '&order=created_at.desc&limit=50',
+            { headers: { 'apikey': cfg.ANON_KEY || '', 'Authorization': 'Bearer ' + jwt } }
+        ).then(function (res) {
+            return res.ok ? res.json() : [];
+        }).then(function (rows) {
+            if (!Array.isArray(rows) || !rows.length) return;
+            /* Reverse so oldest entries are inserted first — newest ends at top of feed */
+            for (var i = rows.length - 1; i >= 0; i--) { _rtAppendActivity(rows[i]); }
+        }).catch(function () { });
+    }
+
+    /* --- Task 2 & 3: Remote project update event → granular reconcile --- */
+    window.addEventListener('mbt:remote-project-update', function (evt) {
+        /* Phase 63: Realtime renderer is sealed while diff modal is resolving a conflict */
+        if (window._mbtDiffSealActive) {
+            console.log('[mBT] Realtime update suppressed — diff resolution in progress');
+            return;
+        }
+        var record = evt.detail && evt.detail.record;
+        if (!record || !record.data) return;
+        var remoteBudget = record.data;
+        if (typeof budget === 'undefined' || !budget) return;
+
+        /* Only reconcile if this update is for the currently open project */
+        var localId = budget.id || budget.projectName;
+        var remoteId = remoteBudget.id || remoteBudget.projectName;
+        if (!localId || !remoteId || localId !== remoteId) return;
+
+        /* Only apply if remote is strictly newer */
+        var remoteTime = remoteBudget.updated_at ? new Date(remoteBudget.updated_at).getTime() : 0;
+        var localTime = budget.updated_at ? new Date(budget.updated_at).getTime() : 0;
+        if (remoteTime <= localTime) return;
+
+        /* --- Task 7: Offline Divergence Fork ---
+               If loca    s edits and remote jumped significantly ahead (> 5 min gap),
+               preserve local as an offline divergence copy before overwriting. */
+        DIVERGE_THRESHOLD = 5 * 60 * 1000;
+        if (localTime > 0 && (remoteTime - localTime) > DIVERGE_THRESHOLD) {
+            var forkName = (budget.projectName || 'Budget') + ' (Offline Divergence)';
+            var forkKey = storageKeyPrefix + forkName;
+        try {
+            var forkData = JSON.parse(JSON.stringify(budget));
+            forkData.projectName = forkName;
+            forkData.id = forkData.id ? forkData.id + '_fork' : forkName;
+            if (typeof localforage !== 'undefined') {
+                localforage.setItem(forkKey, forkData).catch(function (e) {
+                    console.warn('[mBTRealtime] Divergence fork save failed:', e);
+                    });
+            }
+            console.log('[mBTRealtime] Forked local budget as:', forkName);
+        } catch (e) {
+            console.warn('[mBTRealtime] Divergence fork failed', e);
+        }
+    }
+
+    /* Apply remote data into budget — granular diff to preserve cursor focus */
+    _applyRemoteDiff(remoteBudget);
+    });
+
+    /* --- Task 5: Granular DOM r        ation — update only non-focused inputs --- */
+    function _applyRemoteDiff(remoteBudget) {
+        var changed = false;
+        /* Merge scalar top-level fields */
+        var scalars = ['projectName', 'currency', 'contingency', 'discount', 'taxRate', 'updated_at'];
+        for (var si = 0; si < scalars.length; si++) {
+        var f = scalars[si];
+        if (remoteBudget[f] !== undefined && remoteBudget[f] !== budget[f]) {
+            budget[f] = remoteBudget[f];
+            changed = true;
+        }
+    }
+    /* Replace categories array (line items live here) */
+    if (remoteBudget.categories) {
+        budget.categories = remoteBudget.categories;
+        changed = true;
+    }
+    /* Replace funding sources if present */
+    if (remoteBudget.fundingSources) {
+        budget.fundingSources = remoteBudget.fundingSources;
+        changed = true;
+    }
+    if (!changed) return;
+
+    /* Patch visible inputs that are NOT currently focused — avoids wiping active cursor */
+    var focusedEl = document.activeElement;
+    var inputs = document.querySelectorAll('input[data-id][data-field], input[data-id][data-section]');
+    for (var ii = 0; ii < inputs.length; ii++) {
+        var inp = inputs[ii];
+        if (inp === focusedEl) continue;
+        /* Find the corresponding value in the updated budget */
+        var itemId = inp.getAttribute('data-id');
+        var field = inp.getAttribute('data-field');
+        var section = inp.getAttribute('data-section');
+        if (!itemId || !field) continue;
+        var newVal = _findItemFieldValue(itemId, section, field);
+        if (newVal !== null && String(inp.value) !== String(newVal)) {
+            inp.value = newVal;
+        }
+    }
+
+    /* Trigger logic reconciliation to refresh totals and summaries */
+    if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+    /* Persist the merged state locally */
+    if (typeof saveBudget === 'function') saveBudget();
+    }
+
+    function _findItemFieldValue(itemId, section, field) {
+        if (!budget || !budget.categories) return null;
+        var cats = budget.categories;
+        for (var ci = 0; ci < cats.length; ci++) {
+            var cat = cats[ci];
+            var items = cat.items || cat.lineItems || [];
+            for (var li = 0; li < items.length; li++) {
+                var item = items[li];
+                if (String(item.id) === String(itemId)) {
+                    return item[field] !== undefined ? item[field] : null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /* --- Task 2: Re-render presence bar when peers change --- */
+    window.addEventListener('mbt:presence-update', function (evt) {
+        var peers = evt.detail && evt.detail.peers;
+        renderPresenceBar(peers || []);
+    });
+
+    /* --- Task 4: Typing lock — visually disable rows locked by peers --- */
+    window.addEventListener('mbt:peer-typing', function (evt) {
+        var fieldId = evt.detail && evt.detail.fieldId;
+        var displayName = (evt.detail && evt.detail.displayName) || 'Peer';
+        if (!fieldId) return;
+        var inp = document.querySelector('[data-id="' + CSS.escape(fieldId.split('_')[0]) + '"][data-field="' + CSS.escape(fieldId.split('_').slice(1).join('_')) + '"]');
+        if (!inp) return;
+        inp.style.backgroundColor = 'rgba(253, 186, 116, 0.35)';
+        inp.style.pointerEvents = 'none';
+        inp.title = displayName + ' is editing this field';
+    });
+
+    window.addEventListener('mbt:peer-release', function (evt) {
+        var fieldId = evt.detail && evt.detail.fieldId;
+        if (!fieldId) return;
+        var inp = document.querySelector('[data-id="' + CSS.escape(fieldId.split('_')[0]) + '"][data-field="' + CSS.escape(fieldId.split('_').slice(1).join('_')) + '"]');
+        if (!inp) return;
+        inp.style.backgroundColor = '';
+        inp.style.pointerEvents = '';
+        inp.title = '';
+    });
+
+    /* --- Task 4 + Phase 92: Broadcast typing lock/release and activity status ---
+           Uses data-id + data-field as the composite field identifier. --- */
+    document.addEventListener('focusin', function (e) {
+        var inp = e.target;
+        if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
+            !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        /* Phase 62: Block focus entirely for view-only users */
+        if (typeof mBTRBAC !== 'undefined' && mBTRBAC.getRole() === 'viewer') {
+            inp.blur();
+            return;
+        }
+        /* Phase 92: Capture value snapshot before the user edits — compared at focusout */
+        _focusedFieldSnapshot = { value: inp.value, itemId: inp.getAttribute('data-id') };
+        if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
+        var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
+        if (mBTRealtime.isFieldLocked(fieldId)) {
+            inp.blur(); /* Prevent editing a peer-locked field */
+            return;
+        }
+        mBTRealtime.broadcastTypingLock(fieldId);
+        mBTRealtime.broadcastTypingStatus(inp.getAttribute('data-field') || '');
+    });
+
+    document.addEventListener('focusout', function (e) {
+        var inp = e.target;
+        if ((inp.tagName !== 'INPUT' && inp.tagName !== 'TEXTAREA') ||
+            !inp.getAttribute('data-id') || !inp.getAttribute('data-field')) return;
+        /* Phase 92: Broadcast field_edit activity if value changed since focusin */
+        if (_focusedFieldSnapshot &&
+            _focusedFieldSnapshot.itemId === inp.getAttribute('data-id') &&
+            inp.value !== _focusedFieldSnapshot.value &&
+            window.mBTRealtime && mBTRealtime.isConnected() && mBTRealtime.broadcastActivity) {
+            mBTRealtime.broadcastActivity(
+                'field_edit',
+                _rtFindSection(inp.getAttribute('data-id') || ''),
+                inp.getAttribute('data-field') || '',
+                ''
+            );
+        }
+        _focusedFieldSnapshot = null;
+        if (!window.mBTRealtime || !mBTRealtime.isConnected()) return;
+        var fieldId = inp.getAttribute('data-id') + '_' + inp.getAttribute('data-field');
+        mBTRealtime.broadcastTypingRelease(fieldId);
+        if (mBTRealtime.broadcastTypingStatusRelease) mBTRealtime.broadcastTypingStatusRelease();
+    });
+
+    /* --- Phase 92: Activity feed — append entries dispatched by realtime engine --- */
+    window.addEventListener('mbt:activity-log', function (evt) {
+        var entry = evt.detail;
+        if (!entry) return;
+        _rtAppendActivity(entry);
+    });
+
+    /* --- Phase 92: Typing status toast — show or hide #peerTypingToast --- */
+    window.addEventListener('mbt:peer-typing-status', function (evt) {
+        var d = evt.detail;
+        if (!d) return;
+        _rtShowTypingStatus(d.displayName || 'Peer', d.fieldLabel || '', !!d.active);
+    });
+
+    /* ========= Phase 63: Offline Sync Conflict Resolution =========
+       When supabase-sync.js detects that th    mote project was updated since our
+       last sync AND we also have local edits, it fires `mbt:d       flict` and
+       halts the sync queue. This handler:
+         1. Unbinds        ltime incoming-render listener to seal the workspace
+         2. Opens        f iframe as a sterile microservice via openTool()
+         3. Waits for 'resolve-diff' or 'abort-diff' postMessage from the iframe
+         4. On resolve: applies merged sections, saves, re-enables realtime, force-pushes
+         5. On abort: discards unmerged deltas, re-enables realtime
+
+       Phase 62 kill-switch: if mbt:auth-changed fires while diff modal is open,
+       the RBAC eviction is relayed into the iframe AND the monolith aborts immediately.
+    ========= */
+
+    /* --- Diff state --- */
+    var _diffActive = false;   /* True while diff modal is open */
+    var _diffPendingRecord = null;    /* The halted localRecord from conflict event */
+    var _rtMessageHandler = null;    /* Saved realtime message handler ref for unbind */
+
+    /* --- Seal/unseal realtime incoming updates (prevents recursive state bleeding) --- */
+    function _sealRealtimeRenderer() {
+        /* Realtime dispatches mbt:remote-project-update which calls _applyRemoteDiff.
+           We disable it by flagging — the existing handler checks this flag. */
+        window._mbtDiffSealActive = true;
+    }
+    function _unsealRealtimeRenderer() {
+        window._mbtDiffSealActive = false;
+    }
+
+
+    /* --- Phase 68B: Badge helpers for pending edit notifications --- */
+    window.mBTClearPendingBadge = function () {
+        var badge = document.getElementById('shareHubBadge');
+        if (!badge) return;
+        badge.style.display = 'none';
+        badge.dataset.count = '0';
+        badge.textContent = '';
+    };
+
+    /* --- Phase 68A/68B: mbt:pending-edit-submitted — Editor save routed to approval queue --- */
+    window.addEventListener('mbt:pending-edit-submitted', function (evt) {
+        var badge = document.getElementById('shareHubBadge');
+        if (!badge) return;
+        var count = (parseInt(badge.dataset.count, 10) || 0) + 1;
+        badge.dataset.count = String(count);
+        badge.textContent = count > 9 ? '9+' : String(count);
+        badge.style.display = 'flex';
+    });
+
+    /* --- Phase 92.8: Activity Feed unread badge helpers --- */
+    function mBTClearActivityBadge() {
+        var badge = document.getElementById('activityFeedBadge');
+        if (!badge) return;
+        badge.style.display = 'none';
+        badge.dataset.count = '0';
+        badge.textContent = '';
+    }
+    function mBTAddActivityBadge() {
+        var badge = document.getElementById('activityFeedBadge');
+        if (!badge) return;
+        var count = (parseInt(badge.dataset.count, 10) || 0) + 1;
+        badge.dataset.count = String(count);
+        badge.textContent = count > 9 ? '9+' : String(count);
+        badge.style.display = 'flex';
+    }
+
+    /* --- Phase 68B: mbt:approval-verdict — Owner approved or rejected this Editor's proposal --- */
+    window.addEventListener('mbt:approval-verdict', function (evt) {
+        var detail = evt.detail || {};
+        if (detail.verdict === 'approved') {
+            if (typeof mBTME !== 'undefined') {
+                mBTME.alert('Proposal Approved', 'Your budget changes have been approved and merged by the Owner.');
+            }
+        } else {
+            if (typeof mBTME !== 'undefined') {
+                mBTME.alert('Proposal Rejected', 'The Owner has rejected your proposed changes. Your local copy is unchanged.');
+            }
+        }
+    });
+
+    /* --- mbt:diff-conflict: sync halted, open diff modal --- */
+    window.addEventListener('mbt:diff-conflict', function (evt) {
+        if (_diffActive) return; /* Already handling a conflict */
+        var detail = evt.detail || {};
+        _diffPendingRecord = detail.localRecord || null;
+        _diffActive = true;
+        _sealRealtimeRenderer();
+
+        /* Fetch remote sections to pass to the iframe */
+        var remoteTime = detail.remoteTime || '';
+        var localSections = (budget && budget.sections) ? budget.sections : {};
+
+        /* Try to fetch the current remote sections from Supabase */
+        var projectId = detail.projectId || '';
+        var apiUrl = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.API_URL : '';
+        var anonKey = window.mBTSupabaseConfig ? window.mBTSupabaseConfig.ANON_KEY : '';
+        var jwt = localStorage.getItem('mbt_supabase_auth_token') || '';
+
+        function _openDiffTool(remoteSections) {
+            /* Build WASM diff payload */
+            var wasmPayload = JSON.stringify({ local: localSections, remote: remoteSections });
+            var conflictsJson = '[]';
+            try {
+                /* mbt_wasm.js exposes diff_sections via the browser ES module import */
+                if (window.mBTWasm && typeof window.mBTWasm.diff_sections === 'function') {
+                    conflictsJson = window.mBTWasm.diff_sections(wasmPayload);
+                } else {
+                    /* JS fallback: compare section names only */
+                    var fallbackConflicts = [];
+                    Object.keys(localSections).forEach(function (name) {
+                        var lItems = (localSections[name] && localSections[name].items) ? localSections[name].items.length : 0;
+                        var rItems = (remoteSections[name] && remoteSections[name].items) ? remoteSections[name].items.length : 0;
+                        if (!remoteSections[name] || lItems !== rItems) {
+                            fallbackConflicts.push({
+                                section_id: (localSections[name] && localSections[name].id) || name,
+                                section_name: name,
+                                conflict_type: !remoteSections[name] ? 'section_missing' : (lItems > rItems ? 'item_added' : 'item_removed'),
+                                local_item_count: lItems,
+                                remote_item_count: rItems
+                            });
+                        }
+                    });
+                    conflictsJson = JSON.stringify(fallbackConflicts);
+                }
+            } catch (e) {
+                console.warn('[mBT] WASM diff failed, using empty conflict list:', e);
+            }
+
+            var conflicts = [];
+            try { conflicts = JSON.parse(conflictsJson); } catch (_) { }
+
+            /* Open diff iframe */
+            openTool('./src/tools/diff/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+
+            /* Send conflict payload to iframe once it signals ready via postMessage */
+            var diffPayload = {
+                conflicts: conflicts,
+                localSections: localSections,
+                remoteSections: remoteSections,
+                projectKey: storageKeyPrefix + (budget ? budget.projectName : '')
+            };
+
+            /* Wait for iframe to load then push payload */
+            var _attempts = 0;
+            var _diffSendInterval = setInterval(function () {
+                _attempts++;
+                var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (modal && modal.contentWindow) {
+                    modal.contentWindow.postMessage({ type: 'mbt:diff-init', payload: diffPayload }, '*');
+                    clearInterval(_diffSendInterval);
+                }
+                if (_attempts > 20) clearInterval(_diffSendInterval); /* Give up after 2s */
+            }, 100);
+        }
+
+        if (projectId && apiUrl) {
+            fetch(apiUrl + '/rest/v1/projects?id=eq.' + encodeURIComponent(projectId) + '&select=data', {
+                headers: { 'apikey': anonKey, 'Authorization': 'Bearer ' + (jwt || anonKey) }
+            })
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (rows) {
+                    var remoteSections = (rows && rows.length && rows[0].data && rows[0].data.sections) ? rows[0].data.sections : {};
+                    _openDiffTool(remoteSections);
+                })
+                .catch(function () { _openDiffTool({}); });
+        } else {
+            _openDiffTool({});
+        }
+    });
+
+    /* ========= Phase 93: mBTRBAC + mBTTabLock extracted to src/core/services/Security.js =========
+       Budget Editor shims — delegates to window.mBT.rbac and window.mBT.tabLock
+       loaded by the <script> tag in <head>. Both vars kept in this scope for
+       backward compatibility with any inline callers. ========= */
+    var mBTRBAC = (window.mBT && window.mBT.rbac) ? window.mBT.rbac : { getRole: function () { return 'admin'; }, setRole: function () { }, applyCurrentRole: function () { }, applyViewOnlyLockdown: function () { }, liftLockdown: function () { } };
+    var mBTTabLock = (window.mBT && window.mBT.tabLock) ? window.mBT.tabLock : { negotiate: function () { }, teardown: function () { }, isPrimary: function () { return true; } };
+
+    /* Apply persisted role on page load */
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.mBT && window.mBT.rbac) window.mBT.rbac.applyCurrentRole();
+    });
+
+    /* Re-apply lockdown hook: called after sectionContainer is rebuilt */
+    function mBTRBACPostRender() {
+        if (window.mBT && window.mBT.rbac && window.mBT.rbac.getRole() === 'viewer') {
+            window.mBT.rbac.applyViewOnlyLockdown();
+        }
+    }
+
+    /* ================= v19.54 TIER 3: Core Logic Engines ================= */
+
+    /* --- fetchExchangeRates: live rates from frankfurter.app (no API key required) --- */
+    function fetchExchangeRates() {
+        if (!navigator.onLine) return;
+        fetch('https://api.frankfurter.app/latest?from=USD')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.rates) return;
+                exchangeRates = Object.assign({ USD: 1.0 }, data.rates);
+                /* Phase 118: do not overwrite locked snapshot with live data */
+                if (localStorage.getItem(storageKeyPrefix + 'ratesLocked') !== 'true') {
+                    localStorage.setItem(storageKeyPrefix + 'rates', JSON.stringify(exchangeRates));
+                }
+                Object.keys(exchangeRates).forEach(function (code) {
+                    if (mBTLE.config.currencies[code]) {
+                        mBTLE.config.currencies[code].rate = exchangeRates[code];
+                    }
+                });
+                console.log('[mBT] Exchange rates refreshed from frankfurter.app');
+            })
+            .catch(function (e) {
+                console.warn('[mBT] Rate fetch failed, using cached/default rates:', e);
+            });
+    }
+
+    /* --- 3. Core Calculation Utilities (Restored) --- */
+    // Logic Resolution: Essential math helpers required by the UI Render Engine.
+    // NOTE: toDisp() and esc() hoisted to script top (Phase 137.INTEGRATE).
+
+    function calculateItem(item) {
+        var qty = parseFloat(item.quantity) || 0;
+        var rate = parseFloat(item.rate) || 0;
+        var mult = parseFloat(item.multiplier) || 1;
+        var est = qty * rate * mult;
+        var act = parseFloat(item.actual) || 0;
+        return { estimated: est || 0, variance: (act - est) || 0 };
+    }
+
+    function formatAbbreviated(value, currency) {
+        currency = currency || 'JMD';
+        if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+        if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
+        if (typeof mBTLE !== 'undefined' && mBTLE.format) {
+            return mBTLE.format.currency(value, currency);
+        }
+        return new Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD' }).format(value);
+    }
+
+    window.esc = esc;
+    window.fmt = (typeof mBTLE !== 'undefined' && mBTLE.format) ? mBTLE.format.currency : function (x) { return x; };
+
+    /* --- Payment Services Registry (Phase 88) --- */
+    /* Single source for payment method definitions used by paymentModal and Contacts Wallet. */
+    var PAYMENT_SERVICES = [
+        { id: 'cash', label: 'Cash / Petty Cash', icon: mBTAssets.money },
+        { id: 'transfer', label: 'Bank Transfer (JMD)', icon: mBTAssets.bank },
+        { id: 'wire', label: 'Intl Wire (USD)', icon: mBTAssets.globe },
+        { id: 'cheque', label: 'Cheque', icon: mBTAssets.receipt },
+        { id: 'paypal', label: 'PayPal', icon: mBTAssets.creditCard },
+        { id: 'wise', label: 'Wise', icon: mBTAssets.wallet },
+        { id: 'payoneer', label: 'Payoneer', icon: mBTAssets.creditCard }
+    ];
+
+    /* ========= Phase 131: Sovereign mBTLE Engine ========= */
+    window.mBTLE = (function () {
+        var _currencies = {
+            'JMD': { locale: 'en-JM', symbol: 'JMD$', rate: 157.50 },
+            'USD': { locale: 'en-US', symbol: '$', rate: 1.0 },
+            'GBP': { locale: 'en-GB', symbol: '\u00a3', rate: 0.79 },
+            'CAD': { locale: 'en-CA', symbol: 'CA$', rate: 1.36 },
+            'EUR': { locale: 'de-DE', symbol: '\u20ac', rate: 0.92 },
+            'AUD': { locale: 'en-AU', symbol: 'A$', rate: 1.52 },
+            'NZD': { locale: 'en-NZ', symbol: 'NZ$', rate: 1.63 },
+            'ZAR': { locale: 'en-ZA', symbol: 'R', rate: 18.50 },
+            'INR': { locale: 'en-IN', symbol: '\u20b9', rate: 83.00 },
+            'CNY': { locale: 'zh-CN', symbol: '\u00a5', rate: 7.20 },
+            'JPY': { locale: 'ja-JP', symbol: '\u00a5', rate: 150.00 }
+        };
+        var _le = (window.mBT && window.mBT.le) || {};
+
+        return {
+            config: { currencies: _currencies },
+
+            format: {
+                currency: function (value, code) {
+                    var currencyCode = code || displayCurrency || 'JMD';
+                    var cfg = _currencies[currencyCode] || _currencies['USD'];
+                    var dp = (budget && budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
+                    return new Intl.NumberFormat(cfg.locale, {
+                        style: 'currency', currency: currencyCode, currencyDisplay: 'narrowSymbol',
+                        minimumFractionDigits: dp, maximumFractionDigits: dp
+                    }).format(value);
+                }
+            },
+
+            validate: {
+                item: function (item) {
+                    item.quantity = Math.max(0, parseFloat(item.quantity) || 0);
+                    item.rate = Math.max(0, parseFloat(item.rate) || 0);
+                    item.multiplier = Math.max(1, parseFloat(item.multiplier) || 1);
+                    /* Phase 76: qualifying spend flag */
+                    if (item.qualifying === undefined) item.qualifying = false;
+                    /* Phase 77: actuarial fields */
+                    if (item.actualQuantity === undefined) item.actualQuantity = 0;
+                    if (item.actualRate === undefined) item.actualRate = 0;
+                    if (!item.actualDate) item.actualDate = '';
+                    if (item.committedCost === undefined) item.committedCost = 0;
+                    return item;
+                }
+            },
+
+            /* Phase 93: Delegated to window.mBT_Finance.reconcile (finance.engine.js) */
+            reconcile: function (target) {
+                if (window.mBT_Finance && window.mBT_Finance.reconcile) {
+                    return window.mBT_Finance.reconcile(target);
+                }
+                console.error('[mBT] Finance Engine not loaded — reconcile skipped.');
+            },
+
+            /* Phase 9: AI Simulation Engine (Neural Risk Mitigation) */
+            simulate: function (modifications) {
+                if (!budget) return null;
+                var shadow = JSON.parse(JSON.stringify(budget));
+                if (typeof modifications === 'function') {
+                    modifications(shadow);
+                } else if (Array.isArray(modifications)) {
+                    var findItem = function (id) {
+                        var secKeys = Object.keys(shadow.sections);
+                        for (var si = 0; si < secKeys.length; si++) {
+                            var items = shadow.sections[secKeys[si]].items;
+                            for (var ii = 0; ii < items.length; ii++) {
+                                if (items[ii].id === id) return items[ii];
+                            }
+                        }
+                        return null;
+                    };
+                    modifications.forEach(function (mod) {
+                        if (mod.id) {
+                            var item = findItem(mod.id);
+                            if (item && mod.field) item[mod.field] = mod.value;
+                        } else if (mod.globalRateAdj) {
+                            Object.keys(shadow.sections).forEach(function (sk) {
+                                shadow.sections[sk].items.forEach(function (i) { i.rate *= (1 + mod.globalRateAdj); });
+                            });
+                        }
+                    });
+                }
+                this.reconcile(shadow);
+                return {
+                    original: budget.grandTotal,
+                    simulated: shadow.grandTotal,
+                    delta: shadow.grandTotal - budget.grandTotal,
+                    percentChange: ((shadow.grandTotal - budget.grandTotal) / budget.grandTotal) * 100
+                };
+            },
+
+            /* Phase 131: Temporal utilities from mBT.le (mbtle.js) */
+            temporal: {
+                computeWorkingDays: _le.computeWorkingDays || null,
+                getStageStartDates: _le.getStageStartDates || null,
+                stageCrewDays: _le.stageCrewDays || null
+            }
+        };
+    }());
+
+    /* ========= mBT.logic: CORE INTELLIGENCE (Metrics) ========= */
+    mBT.logic = {
+        // --- Stage Metrics (Previously mBTStagesEngine) ---
+        stages: {
+            // Returns { grandTotal, stageTotals: {dev: $, ...}, totalCap: $, dailyBurn: $, runwayDays: # }
+            calculateMetrics: function () {
+                var tl = (budget && budget.targetLock) ? budget.targetLock : { totalCap: 0, stages: {} };
+                var workWeek = (budget && budget.settings && budget.settings.workWeek) || 5;
+                var blackouts = (budget && budget.blackoutDays) || [];
+                var stageStarts = (typeof getStageStartDates !== 'undefined') ? getStageStartDates(budget) : {};
+
+                var result = {
+                    grandTotal: budget.grandTotal || 0,
+                    stageTotals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
+                    totalCap: tl.totalCap || 0,
+                    totalDays: 0,
+                    totalWorkingDays: 0,
+                    dailyBurn: 0,
+                    runwayDays: 0
+                };
+
+                // 1. Calculate Costs (Aggregation using Payable Days)
+                var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+                Object.values(budget.sections || {}).forEach(function (sec) {
+                    (sec.items || []).forEach(function (item) {
+                        if (!item.stageData) return;
+                        KEYS.forEach(function (k) {
+                            var sd = item.stageData[k];
+                            if (sd) {
+                                var grossDays = parseFloat(sd.days) || 0;
+                                var payable = (stageStarts[k] && typeof computeWorkingDays !== 'undefined')
+                                    ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts)
+                                    : grossDays;
+                                result.stageTotals[k] += payable * (parseFloat(sd.rate || item.rate) || 0);
+                            }
+                        });
+                    });
+                });
+
+                // 2. Calculate Burn Logic
+                KEYS.forEach(function (k) {
+                    if (tl.stages && tl.stages[k]) {
+                        var grossDays = parseFloat(tl.stages[k].days) || 0;
+                        result.totalDays += grossDays;
+                        result.totalWorkingDays += stageStarts[k] && typeof computeWorkingDays !== 'undefined' ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts)
+                            : grossDays;
+                    }
+                });
+
+                if (result.totalWorkingDays > 0) result.dailyBurn = result.grandTotal / result.totalWorkingDays;
+                if (result.dailyBurn > 0) result.runwayDays = result.totalCap / result.dailyBurn;
+
+                return result;
+            },
+
+            // Alias for Tier 5 compatibility
+            getMetrics: function () { return this.calculateMetrics(); },
+
+            // Returns Status Object for Ring/Bars
+            getBurnStatus: function (current, cap) {
+                var pct = cap > 0 ? (current / cap) * 100 : 0;
+                if (pct > 100) return { color: 'text-red-600', bg: 'bg-red-500', ring: 'border-red-200', pct: pct };
+                if (pct > 85) return { color: 'text-yellow-600', bg: 'bg-blue-500', ring: 'border-yellow-200', pct: pct };
+                return { color: 'text-green-600', bg: 'bg-green-500', ring: 'border-green-200', pct: pct };
+            },
+
+            // --- TIER 3 UPGRADE: Timeline Validation Logic (Restored) ---
+            validateTimeline: function (stageKey) {
+                var maxItemDays = 0;
+                var hasItems = false;
+
+                // 1. Scan the physics model for the longest item in this stage
+                if (budget && budget.sections) {
+                    Object.keys(budget.sections).forEach(function (key) {
+                        var sec = budget.sections[key];
+                        sec.items.forEach(function (item) {
+                            if (item.stageData && item.stageData[stageKey]) {
+                                hasItems = true;
+                                var d = parseFloat(item.stageData[stageKey].days) || 0;
+                                if (d > maxItemDays) maxItemDays = d;
+                            }
+                        });
+                    });
+                }
+
+                // 2. Compare against the "Governor" (User Input)
+                var userDays = (budget.targetLock && budget.targetLock.stages[stageKey])
+                    ? (parseFloat(budget.targetLock.stages[stageKey].days) || 0)
+                    : 0;
+
+                // 3. Return Truth
+                return {
+                    isValid: userDays >= maxItemDays, // Safe if User Input >= Max Item
+                    maxNeeded: maxItemDays,
+                    current: userDays,
+                    delta: userDays - maxItemDays,     // Negative value indicates shortage
+                    isBankrupt: hasItems && userDays === 0 // Logic Resolution: Items exist but no time allocated
+                };
+            },
+
+            // --- TIER 3 UPGRADE: Temporal Projection Engine (Phase 1 + 3.3 Overrun Logic) ---
+            calculateTimeline: function () {
+                var timeline = {};
+                /* Phase 109.1: Weekend-skipping helper — mirrors Stages tool addWorkDays */
+                var _addWorkDays = function (startDate, days, workWeek) {
+                    var date = new Date(startDate);
+                    var count = 0;
+                    while (count < days) {
+                        date.setDate(date.getDate() + 1);
+                        var dow = date.getDay();
+                        var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) || (workWeek === 6 && dow === 0);
+                        if (!isWeekend) count++;
+                    }
+                    return date;
+                };
+                var _workWeek = (budget.settings && budget.settings.workWeek) || 7;
+
+                // Default to today if start date is missing
+                var cursor = new Date(budget.startDate || new Date());
+                // Handle Timezone offset for pure dates (prevent "yesterday" bugs)
+                cursor = new Date(cursor.getTime() + cursor.getTimezoneOffset() * 60000);
+
+                var stages = ['dev', 'pre', 'prod', 'post', 'dist'];
+
+                stages.forEach(function (k) {
+                    var days = (budget.targetLock && budget.targetLock.stages[k])
+                        ? (parseFloat(budget.targetLock.stages[k].days) || 0)
+                        : 0;
+
+                    var start = new Date(cursor);
+                    var end = (days > 0 && _workWeek < 7) ? _addWorkDays(start, days, _workWeek) : new Date(start.getTime() + (days * 24 * 60 * 60 * 1000));
+
+                    var fmt = function (d) { return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+
+                    timeline[k] = {
+                        start: start,
+                        end: end,
+                        label: days > 0 ? (fmt(start) + ' - ' + fmt(end)) : 'SCHEDULE TBD'
+                    };
+
+                    cursor = end;
+                });
+
+                // --- Phase 3.3: Overrun Calculation ---
+                if (budget.deliveryDate) {
+                    var target = new Date(budget.deliveryDate);
+                    var targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+                    var diffTime = targetAdj - cursor;
+                    var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    var status = 'On Track';
+                    var statusColor = 'text-emerald-500';
+                    var ringColor = 'border-slate-100';
+
+                    if (diffDays < 0) {
+                        status = 'OVERDUE';
+                        statusColor = 'text-rose-600';
+                        ringColor = 'border-rose-500'; // Red Ring Trigger
+                    } else if (diffDays < 7) {
+                        status = 'Tight';
+                        statusColor = 'text-amber-500';
+                        ringColor = 'border-amber-400'; // Amber Ring Trigger
+                    }
+
+                    // Attach analysis to the timeline object for UI consumption
+                    timeline._analysis = {
+                        projectedEnd: cursor,
+                        targetDate: targetAdj,
+                        variance: diffDays,
+                        status: status,
+                        color: statusColor,
+                        ring: ringColor
+                    };
+                }
+
+                return timeline;
+            },
+
+            // --- TIER 5 UPGRADE: Phase 3.4 Risk Analyst (The Brain) ---
+            analyzeRisk: function (metrics, timeline) {
+                // 1. Daily Burn Rate (Cash per Working Day, pre-calculated from working days in metrics)
+                var dailyBurn = metrics.dailyBurn || 0;
+
+                // 2. Variance (Days Late) from Timeline
+                // timeline._analysis might be undefined if no deadline set
+                var variance = (timeline && timeline._analysis) ? timeline._analysis.variance : 0;
+
+                // If early or on time (variance >= 0), no financial risk from time
+                if (variance >= 0) return null;
+
+                // 3. Cost of Delay (Daily Burn * Days Late)
+                var daysLate = Math.abs(variance);
+                var delayCost = dailyBurn * daysLate;
+
+                // 4. Projected Total (Current Estimated + Cost of Delay)
+                var projectedTotal = metrics.grandTotal + delayCost;
+
+                // 5. The "Crash" Check
+                // Do we have enough Cap Room to absorb this delay?
+                var cap = metrics.totalCap || 0;
+                var isCritical = cap > 0 && projectedTotal > cap;
+
+                return {
+                    status: isCritical ? 'CRITICAL' : 'WARNING',
+                    daysLate: daysLate,
+                    dailyBurn: dailyBurn,
+                    cost: delayCost,
+                    projectedTotal: projectedTotal,
+                    message: isCritical ? "INSOLVENCY RISK" : "DELAY COST",
+                    subMessage: isCritical
+                        ? 'Projected ' + mBTLE.format.currency(projectedTotal) + ' exceeds Cap'
+                        : 'Est. Penalty: ' + mBTLE.format.currency(delayCost)
+                };
+            }
+        }
+    };
+
+    /* --- recordTransaction: Phase 80-compliant payment recorder ---
+       Routes payment state through budget.ledgers.pos[] only.
+       Does NOT write to item.actual (Phase 77 owns that field).
+       Does NOT write to contact.payments[] (use pos[] SSoT instead). */
+    mBT.logic.recordTransaction = function (data) {
+        /* data: { poId, amount, service, reference, notes } */
+        if (!budget || !budget.ledgers || !budget.ledgers.pos) return null;
+        var pos = budget.ledgers.pos;
+        var targetPo = null;
+        for (var i = 0; i < pos.length; i++) {
+            if (pos[i].id === data.poId) { targetPo = pos[i]; break; }
+        }
+        if (!targetPo) return null;
+        targetPo.status = 'Paid';
+        targetPo.paidAmount = data.amount || targetPo.amount;
+        targetPo.paidDate = new Date().toISOString().split('T')[0];
+        targetPo.paymentService = data.service || '';
+        targetPo.paymentRef = data.reference || '';
+        targetPo.paymentNotes = data.notes || '';
+        saveBudget();
+        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+        /* Sync ledger state to sibling tool iframes */
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash, poCounter: budget.ledgers.poCounter } }, '*');
+        return targetPo;
+    };
+
+    /* --- Tier 5 Handshake Polyfill --- */
+    mBT.utils = { formatCurrency: mBTLE.format.currency };
+
+    /* ========= Phase 118: Universal Currency Perspective Engine ========= */
+    mBT.logic.currency = {
+        /* Returns effective rate table — locked snapshot or live cache */
+        _getRates: function () {
+            if (localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true') {
+                var snap = localStorage.getItem(storageKeyPrefix + 'ratesLockedSnap');
+                if (snap) { try { return JSON.parse(snap); } catch (e) { } }
+            }
+            return exchangeRates;
+        },
+        /* Convert val from budget base currency to displayCurrency (display-only, non-destructive) */
+        convert: function (val) {
+            var from = (budget && budget.currency) || displayCurrency || 'JMD';
+            var to = displayCurrency || 'JMD';
+            if (from === to) return parseFloat(val) || 0;
+            var rates = this._getRates();
+            var fromRate = rates[from] || 1;
+            var toRate = rates[to] || 1;
+            return (parseFloat(val) || 0) / fromRate * toRate;
+        },
+        isLocked: function () {
+            return localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true';
+        },
+        /* Snapshot current rates and freeze conversions */
+        lock: function () {
+            localStorage.setItem(storageKeyPrefix + 'ratesLocked', 'true');
+            localStorage.setItem(storageKeyPrefix + 'ratesLockedSnap', JSON.stringify(exchangeRates));
+            if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+        },
+        /* Unfreeze and re-fetch live rates */
+        unlock: function () {
+            localStorage.setItem(storageKeyPrefix + 'ratesLocked', 'false');
+            fetchExchangeRates();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+            if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+        },
+        /* Manually override a single rate while locked */
+        setRate: function (code, rate) {
+            var snap = localStorage.getItem(storageKeyPrefix + 'ratesLockedSnap');
+            var rates = snap ? JSON.parse(snap) : Object.assign({}, exchangeRates);
+            rates[code] = parseFloat(rate) || 1;
+            localStorage.setItem(storageKeyPrefix + 'ratesLockedSnap', JSON.stringify(rates));
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+        }
+    };
+
+    // --- Aliases for Backward Compatibility ---
+    window.mBTStagesEngine = mBT.logic.stages;
+
+    /* --- 2. Logic Bridges & Data Normalization --- */
+    function recalculateTemplateQuantities(data) {
+        if (!data.days) return;
+        var principal = data.days.principal;
+        var scouting = data.days.scouting;
+        var preprod = data.days.preprod;
+        var totalDays = (parseFloat(principal) || 0) + (parseFloat(scouting) || 0) + (parseFloat(preprod) || 0);
+        Object.values(data.sections).forEach(function (section) {
+            section.items.forEach(function (item) { if (item.unit === 'Day') item.quantity = totalDays; });
+        });
+    }
+
+    // Logic Resolution: Core budget item updater (Restored)
+    function handleUpdate(sectionName, itemId, field, value, context) {
+        var section = budget.sections[sectionName];
+        if (!section) return;
+        var item = section.items.find(function (i) { return i.id === itemId; });
+        if (!item) return;
+
+        if (field === 'description') item.description = value;
+        else if (field === 'quantity') item.quantity = parseFloat(value) || 0;
+        else if (field === 'rate') item.rate = parseFloat(value) || 0;
+        else if (field === 'unit') item.unit = value;
+        else if (field === 'actual') item.actual = parseFloat(value) || 0;
+        /* Phase 77: actuarial fields */
+        else if (field === 'actualQuantity') {
+            item.actualQuantity = parseFloat(value) || 0;
+            if (!item.actualDate) item.actualDate = new Date().toISOString().split('T')[0];
+        }
+        else if (field === 'actualRate') {
+            item.actualRate = parseFloat(value) || 0;
+            if (!item.actualDate) item.actualDate = new Date().toISOString().split('T')[0];
+        }
+        else if (field === 'actualDate') item.actualDate = value;
+        else if (field === 'committedCost') item.committedCost = parseFloat(value) || 0;
+
+        // Deficiency 1 Fix: Single-Source of Truth
+        // We rely on the Proxy (Tier 2) to trigger Global Math & Persistence (debounced).
+        // We ONLY call paint() here for instant, non-blocking visual feedback on the active row.
+        if (typeof mBT.ui.paint === 'function') {
+            requestAnimationFrame(function () { return mBT.ui.paint(); });
+        }
+    }
+
+    function balanceStageSliders(changedKey, newValue) {
+        var stages = budget.targetLock.stages;
+        var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+
+        newValue = parseFloat(newValue);
+        if (isNaN(newValue)) newValue = 0;
+
+        var lockedKeys = validKeys.filter(function (k) { return k !== changedKey && stages[k].locked; });
+        var unlockedKeys = validKeys.filter(function (k) { return k !== changedKey && !stages[k].locked; });
+
+        var lockedTotal = lockedKeys.reduce(function (sum, k) { return sum + (stages[k].ratio || 0); }, 0);
+        var maxAvailable = 100 - lockedTotal;
+
+        if (newValue > maxAvailable) newValue = maxAvailable;
+        if (newValue < 0) newValue = 0;
+
+        stages[changedKey].ratio = newValue;
+
+        var remaining = Math.max(0, 100 - newValue - lockedTotal);
+
+        if (unlockedKeys.length > 0) {
+            var currentUnlockedTotal = unlockedKeys.reduce(function (sum, k) { return sum + (stages[k].ratio || 0); }, 0);
+            unlockedKeys.forEach(function (k) {
+                var newRatio;
+                if (currentUnlockedTotal <= 0.01) {
+                    newRatio = remaining / unlockedKeys.length;
+                } else {
+                    var share = stages[k].ratio / currentUnlockedTotal;
+                    newRatio = remaining * share;
+                }
+                stages[k].ratio = newRatio;
+            });
+        }
+    }
+
+    // Preset Handler
+    window.applyStagePreset = function (presetName) {
+        var ratios = STAGE_PRESETS[presetName];
+        if (!ratios) return;
+        Object.keys(ratios).forEach(function (k) {
+            if (budget.targetLock.stages[k]) {
+                budget.targetLock.stages[k].ratio = ratios[k];
+                budget.targetLock.stages[k].locked = false;
+            }
+        });
+        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+        if (typeof pushToHistory === 'function') pushToHistory(`Applied ${presetName} preset`);
+    };
+
+    var mBTAssign = {
+        assignFromContacts: function () {
+            var contacts = (typeof getGlobalContacts === 'function' ? getGlobalContacts() : (mBTOG.contacts || []));
+            if (!contacts.length) return { assigned: 0, message: 'No records found' };
+            var assigned = 0;
+            Object.values(budget.sections).forEach(function (s) {
+                return s.items.forEach(function (i) {
+                    if (i.crew && i.crew.name) return;
+                    var match = contacts.find(function (c) { return c.role && i.description.toLowerCase().includes(c.role.toLowerCase()); });
+                    if (match) {
+                        i.crew = { name: match.name, phone: (match.contact && match.contact.includes('@')) ? '' : match.contact, email: (match.contact && match.contact.includes('@')) ? match.contact : '' };
+                        assigned++;
+                    }
+                });
+            });
+            if (assigned > 0) {
+                mBTLE.reconcile();
+                // Logic Resolution: Auto-Assign modifies complex DOM (Avatars) that Paint() skips.
+                // We must trigger a full structural refresh here.
+                render();
+            }
+            return { assigned, message: `${assigned} personnel synchronized` };
+        }
+    };
+
+    /* ========= v19.54 CONNECTIVE TISSUE: Logic Resolution Utilities ========= */
+
+    // NOTE: Project Inventory, Data Hydration, and History functions 
+    // have been consolidated into mBT.data (Tier 2). 
+    // Global aliases maintain compatibility.
+
+    /* --- 3. Configuration & System Utilities (Restored) --- */
+    // Logic Resolution: Helpers for global settings accessed by mBT.features.settings
+    function getProjectDateFormat() { return localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD'; }
+    function getProjectNameSeparator() { return localStorage.getItem(projectNameSeparatorKey) || ' '; }
+    function hardResetApp() {
+        mBTME.confirm("System Flush", "This will wipe the Offline Cache to pull the latest app update. Your Budgets, Contacts, and Cloud Auth are shielded. Continue?", function () {
+
+            // Phase 82: PWA Toolset Wipe
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                    for (var registration of registrations) { registration.unregister(); }
+                });
+            }
+            if ('caches' in window) {
+                caches.keys().then(function (names) {
+                    for (var name of names) { caches.delete(name); }
+                });
+            }
+
+            // Allow async destruction queues to execute
+            setTimeout(function () { window.location.reload(true); }, 800);
+        });
+    }
+
+    /* --- 4. Sonic Handshake (Phase 111.1: Audio Feedback Service) --- */
+    mBT.audio = (function () {
+        var _ctx = null;
+        function _getCtx() {
+            if (!_ctx) {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                _ctx = new AC();
+            }
+            if (_ctx.state === 'suspended') _ctx.resume();
+            return _ctx;
+        }
+        function _tone(freq, duration, vol, type, delay) {
+            var ctx = _getCtx();
+            if (!ctx) return;
+            var t = ctx.currentTime + (delay || 0);
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(vol || 0.08, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + duration);
+        }
+        return {
+            play: function (type) {
+                try {
+                    if (type === 'success') { _tone(880, 0.12, 0.06, 'sine', 0); _tone(1100, 0.15, 0.06, 'sine', 0.08); }
+                    else if (type === 'alert') { _tone(440, 0.15, 0.08, 'triangle', 0); _tone(330, 0.2, 0.08, 'triangle', 0.12); }
+                    else if (type === 'delete') { _tone(330, 0.1, 0.06, 'square', 0); _tone(220, 0.15, 0.06, 'square', 0.06); }
+                } catch (e) { /* Silent fail — audio is non-critical */ }
+            },
+            _ctx: function () { return _getCtx(); }
+        };
+    }());
+
+    /* --- 5. AI Module Bridge (Phase 60.A: Extracted to src/core/logic/AIModule.js) --- */
+                    mBT.features.ai = window.mBTAIModule;
+
+                    /* --- 6. Event Router Bridge (Phase 121: Extracted to src/core/logic/EventRouter.js) --- */
+                    mBT.router = window.mBTRouter;
+
+                    // Global Aliases for Backward Compatibility (Preserves Tier 5 Settings UI)
+                    var getStoredApiKey = mBT.features.ai.getStoredApiKey.bind(mBT.features.ai);
+                    var saveStoredApiKey = mBT.features.ai.saveStoredApiKey.bind(mBT.features.ai);
+                    var getSelectedProvider = mBT.features.ai.getSelectedProvider.bind(mBT.features.ai);
+                    var callUnifiedAI = mBT.features.ai.callUnifiedAI.bind(mBT.features.ai);
+                    window.showAIToolsModal = mBT.features.ai.openTools.bind(mBT.features.ai);
+
+                    // Logic Resolution: Handles renaming projects.
+                    function handleProjectNameChange(e) {
+                        var newName = e.target.value.trim();
+                        if (!newName) return;
+                        var oldKey = storageKeyPrefix + budget.projectName;
+                        var newKey = storageKeyPrefix + newName;
+                        if (localStorage.getItem(newKey)) {
+                            mBTME.alert("Naming Error", "Project name already exists.");
+                            e.target.value = budget.projectName;
+                            return;
+                        }
+                        localStorage.removeItem(oldKey);
+                        budget.projectName = newName;
+                        saveBudget();
+                        currentProjectName = newName;
+                    }
+
+
+                    /* ========= v19.54 TIER 4: Atomic Render Pipeline ========= */
+
+                    // ... (keep getAbbreviatedName function) ...
+
+                    /* --- 3. UI Namespace Consolidation --- */
+                    // Logic Resolution: Moving all UI logic under one roof.
+
+                    // 1. Viewport Manager (Mobile Zoom Control)
+                    mBT.ui.updateViewport = function () {
+                        var allow = (budget && budget.settings && budget.settings.allowZoom) || false;
+                        var meta = document.querySelector('meta[name="viewport"]');
+                        if (meta) {
+                            // Toggles between locked (app-like) and unlocked (accessible) states
+                            meta.content = `width=device-width, initial-scale=1.0, viewport-fit=cover${allow ? '' : ', maximum-scale=1.0, user-scalable=no'}`;
+                        }
+                    };
+
+                    // 2. The Main Render Loop (The Gatekeeper)
+                    mBT.ui.refresh = function () {
+                        var app = document.getElementById('app');
+                        if (!budget || !app) return;
+
+                        // Deficiency Fix: Theme Toggle Latency
+                        // Updated: Standardized on Slate-200 (#e2e8f0) for improved production environment contrast.
+                        var isClassic = (budget.settings && budget.settings.classicTheme) || false;
+                        app.className = `max-w-7xl mx-auto px-4 py-4 ${isClassic ? 'classic-theme' : ''}`;
+                        if (isClassic) document.body.style.backgroundColor = "#e5e5e5";
+                        else document.body.style.backgroundColor = "#e2e8f0";
+
+                        // A. Smart Detection: Does the shell exist?
+                        var shellExists = document.getElementById('projectName') && document.getElementById('budget-sections');
+
+                        if (!shellExists) {
+                            // Path 1: Full Rebuild (Initial Load / Hard Reset)
+                            this._fullRender(app);
+                        } else {
+                            // Path 2: Surgical Update
+
+                            // Sub-check: Has the structure changed? (Row count mismatch)
+                            // This allows us to handle "Add Item" without a full app flash, but keeps typing fast.
+                            var dataCount = 0;
+                            Object.values(budget.sections).forEach(function (s) { return dataCount += s.items.length; });
+                            var domCount = document.querySelectorAll('.draggable-row').length;
+
+                            if (dataCount !== domCount) {
+                                // Structural Mismatch: Rebuild only the list container
+                                var sectionContainer = document.getElementById('budget-sections');
+                                if (sectionContainer) sectionContainer.innerHTML = renderBudgetSections();
+
+                                // Re-bind specific list listeners
+                                if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                                /* Phase 62: Re-apply RBAC lockdown after DOM rebuild */
+                                if (typeof mBTRBACPostRender === 'function') mBTRBACPostRender();
+                            }
+
+                            // Always Paint values (covers typing, calculations, and the new rows)
+                            this.paint();
+                        }
+
+                        // B. Auxiliary Interface Updates (Top Level)
+                        var _toolbarPromise = (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function')
+                            ? mBT.ui.toolbar.renderProjectMgmt()
+                            : Promise.resolve();
+                        return _toolbarPromise.then(function () {
+                            if (typeof renderStatusBar === 'function') renderStatusBar();
+                            if (typeof renderCurrencyBtn === 'function') renderCurrencyBtn();
+                            if (typeof updateOnlineStatus === 'function') updateOnlineStatus();
+
+                            // C. Focus Restoration (Legacy support for structural updates)
+                            // Note: Paint() handles this natively, but we keep this for the list-rebuild path.
+                            var active = document.activeElement;
+                            if (active && active.id) {
+                                var el = document.getElementById(active.id);
+                                if (el) {
+                                    // Only refocus if we lost it (e.g. element was recreated)
+                                    if (document.activeElement !== el) el.focus();
+                                }
+                            }
+                        });
+                    };
+
+                    // New Internal Method: Heavy HTML Generation (The Builder)
+                    /* Phase 100.2: Header + summary delegated to mBT.ui.toolbar. Quick-actions bar retained inline. */
+                    mBT.ui._fullRender = function (app) {
+                        app.innerHTML =
+                            mBT.ui.toolbar.renderHeader() +
+                            '<div class="flex gap-2 items-center mb-3">' +
+                            '<div class="relative shrink-0" id="currencyContainer">' +
+                            '<button id="currencyBtn" title="Base Currency" class="rounded-xl shadow-lg active:scale-95 flex items-center justify-center min-w-[38px] h-[38px] px-2 transition-all">' +
+                            '<span id="currencyBtnCode" class="text-[18px] font-black uppercase leading-none tracking-tight"></span>' +
+                            '</button>' +
+                            '<div id="currencyPopover" class="hidden absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 min-w-[130px]"></div>' +
+                            '</div>' +
+                            '<button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">' +
+                            (mBTAssets.wand || '') +
+                            '</button>' +
+                            '<span id="shareHubBtnWrap" style="position:relative;display:inline-flex;">' +
+                            '<button id="shareHubBtn" title="Share &amp; Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">' +
+                            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>' +
+                            '</button>' +
+                            '<span id="shareHubBadge" data-count="0" style="display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;background:#ef4444;border-radius:9999px;border:2px solid white;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:white;padding:0 3px;line-height:1;"></span>' +
+                            '</span>' +
+                            '<div id="statusBar" class="flex-grow min-w-0 py-1.5 px-3 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest flex justify-between items-center shadow-2xl"></div>' +
+                            '</div>' +
+                            mBT.ui.toolbar.renderSummary();
+                        /* Re-bind all initial listeners for a fresh DOM */
+                        if (typeof initializeInteractiveInputs === 'function') initializeInteractiveInputs();
+                        if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                        this.paint();
+                    };
+
+                    // Deficiency 1 Fix: Surgical DOM Update (The "Paint" Engine)
+                    /* Phase 100.2: Summary/header updates delegated to mBT.ui.toolbar.update().
+                       Retains line-item updates. ES6 converted to ES5 (var/var/arrow -> var/function). */
+                    mBT.ui.paint = function () {
+                        if (!budget) return;
+                        /* Delegate header + summary value updates to extracted toolbar component */
+                        if (mBT.ui.toolbar && typeof mBT.ui.toolbar.update === 'function') {
+                            mBT.ui.toolbar.update();
+                        }
+                        /* Delegate temporal projection updates to Calendar component (Phase 101) */
+                        if (mBT.ui.calendar && typeof mBT.ui.calendar.update === 'function') {
+                            mBT.ui.calendar.update();
+                        }
+                        /* Phase 115 Step 2: Client/Review Mode — inject readonly on all inputs */
+                        if (mBT.ui.state && mBT.ui.state.isEditing === false) {
+                            var _appEl = document.getElementById('app');
+                            if (_appEl) {
+                                var _lockInputs = _appEl.querySelectorAll('input, textarea, select');
+                                for (var _li = 0; _li < _lockInputs.length; _li++) {
+                                    _lockInputs[_li].setAttribute('readonly', 'readonly');
+                                    if (_lockInputs[_li].tagName === 'SELECT') _lockInputs[_li].setAttribute('disabled', 'disabled');
+                                }
+                            }
+                        }
+                        /* Line item surgical updates (section totals + per-item cells) */
+                        /* Phase 118: wrap format with perspective conversion */
+                        var _conv = (mBT.logic && mBT.logic.currency) ? function (v) { return mBT.logic.currency.convert(v); } : function (v) { return parseFloat(v) || 0; };
+                        var fmt = function (v) { return mBTLE.format.currency(_conv(v)); };
+                        var isMobile = window.innerWidth < 768;
+                        Object.keys(budget.sections).forEach(function (sectionKey) {
+                            var section = budget.sections[sectionKey];
+                            var safeKey = sectionKey.replace(/"/g, '\\"');
+                            var sectionTotalEl = document.querySelector('[data-section-total="' + safeKey + '"]');
+                            if (sectionTotalEl) sectionTotalEl.textContent = fmt(section.total);
+                            /* Phase 114: targetCap overage — red badge when section total exceeds cap */
+                            var capBadge = document.querySelector('[data-section-cap-badge="' + safeKey + '"]');
+                            if (capBadge) {
+                                var sectionCap = section.targetCap || 0;
+                                if (sectionCap > 0 && section.total > sectionCap) {
+                                    capBadge.textContent = '+' + fmt(section.total - sectionCap);
+                                    capBadge.classList.remove('hidden');
+                                } else {
+                                    capBadge.classList.add('hidden');
+                                }
+                            }
+                            section.items.forEach(function (item) {
+                                var calc = calculateItem(item);
+                                var estimated = calc.estimated;
+                                var variance = calc.variance;
+                                var estCell = document.querySelector('[data-estimated-id="' + item.id + '"]');
+                                if (estCell) estCell.textContent = isMobile ? formatAbbreviated(estimated, displayCurrency) : fmt(estimated);
+                                var varCell = document.querySelector('[data-variance-id="' + item.id + '"]');
+                                if (varCell) {
+                                    varCell.textContent = isMobile ? formatAbbreviated(variance, displayCurrency) : fmt(variance);
+                                    varCell.className = 'p-1 md:p-2 w-[50px] md:w-28 text-right font-mono font-black text-[10px] md:text-xs ' + (variance > 0 ? 'text-red-500' : 'text-green-600');
+                                }
+                                var updateInput = function (field, val) {
+                                    var input = document.querySelector('input[data-id="' + item.id + '"][data-field="' + field + '"]');
+                                    if (input && document.activeElement !== input) input.value = val;
+                                };
+                                updateInput('quantity', item.quantity);
+                                updateInput('rate', toDisp(item.rate).toFixed(2));
+                                updateInput('actual', toDisp(item.actual).toFixed(2));
+                            });
+                        });
+                    };
+
+                    // --- NEW: Surgical DOM Operations ("The Surgeon") ---
+                    // Logic Resolution: Direct DOM manipulation for Add/Remove to avoid full re-renders
+                    mBT.ui.ops = {
+                        add: function (sectionName, item) {
+                            // 1. Generate HTML string using the Render Engine
+                            // Logic Resolution: Use internal namespace directly to ensure strict dependency resolution
+                            var renderer = mBT.ui.render;
+                            var html = renderer.lineItem(item, sectionName);
+
+                            // 2. Locate the specific section body
+                            // We use the same selector strategy as the full render
+                            var safeName = sectionName.replace(/"/g, '\\"');
+                            var tbody = document.querySelector(`tbody[data-section-body="${safeName}"]`);
+
+                            if (tbody) {
+                                // 3. Inject HTML at the end of the list
+                                tbody.insertAdjacentHTML('beforeend', html);
+
+                                // 4. UX Polish: Auto-scroll and flash the new row
+                                var newRow = tbody.lastElementChild;
+                                if (newRow) {
+                                    newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    newRow.classList.add('bg-blue-50');
+                                    setTimeout(function () { return newRow.classList.remove('bg-blue-50'); }, 500);
+
+                                    // 5. Re-bind Drag & Drop (Logic Resolution)
+                                    if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                                }
+                            }
+                        },
+
+                        remove: function (sectionName, itemId) {
+                            // 1. Locate the specific row by ID
+                            var row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+
+                            if (row) {
+                                // 2. UX Polish: Fade out before removal
+                                row.style.transition = 'all 0.2s ease';
+                                row.style.opacity = '0';
+                                row.style.transform = 'translateX(-10px)';
+
+                                // 3. Remove from DOM after animation
+                                setTimeout(function () { return row.remove(); }, 200);
+                            }
+                        }
+                    };
+
+                    // --- Global Alias for Backward Compatibility (The Bridge) ---
+                    // Logic Resolution: Calls to global 'render()' are now proxied to the UI namespace.
+                    window.render = mBT.ui.refresh.bind(mBT.ui);
+
+                    // Logic Resolution: Prevents long filenames from breaking Studio layout containers.
+                    function getAbbreviatedName(name, maxLen) {
+                        maxLen = maxLen || 25;
+                        if (name.length <= maxLen) return name;
+                        var ext = name.split('.').pop();
+                        var base = name.substring(0, name.lastIndexOf('.'));
+                        var keep = maxLen - ext.length - 4;
+                        return base.substring(0, keep) + '...' + ext;
+                    }
+
+                    // --- mBT.ui.render: VISUAL CONSTRUCTION ENGINE ---
+                    // Previously: RenderEngine
+                    mBT.ui.render = {
+                        // --- XSS Neutralization: Standardized string escaping ---
+                        // Logic Resolution: Protects the DOM from injection by sanitizing all user-generated strings.
+                        esc: function (str) {
+                            return !str ? '' : String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+                        },
+
+                        /* --- v19.54 UI BLUEPRINTS: Standardized Component Generators --- */
+                        ui: {
+                            // 1. Tab Navigation Generator
+                            tabs: function (opts) {
+                                var items = opts.items;
+                                var activeId = opts.activeId;
+                                var onClick = opts.onClick;
+                                var dataAction = opts.dataAction;
+                                return `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                    ${items.map(function (t) {
+                                    var isActive = t.id === activeId;
+                                    var activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                                    var inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                                    // Logic Resolution: Support both legacy onClick and modern data-action delegation
+                                    var actionAttr = dataAction ? `data-action="${dataAction}" data-tab="${t.id}"` : `onclick="${onClick}('${t.id}')"`;
+
+                                    return `<button type="button" ${actionAttr} class="flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                            ${t.label} ${t.count !== undefined ? `<span class="opacity-50 ml-1">(${t.count})</span>` : ''}
+                        </button>`;
+                                }).join('')}
+                </div>`;
+                            },
+
+                            // 2. Standard List Row (Used in Settings, Trash, Databases)
+                            listRow: function ({ id, icon, title, subtitle, actions = [], onClick = null, classes = '' }) {
+                                var clickAttr = onClick ? `onclick="${onClick}"` : '';
+                                var cursorClass = onClick ? 'cursor-pointer' : '';
+
+                                var actionHtml = actions.map(function (a) { return `<button type="button" aria-label="${a.title || 'Action'}" onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-500 transition-colors scale-90 hover:scale-100" title="${a.title || ''}">${a.icon}</button>`; }
+                                ).join('');
+
+                                return `<div class="flex items-center justify-between p-4 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group ${classes} ${cursorClass}" ${clickAttr}>
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-blue-500 group-hover:shadow-sm transition-all text-lg shrink-0">${icon || ''}</div>
+                        <div class="overflow-hidden min-w-0">
+                            <div class="text-[10px] font-black uppercase text-slate-700 truncate">${mBT.ui.render.esc(title)}</div>
+                            ${subtitle ? `<div class="text-[9px] text-slate-400 font-bold truncate">${mBT.ui.render.esc(subtitle)}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        ${actionHtml}
+                    </div>
+                </div>`;
+                            },
+
+                            // 3. Grid Card (Used in Documents, Templates)
+                            card: function ({ id, icon, title, subtitle, badge, actions = [], onClick = null }) {
+                                var clickAttr = onClick ? `onclick="${onClick}"` : '';
+                                var cursorClass = onClick ? 'cursor-pointer' : '';
+
+                                var actionHtml = actions.map(function (a) { return `<button type="button" aria-label="${a.title || 'Action'}" onclick="${a.onClick}" class="p-2 text-slate-300 hover:text-${a.color || 'blue'}-600 transition-colors" title="${a.title || ''}">${a.icon}</button>`; }
+                                ).join('');
+
+                                return `<div class="group bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex items-center justify-between ${cursorClass}">
+                    <div class="flex items-center gap-4 flex-grow overflow-hidden" ${clickAttr}>
+                        <div class="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 group-hover:scale-110 transition-transform shrink-0">
+                            ${icon || ''}
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="font-black text-slate-900 text-xs uppercase tracking-tighter truncate">${mBT.ui.render.esc(title)}</h4>
+                            ${subtitle ? `<p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest truncate">${mBT.ui.render.esc(subtitle)}</p>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        ${actionHtml}
+                    </div>
+                </div>`;
+                            },
+
+                            // 4. Empty State Placeholder
+                            emptyState: function (opts) {
+                                var icon = opts.icon;
+                                var message = opts.message;
+                                var subtext = opts.subtext;
+                                return `<div class="h-64 flex flex-col items-center justify-center text-slate-300 select-none">
+                    <div class="text-4xl mb-4 opacity-30">${icon || ''}</div>
+                    <p class="font-black uppercase text-[10px] tracking-widest opacity-60">${message || 'No Items Found'}</p>
+
+                    ${subtext ? `<p class="text-[9px] font-bold mt-1 opacity-40">${subtext}</p>` : ''}
+                </div>`;
+                            },
+
+                            // 5. Media Asset Card (Universal Bundle Blueprint)
+                            mediaCard: function ({ id, title, type, src, size, location, onClick, actions = [] }) {
+                                var isInternal = location === 'internal';
+                                var statusColor = isInternal ? 'bg-emerald-500' : 'bg-amber-500';
+                                var statusLabel = isInternal ? 'Secure' : 'Linked';
+
+                                var actionHtml = actions.map(function (a) { return `<button onclick="${a.onClick}" class="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-${a.color || 'blue'}-600 transition-colors shadow-sm backdrop-blur-sm" title="${a.title || ''}">${a.icon}</button>`; }
+                                ).join('');
+
+                                return `<div class="group relative aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all select-none">
+                    <!-- Preview Canvas -->
+                    <div class="absolute inset-0 flex items-center justify-center bg-slate-50 cursor-pointer" onclick="${onClick}">
+                        ${src ? `<img src="${src}" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity">`
+                                        : `<div class="text-4xl text-slate-300 opacity-50">${mBTAssets.file}</div>`}
+                    </div>
+                    
+                    <!-- HUD Overlay -->
+                    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/90 via-slate-900/50 to-transparent p-4 pt-12 text-white pointer-events-none">
+                        <div class="flex justify-between items-end">
+                            <div class="min-w-0 pr-2">
+                                <h4 class="font-black text-[10px] uppercase tracking-widest truncate text-white shadow-black drop-shadow-md">${mBT.ui.render.esc(title)}</h4>
+                                <p class="text-[8px] font-bold text-slate-300 mt-0.5 uppercase tracking-wide">${type} • ${size}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0 bg-black/30 px-2 py-1 rounded-full backdrop-blur-md border border-white/10">
+                                <span class="w-1.5 h-1.5 rounded-full ${statusColor} shadow-[0_0_6px_currentColor]"></span>
+                                <span class="text-[7px] font-black uppercase tracking-widest opacity-80">${statusLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Floating Actions (Hover) -->
+                    <div class="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0 duration-200 z-10">
+                        ${actionHtml}
+                    </div>
+                </div>`;
+                            }
+                        },
+
+                        // --- Payment Interface (Foundations Phase 3) ---
+                        paymentModal: function (contactId, contactName, balance, currency = 'JMD') {
+                            var services = (typeof PAYMENT_SERVICES !== 'undefined' ? PAYMENT_SERVICES : []);
+
+                            return `
+                <div class="p-6 bg-slate-50 h-full flex flex-col">
+                    <!-- Header / Balance -->
+                    <div class="text-center mb-8">
+                        <div class="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-3 shadow-sm border border-emerald-200">
+                            ${mBTAssets.wallet}
+                        </div>
+                        <h3 class="text-lg font-black text-slate-800 uppercase tracking-tighter">${this.esc(contactName)}</h3>
+                        <div class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm mt-2">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Est. Balance</span>
+                            <span class="text-sm font-mono font-bold ${balance > 0 ? 'text-slate-700' : 'text-emerald-600'}">${balance > 0 ? '' : ''}${mBTLE.format.currency(Math.abs(balance), currency)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Form -->
+                    <div class="space-y-4 flex-grow">
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Payment Amount</label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                                <input type="number" id="payAmount" class="w-full p-4 pl-8 bg-white border-none rounded-2xl text-2xl font-black text-slate-800 outline-none focus:ring-4 focus:ring-emerald-100 transition-all placeholder-slate-200" placeholder="0.00" autofocus>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Method</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <select id="payService" class="col-span-2 w-full p-3 bg-white border-none rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-50 cursor-pointer">
+                                    ${services.map(function (s) { return `<option value="${s.id}">${s.icon} ${s.label}</option>`; }).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div>
+                             <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Date</label>
+                             <input type="date" id="payDate" value="${new Date().toISOString().split('T')[0]}" class="w-full p-3 bg-white border-none rounded-xl text-xs font-bold text-slate-600 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="mt-6 pt-6 border-t border-slate-200/50">
+                        <button onclick="mBT.features.finance.processPayment('${contactId}')" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2">
+                            <span>Process Payment</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+                        },
+
+                        // --- Payment History Ledger (Phase 7) ---
+                        paymentHistory: function (contact) {
+                            var payments = contact.payments || [];
+                            var totalPaid = payments.reduce(function (sum, p) { return sum + (parseFloat(p.amount) || 0); }, 0);
+                            var sorted = payments.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+
+                            if (sorted.length === 0) {
+                                return this.ui.emptyState({
+                                    icon: mBTAssets.money,
+                                    message: 'No Transaction History',
+                                    subtext: 'Payments logged will appear here'
+                                });
+                            }
+                            var list = sorted.map(function (p) {
+                                var serviceDef = (typeof PAYMENT_SERVICES !== 'undefined') ? PAYMENT_SERVICES.find(function (s) { return s.id === p.service; }) : null;
+                                var icon = serviceDef ? serviceDef.icon : mBTAssets.money;
+                                var label = serviceDef ? serviceDef.label : (p.service || 'Payment');
+
+                                return `<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-sm border border-emerald-100">${icon}</div>
+                        <div>
+                            <div class="text-[10px] font-black uppercase text-slate-700">${this.esc(label)}</div>
+                            <div class="text-[9px] text-slate-400 font-bold">${this.esc(p.date)} • ${this.esc(p.projectId || 'Unknown Project')}</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] font-black text-slate-800 font-mono">${mBTLE.format.currency(p.amount, p.currency)}</div>
+                        <div class="text-[8px] text-emerald-500 font-bold uppercase tracking-widest">Paid</div>
+                    </div>
+                </div>`;
+                            }).join('');
+
+                            return `<div class="flex flex-col h-full bg-slate-50">
+                <div class="p-4 bg-white border-b border-slate-100 shrink-0">
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h4 class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Paid</h4>
+                            <div class="text-xl font-black text-slate-800 tracking-tighter">${mBTLE.format.currency(totalPaid)}</div>
+                        </div>
+                        <div class="text-[9px] font-bold text-slate-400">${sorted.length} Transactions</div>
+                    </div>
+                </div>
+                <div class="flex-grow overflow-y-auto no-scrollbar p-3 space-y-2">${list}</div>
+            </div>`;
+                        },
+
+                        /* --- v19.54 LAYOUT ENGINES: High-level Container Abstractions --- */
+                        layouts: {
+                            // Logic Resolution: Modular Studio Layout with Dedicated Title Bar and Expanded Control Header
+                            studioPanel: function ({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
+                                // Logic Resolution: Strip structural prefixes for the clean centered title
+                                var cleanTitle = title.replace(/^(Studio|Budget|Document):\s*/i, '');
+
+                                // Isolate System Close (isolated on right) from other actions
+                                var closeAction = actions.find(function (a) { return a.title === 'Close'; });
+
+                                var renderBtn = function (a) {
+                                    return `
+                    <button onclick="${a.onClick}" class="p-2.5 bg-slate-800/80 rounded-xl text-slate-300 hover:text-white hover:bg-${a.color || 'blue'}-600/50 transition-all shadow-sm border border-slate-700/50" title="${a.title || ''}">
+                        ${a.icon}
+                    </button>`;
+                                };
+
+                                // Logic Resolution: Only render the main control header if there are actually tools to show.
+                                // This removes the "dead black space" in simple views like the Template Selector.
+                                var showHeader = (toolbarId && toolbarId.trim().length > 0) || (actions && actions.length > 0);
+
+                                return `
+                <div class="flex flex-col max-h-[90vh] bg-slate-200">
+                    <!-- Sub-Header: Document Identity Bar -->
+                    <div class="bg-slate-900 text-center py-2 border-b border-slate-800 flex-shrink-0 z-30">
+                        <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-4">${mBT.ui.render.esc(cleanTitle)}</h3>
+                    </div>
+
+                    <!-- Main Studio Header (2-Column Control Grid) - Conditionally Rendered -->
+                    ${showHeader ? `
+                    <header class="bg-slate-900 p-3 flex-shrink-0 z-20 shadow-lg grid grid-cols-[1fr_auto] items-center gap-4">
+                        <!-- Left: Integrated Toolbar & Operations (Occupies remaining space) -->
+                        <div id="${toolbarId}" class="flex items-center gap-2 min-w-0"></div>
+
+                        <!-- Right: System Control (Isolated Close) -->
+                        <div class="flex justify-end shrink-0">
+                            ${closeAction ? renderBtn(closeAction) : ''}
+                        </div>
+                    </header>` : ''}
+
+                    <!-- Search & Secondary Nav -->
+                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 shadow-sm">
+                        <div class="relative">
+                            <input type="text" id="${searchId}" placeholder="${searchPlaceholder || 'SEARCH...'}" class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                        </div>
+                    </div>
+
+                    <!-- Main Content Workspace (Slate-200 background for Widget separation) -->
+                    <div id="${contentId}" class="flex-grow overflow-y-auto no-scrollbar bg-slate-200 ${containerClasses}">
+                        ${contentHtml}
+                    </div>
+
+                    <!-- Footer -->
+                    ${footerHtml ? `<div class="p-6 bg-white border-t border-slate-100 flex-shrink-0 z-10">${footerHtml}</div>` : ''}
+                </div>`;
+                            }
+                        },
+
+                        // --- Layout Shell: Section container generation ---
+                        // Logic Resolution: Constructs the collapsible department headers and their item containers.
+                        // Updated: Removed redundant integrated headers that caused visual double-up on desktop.
+                        section: function (opts) {
+                            var name = opts.name;
+                            var total = opts.total || '';
+                            var isOpen = opts.isOpen !== false;
+                            var content = opts.content || '';
+                            var safeName = this.esc(name);
+                            var rawId = name.replace(/"/g, '&quot;'); // Attribute-safe raw key for dataset lookups
+                            return `
+                <div class="mb-3 bg-white rounded-2xl shadow-sm border border-slate-100">
+                    <div class="sticky-section-header relative min-h-[40px] bg-slate-50 border-b border-slate-100 select-none group z-30">
+                        <div class="px-4 py-2.5 flex justify-between items-center cursor-pointer z-40 active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="${rawId}">
+                            <div class="flex items-center gap-3 pointer-events-none">
+                                <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">${safeName}</h2>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-shrink-0">
+                                <span data-section-cap-badge="${safeName}" class="hidden text-[8px] font-black text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none pointer-events-none"></span>
+                                <span data-section-total="${safeName}" class="text-sm font-black text-blue-600 font-mono pointer-events-none">${total}</span>
+                                <button data-action="section-cap" data-id="${rawId}" title="Set section spending cap" class="pointer-events-auto w-5 h-5 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors rounded">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section-content ${isOpen ? '' : 'hidden'} animate-in fade-in slide-in-from-top-1 duration-200">
+                        ${content}
+                    </div>
+                </div>`;
+                        },
+
+                        // --- Data Row Blueprint: Itemized line generation ---
+                        // Logic Resolution: Mobile-optimized widths, font-scaling, and "touch-friendly" inputs.
+                        // Updated to use delegation: data-action attributes for buttons.
+                        lineItem: function (item, sectionName) {
+                            var safeId = this.esc(item.id);
+                            var safeSection = this.esc(sectionName);
+                            var isMobile = window.innerWidth < 768;
+                            var itemCalc = calculateItem(item);
+                            var estimated = itemCalc.estimated;
+                            var variance = itemCalc.variance;
+                            var crew = item.crew || {};
+                            var isLocked = item.rateType === 'fixed';
+                            var initials = crew.name ? crew.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase() : '?';
+
+                            var telLink = mBTPublisher.comm.call(crew.phone);
+                            var waLink = mBTPublisher.comm.whatsapp(crew.phone);
+                            var mailLink = mBTPublisher.comm.email(crew.email);
+                            var isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
+                            var isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
+                            var hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
+
+                            /* --- compact mode: tighter rows, variance column hidden --- */
+                            var rowPad = isCompact ? 'py-1' : 'py-2';
+                            var hideVar = isCompact ? 'hidden' : '';
+                            // Replaced fixed widths with w-px + whitespace-nowrap for numeric columns.
+                            // Reduced horizontal padding from p-2 to px-1 py-2 to improve proximity.
+                            return `
+                <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}"${item.memoStatus === 'Pending' ? ' style="background-color:rgba(234,179,8,0.12);"' : ''}>
+                    <td class="px-1 ${rowPad} text-center relative w-12 md:w-14 overflow-visible">
+                        <div class="crew-wrapper inline-block">
+                            <button data-action="crew-toggle" class="crew-avatar rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
+                                <span class="text-[12px] font-black pointer-events-none">${initials}</span>
+                            </button>
+
+                            <div class="crew-popup">
+                                ${crew.name ? `
+                                    ${crew.phone && telLink !== '#' ? `<a href="${telLink}" class="contact-action-btn action-call" title="Call">${mBTAssets.phone}</a>` : ''}
+                                    ${crew.phone && waLink !== '#' ? `<a href="${waLink}" target="_blank" class="contact-action-btn action-wa" title="WhatsApp">${mBTAssets.wa}</a>` : ''}
+                                    ${crew.email && mailLink !== '#' ? `<a href="${mailLink}" class="contact-action-btn action-email" title="Email">${mBTAssets.mail}</a>` : ''}
+                                    <button data-action="crew-profile" data-id="${safeId}" data-section="${safeSection}" class="contact-action-btn action-profile" title="Profile">${mBTAssets.user}</button>
+                                ` : `
+                                    <button data-action="crew-profile" data-id="${safeId}" data-section="${safeSection}" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">
+                                        <span class="pointer-events-none">Assign</span> ${mBTAssets.plus}
+                                    </button>
+                                `}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <td class="px-1 ${rowPad} w-8 drag-handle text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing text-center ${isCompact ? 'hidden' : ''}">${mBTAssets.drag}</td>
+
+                    <td class="px-1 ${rowPad} text-left min-w-[200px]">
+                        <input type="text" data-id="${safeId}" data-section="${safeSection}" data-field="description" value="${this.esc(item.description)}"
+                               class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item..." ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
+                        ${item.memoStatus === 'Pending' ? '<span style="display:inline-block;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:rgba(120,53,15,0.85);background:rgba(234,179,8,0.25);border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">MEMO</span>' : ''}
+                    </td>
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" data-id="${safeId}" data-section="${safeSection}" data-field="quantity" value="${item.quantity}"
+                               class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0" ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
+                    </td>
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <select data-id="${safeId}" data-section="${safeSection}" data-field="unit"
+                                class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center" ${item.memoStatus === 'Pending' ? 'disabled' : ''}>
+                            ${['Day', 'Week', 'Flat', 'Policy', 'Hour'].map(function (u) { return `<option value="${u}" ${item.unit === u ? 'selected' : ''}>${u.substring(0, 3)}</option>`; }).join('')}
+                        </select>
+                    </td>
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <div class="flex items-center gap-1 justify-end md:justify-start">
+                            <button data-action="row-lock" data-id="${safeId}" data-section="${safeSection}" class="hidden md:flex w-6 h-6 rounded-lg transition-all flex-shrink-0 items-center justify-center ${isLocked ? 'text-rose-500 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}">
+                                <span class="scale-75 pointer-events-none">${isLocked ? mBTAssets.lock : mBTAssets.zap}</span>
+                            </button>
+                            <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="rate" value="${toDisp(item.rate).toFixed(2)}"
+                                   class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0" ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
+                        </div>
+                    </td>
+
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="${safeId}">
+                        ${isMobile ? formatAbbreviated((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated, displayCurrency) : mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated)}
+                    </td>
+
+                    ${isActuals ? `
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">
+                        ${mBTLE.format.currency(item.committedCost || 0)}
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actualQuantity" value="${toDisp(item.actualQuantity || 0).toFixed(2)}"
+                               class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actualRate" value="${toDisp(item.actualRate || 0).toFixed(2)}"
+                               class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">
+                        ${mBTLE.format.currency(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))))}
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="${safeId}">
+                        ${mBTLE.format.currency(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)))}
+                    </td>
+                    ` : `
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap">
+                        <input type="number" step="0.01" data-id="${safeId}" data-section="${safeSection}" data-field="actual" value="${toDisp(item.actual || 0).toFixed(2)}"
+                               class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">
+                    </td>
+                    <td class="px-1 ${rowPad} w-px whitespace-nowrap text-right font-mono font-black text-xs ${hideVar}" data-variance-id="${safeId}">
+                        ${isMobile ? formatAbbreviated(variance, displayCurrency) : mBTLE.format.currency(variance)}
+                    </td>
+                    `}
+
+                    ${hasIncentive ? `
+                    <td class="px-1 ${rowPad} text-center w-8">
+                        <button data-action="item-qualifying-toggle" data-id="${safeId}" data-section="${safeSection}"
+                                class="w-6 h-6 rounded-md text-[9px] font-black transition-all ${item.qualifying ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-100 text-slate-300 hover:bg-emerald-100 hover:text-emerald-600'}"
+                                title="${item.qualifying ? 'Qualifying spend' : 'Mark as qualifying'}">Q</button>
+                    </td>
+                    ` : ''}
+
+                    <td class="px-1 ${rowPad} text-center w-8">
+                        <button data-action="row-delete" data-id="${safeId}" data-section="${safeSection}" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100" ${item.memoStatus === 'Pending' ? 'style="display:none;"' : ''}>
+                            ${mBTAssets.trash}
+                        </button>
+                    </td>
+                    ${item.contact_id ? `
+                    <td class="px-1 ${rowPad} text-center w-8">
+                        <button data-action="quick-pay" data-contact-id="${this.esc(item.contact_id)}" data-item-id="${safeId}" data-section="${safeSection}" class="text-emerald-400 hover:text-emerald-600 transition-colors scale-75 md:scale-100" title="Quick Pay">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                        </button>
+                    </td>
+                    ` : ''}
+                </tr>`;
+                        },
+
+                        // --- Stage Visualization: Production phase card generation ---
+                        // Logic Resolution: Renders specialized cards for the Production Stages view with burn-rate telemetry.
+                        stageCard: function (item, stageKey) {
+                            var cost = (item._sDays || 0) * (item._sRate || 0);
+
+                            // TIER 4 VISUALS: Smart Days Conflict Detection
+                            var limit = (budget.targetLock && budget.targetLock.stages[stageKey]) ? (parseFloat(budget.targetLock.stages[stageKey].days) || 0) : 0;
+                            var days = parseFloat(item._sDays) || 0;
+                            var isConflict = limit > 0 && days > limit;
+
+                            // Note: onmousedown/ontouchstart removed. Sortable 'filter' now handles interaction locking.
+                            // Layout Update: Increased contrast (border-slate-300, shadow-md) and spacing (space-y-3).
+                            // Added 'pr-12' padding to container to accommodate the larger side button.
+                            return `
+                <div class="stage-card-item p-3 pr-12 ${isConflict ? 'bg-amber-50 border-amber-200 shadow-amber-100' : 'bg-white border-slate-300'} border rounded-xl shadow-md space-y-3 group relative cursor-grab active:cursor-grabbing transition-colors duration-300 stage-draggable" 
+                     data-item-id="${item.id}" data-stage-key="${stageKey}">
+                    
+                    <div class="flex justify-between items-start">
+                        <div class="min-w-0 pr-2">
+                            <p class="text-[10px] font-black ${isConflict ? 'text-amber-800' : 'text-slate-800'} uppercase truncate">${this.esc(item.description)}</p>
+                            <p class="text-[8px] ${isConflict ? 'text-amber-600' : 'text-slate-400'} font-bold uppercase tracking-widest">${this.esc(item._sec)}</p>
+                        </div>
+                        <span id="cost-${item.id}-${stageKey}" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">${formatAbbreviated(cost, displayCurrency)}</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- Layout Update: Compact widths (w-12, w-20) for mobile fit -->
+                        <div class="w-12">
+                            <label class="block text-[7px] font-black text-slate-400 uppercase">Days ${isConflict ? '(!)' : ''}</label>
+                            <input type="number" value="${item._sDays}" 
+                                   data-action="stage-update" data-field="days" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}" 
+                                   class="w-full ${isConflict ? 'bg-white text-amber-600 font-black' : 'bg-slate-50 text-blue-600 font-bold'} border-none rounded p-1 text-[10px] no-spinner transition-colors">
+                        </div>
+                        <div class="w-20">
+                            <label class="block text-[7px] font-black text-slate-400 uppercase">Rate</label>
+                            <input type="number" value="${item._sRate}" 
+                                   data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}" 
+                                   class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-mono font-bold text-slate-600 no-spinner">
+                        </div>
+                    </div>
+
+                    <!-- Smart Remove: Centered Right, Larger Touch Target -->
+                    <button 
+                        class="stage-remove-btn absolute top-1/2 -translate-y-1/2 right-2 bg-white text-slate-300 hover:text-red-500 rounded-full w-8 h-8 flex items-center justify-center shadow-md border border-slate-200 z-30 transition-all hover:scale-110 hover:shadow-lg hover:border-red-100"
+                        onpointerdown="event.stopPropagation()"
+                        onclick="mBT.features.stages.logic.removeItem(this)"
+                        data-id="${item.id}"
+                        data-section="${this.esc(item._sec)}"
+                        data-stage="${stageKey}"
+                        title="Remove from Stage">
+                        ${mBTAssets.minusCircle}
+                    </button>
+                </div>`;
+                        }
+                    };
+
+                    // --- Global Alias for Backward Compatibility (The Bridge) ---
+                    window.RenderEngine = mBT.ui.render;
+
+                    /* --- 4. Render Orchestration: Global UI drawing logic --- */
+                    function renderBudgetSections() {
+                        if (!budget || !budget.sections) return '';
+
+                        // Phase 9: Sub-Budget View Filter
+                        var filter = (mBT.ui && mBT.ui.state) ? mBT.ui.state.activeFilter : null;
+
+                        return Object.entries(budget.sections).map(function ([name, section]) {
+                            // Logic Resolution: Sub-Budget Isolation
+                            if (filter && name !== filter) return '';
+
+                            // Logic Resolution: Responsive Table Headers
+                            // Note: Header moved to RenderEngine.section to prevent visual blocking. Table is now body-only.
+                            // Fix: Escape quotes in section name to prevent HTML attribute injection
+                            var safeSectionName = name.replace(/"/g, '&quot;');
+                            var _isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
+                            var _isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
+                            var _hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
+
+                            var bodyContent = `
+                <div class="table-container overflow-x-auto no-scrollbar relative mbt-mobile-safe">
+                    <table class="w-full border-collapse min-w-full table-auto">
+                        <thead class="bg-slate-50 text-[11px] font-black uppercase tracking-tighter text-slate-400 border-b border-slate-100">
+                            <tr>
+                                <th class="p-1 w-12 text-center">Crew</th>
+                                <th class="p-1 w-6 text-center ${_isCompact ? 'hidden' : ''}"></th>
+                                <th class="p-1 text-left">Description</th>
+                                <th class="p-1 w-px text-center whitespace-nowrap px-3">Qty</th>
+                                <th class="p-1 w-px text-center whitespace-nowrap px-3">Unit</th>
+                                <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Rate</th>
+                                <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Est</th>
+                                ${_isActuals ? `
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-slate-400">Commit</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-amber-500">Act Qty</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-amber-500">Act Rate</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2 text-blue-500">ETC</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-2">Var</th>
+                                ` : `
+                                <th class="p-1 w-px text-right md:text-left whitespace-nowrap px-3">Act</th>
+                                <th class="p-1 w-px text-right whitespace-nowrap px-3 ${_isCompact ? 'hidden' : ''}">Var</th>
+                                `}
+                                ${_hasIncentive ? `<th class="p-1 w-8 text-center text-emerald-500">Q</th>` : ''}
+                                <th class="p-1 w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody data-section-body="${safeSectionName}">
+                            ${section.items.map(function (item) { return RenderEngine.lineItem(item, name); }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="bg-white border-t border-slate-100">
+                    <button data-action="section-add" data-id="${safeSectionName}" class="w-full py-2 flex items-center justify-center gap-2 text-blue-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all">
+                        <span class="scale-75 pointer-events-none">${mBTAssets.plus}</span> Add Line Item
+                    </button>
+                </div>`;
+
+                            return RenderEngine.section({
+                                name: name,
+                                total: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(section.total) : section.total),
+                                isOpen: section.isOpen,
+                                content: bodyContent
+                            });
+                        }).join('');
+                    }
+
+                    // Logic Resolution: Toggles visibility of section items.
+                    function handleToggleSection(sectionName, triggerEl) {
+                        var sec = budget.sections[sectionName];
+                        if (sec) {
+                            sec.isOpen = !sec.isOpen;
+                            saveBudget();
+
+                            // Tier 4 Surgical Update: Direct DOM toggle
+                            // Logic Resolution: Ensures triggerEl.closest('.mb-3') finds the card wrapper
+                            // and container.querySelector('.section-content') targets the collapsible area.
+                            if (triggerEl) {
+                                var container = triggerEl.closest('.mb-3');
+                                var content = container ? container.querySelector('.section-content') : null;
+
+                                if (content) {
+                                    if (sec.isOpen) content.classList.remove('hidden');
+                                    else content.classList.add('hidden');
+                                }
+                            } else {
+                                render();
+                            }
+                        }
+                    }
+
+                    // Logic Resolution: Removes items from the budget object.
+                    function handleRemoveItem(sectionName, itemId) {
+                        /* Phase 74A: block deletion of ghost items linked to deal memos */
+                        var sec = budget.sections[sectionName];
+                        if (sec) {
+                            var _target = sec.items.find(function (i) { return String(i.id) === String(itemId); });
+                            if (_target && _target.memoStatus === 'Pending') {
+                                mBTME.alert('Cannot Delete', 'This row is linked to a Deal Memo. Change the memo status to Draft or Executed to remove it.');
+                                return;
+                            }
+                        }
+                        mBTME.confirm("Delete Line Item", "Remove this item from the budget permanently?", function () {
+                            var sec = budget.sections[sectionName];
+                            if (sec) {
+                                // SNAPSHOT TRIGGER: Capture state before deletion
+                                if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Deleted Line Item");
+
+                                // Fix: Use string comparison to avoid type mismatches (Ghost Cost bug)
+                                sec.items = sec.items.filter(function (i) { return String(i.id) !== String(itemId); });
+
+                                // Tier 4 Surgeon: Remove DOM node instantly
+                                if (mBT.ui && mBT.ui.ops) {
+                                    mBT.ui.ops.remove(sectionName, itemId);
+                                    mBTLE.reconcile(); // Update Math
+                                    mBT.ui.paint();    // Update Totals
+                                } else {
+                                    mBTLE.reconcile();
+                                    render(); // Fallback
+                                }
+                            }
+                        });
+                    }
+
+                    // Logic Resolution: Modal for adding new line items from Open Gate.
+                    function showItemSelectorModal(sectionName) {
+                        // Define the commit handler globally for HTML access
+                        window._commitAddItem = function (desc, rate, unit) {
+                            var section = budget.sections[sectionName];
+                            if (!section) return;
+
+                            // SNAPSHOT TRIGGER: Capture state before addition
+                            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added Line Item");
+
+                            var newItem = {
+                                id: 'item_' + Date.now(),
+                                description: desc || 'New Item',
+                                quantity: 1,
+                                unit: unit || 'Day',
+                                rate: parseFloat(rate) || 0,
+                                multiplier: 1,
+                                actual: 0,
+                                crew: { name: '', phone: '', email: '' },
+                                rateType: 'negotiable'
+                            };
+                            section.items.push(newItem);
+                            mBTME.close('itemSelectorModal');
+
+                            // Tier 4 Surgeon: Inject DOM node instantly
+                            if (mBT.ui && mBT.ui.ops) {
+                                mBT.ui.ops.add(sectionName, newItem);
+                                mBTLE.reconcile(); // Update Math
+                                mBT.ui.paint();    // Update Totals
+                            } else {
+                                mBTLE.reconcile();
+                                render(); // Fallback
+                            }
+                        };
+
+                        var rates = mBTOG.rates || [];
+
+                        // Custom filter logic to preserve the 'Create Custom' button dynamically
+                        window._filterItemSelector = function (val) {
+                            var container = document.getElementById('ogItemList');
+                            if (!container) return;
+                            var term = val.toLowerCase();
+                            var filtered = rates.filter(function (r) { return r.description.toLowerCase().includes(term); });
+
+                            var customBtn = `
+            <button onclick="window._commitAddItem('${RenderEngine.esc(val)}', 0, 'Day')" class="w-full text-left p-3 rounded-lg border border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">
+                <span class="text-[10px] font-black uppercase tracking-widest">+ Create "${RenderEngine.esc(val) || 'New Item'}"</span>
+            </button>`;
+
+                            var listHtml = filtered.map(function (r) {
+                                return `
+            <button onclick="window._commitAddItem('${RenderEngine.esc(r.description)}', ${r.rate}, '${r.unit}')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">
+                <span class="text-[10px] font-bold text-slate-700 uppercase">${r.description}</span>
+                <span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">${mBTLE.format.currency(r.rate)} / ${r.unit}</span>
+            </button>
+        `;
+                            }).join('');
+
+                            container.innerHTML = customBtn + listHtml;
+                        };
+
+                        var content = `
+        <div class="flex flex-col h-[500px]">
+            <div class="p-4 border-b border-slate-100 bg-slate-50">
+                <input type="text" oninput="window._filterItemSelector(this.value)" placeholder="SEARCH OPEN GATE..." class="w-full p-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 transition-all" autofocus>
+            </div>
+            <div id="ogItemList" class="flex-grow overflow-y-auto p-2 bg-white no-scrollbar">
+                <button onclick="window._commitAddItem('New Item', 0, 'Day')" class="w-full text-left p-3 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">
+                    <span class="text-[10px] font-black uppercase tracking-widest">+ Create Custom</span>
+                </button>
+                ${rates.map(function (r) {
+                            return `
+                    <button onclick="window._commitAddItem('${RenderEngine.esc(r.description)}', ${r.rate}, '${r.unit}')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">
+                        <span class="text-[10px] font-bold text-slate-700 uppercase">${r.description}</span>
+                        <span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">${mBTLE.format.currency(r.rate)} / ${r.unit}</span>
+                    </button>
+                `;
+                        }).join('')}
+            </div>
+        </div>`;
+
+                        mBTME.open('itemSelector', `Add to ${sectionName}`, content, 'max-w-md');
+                        // Auto-focus logic for better UX
+                        setTimeout(function () { var _inp = document.querySelector('#itemSelectorModal input'); if (_inp) _inp.focus(); }, 50);
+                    }
+
+                    // Logic Resolution: Placeholders for event listeners handled by Tier 6.
+                    function initializeInteractiveInputs() { }
+
+                    // Logic Resolution: Drag and drop initialization.
+                    function initializeDragAndDrop() {
+                        document.querySelectorAll('tbody').forEach(function (el) {
+                            // Fix: Idempotency Check to prevent multiple instances causing "locked" rows
+                            if (el.classList.contains('sortable-initialized')) return;
+
+                            if (typeof Sortable !== 'undefined') {
+                                new Sortable(el, {
+                                    handle: '.drag-handle',
+                                    animation: 150,
+                                    // Fix: Filter inputs so typing doesn't trigger drag or get blocked
+                                    filter: 'input, button, select, textarea, .no-drag',
+                                    preventOnFilter: false,
+                                    // TIER 2 FIX: Persist order changes to Data Model
+                                    onEnd: function (evt) {
+                                        var itemEl = evt.item;
+                                        var secKey = itemEl.dataset.section; // Auto-decodes HTML entities
+                                        var oldIdx = evt.oldIndex;
+                                        var newIdx = evt.newIndex;
+
+                                        if (secKey && budget.sections[secKey] && oldIdx !== newIdx) {
+                                            var items = budget.sections[secKey].items;
+
+                                            // SNAPSHOT TRIGGER: Capture state before reorder
+                                            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Reordered Items");
+
+                                            // Tier 2 Audit Hook: Log Reorder
+                                            if (mBT.data && mBT.data.state && mBT.data.state.audit) {
+                                                var movedItem = items[oldIdx];
+                                                mBT.data.state.audit('REORDER', movedItem.description, { section: secKey });
+                                            }
+
+                                            // Array Move: Splice out, then Splice in
+                                            var [movedItem] = items.splice(oldIdx, 1);
+                                            items.splice(newIdx, 0, movedItem);
+
+                                            // Persist immediately (No render needed as DOM is already moved)
+                                            saveBudget();
+                                        }
+                                    }
+                                });
+                                el.classList.add('sortable-initialized');
+                            }
+                        });
+                    }
+
+                    // Logic Resolution: Stage Drag and Drop initialization.
+                    function initializeStageDragAndDrop() {
+                        // TIER 5 UPGRADE: Integrated Sortable.js for Stages
+                        var containers = document.querySelectorAll('.stage-drop-zone');
+
+                        containers.forEach(function (container) {
+                            // Fix: Idempotency Check to prevent multiple instances
+                            if (container.classList.contains('sortable-initialized')) return;
+
+                            if (typeof Sortable === 'undefined') return;
+
+                            new Sortable(container, {
+                                group: {
+                                    name: 'stages',
+                                    pull: 'clone', // Clone items instead of moving
+                                    put: true
+                                },
+                                animation: 150,
+                                sort: true, // ENABLED: Allow reordering within the stage
+                                delay: 100, // Touch device debounce
+                                delayOnTouchOnly: true,
+                                ghostClass: 'opacity-50',
+                                filter: 'input, button, select, .no-drag, .stage-remove-btn',
+                                preventOnFilter: false, // Fix: Allow clicks to bubble up to Router
+
+                                // Event: Item reordered within the same list
+                                onUpdate: function (evt) {
+                                    window.updateStageOrder(container.dataset.stageKey, container);
+                                },
+
+                                // Event: Item dropped from another list
+                                onAdd: function (evt) {
+                                    var itemEl = evt.item;
+                                    var targetStage = container.dataset.stageKey;
+                                    var sourceStage = itemEl.dataset.stageKey;
+                                    var itemId = itemEl.dataset.itemId;
+
+                                    if (!itemId || !targetStage) {
+                                        showStagesModal(); // Revert
+                                        return;
+                                    }
+
+                                    // Update State Logic
+                                    var item = null;
+                                    Object.values(budget.sections).forEach(function (sec) {
+                                        if (!item) item = sec.items.find(function (i) { return i.id === itemId; });
+                                    });
+
+                                    if (item) {
+                                        if (!item.stageData) item.stageData = {};
+
+                                        // If not already in stage, add it (prevent overwriting if dragging for reorder, though onAdd implies cross-list)
+                                        if (!item.stageData[targetStage] || sourceStage !== targetStage) {
+                                            // Clone data if coming from another stage, else default
+                                            var newData = { days: 1, rate: item.rate || 0 };
+                                            if (sourceStage && item.stageData[sourceStage]) {
+                                                var srcD = item.stageData[sourceStage];
+                                                newData = {};
+                                                var sdK = Object.keys(srcD);
+                                                for (var sdi = 0; sdi < sdK.length; sdi++) { newData[sdK[sdi]] = srcD[sdK[sdi]]; }
+                                            }
+                                            item.stageData[targetStage] = newData;
+                                        }
+
+                                        // Update Order based on drop position
+                                        window.updateStageOrder(targetStage, container);
+
+                                        // Full Redraw to ensure DOM ID/Input consistency
+                                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                                        showStagesModal();
+                                    } else {
+                                        showStagesModal(); // Revert if item not found
+                                    }
+                                }
+                            });
+                            container.classList.add('sortable-initialized');
+                        });
+                    }
+
+                    // Logic Resolution: Helper to persist visual order to data model
+                    window.updateStageOrder = function (stageKey, container) {
+                        var children = Array.from(container.children);
+                        children.forEach(function (el, index) {
+                            var itemId = el.dataset.itemId;
+                            if (!itemId) return;
+
+                            var item = null;
+                            Object.values(budget.sections).forEach(function (sec) {
+                                if (!item) item = sec.items.find(function (i) { return i.id === itemId; });
+                            });
+
+                            if (item && item.stageData && item.stageData[stageKey]) {
+                                item.stageData[stageKey].order = index;
+                            }
+                        });
+                        saveBudget();
+                    };
+
+                    // Logic Resolution: Updates UI based on connectivity.
+                    function updateOnlineStatus() {
+                        if (mBT.router && typeof mBT.router.resolveConnectivityStatus === 'function') mBT.router.resolveConnectivityStatus();
+                    }
+
+                    /* --- Phase 94.2: ES5 .then() conversion of showNewProjectModal --- */
+                    /* Phase 116: Studio Hub styling — 4-col grid, premium dark branding, rates toggle polish */
+                    window.showNewProjectModal = function () {
+                        /* Show modal immediately with loading skeleton, then swap content once blueprints load */
+                        var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
+                            '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Blueprints\u2026</div></div>';
+                        mBTME.open('newProject', '', skeleton, 'max-w-5xl', { hideHeader: true, noPadding: true });
+
+                        /* Load IndexedDB custom blueprint registry then swap skeleton content */
+                        mBT.data.templates.load().catch(function () { return {}; }).then(function (customRegistry) {
+                            /* 1. Industry Standards */
+                            var standardsHtml = Object.keys(BUDGET_TEMPLATES).map(function (key) {
+                                var t = BUDGET_TEMPLATES[key];
+                                return '<button onclick="mBT.data.newProject(false,\'' + key + '\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');"' +
+                                    ' class="group relative flex flex-col items-start p-6 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:-translate-y-1 transition-all text-left w-full h-full">' +
+                                    '<div class="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center mb-4 transition-colors shadow-sm">' +
+                                    (mBTAssets[t.icon] || mBTAssets.file) + '</div>' +
+                                    '<h3 class="text-xs font-black uppercase tracking-widest text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">' + t.label + '</h3>' +
+                                    '<p class="text-[10px] text-slate-500 font-medium leading-relaxed opacity-80 line-clamp-2">' + t.desc + '</p>' +
+                                    '</button>';
+                            }).join('');
+
+                            /* 2. Custom Blueprints — validate schema, skip incompatible versions */
+                            var systemKeys = Object.keys(BUDGET_TEMPLATES);
+                            var validCustom = {};
+                            Object.keys(customRegistry).forEach(function (key) {
+                                if (systemKeys.indexOf(key) !== -1) return;
+                                var validated = mBT.data.templates._validate(customRegistry[key], key);
+                                if (validated) validCustom[key] = validated;
+                            });
+
+                            var customHtml = Object.keys(validCustom).map(function (key) {
+                                var t = validCustom[key];
+                                var label = t.label || key;
+                                var icon = (t.icon && mBTAssets[t.icon]) ? mBTAssets[t.icon] : mBTAssets.file;
+                                var desc = t.desc || (Array.isArray(t.structure) ? t.structure.length + ' Sections' : 'Custom Blueprint');
+                                var safeKey = key.replace(/'/g, "\\'");
+                                return '<div class="group relative flex flex-col p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-white hover:shadow-md transition-all">' +
+                                    '<button onclick="mBT.data.newProject(false,\'' + safeKey + '\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');"' +
+                                    ' class="text-left w-full">' +
+                                    '<div class="flex items-center justify-between w-full mb-1">' +
+                                    '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 truncate pr-2 group-hover:text-indigo-600">' + label + '</div>' +
+                                    '<div class="text-slate-300 group-hover:text-indigo-500 scale-75 flex-shrink-0">' + icon + '</div></div>' +
+                                    '<div class="text-[8px] text-slate-400 font-bold truncate">' + desc + '</div></button>' +
+                                    '<div class="absolute top-2 right-2 hidden group-hover:flex gap-1">' +
+                                    '<button onclick="event.stopPropagation(); mBT_renameBlueprint(\'' + safeKey + '\');" title="Rename"' +
+                                    ' class="w-5 h-5 bg-white rounded shadow text-slate-400 hover:text-blue-500 flex items-center justify-center text-[9px]">' + mBTAssets.edit + '</button>' +
+                                    '<button onclick="event.stopPropagation(); mBT_deleteBlueprint(\'' + safeKey + '\');" title="Delete"' +
+                                    ' class="w-5 h-5 bg-white rounded shadow text-slate-400 hover:text-red-500 flex items-center justify-center text-[9px]">' + mBTAssets.trash + '</button>' +
+                                    '</div></div>';
+                            }).join('');
+
+                            /* 3. Compose final layout */
+                            /* Rates Toggle: persist user preference; show OpenGate sync status */
+                            var _ogSync = localStorage.getItem('moo_og_last_sync');
+                            var _syncLabel = _ogSync ? 'Rates synced' : 'Local rates';
+                            var _injectDefault = localStorage.getItem('mbt_inject_rates_default') !== 'false';
+                            var toggleHtml =
+                                '<div class="mb-5 shrink-0">' +
+                                '<label class="flex items-center justify-between cursor-pointer bg-gradient-to-r from-slate-50 to-white rounded-xl px-5 py-3 border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all">' +
+                                '<div class="flex items-center gap-3">' +
+                                '<div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">' +
+                                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' +
+                                '</div>' +
+                                '<div>' +
+                                '<span class="text-[10px] font-black uppercase tracking-widest text-slate-700 block leading-tight">Inject Live Community Rates</span>' +
+                                '<span class="text-[8px] text-slate-400 font-bold">Pull OpenGate industry-standard rates into your blueprint</span>' +
+                                '</div>' +
+                                '</div>' +
+                                '<div class="flex items-center gap-3 shrink-0">' +
+                                '<div class="relative inline-flex">' +
+                                '<input type="checkbox" id="mbt-inject-rates" class="sr-only peer" ' + (_injectDefault ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_inject_rates_default\',this.checked)">' +
+                                '<div class="w-10 h-5 rounded-full bg-slate-200 peer-checked:bg-blue-600 after:content-[\'\'] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-5 shadow-inner"></div>' +
+                                '</div>' +
+                                '<div class="text-[8px] font-bold ' + (_ogSync ? 'text-sky-500' : 'text-slate-300') + '">' +
+                                (_ogSync ? 'Synced' : 'Local') + '</div>' +
+                                '</div>' +
+                                '</label></div>';
+
+                            var content =
+                                '<div class="p-8 bg-gradient-to-b from-slate-50 to-white min-h-[500px] flex flex-col">' +
+                                '<div class="text-center mb-5 shrink-0">' +
+                                '<div class="inline-flex items-center gap-2 mb-1">' +
+                                '<div class="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center">' +
+                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/></svg>' +
+                                '</div>' +
+                                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">moo Budget Tool</h2>' +
+                                '</div>' +
+                                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
+                                toggleHtml +
+                                '<div class="flex-grow overflow-y-auto no-scrollbar pr-2">' +
+                                '<div class="mb-3 flex items-center gap-3">' +
+                                '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>' +
+                                '<div class="h-px bg-slate-200 flex-grow"></div></div>' +
+                                '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">' + standardsHtml + '</div>' +
+                                (customHtml ?
+                                    '<div class="mb-3 flex items-center gap-3">' +
+                                    '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>' +
+                                    '<div class="h-px bg-slate-200 flex-grow"></div>' +
+                                    '</div>' +
+                                    '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">' + customHtml + '</div>' : '') +
+                                '</div>' +
+                                '<div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4 flex items-center justify-center gap-4">' +
+                                '<button onclick="mBT.data.newProject(false,\'Blank\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">Skip &amp; Create Blank</button>' +
+                                (budget ? '<button onclick="mBT_saveAsBlueprint();" class="text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors hover:bg-indigo-50 px-4 py-2 rounded-lg">Save Current as Blueprint</button>' : '') +
+                                '</div></div>';
+
+                            /* Swap skeleton content */
+                            var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
+                            if (modalBody) modalBody.innerHTML = content;
+                            else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-5xl', { hideHeader: true, noPadding: true }); }
+                        });
+                    };
+
+                    /* --- Phase 61: Blueprint CRUD helpers (called from modal inline buttons) --- */
+                    window.mBT_saveAsBlueprint = function () {
+                        if (!budget) return;
+                        var content =
+                            '<div class="p-5 space-y-3">' +
+                            '<p class="text-xs text-slate-500 font-bold">Name your blueprint. Rates and actuals will be reset to zero.</p>' +
+                            '<input type="text" id="blueprintNameInput" value="' + (budget.projectName || '') + ' Blueprint"' +
+                            ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+                            '<input type="text" id="blueprintDescInput" placeholder="Optional description\u2026"' +
+                            ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+                            '<div class="flex gap-2 pt-1">' +
+                            '<button onclick="mBTME.close(\'saveBlueprintModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+                            '<button onclick="mBT_confirmSaveBlueprint();" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Save Blueprint</button>' +
+                            '</div></div>';
+                        mBTME.close('newProject');
+                        mBTME.open('saveBlueprintModal', 'Save as Blueprint', content, 'max-w-sm');
+                    };
+
+                    /* Phase 94.2: ES5 .then() conversion */
+                    window.mBT_confirmSaveBlueprint = function () {
+                        var name = (document.getElementById('blueprintNameInput') || {}).value || '';
+                        var desc = (document.getElementById('blueprintDescInput') || {}).value || '';
+                        name = name.trim();
+                        if (!name) return;
+                        mBTME.close('saveBlueprintModal');
+                        mBT.data.templates.saveFromProject(budget, name, desc).then(function (savedName) {
+                            mBTME.alert('Blueprint Saved', '\u201c' + savedName + '\u201d added to My Blueprints.');
+                        }).catch(function (e) {
+                            mBTME.alert('Error', 'Could not save blueprint: ' + (e.message || 'Unknown error'));
+                        });
+                    };
+
+                    /* Phase 94.2: async removed — body already uses .then() */
+                    window.mBT_deleteBlueprint = function (name) {
+                        mBTME.close('newProject');
+                        var content =
+                            '<div class="p-5 space-y-4">' +
+                            '<p class="text-sm text-slate-600">Delete blueprint <strong>' + name + '</strong>? This cannot be undone.</p>' +
+                            '<div class="flex gap-2">' +
+                            '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+                            '<button onclick="mBT.data.templates.deleteTemplate(\'' + name.replace(/'/g, "\\'") + '\').then(function(){ mBTME.close(\'deleteBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all">Delete</button>' +
+                            '</div></div>';
+                        mBTME.open('deleteBlueprintModal', 'Delete Blueprint', content, 'max-w-sm');
+                    };
+
+                    /* Phase 94.2: async removed — body already uses .then() */
+                    window.mBT_renameBlueprint = function (oldName) {
+                        mBTME.close('newProject');
+                        var content =
+                            '<div class="p-5 space-y-3">' +
+                            '<input type="text" id="renameBlueprintInput" value="' + oldName + '"' +
+                            ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-indigo-400 focus:outline-none">' +
+                            '<div class="flex gap-2">' +
+                            '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+                            '<button onclick="var n=(document.getElementById(\'renameBlueprintInput\')||{}).value||\'\'; mBT.data.templates.renameTemplate(\'' + oldName.replace(/'/g, "\\'") + '\', n).then(function(){ mBTME.close(\'renameBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Rename</button>' +
+                            '</div></div>';
+                        mBTME.open('renameBlueprintModal', 'Rename Blueprint', content, 'max-w-sm');
+                    };
+
+
+                    /* ================= TIER 5: MODULE CONTROLLERS & SMART FEATURES ================= */
+                    /* ========= v19.54 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
+                    // Previously: mBTME
+                    mBT.ui.modal = {
+                        containerId: 'global-modal-container', stack: [],
+                        /* --- Registry Resolution: Pointing to Tier 1 Asset Registry --- */
+                        icons: {
+                            close: mBTAssets.close,
+                            alert: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+                        },
+
+                        /* --- Portal Generation: Dynamic injection of overlay layers --- */
+                        open: function (id, title, contentHtml, maxWidth, options) {
+                            maxWidth = maxWidth || 'max-w-2xl';
+                            options = options || {};
+                            var self = this;
+                            var container = document.getElementById(this.containerId);
+                            if (!container) return;
+
+                            /* Focus Management (Stack-based for nested support) */
+                            if (!this.focusStack) this.focusStack = [];
+                            this.focusStack.push(document.activeElement);
+
+                            /* Prevent background scrolling while modal is active */
+                            document.body.style.overflow = 'hidden';
+
+                            var modalId = id + 'Modal';
+                            this.close(modalId, true); /* Cleanup duplicates */
+
+                            var headerHtml = options.hideHeader ? '' :
+                                '<div class="px-4 py-2.5 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">' +
+                                '<div></div><h2 class="text-xs font-black uppercase tracking-widest text-slate-800 text-center truncate px-2">' + title + '</h2>' +
+                                '<div class="text-right">' +
+                                '<button onclick="mBT.ui.modal.close(\'' + modalId + '\')" class="text-slate-400 hover:text-red-500 transition-all p-1 rounded-md hover:bg-slate-50">' + this.icons.close + '</button>' +
+                                '</div></div>';
+
+                            /* Phase 87B: Calculate dynamic Z-index based on stack depth */
+                            var baseZ = 999;
+                            var newZ = baseZ + (this.stack.length * 10);
+                            this.stack.push(modalId);
+                            var fullHtml =
+                                '<div id="' + modalId + '" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 hidden" style="z-index:' + newZ + '; transition: opacity 300ms;" tabindex="-1">' +
+                                '<div id="' + modalId + 'Content" class="bg-white rounded-2xl shadow-2xl w-full ' + maxWidth + ' mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">' +
+                                headerHtml +
+                                '<div class="flex-grow overflow-hidden" id="' + modalId + 'Body">' + contentHtml + '</div>' +
+                                '</div></div>';
+                            container.insertAdjacentHTML('beforeend', fullHtml);
+                            var modal = document.getElementById(modalId);
+                            modal.classList.remove('hidden');
+
+                            /* Animation & Focus Trapping */
+                            setTimeout(function () {
+                                modal.classList.remove('opacity-0');
+                                var contentEl = document.getElementById(modalId + 'Content');
+                                if (contentEl) contentEl.classList.remove('scale-95');
+
+                                /* Auto-focus first interactive element */
+                                var focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                                if (focusable.length > 0) {
+                                    var auto = modal.querySelector('[autofocus]');
+                                    if (auto) auto.focus();
+                                    else focusable[0].focus();
+                                } else {
+                                    modal.focus();
+                                }
+                            }, 50);
+
+                            modal.addEventListener('click', function (e) { if (e.target === modal) self.close(modalId); });
+                            /* Escape Key Listener */
+                            var escHandler = function (e) {
+                                if (e.key === 'Escape') {
+                                    if (self.stack[self.stack.length - 1] === modalId) {
+                                        self.close(modalId);
+                                        window.removeEventListener('keydown', escHandler);
+                                    }
+                                }
+                            };
+                            window.addEventListener('keydown', escHandler);
+
+                            if (options.onOpen && typeof options.onOpen === 'function') setTimeout(options.onOpen, 50);
+                            return modal;
+                        },
+
+                        /* --- Portal Dissolution: Synchronized removal of UI layers --- */
+                        close: function (modalId, instant) {
+                            instant = instant || false;
+                            var self = this;
+                            /* Phase 87B: Pop from stack */
+                            this.stack = (this.stack || []).filter(function (id) { return id !== modalId; });
+                            if (this.stack.length === 0) document.body.style.overflow = '';
+                            var modal = document.getElementById(modalId);
+                            if (!modal) return;
+
+                            var finalize = function () {
+                                modal.remove();
+                                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                                /* Focus Restoration */
+                                if (self.focusStack && self.focusStack.length > 0) {
+                                    var el = self.focusStack.pop();
+                                    if (el && document.body.contains(el)) el.focus();
+                                }
+                            };
+
+                            if (instant) { finalize(); } else {
+                                modal.classList.add('opacity-0');
+                                var contentEl = document.getElementById(modalId + 'Content');
+                                if (contentEl) contentEl.classList.add('scale-95');
+                                setTimeout(finalize, 300);
+                            }
+                        },
+
+                        /* --- System: Non-blocking Confirmation Modal --- */
+                        confirm: function (title, message, onConfirm) {
+                            var self = this;
+                            var content =
+                                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                                '<div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4 animate-bounce shadow-sm">' + this.icons.alert + '</div>' +
+                                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                                '<p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">' + message + '</p>' +
+                                '<div class="flex gap-3 w-full max-w-xs">' +
+                                '<button id="mbtConfirmCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>' +
+                                '<button id="mbtConfirmYes" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">Confirm</button>' +
+                                '</div></div>';
+                            this.open('confirmation', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+                            setTimeout(function () {
+                                var cancelBtn = document.getElementById('mbtConfirmCancel');
+                                var yesBtn = document.getElementById('mbtConfirmYes');
+                                if (cancelBtn) cancelBtn.onclick = function () { self.close('confirmationModal'); };
+                                if (yesBtn) yesBtn.onclick = function () {
+                                    self.close('confirmationModal');
+                                    if (onConfirm && typeof onConfirm === 'function') onConfirm();
+                                };
+                            }, 50);
+                        },
+
+                        /* --- System: Non-blocking Alert Modal --- */
+                        alert: function (title, message, onOk) {
+                            var self = this;
+                            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('alert');
+                            var content =
+                                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                                '<div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-4 shadow-sm">' +
+                                '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+                                '</div>' +
+                                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                                '<p class="text-xs text-slate-500 font-bold mb-8 max-w-xs leading-relaxed">' + message + '</p>' +
+                                '<button id="mbtAlertOk" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>' +
+                                '</div>';
+                            this.open('alert', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+                            setTimeout(function () {
+                                var okBtn = document.getElementById('mbtAlertOk');
+                                if (okBtn) okBtn.onclick = function () {
+                                    self.close('alertModal');
+                                    if (onOk && typeof onOk === 'function') onOk();
+                                };
+                            }, 50);
+                        },
+
+                        /* --- System: Non-blocking Prompt Modal --- */
+                        prompt: function (title, message, defaultValue, onOk) {
+                            var self = this;
+                            var content =
+                                '<div class="p-8 text-center flex flex-col items-center justify-center">' +
+                                '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">' + title + '</h3>' +
+                                '<p class="text-xs text-slate-500 font-bold mb-4 max-w-xs leading-relaxed">' + message + '</p>' +
+                                '<input type="text" id="mbtPromptInput" value="' + (defaultValue || '') + '" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-6" autofocus>' +
+                                '<div class="flex gap-3 w-full max-w-xs">' +
+                                '<button id="mbtPromptCancel" class="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Cancel</button>' +
+                                '<button id="mbtPromptOk" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black shadow-lg transition-all transform active:scale-95">OK</button>' +
+                                '</div></div>';
+                            this.open('prompt', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+                            setTimeout(function () {
+                                var input = document.getElementById('mbtPromptInput');
+                                if (input) {
+                                    input.focus();
+                                    input.select();
+                                    input.addEventListener('keydown', function (e) {
+                                        if (e.key === 'Enter') document.getElementById('mbtPromptOk').click();
+                                    });
+                                }
+                                var cancelBtn = document.getElementById('mbtPromptCancel');
+                                var okBtn = document.getElementById('mbtPromptOk');
+                                if (cancelBtn) cancelBtn.onclick = function () { self.close('promptModal'); };
+                                if (okBtn) okBtn.onclick = function () {
+                                    var val = document.getElementById('mbtPromptInput').value;
+                                    self.close('promptModal');
+                                    if (onOk && typeof onOk === 'function') onOk(val);
+                                };
+                            }, 50);
+                        },
+
+                        /* --- System: Status Loader --- */
+                        showLoader: function (message) {
+                            var content =
+                                '<div class="p-6 flex flex-col items-center justify-center">' +
+                                '<div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>' +
+                                '<p class="text-[10px] font-black uppercase tracking-widest text-slate-500 animate-pulse">' + message + '</p>' +
+                                '</div>';
+                            this.open('loader', '', content, 'max-w-xs', { hideHeader: true, noPadding: true });
+                        },
+                        hideLoader: function () {
+                            this.close('loaderModal');
+                        },
+
+                        /* --- Search Integration: Filtering logic for modal lists --- */
+                        attachSearch: function (inputId, listContainerId, dataItems, renderRowFn) {
+                            var input = document.getElementById(inputId);
+                            var list = document.getElementById(listContainerId);
+                            if (!input || !list) return;
+                            input.addEventListener('input', function (e) {
+                                var term = e.target.value.toLowerCase();
+                                var filtered = dataItems.filter(function (item) {
+                                    return (item.description || item.name || item.label || '').toLowerCase().includes(term);
+                                });
+                                /* Added col-span-full to support grid layouts in No Matches state */
+                                list.innerHTML = filtered.length > 0 ? filtered.map(renderRowFn).join('') : '<div class="p-12 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest col-span-full">No Matches</div>';
+                            });
+                        }
+                    };
+
+                    /* --- Global Alias for Backward Compatibility --- */
+                    window.mBTME = mBT.ui.modal;
+
+                    /* mBTPublisher engine loaded from src/scripts/engine/publisher.js */
+                    /* ========= v19.54 mBTDB: STUDIO BUILDER ENGINE ========= */
+                    window.mBTDB = {
+                        config: {
+                            paperSizes: {
+                                'us-letter': { label: 'Letter', width: '8.5in', height: '11in', cols: 48 },
+                                'a4': { label: 'A4', width: '210mm', height: '297mm', cols: 48 },
+                                'us-legal': { label: 'Legal', width: '8.5in', height: '14in', cols: 48 },
+                                'a3': { label: 'A3', width: '297mm', height: '420mm', cols: 60 },
+                                'strip-12': { label: 'Strip (12)', width: '14in', height: '8.5in', cols: 12 }
+                            }
+                        },
+                        state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1, _cache: null },
+
+                        // --- PERSISTENCE LAYER (Phase 1.2) ---
+                        _saveTimer: null,
+                        _debouncedSave: function () {
+                            clearTimeout(this._saveTimer);
+                            this._saveTimer = setTimeout(function () {
+                                this._triggerSave();
+                                // Visual Feedback for Auto-Save
+                                var status = document.getElementById('statusBar');
+                                if (status) {
+                                    // Subtle indicator
+                                    var indicator = document.createElement('div');
+                                    indicator.className = "fixed bottom-4 right-4 bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg animate-pulse z-[1000] pointer-events-none";
+                                    indicator.innerText = "Auto-Saved";
+                                    document.body.appendChild(indicator);
+                                    setTimeout(function () { return indicator.remove(); }, 2000);
+                                }
+                            }, 1500);
+                        },
+
+                        // --- LIVE SYNC ENGINE (Phase 9) ---
+                        resolveLinkedData: function (doc) {
+                            // Optimization: Return cached deeply-cloned data if available for this render cycle
+                            // This prevents expensive JSON operations on purely visual updates (like toggling Edit Mode)
+                            if (this.state._cache && this.state._cache.docId === doc.id) {
+                                return this.state._cache.data;
+                            }
+
+                            // Deep clone to prevent render-cycle mutations from polluting storage
+                            var data = JSON.parse(JSON.stringify(doc.content.data));
+
+                            if (!budget || !budget.sections) {
+                                // Cache even if no budget link exists
+                                this.state._cache = { docId: doc.id, data: data };
+                                return data;
+                            }
+
+                            // Fast Lookup Map
+                            var budgetMap = new Map();
+                            Object.values(budget.sections).forEach(function (sec) {
+                                sec.items.forEach(function (i) { return budgetMap.set(i.id, i); });
+                            });
+
+                            // 1. Sync Lists (Crew, Cast)
+                            ['crew', 'cast'].forEach(function (key) {
+                                if (Array.isArray(data[key])) {
+                                    data[key] = data[key].map(function (item) {
+                                        if (item.linkedItemId && budgetMap.has(item.linkedItemId)) {
+                                            var bItem = budgetMap.get(item.linkedItemId);
+                                            if (key === 'crew') {
+                                                item.name = (bItem.crew && bItem.crew.name) || bItem.description;
+                                                item.contact = (bItem.crew && bItem.crew.phone) || item.contact;
+                                                item.position = bItem.description;
+                                            } else if (key === 'cast') {
+                                                item.actor = (bItem.crew && bItem.crew.name) || item.actor;
+                                                item.contact = (bItem.crew && bItem.crew.phone) || item.contact;
+                                            }
+                                        }
+                                        return item;
+                                    });
+                                }
+                            });
+
+                            // Store in cache
+                            this.state._cache = { docId: doc.id, data: data };
+                            return data;
+                        },
+
+                        // --- 1. Registry Resolution: Tier 1 Asset Map ---
+                        icons: {
+                            trash: mBTAssets.trash, plus: mBTAssets.plus, user: mBTAssets.user,
+                            cloud: mBTAssets.cloud, save: mBTAssets.save, undo: mBTAssets.undo,
+                            redo: mBTAssets.redo, copy: mBTAssets.copy, print: mBTAssets.print,
+                            close: mBTAssets.close, wand: mBTAssets.wand, grid: mBTAssets.grid,
+                            list: mBTAssets.list, image: mBTAssets.image
+                        },
+
+                        // Logic Resolution: Template Registry migrated to mBTOG (Open Gate)
+                        // We clear this local object to enforce the Single Source of Truth rule.
+                        templates: {},
+
+                        // --- 2. Portal Orchestration ---
+                        open: function (docId) {
+                            this.state.currentDocId = docId;
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return;
+                            if (!doc.content) doc.content = { data: {}, widgets: [] };
+
+                            // Logic Resolution: Auto-Hydrate from Central Registry (Open Gate)
+                            if (!doc.content.widgets || doc.content.widgets.length === 0) {
+                                // Tier 2.5 Handshake: Pull blueprints from Open Gate
+                                var registry = (typeof mBTOG !== 'undefined' && mBTOG.templates) ? mBTOG.templates : [];
+                                var tmpl = registry.find(function (t) { return t.id === doc.type; });
+
+                                // Fallback Heuristics for Legacy Types
+                                if (!tmpl) {
+                                    if (['storyboard', 'budgetRep', 'vendorBid', 'riskAI', 'carbon', 'postSched'].includes(doc.type)) {
+                                        // Map legacy complex types to Script defaults if specific template missing
+                                        tmpl = registry.find(function (t) { return t.id === 'script'; });
+                                    }
+                                    // Ultimate Fallback
+                                    if (!tmpl) tmpl = { widgets: [{ id: 'meta_header', x: 0, y: 0, w: 12, h: 2, type: 'header' }] };
+                                }
+
+                                doc.content.widgets = JSON.parse(JSON.stringify(tmpl.widgets));
+
+                                // Phase 1: Hard Save - Merge Template Defaults with System Defaults
+                                var sysDefaults = this._generateDefaultData();
+                                var tmplDefaults = tmpl.defaults || {};
+
+                                // Deep merge logic for defaults
+                                doc.content.data = JSON.parse(JSON.stringify(sysDefaults));
+
+                                if (tmplDefaults) {
+                                    Object.keys(tmplDefaults).forEach(function (key) {
+                                        if (Array.isArray(tmplDefaults[key])) {
+                                            doc.content.data[key] = tmplDefaults[key].slice();
+                                        } else if (typeof tmplDefaults[key] === 'object' && tmplDefaults[key] !== null) {
+                                            var merged = {};
+                                            var mK1 = Object.keys(doc.content.data[key] || {});
+                                            for (var mi = 0; mi < mK1.length; mi++) { merged[mK1[mi]] = (doc.content.data[key] || {})[mK1[mi]]; }
+                                            var mK2 = Object.keys(tmplDefaults[key]);
+                                            for (var mj = 0; mj < mK2.length; mj++) { merged[mK2[mj]] = tmplDefaults[key][mK2[mj]]; }
+                                            doc.content.data[key] = merged;
+                                        } else {
+                                            doc.content.data[key] = tmplDefaults[key];
+                                        }
+                                    });
+                                }
+                            }
+
+                            if (typeof mBTME !== 'undefined') {
+                                // Logic Resolution: Fixed ID string to match the close() function target
+                                mBTME.open('documentViewer', 'Document Studio', '<div id="mBTDB_Container"></div>', 'w-full h-full max-w-full', { noPadding: true, hideHeader: true });
+                                this.renderFrame();
+                            }
+                        },
+                        close: function () {
+                            if (this.state.isEditing) {
+                                this._saveLayoutState();
+                                this.state.isEditing = false;
+                            }
+                            if (typeof mBTME !== 'undefined') mBTME.close('documentViewerModal');
+                            document.body.classList.remove('print-mode');
+                            this.state.currentDocId = null;
+                            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                            if (typeof render === 'function') render();
+                        },
+
+                        toggleEditMode: function () {
+                            if (this.state.isEditing && this.state.grid) this._saveLayoutState();
+                            this.state.isEditing = !this.state.isEditing;
+                            var container = document.getElementById('mBTDB_Workspace');
+                            var grid = this.state.grid;
+                            if (container && grid) {
+                                if (this.state.isEditing) {
+                                    container.classList.add('editing-mode');
+                                    grid.setStatic(false);
+                                } else {
+                                    container.classList.remove('editing-mode');
+                                    grid.setStatic(true);
+                                }
+
+                                // CRITICAL FIX: Re-render UI to update 'disabled' state on inputs
+                                var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                                if (doc) {
+                                    this._renderMetaHeader(doc);
+                                    doc.content.widgets.forEach(function (w) {
+                                        var el = document.querySelector(`.grid-stack-item[gs-id="${w.id}"] .widget-body`);
+                                        if (el) el.innerHTML = this._getContentForWidget(w, doc);
+                                    });
+                                    // Re-init canvas logic for MudMaps after re-render
+                                    this._initMudMaps();
+                                }
+
+                                this._updateHeaderButtons();
+                            }
+                        },
+                        _saveLayoutState: function () {
+                            if (!this.state.grid) return;
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            this.state.grid.engine.nodes.forEach(function (node) {
+                                var widget = doc.content.widgets.find(function (w) { return w.id === node.id; });
+                                if (widget) { widget.x = node.x; widget.y = node.y; widget.w = node.w; widget.h = node.h; }
+                            });
+                            this._triggerSave();
+                            mBT.data.save(); // Force disk commit
+                        },
+
+                        // --- 3. Publishing & Intelligence Hub ---
+                        openPreviewSelector: function () {
+                            var content = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-slate-50">
+                <button onclick="mBTME.close('previewSelectorModal'); mBTDB.previewDoc('standard')" class="flex flex-col items-center gap-4 p-6 bg-white border border-slate-200 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all group text-center w-full">
+                    <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                        ${mBTAssets.file}
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Industry Standard</h4>
+                        <p class="text-[9px] text-slate-400 font-bold mt-1">Clean White • High Contrast</p>
+                    </div>
+                </button>
+
+                <button onclick="mBTME.close('previewSelectorModal'); mBTDB.previewDoc('graphic')" class="flex flex-col items-center gap-4 p-6 bg-white border border-slate-200 rounded-3xl hover:border-purple-500 hover:shadow-xl transition-all group text-center w-full">
+                    <div class="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                        ${mBTAssets.image}
+                    </div>
+                    <div>
+                        <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Graphic Layout</h4>
+                        <p class="text-[9px] text-slate-400 font-bold mt-1">Workspace Grey • Original UI</p>
+                    </div>
+                </button>
+            </div>`;
+
+                            mBTME.open('previewSelector', 'Capture Mode', content, 'max-w-lg', { noPadding: true });
+                        },
+
+                        previewDoc: function (mode) {
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            if (!doc || typeof mBTPublisher === 'undefined') return;
+
+                            var workspace = document.getElementById('mBTDB_Workspace');
+                            if (!workspace) return;
+
+                            // Logic Resolution: For 'standard' mode, we temporarily strip the workspace grey 
+                            // to ensure a high-contrast white paper export.
+                            if (mode === 'standard') {
+                                workspace.classList.remove('bg-slate-200');
+                                workspace.classList.add('bg-white');
+                            }
+
+                            if (mBTME.showLoader) mBTME.showLoader(`Rendering ${mode === 'standard' ? 'Industry' : 'Graphic'} Preview...`);
+
+                            mBTPublisher.generateFastPreview(mode, 'mBTDB_Workspace', function (jpegURL) {
+                                // Restore visual separation state
+                                if (mode === 'standard') {
+                                    workspace.classList.remove('bg-white');
+                                    workspace.classList.add('bg-slate-200');
+                                }
+
+                                if (mBTME.hideLoader) mBTME.hideLoader();
+                                mBTME.open('previewModal', `Snapshot: ${mode.toUpperCase()}`,
+                                    `<div class="flex flex-col items-center bg-slate-900 h-full p-8 overflow-auto no-scrollbar"><img src="${jpegURL}" id="finalPreviewImage" class="shadow-2xl border border-black max-w-full h-auto mb-24 bg-white rounded-sm"><div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-4 z-[10001]"><button onclick="mBTPublisher.downloadJPEG('${jpegURL}', '${doc.label}')" class="flex items-center gap-3 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95">Download JPEG</button><button onclick="mBTDB.sendToDistribution('${jpegURL}')" class="flex items-center gap-3 bg-emerald-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95">Send to Crew</button><button onclick="mBTME.close('previewModal')" class="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-slate-100 transition-all">Close</button></div></div>`, 'w-full h-full');
+                            });
+                        },
+
+                        sendToDistribution: function (jpegURL) {
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            // Logic Resolution: Close only the preview modal, keeping the Studio active
+                            mBTME.close('previewModal');
+                            if (window.openDocumentShareSelector) window.openDocumentShareSelector(doc.id);
+                            else mBTME.alert("Module Error", "Distribution Hub not active.");
+                        },
+
+                        // --- NEW: AI Hospital Lookup ---
+                        autoFillHospital: function (docId, index, address) {
+                            if (!address) return Promise.resolve();
+                            var provider = mBT.features.ai.getSelectedProvider();
+                            var apiKey = mBT.features.ai.getStoredApiKey(provider);
+                            if (!apiKey) return Promise.resolve(); // Silent skip if no AI
+
+                            var prompt = `Identify the nearest emergency hospital to this address: "${address}". Return ONLY the name of the hospital. Do not include address or other text.`;
+                            var self = this;
+
+                            return mBT.features.ai.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
+                                // Cleanup response
+                                var clean = result.replace(/Here is the.*?|The nearest.*?is/gi, '').replace(/[".]/g, '').trim();
+                                self.updateRow(docId, 'locations', index, 'hospital', clean);
+                            }).catch(function (e) { console.warn("AI Hospital Lookup failed", e); });
+                        },
+
+                        /* --- [Feat16]. Mud Map Intelligence (Geocoding Engine) --- */
+                        getCoordinates: function (query) {
+                            if (!query) return Promise.resolve(null);
+                            return fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`).then(function (res) {
+                                return res.json();
+                            }).then(function (data) {
+                                if (data.results && data.results.length > 0) {
+                                    return { lat: data.results[0].latitude, lon: data.results[0].longitude };
+                                }
+                                return null;
+                            }).catch(function (e) { console.error("Geocoding failed", e); return null; });
+                        },
+
+                        /* --- [Feat16]. Mud Map Intelligence (Slate Generator) --- */
+                        loadMapBackground: function (widgetId, docId) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return Promise.resolve();
+                            var self = this;
+
+                            // 1. Find Context (First Location)
+                            var loc = (doc.content.data.locations && doc.content.data.locations[0]);
+                            var query = loc ? (loc.address || loc.name) : "";
+
+                            if (!query) { mBTME.alert("Map Error", "No location address found in Logistics."); return Promise.resolve(); }
+
+                            mBTME.showLoader("Locating Site...");
+
+                            // 2. Geocode (Using logic from Batch 2.1)
+                            return this.getCoordinates(query).then(function (coords) {
+                                mBTME.hideLoader();
+
+                                if (!coords) { mBTME.alert("Not Found", "Could not locate address."); return; }
+
+                                // 3. Generate Site Slate (Canvas Ops)
+                                var cvs = document.getElementById(`canvas_${widgetId}`);
+                                if (cvs) {
+                                    var ctx = cvs.getContext('2d');
+                                    var w = cvs.width;
+                                    var h = cvs.height;
+
+                                    // A. Background & Grid
+                                    ctx.fillStyle = "#f8fafc"; // Slate-50
+                                    ctx.fillRect(0, 0, w, h);
+
+                                    ctx.strokeStyle = "#e2e8f0"; // Slate-200
+                                    ctx.lineWidth = 1;
+                                    for (var x = 20; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+                                    for (var y = 20; y < h; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+                                    // B. Header Block
+                                    ctx.fillStyle = "#0f172a"; // Slate-900
+                                    ctx.fillRect(0, 0, w, 60);
+
+                                    ctx.fillStyle = "#ffffff";
+                                    ctx.font = "bold 14px 'Arial', sans-serif";
+                                    ctx.fillText("SITE PLAN / MUD MAP", 15, 25);
+
+                                    ctx.font = "10px 'Arial', sans-serif";
+                                    ctx.fillStyle = "#94a3b8";
+                                    ctx.fillText(`LOC: ${loc.name.toUpperCase()}`, 15, 45);
+
+                                    // C. GPS Watermark
+                                    ctx.fillStyle = "#475569";
+                                    ctx.font = "bold 12px 'Courier New', monospace";
+                                    ctx.fillText(`ADDR: ${query}`, 15, 80);
+                                    ctx.fillText(`GPS:  ${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`, 15, 95);
+
+                                    // D. Compass Icon
+                                    ctx.strokeStyle = "#cbd5e1";
+                                    ctx.lineWidth = 2;
+                                    ctx.beginPath();
+                                    ctx.arc(w - 40, 90, 20, 0, 2 * Math.PI);
+                                    ctx.stroke();
+
+                                    ctx.fillStyle = "#64748b";
+                                    ctx.font = "bold 12px Arial";
+                                    ctx.fillText("N", w - 44, 94);
+
+                                    // 4. Save to State (Persist as Image Data)
+                                    self.updateData(docId, `additional.${widgetId}`, cvs.toDataURL());
+                                }
+                            });
+                        },
+
+                        autoFillWidget: function (type, docId) {
+                            var self = this;
+                            mBTME.confirm("Auto-Fill", `Auto-fill ${type}? This uses external services and AI.`, function () {
+                                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                                if (!doc) return;
+
+                                var finalize = function () {
+                                    // Logic Resolution: Use Surgical DOM Update instead of full RenderFrame() to preserve layout
+                                    var widget = doc.content.widgets.find(function (w) { return w.type === type; });
+                                    if (widget) {
+                                        var content = self._getContentForWidget(widget, doc);
+                                        var el = document.querySelector(`.grid-stack-item[gs-id="${widget.id}"] .widget-body`);
+                                        if (el) el.innerHTML = content;
+                                        // Update Header Sun/Moon if modified
+                                        if (type === 'logistics' || type === 'locations') self._renderMetaHeader(doc);
+                                    } else {
+                                        self.renderFrame();
+                                    }
+                                };
+
+                                if (type === 'contacts') {
+                                    var map = { 'director': 'Director', 'producer': 'Producer', 'ad': '1st AD' };
+                                    var mapKeys = Object.keys(map);
+                                    mapKeys.forEach(function (key) {
+                                        var role = map[key];
+                                        var hit = null;
+                                        if (budget.sections) Object.values(budget.sections).some(function (s) {
+                                            var i = s.items.find(function (x) { return x.description.toLowerCase().includes(role.toLowerCase()) && x.crew && x.crew.name; });
+                                            if (i) { hit = { name: i.crew.name, contact: i.crew.phone || i.crew.email }; return true; }
+                                        });
+                                        if (!hit) {
+                                            var g = mBTOG.contacts.find(function (x) { return x.role && x.role.toLowerCase().includes(role.toLowerCase()); });
+                                            if (g) hit = { name: g.name, contact: g.contact || g.phone };
+                                        }
+                                        if (hit) self.updateData(docId, `contacts.${key}`, `${hit.name} ${hit.contact || ''}`);
+                                    });
+                                    finalize();
+                                } else if (type === 'crew') {
+                                    Object.values(budget.sections).forEach(function (sec) {
+                                        return sec.items.forEach(function (i) {
+                                            if (i.crew && i.crew.name) {
+                                                var exists = doc.content.data.crew.some(function (c) { return c.name === i.crew.name && c.department === i.description; });
+                                                if (!exists) {
+                                                    self.addRow(docId, 'crew', 'person', { department: i.description, name: i.crew.name, contact: i.crew.phone, linkedItemId: i.id });
+                                                }
+                                            }
+                                        });
+                                    });
+                                    finalize();
+                                }
+                                // --- NEW: Logistics / Locations Support ---
+                                else if (type === 'logistics' || type === 'locations') {
+                                    var locs = doc.content.data.locations || [];
+                                    mBTME.showLoader("Scanning Locations...");
+
+                                    // Serial execution using reduce to prevent rate limiting
+                                    var indices = [];
+                                    for (var _li = 0; _li < locs.length; _li++) { indices.push(_li); }
+
+                                    indices.reduce(function (chain, i) {
+                                        return chain.then(function () {
+                                            var l = locs[i];
+                                            var p = Promise.resolve();
+                                            if (l.name) p = p.then(function () { return self.autoFillWeather(docId, i, l.name); });
+                                            if (l.address && !l.hospital) p = p.then(function () { return self.autoFillHospital(docId, i, l.address); });
+                                            return p;
+                                        });
+                                    }, Promise.resolve()).then(function () {
+                                        mBTME.hideLoader();
+                                        finalize();
+                                    });
+                                    return; // finalize called inside .then above
+                                } else {
+                                    finalize();
+                                }
+                            });
+                        },
+
+                        neuralFill: function (widgetId, docId) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return;
+
+                            var widget = doc.content.widgets.find(function (w) { return w.id === widgetId; });
+                            if (!widget) return;
+
+                            var provider = mBT.features.ai.getSelectedProvider();
+                            var apiKey = mBT.features.ai.getStoredApiKey(provider);
+                            var self = this;
+
+                            if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Neural Fill.");
+
+                            // --- HYBRID ROUTER (Batch 3.1) ---
+                            var currentVal = (doc.content.data.additional && doc.content.data.additional[widgetId]) || "";
+                            var isScript = (doc.type === 'script' || widget.label.toLowerCase().includes('script')) && widget.type === 'richText';
+
+                            // ROUTE 1: SCRIPT PARSING (Structure Extraction)
+                            // Trigger: Script document + RichText widget + Content > 50 chars
+                            if (isScript && currentVal.length > 50) {
+                                mBTME.confirm("Script Analysis", "Analyze script text to extract Scenes and Cast data?", function () {
+                                    mBTME.showLoader("Analyzing Screenplay...");
+                                    var prompt = `Analyze this screenplay text. Return valid JSON only. No markdown.
+                Structure: { "scenes": ["INT. LOCATION - DAY", ...], "cast": ["CHARACTER NAME", ...] }.
+                Text: \n\n ${currentVal.substring(0, 15000)}`;
+
+                                    mBT.features.ai.callUnifiedAI(provider, apiKey, prompt, "ROLE: Data Parser. OUTPUT: Pure JSON. No chat.").then(function (result) {
+                                        // Sanitize AI output (strip markdown code blocks)
+                                        var jsonStr = result.replace(/^```json\n?|```$/g, '').trim();
+                                        var data = JSON.parse(jsonStr);
+
+                                        var report = `Extracted ${(data.scenes && data.scenes.length) || 0} Scenes and ${(data.cast && data.cast.length) || 0} Characters.\n`;
+                                        var updates = 0;
+
+                                        // 1. Sync Schedule (Scenes)
+                                        if (data.scenes && Array.isArray(data.scenes)) {
+                                            if (!doc.content.data.schedule) doc.content.data.schedule = [];
+                                            data.scenes.forEach(function (sc) {
+                                                // Dedupe: Check if description matches
+                                                if (!doc.content.data.schedule.some(function (s) { return s.description === sc; })) {
+                                                    var parts = sc.split('-');
+                                                    var loc = parts[0] ? parts[0].replace(/INT\.|EXT\./i, '').trim() : '';
+
+                                                    mBTDB.addRow(docId, 'schedule', 'shot', {
+                                                        id: Date.now() + Math.random(),
+                                                        description: sc,
+                                                        scene: (doc.content.data.schedule.length + 1).toString(),
+                                                        time: "00:00",
+                                                        ie: sc.toUpperCase().includes("INT") ? "INT" : "EXT",
+                                                        loc: loc,
+                                                        cast: ""
+                                                    });
+                                                    updates++;
+                                                }
+                                            });
+                                        }
+
+                                        // 2. Sync Cast (Characters)
+                                        if (data.cast && Array.isArray(data.cast)) {
+                                            if (!doc.content.data.cast) doc.content.data.cast = [];
+                                            data.cast.forEach(function (c) {
+                                                if (!doc.content.data.cast.some(function (existing) { return existing.character === c; })) {
+                                                    mBTDB.addRow(docId, 'cast', 'talent', {
+                                                        id: Date.now() + Math.random(),
+                                                        character: c,
+                                                        actor: "", swf: "W", pickup: "", hmu: "", setCall: "", costume: ""
+                                                    });
+                                                    updates++;
+                                                }
+                                            });
+                                        }
+
+                                        mBTME.hideLoader();
+                                        if (updates > 0) {
+                                            mBTDB.renderFrame(); // Refresh UI to show new rows
+                                            mBTME.alert("Analysis Complete", report + `\n${updates} items added to lists.`);
+                                        }
+                                        else mBTME.alert("Analysis Complete", "No new items found to add.");
+
+                                    }).catch(function (e) {
+                                        mBTME.hideLoader();
+                                        mBTME.alert("Parsing Error", "AI response could not be mapped to data structure.");
+                                        console.error(e);
+                                    });
+                                });
+                                return;
+                            }
+
+                            // ROUTE 2: CONTENT GENERATION (Creative)
+                            mBTME.showLoader("Generating Content...");
+                            var prompt = "";
+
+                            if (widget.type === 'footer') {
+                                // Safety Footer Specific Logic
+                                var locSetting = (typeof mBTOG !== 'undefined' && mBTOG.settings) ? mBTOG.settings.location : 'Jamaica';
+                                var prodAddr = (doc.content.data.production && doc.content.data.production.address) || "";
+                                var locationContext = prodAddr.length > 5 ? `Production Address: ${prodAddr}` : `Jurisdiction: ${locSetting}`;
+
+                                prompt = `Generate a professional film production call sheet footer.
+             CONTEXT: ${locationContext}.
+             REQUIREMENTS:
+             1. Include a Health & Safety Disclaimer referencing specific local acts (e.g., "Health and Safety at Work Act 1974" for UK, "Factories Act" for Jamaica, "OSHA" for USA). Pick the one matching the context.
+             2. Include a strict Anti-Harassment/Bullying Policy statement with a placeholder for a contact number.
+             3. Keep it concise, serious, legalistic, and formatted as a compact block. No markdown, just text.`;
+                            } else if (isScript) {
+                                // Empty Script Generation
+                                prompt = `Write a sample screenplay scene for a film titled "${budget.projectName}". Format: Standard Screenplay format (Scene Heading, Action, Character, Dialogue). Keep it short (1 page).`;
+                            } else {
+                                // General Logic
+                                prompt = `Generate content for a section labeled "${widget.label}" for a film production named "${budget.projectName}" (${doc.label}). Context: Film Production. Keep it professional and concise.`;
+                            }
+
+                            return mBT.features.ai.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
+                                // Logic Resolution: Sanitize output (remove markdown code fences if AI adds them)
+                                var cleanResult = result.replace(/^```[a-z]*\n|```$/g, '').trim();
+
+                                self.updateData(docId, `additional.${widgetId}`, cleanResult);
+                                mBTME.hideLoader();
+
+                                // Surgical update to avoid grid flicker
+                                var el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"] .widget-body textarea`);
+                                if (el) el.value = cleanResult;
+                                else self.renderFrame(); // Fallback if DOM lost
+
+                            }).catch(function (e) {
+                                mBTME.hideLoader();
+                                mBTME.alert("Generation Failed", e.message);
+                            });
+                        },
+
+                        autoFillWeather: function (docId, index, name) {
+                            var btn = document.getElementById(`w-btn-${index}`);
+                            if (btn) btn.innerHTML = `<span class="animate-spin inline-block">...</span>`;
+                            var self = this;
+                            return fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`).then(function (geoRes) {
+                                return geoRes.json();
+                            }).then(function (geo) {
+                                if (!geo.results) throw new Error("Location not found");
+                                var geoResult = geo.results[0];
+                                var latitude = geoResult.latitude;
+                                var longitude = geoResult.longitude;
+                                return fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+                            }).then(function (wRes) {
+                                return wRes.json();
+                            }).then(function (wData) {
+                                var today = wData.daily;
+                                var code = today.weather_code[0];
+                                var summary = "Clear Skies"; if (code > 3) summary = "Cloudy"; if (code > 50) summary = "Rainy";
+
+                                var sunrise = today.sunrise[0].split('T')[1];
+                                var sunset = today.sunset[0].split('T')[1];
+
+                                var str = `${summary} | Max: ${today.temperature_2m_max[0]}°C / Min: ${today.temperature_2m_min[0]}°C\nSunrise: ${sunrise} / Sunset: ${sunset}`;
+
+                                // Logic Fix: Sync Sunrise/Sunset to Header
+                                self.updateData(docId, 'meta.sunriseSunset', `${sunrise}/${sunset}`);
+                                self.updateRow(docId, 'locations', index, 'weather', str);
+
+                                self.renderFrame();
+                            }).catch(function (e) { mBTME.alert("Sync Error", "Weather Synchronization Failure"); if (btn) btn.innerHTML = self.icons.cloud; });
+                        },
+
+                        // --- NEW: Header Sync Logic ---
+                        syncProductionInfo: function (docId) {
+                            // 1. Search Open Gate for "Production Office" contact
+                            var contact = mBTOG.contacts.find(function (c) { return c.name.toLowerCase().includes('production office'); });
+
+                            if (contact) {
+                                var data = {
+                                    address: contact.address || '',
+                                    phone: contact.phone || '',
+                                    email: contact.email || '',
+                                    wifi: contact.wifi || '',
+                                    pass: contact.pass || ''
+                                };
+
+                                // Batch update manually to avoid multiple re-renders
+                                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                                if (doc) {
+                                    if (!doc.content.data.production) doc.content.data.production = {};
+                                    Object.assign(doc.content.data.production, data);
+                                    this._triggerSave();
+                                    this.renderFrame();
+                                    mBTME.alert("Synced", "Production Office details updated from Open Gate.");
+                                }
+                            } else {
+                                // Fallback: Use Budget Company Name
+                                this.updateData(docId, 'production.address', budget.company || '');
+                                mBTME.alert("Partial Sync", "No 'Production Office' contact found in Open Gate. Synced Company Name.");
+                            }
+                        },
+
+                        syncAgencyInfo: function (docId) {
+                            // Search Open Gate for Agency roles
+                            var producer = mBTOG.contacts.find(function (c) { return c.role && (c.role.toLowerCase().includes('agency producer') || c.role.toLowerCase().includes('client')); });
+                            var creative = mBTOG.contacts.find(function (c) { return c.role && (c.role.toLowerCase().includes('creative') || c.role.toLowerCase().includes('director')); });
+
+                            var updates = 0;
+                            if (producer) { this.updateData(docId, 'agency.producer', producer.name); updates++; }
+                            if (creative) { this.updateData(docId, 'agency.creative', creative.name); updates++; }
+
+                            if (updates > 0) this.renderFrame();
+                            else mBTME.alert("No Matches", "No contacts with 'Agency' or 'Client' roles found.");
+                        },
+
+                        // --- 4. Render Engine Handshake ---
+                        renderFrame: function () {
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            var container = document.getElementById('mBTDB_Container');
+                            if (!container) return;
+
+                            // Standardized Studio Actions
+                            var actions = [
+                                { icon: mBTAssets.sync, title: "Sync Budget", onClick: "mBTDB.syncFromBudget()", color: "emerald" },
+                                { icon: mBTAssets.refresh, title: "Sync Previous", onClick: "mBTDB.syncFromPrevious()", color: "blue" },
+                                { icon: mBTAssets.image, title: "Preview", onClick: "mBTDB.previewDoc('standard')", color: "purple" },
+                                { icon: mBTAssets.close, title: "Close", onClick: "mBTDB.close()", color: "rose" }
+                            ];
+
+                            // --- NEW: Paper Protocol Structure ---
+                            var contentHtml = `
+            <div class="sheet-workspace" id="mBTDB_ScrollArea">
+                <div class="sheet-a4 cs-theme" id="mBTDB_Paper">
+                    <!-- Embedded Header (Part of the Page) -->
+                    <div id="mBTDB_MetaArea" class="mb-4"></div>
+                    <!-- The Grid (Flexible Content) -->
+                    <div class="grid-stack flex-grow"></div>
+                    <!-- Footer Branding -->
+                    <div class="mt-auto pt-4 border-t-2 border-slate-700 flex justify-between text-[8px] font-bold uppercase tracking-widest text-slate-500">
+                        <span>${budget.company || 'Production Office'}</span>
+                        <span>Generated by mooBudget</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+                            container.innerHTML = RenderEngine.layouts.studioPanel({
+                                title: `Studio: ${doc.label}`,
+                                searchId: 'mBTDB_Search',
+                                searchPlaceholder: 'SEARCH DOCUMENT...',
+                                contentId: 'mBTDB_Workspace',
+                                contentHtml: contentHtml,
+                                actions: actions,
+                                toolbarId: 'mBTDB_Buttons',
+                                containerClasses: 'p-0 overflow-hidden !bg-[#0f172a]' // Logic Resolution: Force Deep Slate Background
+                            });
+
+                            this._renderMetaHeader(doc);
+                            setTimeout(function () {
+                                if (typeof GridStack === 'undefined') return console.error("GridStack resolution failure.");
+                                var wrapper = document.getElementById('mBTDB_Workspace');
+                                // Re-apply editing class if state persisted
+                                if (this.state.isEditing) wrapper.classList.add('editing-mode');
+
+                                // Batch 2.1: Grid Physics Refinement
+                                // Reduced cellHeight (30px) for granular text matching. Increased margin for visual breathing room.
+                                this.state.grid = GridStack.init({
+                                    column: 12,
+                                    cellHeight: 30,
+                                    minRow: 1,
+                                    margin: 5,
+                                    animate: true,
+                                    float: false, // Gravity Enabled (Widgets snap up)
+                                    resizable: { handles: 'n,e,s,w,ne,se,sw,nw' },
+                                    staticGrid: !this.state.isEditing
+                                }, wrapper.querySelector('.grid-stack'));
+
+                                this._loadWidgetsToGrid(doc);
+                                this._updateHeaderButtons();
+                                this.state.grid.on('change', function () { return this._triggerSave(); });
+                                this._initMudMaps(); // Initialize canvases
+                            }, 50);
+                        },
+
+                        _loadWidgetsToGrid: function (doc) {
+                            var grid = this.state.grid; grid.removeAll(); grid.batchUpdate();
+                            doc.content.widgets.forEach(function (w) { if (w.type === 'header') return; grid.addWidget({ x: w.x, y: w.y, w: w.w, h: w.h, content: this._generateWidgetHTML(w, doc), id: w.id }); });
+                            grid.commit();
+                        },
+                        _generateWidgetHTML: function (widget, doc) {
+                            var cleanTitle = widget.label || (widget.type.charAt(0).toUpperCase() + widget.type.slice(1));
+
+                            var tools = '';
+                            if (widget.type === 'contacts') {
+                                tools += `<button type="button" aria-label="Toggle View" data-action="widget-toggle-view" data-id="${widget.id}" class="p-1 rounded transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
+                            }
+                            if (widget.type !== 'image') {
+                                // Logic Resolution: Enable AI Wand for text-heavy or structural widgets (Hybrid Router)
+                                // Added 'footer' to enable Safety Logic and 'script' awareness for the Parser
+                                var isNeural = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script', 'screenplay'].some(function (s) { return (widget.label || '').toLowerCase().includes(s); });
+                                var action = isNeural ? 'widget-neural-fill' : 'widget-autofill';
+                                var title = isNeural ? 'AI Generate / Parse' : 'Auto-Fill';
+                                tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1 rounded transition-all" title="${title}">${this.icons.wand}</button>`;
+                            }
+
+                            return `<div class="grid-stack-item-content group">
+            <div class="widget-header flex justify-between items-center">
+                <input value="${cleanTitle}" onchange="mBTDB.updateWidgetLabel('${doc.id}', '${widget.id}', this.value)" class="bg-transparent border-none w-48 outline-none transition-colors">
+                <div class="widget-tools flex items-center gap-1">
+                    ${tools}
+                    <button type="button" aria-label="Delete Widget" data-action="widget-delete" data-id="${widget.id}" class="p-1 rounded transition-colors">${this.icons.trash}</button>
+                </div>
+            </div>
+            <div class="widget-body flex-grow overflow-y-auto no-scrollbar relative text-slate-800 h-full bg-white">${this._getContentForWidget(widget, doc)}</div>
+        </div>`;
+                        },
+                        _getContentForWidget: function (widget, doc) {
+                            var data = this.resolveLinkedData(doc); // LIVE SYNC (Phase 9)        
+                            if (widget.type === 'contacts') return this._renderContacts(doc.id, data, widget);
+                            if (['logistics', 'locations'].includes(widget.type)) return this._renderLogistics(doc.id, data);
+                            if (widget.type === 'schedule') return this._renderSchedule(doc.id, data);
+                            if (widget.type === 'crew') return this._renderCrew(doc.id, data);
+                            if (widget.type === 'cast') return this._renderTalent(doc.id, data);
+                            if (widget.type === 'richText') return this._renderRichText(doc.id, widget.id, data);
+                            if (widget.type === 'image') return this._renderImage(doc.id, widget.id, data);
+                            // --- Batch 2: Logistics Routing ---
+                            if (widget.type === 'transport') return this._renderTransport(doc.id, data);
+                            if (widget.type === 'mudmap') return this._renderMudMap(doc.id, widget.id, data);
+                            if (widget.type === 'footer') return this._renderFooter(doc.id, widget.id, data);
+                            return '';
+                        },
+
+                        // --- Helper: Open Contact from Name ---
+                        openContactByName: function (name) {
+                            if (!name) return;
+                            // Logic Resolution: Clean name by removing parenthetical contact info often added by the system
+                            var rawName = name.split('(')[0].trim();
+                            var cleanName = rawName.toLowerCase();
+
+                            // 1. Search Active Budget Line Items First (Priority Scan)
+                            var foundInBudget = null;
+                            var sectionKey = null;
+
+                            if (budget && budget.sections) {
+                                Object.entries(budget.sections).some(function ([secName, sec]) {
+                                    var item = sec.items.find(function (i) {
+                                        return i.crew &&
+                                            i.crew.name &&
+                                            (i.crew.name.toLowerCase() === cleanName ||
+                                                i.crew.name.toLowerCase().includes(cleanName) ||
+                                                cleanName.includes(i.crew.name.toLowerCase()));
+                                    });
+                                    if (item) {
+                                        foundInBudget = item;
+                                        sectionKey = secName;
+                                        return true;
+                                    }
+                                    return false;
+                                });
+                            }
+
+                            if (foundInBudget) {
+                                openCrewProfile(null, null, foundInBudget.id, sectionKey);
+                                return;
+                            }
+
+                            // 2. Fallback to Global Open Gate Database
+                            var contact = mBTOG.contacts.find(function (c) { return c.name.toLowerCase().includes(cleanName) || cleanName.includes(c.name.toLowerCase()); });
+
+                            if (contact) {
+                                openCrewProfile(null, null, contact.id, null);
+                            } else {
+                                mBTME.confirm("Contact Not Found", `Create a new profile for "${rawName}"?`, function () {
+                                    var dummyId = 'dummy_new_contact_' + Date.now();
+                                    openCrewProfile(null, null, dummyId, null);
+                                    setTimeout(function () {
+                                        var nameInput = document.getElementById('crewName');
+                                        if (nameInput) nameInput.value = rawName;
+                                    }, 100);
+                                });
+                            }
+                        },
+
+                        _renderMetaHeader: function (doc) {
+                            var d = doc.content.data;
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var is24h = d.meta.is24h || false;
+
+                            // Ensure agency object exists
+                            if (!d.agency) d.agency = {};
+                            if (!d.production) d.production = { address: '', phone: '', email: '', wifi: '', pass: '' }; // New Prod Office Data
+
+                            // Champion Layout Masthead (3-Column Grid)
+                            var html = `
+        <div class="flex justify-between items-end border-b-4 border-black pb-2 mb-2">
+            <input ${lock} value="${d.meta.productionTitle || 'UNTITLED PROJECT'}" onchange="mBTDB.updateData('${doc.id}', 'meta.productionTitle', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">
+            <div class="text-right shrink-0">
+                <div class="text-2xl font-black">CALL SHEET</div>
+                <div class="flex gap-4 text-xs font-bold mt-1">
+                    <div>DATE: <input type="date" value="${d.meta.shootDate}" onchange="mBTDB.updateData('${doc.id}', 'meta.shootDate', this.value); mBTDB.renderFrame();" class="inline-block w-auto border-b border-slate-300"></div>
+                    <div>CALL: <input type="time" value="${d.meta.crewCallTime}" onchange="mBTDB.updateData('${doc.id}', 'meta.crewCallTime', this.value)" class="inline-block w-24 text-center border-b border-slate-300"></div>
+                    <div class="flex items-center gap-1.5 ${this.state.isEditing ? '' : 'hidden'}"><input type="checkbox" ${is24h ? 'checked' : ''} onchange="mBTDB.updateData('${doc.id}', 'meta.is24h', this.checked); mBTDB.renderFrame();" class="w-3 h-3 cursor-pointer"> 24h</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-2 mb-4 text-[10px]">
+            <!-- Left: Production Office (Address & Logistics) -->
+            <div class="cs-box p-2 flex flex-col h-full">
+                <div class="font-bold border-b border-black mb-1 flex justify-between">
+                    <span>PRODUCTION OFFICE</span>
+                    <span>${this.icons.mapPin}</span>
+                </div>
+                <div class="flex-grow space-y-1">
+                    <textarea ${lock} onchange="mBTDB.updateData('${doc.id}','production.address',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address...">${d.production.address || ''}</textarea>
+                    <div class="grid grid-cols-[auto_1fr] gap-x-2 items-center">
+                        <span class="font-bold">PH:</span> <input ${lock} value="${d.production.phone || ''}" onchange="mBTDB.updateData('${doc.id}','production.phone',this.value)" class="w-full" placeholder="Office Phone">
+                        <span class="font-bold">EMAIL:</span> <input ${lock} value="${d.production.email || ''}" onchange="mBTDB.updateData('${doc.id}','production.email',this.value)" class="w-full" placeholder="production@email.com">
+                    </div>
+                    <div class="flex gap-2 pt-1 border-t border-slate-100 mt-1">
+                        <div class="flex-1"><span class="font-bold">WIFI:</span> <input ${lock} value="${d.production.wifi || ''}" onchange="mBTDB.updateData('${doc.id}','production.wifi',this.value)" class="w-16" placeholder="Network"></div>
+                        <div class="flex-1"><span class="font-bold">PASS:</span> <input ${lock} value="${d.production.pass || ''}" onchange="mBTDB.updateData('${doc.id}','production.pass',this.value)" class="w-16" placeholder="Password"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center: Locations -->
+            <div class="cs-box p-2">
+                <div class="font-bold border-b border-black mb-1">LOCATIONS</div>
+                ${(d.locations || []).map(function (l, i) {
+                                return `
+                    <div class="mb-2">
+                        <div class="flex justify-between"><span class="font-bold">${esc(l.name || '')}</span> <span class="opacity-50">HOSP:</span>
+                             <input ${lock} value="${l.hospital || ''}" onchange="mBTDB.updateRow('${doc.id}','locations',${i},'hospital',this.value)" class="w-full bg-transparent border-b border-red-100 focus:border-red-500 text-red-600" placeholder="Nearest Hospital...">
+                        </div>
+                    </div>
+                `;
+                            }).join('')}
+            </div>
+
+            <!-- Right: Agency & Weather -->
+            <div class="cs-box p-2 flex flex-col h-full">
+                <!-- Agency Block -->
+                <div class="font-bold border-b border-black mb-1 flex justify-between items-center cursor-pointer hover:bg-slate-50" onclick="if(!event.target.closest('button')) { var b=this.nextElementSibling; b.classList.toggle('hidden'); }">
+                    <span>AGENCY / CLIENT</span> 
+                    <div class="flex gap-2">
+                        <button onclick="mBTDB.syncAgencyInfo('${doc.id}')" class="text-slate-400 hover:text-blue-600 transition-colors" title="Sync from Database">${this.icons.sync}</button>
+                        <span class="text-[8px] text-slate-400">▼</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mb-2 hidden">
+                    <span class="font-bold">PRODUCER:</span>
+                    <div class="flex items-center gap-1">
+                        <input ${lock} value="${d.agency.producer || ''}" onchange="mBTDB.updateData('${doc.id}','agency.producer',this.value)" class="w-full" placeholder="Name">
+                        ${d.agency.producer ? `<button onclick="mBTDB.openContactByName('${d.agency.producer}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : ''}
+                    </div>
+                    <span class="font-bold">CREATIVE:</span>
+                    <div class="flex items-center gap-1">
+                        <input ${lock} value="${d.agency.creative || ''}" onchange="mBTDB.updateData('${doc.id}','agency.creative',this.value)" class="w-full" placeholder="Name">
+                        ${d.agency.creative ? `<button onclick="mBTDB.openContactByName('${d.agency.creative}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : ''}
+                    </div>
+                </div>
+
+                <div class="font-bold border-b border-black mb-1 mt-auto">CONDITIONS</div>
+                <div class="flex justify-between mb-1">
+                    <span>Sunrise: <input ${lock} value="${(d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[0]) || ''}" class="w-12 text-center border-b border-slate-200"></span>
+                    <span>Sunset: <input ${lock} value="${(d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[1]) || ''}" class="w-12 text-center border-b border-slate-200"></span>
+                </div>
+                <textarea ${lock} class="w-full h-8 resize-none" placeholder="Weather forecast...">${(d.locations && d.locations[0] && d.locations[0].weather) || ''}</textarea>
+            </div>
+        </div>`;
+
+                            var container = document.getElementById('mBTDB_MetaArea'); if (container) container.innerHTML = html;
+                        },
+
+                        _renderContacts: function (docId, d, widget) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+
+                            // Data Migration: Permanent Fix for Legacy Objects to Arrays
+                            if (!Array.isArray(d.contacts)) {
+                                var newArray = [
+                                    { role: 'DIRECTOR', name: d.contacts.director || '' },
+                                    { role: 'PRODUCER', name: d.contacts.producer || '' },
+                                    { role: '1ST AD', name: d.contacts.ad || '' }
+                                ];
+                                // Persist migration immediately so Add/Delete works
+                                setTimeout(function () { return mBTDB.updateData(docId, 'contacts', newArray); }, 0);
+                                d.contacts = newArray;
+                            }
+
+                            var renderRow = function (c, i) {
+                                return `
+            <div class="flex flex-col border-b border-slate-100 pb-1 mb-1 last:border-0 group/row">
+                <!-- Role Header -->
+                <input ${lock} value="${c.role || ''}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'role',this.value)" class="text-[7px] font-black uppercase tracking-widest text-slate-400 bg-transparent border-none p-0 w-full outline-none mb-0.5 focus:text-blue-600 transition-colors" placeholder="ROLE">
+                
+                <!-- Name Row -->
+                <div class="flex items-center gap-2">
+                    <!-- Import Button (Left) -->
+                    ${this.state.isEditing ? `
+                    <button class="text-slate-300 hover:text-blue-500 transition-colors shrink-0" onclick="mBTDB.pullFromOpenGate('${docId}', 'contacts.${i}.name', '${c.role || 'crew'}')" title="Import from DB">
+                        ${this.icons.user}
+                    </button>` : ''}
+                    
+                    <!-- Name Input -->
+                    <input ${lock} value="${c.name || ''}" onchange="mBTDB.updateRow('${docId}','contacts',${i},'name',this.value)" class="flex-grow bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name...">
+                    
+                    <!-- Delete Button (Right) -->
+                    <button onclick="mBTDB.deleteRow('${docId}','contacts',${i},'contacts')" class="text-slate-200 hover:text-red-500 transition-colors shrink-0 ${hideTool}" title="Remove Contact">
+                        ${this.icons.trash}
+                    </button>
+                </div>
+            </div>`;
+                            };
+
+                            return `
+        <div class="h-full flex flex-col cs-box border-none">
+            <div class="flex-grow overflow-y-auto p-2 no-scrollbar bg-white widget-list-grid">
+                ${d.contacts.map(function (c, i) { return renderRow(c, i); }).join('')}
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','contacts','contact')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Contact</button>
+            </div>
+        </div>`;
+                        },
+
+                        _renderLogistics: function (docId, d) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+
+                            // Parse Sun Data for Display
+                            var sunRaw = d.meta.sunriseSunset || '/';
+                            var [sunrise, sunset] = sunRaw.split('/');
+
+                            return `<div class="flex flex-col h-full">
+            <!-- Compact Sun Header (Horizontal) -->
+            <div class="px-2 py-1 border-b border-black flex justify-center items-center gap-4 bg-slate-50">
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SUN</span>
+                    <input type="text" ${lock} value="${sunrise || ''}" onchange="mBTDB.formatTime(this, '${docId}'); var current = '${sunRaw}'.split('/'); current[0]=this.value; mBTDB.updateData('${docId}','meta.sunriseSunset',current.join('/'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="06:00">
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SET</span>
+                    <input type="text" ${lock} value="${sunset || ''}" onchange="mBTDB.formatTime(this, '${docId}'); var current = '${sunRaw}'.split('/'); current[1]=this.value; mBTDB.updateData('${docId}','meta.sunriseSunset',current.join('/'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">
+                </div>
+            </div>
+            
+            <div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar widget-list-grid">${(d.locations || []).map(function (l, i) {
+                                return `<div class="flex flex-col gap-1 border-b-2 border-black pb-2 mb-1 relative group/loc">
+            
+            <!-- Row 1: Name and Time (Refined Font Size & Width) -->
+            <div class="flex justify-between items-end gap-2 mb-1">
+                <div class="flex-grow">
+                    <label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">LOCATION ${i + 1}</label>
+                    <input ${lock} value="${l.name}" onchange="mBTDB.updateRow('${docId}','locations',${i},'name',this.value)" class="w-full bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase tracking-tight outline-none placeholder-slate-300" placeholder="NAME">
+                </div>
+                <div class="w-20 text-right shrink-0">
+                     <label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">CALL</label>
+                     <input ${lock} type="text" value="${l.timeOnLocation || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','locations',${i},'timeOnLocation',this.value)" class="w-full bg-transparent border-none p-0 text-xs font-black text-blue-600 text-center outline-none" placeholder="00:00">
+                </div>
+            </div>
+            
+            <!-- Row 2: Address (Compact Height) -->
+            <div class="w-full">
+                 <textarea ${lock} onchange="mBTDB.updateRow('${docId}','locations',${i},'address',this.value)" class="w-full bg-slate-50 border-none rounded px-2 py-1 text-[9px] font-bold text-slate-700 placeholder-slate-400 h-10 resize-none leading-relaxed" placeholder="Full Address...">${l.address}</textarea>
+            </div>
+
+            <!-- Row 3: Hospital -->
+            <div class="flex items-center gap-1 bg-red-50 px-2 py-1 rounded border border-red-100">
+                <span class="text-[8px] font-black text-red-500 uppercase tracking-widest shrink-0">HOSP</span>
+                <input ${lock} value="${l.hospital || ''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'hospital',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-red-700 placeholder-red-200" placeholder="Nearest Medical...">
+            </div>
+            
+            <!-- Row 4: Weather (Stacked Below, Compact) -->
+            <div class="relative bg-blue-50 px-2 py-1 rounded border border-blue-100 h-8 flex items-center">
+                <input ${lock} value="${l.weather || ''}" onchange="mBTDB.updateRow('${docId}','locations',${i},'weather',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-blue-800 placeholder-blue-200 pr-5" placeholder="Weather...">
+                <button id="w-btn-${i}" onclick="mBTDB.autoFillLocationDetails('${docId}', ${i})" class="absolute top-1/2 -translate-y-1/2 right-1 text-blue-400 hover:text-blue-600 transition-colors ${hideTool}" title="Auto-Fill details">
+                    ${this.icons.wand}
+                </button>
+            </div>
+
+            <button onclick="mBTDB.deleteRow('${docId}','locations',${i},'logistics')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ${hideTool}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>`;
+                            }).join('')}</div>
+        <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+            <button onclick="mBTDB.addRow('${docId}','locations','loc')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Location</button>
+        </div>
+        </div>`;
+                        },
+
+                        autoFillLocationDetails: function (docId, index) {
+                            var btn = document.getElementById(`w-btn-${index}`);
+                            if (btn) btn.innerHTML = `...`;
+                            var self = this;
+
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc || !doc.content.data.locations[index]) return Promise.resolve();
+
+                            var loc = doc.content.data.locations[index];
+                            // Prioritize address for accuracy
+                            var query = loc.address && loc.address.length > 5 ? loc.address : loc.name;
+
+                            // 1. Geocoding
+                            return fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`).then(function (geoRes) {
+                                return geoRes.json();
+                            }).then(function (geo) {
+                                if (!geo.results) throw new Error("Location not found via Geocoding.");
+                                var geoFirst = geo.results[0];
+                                var latitude = geoFirst.latitude;
+                                var longitude = geoFirst.longitude;
+                                var geoName = geoFirst.name;
+
+                                // 2. Weather
+                                return fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`).then(function (wRes) {
+                                    return wRes.json();
+                                }).then(function (wData) {
+                                    var today = wData.daily;
+                                    var code = today.weather_code[0];
+
+                                    // WMO Code Mapping
+                                    var summary = "Clear";
+                                    if (code === 1 || code === 2 || code === 3) summary = "Partly Cloudy";
+                                    else if (code === 45 || code === 48) summary = "Foggy";
+                                    else if (code >= 51 && code <= 57) summary = "Drizzle";
+                                    else if (code >= 61 && code <= 67) summary = "Rain";
+                                    else if (code >= 80 && code <= 82) summary = "Showers";
+                                    else if (code >= 95) summary = "Thunderstorm";
+
+                                    var sunrise = today.sunrise[0].split('T')[1];
+                                    var sunset = today.sunset[0].split('T')[1];
+
+                                    // Logic Fix: Stripped Sunrise/Sunset info from weather string
+                                    var weatherStr = `${summary} ${Math.round(today.temperature_2m_max[0])}°/${Math.round(today.temperature_2m_min[0])}°C`;
+
+                                    // Update Weather
+                                    self.updateRow(docId, 'locations', index, 'weather', weatherStr);
+
+                                    // Update Global Sun (First location only)
+                                    if (index === 0) {
+                                        self.updateData(docId, 'meta.sunriseSunset', `${sunrise}/${sunset}`);
+                                    }
+
+                                    // 3. Hospital AI
+                                    var provider = mBT.features.ai.getSelectedProvider();
+                                    var apiKey = mBT.features.ai.getStoredApiKey(provider);
+
+                                    if (apiKey) {
+                                        var prompt = `Find nearest emergency hospital to ${latitude},${longitude} (${geoName}). Return ONLY Hospital Name.`;
+                                        return mBT.features.ai.callUnifiedAI(provider, apiKey, prompt).then(function (hospitalName) {
+                                            var cleanHost = hospitalName.replace(/^(The nearest.*?is|Here is|Name:|Hospital:)/i, '').trim().replace(/\.$/, '');
+                                            self.updateRow(docId, 'locations', index, 'hospital', cleanHost);
+                                        });
+                                    }
+                                    return Promise.resolve();
+                                });
+                            }).then(function () {
+                                // Refresh
+                                // Logic Resolution: Trigger a repaint of this specific widget if possible to avoid full reload
+                                // But for safety in single-file, we call renderFrame.
+                                self.renderFrame();
+                            }).catch(function (e) {
+                                console.error("Autofill Logic Error:", e);
+                                mBTME.alert("Sync Error", "Could not fetch location data.");
+                                if (btn) btn.innerHTML = self.icons.wand;
+                            });
+                        },
+
+                        // Legacy Bridge: Prevents crash if old buttons invoke this
+                        autoFillWeather: function (docId, index, name) {
+                            return this.autoFillLocationDetails(docId, index);
+                        },
+                        _renderSchedule: function (docId, d) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+
+                            // High-Density Table (Header Removed)
+                            return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-20 text-center">TIME</th>
+                            <th class="w-10 text-center">SCN</th>
+                            <th class="w-10 text-center">I/E</th>
+                            <th class="text-left">DESCRIPTION / ACTION / NOTES</th>
+                            <th class="w-16 text-center">CAST</th>
+                            <th class="w-20 text-left">LOC</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${d.schedule.map(function (row, i) {
+                                var isMeal = row.type === 'meal';
+                                var rowBg = isMeal ? 'bg-slate-100 font-bold' : '';
+                                return `
+                            <tr class="${rowBg} hover:bg-blue-50 transition-colors">
+                                <td class="p-1"><input ${lock} type="text" value="${row.time}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','schedule',${i},'time',this.value)" class="text-center font-bold" placeholder="00:00"></td>
+                                ${isMeal ?
+                                        `<td colspan="5" class="p-1 text-center uppercase tracking-widest text-[10px]"><input ${lock} value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="text-center w-full uppercase"></td>` :
+                                        `
+                                <td class="p-1"><input ${lock} value="${row.scene}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'scene',this.value)" class="text-center"></td>
+                                <td class="p-1"><input ${lock} value="${row.ie}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'ie',this.value)" class="text-center uppercase"></td>
+                                <td class="p-1"><input ${lock} value="${row.description}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'description',this.value)" class="font-medium w-full"></td>
+                                <td class="p-1"><input ${lock} value="${row.cast}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'cast',this.value)" class="text-center font-bold text-slate-600"></td>
+                                <td class="p-1"><input ${lock} value="${row.loc}" onchange="mBTDB.updateRow('${docId}','schedule',${i},'loc',this.value)" class="text-xs"></td>
+                                `}
+                                <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','schedule',${i}, 'schedule')" class="text-slate-300 hover:text-red-500">×</button></td>
+                            </tr>`;
+                            }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex gap-2 p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','schedule','shot')" class="flex-1 bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Shot</button>
+                <button onclick="mBTDB.addRow('${docId}','schedule','meal')" class="flex-1 bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Meal</button>
+            </div>
+        </div>`;
+                        },
+                        _renderCrew: function (docId, d) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+                            // Updated: High Density Crew List (Header Removed)
+                            return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-1/4">DEPARTMENT / POSITION</th>
+                            <th class="w-1/4">NAME</th>
+                            <th class="w-20 text-center">CALL</th>
+                            <th>NOTES / INSTRUCTIONS</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.crew || []).map(function (c, i) {
+                                return `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-1">
+                                <input ${lock} value="${c.department || ''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'department',this.value)" class="font-black uppercase text-[8px] text-slate-400 block w-full mb-0.5" placeholder="DEPT">
+                                <input ${lock} value="${c.position || ''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'position',this.value)" class="font-bold text-slate-800" placeholder="Position">
+                            </td>
+                            <td class="p-1">
+                                <div class="flex items-center gap-1">
+                                    <input ${lock} value="${c.name || ''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'name',this.value)" class="font-bold text-slate-900 w-full" placeholder="Name">
+                                    ${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','crew.${i}.name','${c.position || 'crew'}')">${this.icons.user}</div>` :
+                                        (c.name ? `<button onclick="mBTDB.openContactByName('${c.name}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : '')}
+                                </div>
+                                <input ${lock} value="${c.contact || ''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'contact',this.value)" class="text-[8px] font-mono text-slate-400 w-full" placeholder="Phone/Email">
+                            </td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.callTime || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','crew',${i},'callTime',this.value)" class="text-center font-black text-blue-600" placeholder="00:00"></td>
+                            <td class="p-1"><input ${lock} value="${c.notes || ''}" onchange="mBTDB.updateRow('${docId}','crew',${i},'notes',this.value)" class="italic text-slate-600 w-full" placeholder="Specific notes..."></td>
+                            <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','crew',${i}, 'crew')" class="text-slate-300 hover:text-red-500">×</button></td>
+                        </tr>`;
+                            }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','crew','person')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Crew</button>
+            </div>
+        </div>`;
+                        },
+                        _renderTalent: function (docId, d) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+                            // Updated: High Density Cast Grid (Header Removed)
+                            return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-24">CHARACTER</th>
+                            <th>ARTIST</th>
+                            <th class="w-10 text-center">SWF</th>
+                            <th class="w-20 text-center">PU</th>
+                            <th class="w-20 text-center">BF</th>
+                            <th class="w-20 text-center">H/MU</th>
+                            <th class="w-20 text-center">COST</th>
+                            <th class="w-20 text-center bg-slate-100 text-black border-black">SET</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.cast || []).map(function (c, i) {
+                                return `
+                        <tr>
+                            <td class="p-1"><input ${lock} value="${c.character || ''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'character',this.value)" class="font-bold text-slate-500 uppercase"></td>
+                            <td class="p-1">
+                                <div class="flex items-center gap-1">
+                                    <input ${lock} value="${c.actor || ''}" onchange="mBTDB.updateRow('${docId}','cast',${i},'actor',this.value)" class="font-black text-slate-900 w-full">
+                                    ${this.state.isEditing ? `<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate('${docId}','cast.${i}.actor','actor')">${this.icons.user}</div>` :
+                                        (c.actor ? `<button onclick="mBTDB.openContactByName('${c.actor}')" class="text-blue-600 hover:scale-110 transition-transform">${this.icons.user}</button>` : '')}
+                                </div>
+                            </td>
+                            <td class="p-1"><input ${lock} value="${c.swf || 'W'}" onchange="mBTDB.updateRow('${docId}','cast',${i},'swf',this.value)" class="text-center font-black uppercase text-[9px]" placeholder="S/W/F"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.pickup || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'pickup',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.bf || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'bf',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.hmu || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'hmu',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1"><input ${lock} type="text" value="${c.costume || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'costume',this.value)" class="text-center" placeholder="--:--"></td>
+                            <td class="p-1 bg-slate-50"><input ${lock} type="text" value="${c.setCall || ''}" onchange="mBTDB.formatTime(this, '${docId}'); mBTDB.updateRow('${docId}','cast',${i},'setCall',this.value)" class="text-center font-black text-slate-900" placeholder="00:00"></td>
+                            <td class="p-1 text-center ${hideTool}"><button onclick="mBTDB.deleteRow('${docId}','cast',${i}, 'cast')" class="text-slate-300 hover:text-red-500">×</button></td>
+                        </tr>`;
+                            }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','cast','talent', {id:Date.now(), character:'', actor:'', swf:'W', pickup:'', bf:'', hmu:'', costume:'', setCall:'', contact:''})" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Talent</button>
+            </div>
+        </div>`;
+                        },
+
+                        // Logic Resolution: 1/8th Page Calculation Heuristic
+                        // Standard screenplay format: ~54 lines per page. 1/8th page ~= 7 lines (approx 1 inch).
+                        _calcPages: function (text) {
+                            if (!text) return "0 Pgs";
+                            // Count newlines to estimate vertical length
+                            var lines = text.split(/\r\n|\r|\n/).length;
+                            // Basic heuristic: 55 lines = 1 page (Courier 12pt standard)
+                            var eighths = Math.ceil(lines / 7); // 7 lines per 1/8th
+                            var pages = Math.floor(eighths / 8);
+                            var rem = eighths % 8;
+
+                            if (pages === 0 && rem === 0) return "0 Pgs";
+                            if (pages === 0) return `${rem}/8 Pgs`;
+                            if (rem === 0) return `${pages} Pgs`;
+                            return `${pages} ${rem}/8 Pgs`;
+                        },
+
+                        // Logic Resolution: Live DOM Update for Script Metrics (Batch 1.2)
+                        _updateScriptHUD: function (widgetId, text) {
+                            var hud = document.getElementById(`hud_${widgetId}`);
+                            if (hud) hud.textContent = this._calcPages(text);
+                        },
+
+                        _renderRichText: function (docId, widgetId, data) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
+
+                            // Logic Resolution: Typography Enforcement for Screenplays (Batch 1.2.2)
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            var widget = doc.content.widgets.find(function (w) { return w.id === widgetId; });
+
+                            // Detect Script Mode via Document Type or Widget Label
+                            var isScript = (doc && (doc.type === 'script' || (widget && widget.label && widget.label.toLowerCase().includes('screenplay'))));
+
+                            // Industry Standard: Courier Prime/New, 12pt, Single Spacing (1 page ~= 1 min)
+                            var styleClass = isScript
+                                ? "font-mono text-sm leading-none bg-white text-black font-bold whitespace-pre-wrap border-none outline-none resize-none"
+                                : "studio-input h-full p-3 text-xs text-slate-800 font-medium leading-relaxed resize-none";
+
+                            var customStyle = isScript ? 'font-family: "Courier Prime", "Courier New", monospace; font-size: 12pt; line-height: 1.0; padding: 40px;' : '';
+                            var placeholder = isScript ? 'INT. LOCATION - DAY\n\nAction description...' : 'Type notes...';
+
+                            // HUD Logic: Inject Visual Counter for Scripts (Batch 1.3)
+                            // Note: Initial calculation happens here on render. Live updates via oninput.
+                            var hudHtml = isScript
+                                ? `<div id="hud_${widgetId}" class="absolute bottom-4 right-4 bg-slate-900/10 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black text-slate-500 border border-slate-200 pointer-events-none select-none transition-opacity z-10">
+                ${this._calcPages(val)}
+               </div>`
+                                : '';
+
+                            // Added 'relative group' to container for HUD positioning
+                            // Added 'oninput' for real-time math (surgical)
+                            // Kept 'onchange' for data persistence (debounced)
+                            return `<div class="h-full flex flex-col p-2 relative group">
+            <div class="flex-grow relative h-full">
+                <textarea ${lock} 
+                    id="input_${widgetId}"
+                    oninput="mBTDB._updateScriptHUD('${widgetId}', this.value); mBTDB.updateDataDebounced('${doc.id}', 'additional.${widgetId}', this.value)"
+                    onchange="mBTDB.updateData('${doc.id}', 'additional.${widgetId}', this.value)" 
+                    class="${styleClass} w-full h-full disabled:bg-transparent disabled:border-none" 
+                    style="${customStyle}" 
+                    placeholder="${placeholder}">${val || ''}</textarea>
+                ${hudHtml}
+            </div>
+        </div>`;
+                        },
+                        // Logic Resolution: New Image Rendering Logic with Optimization
+                        _renderImage: function (docId, widgetId, data) {
+                            var val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
+
+                            if (val) {
+                                // Image Display State
+                                return `
+            <div class="relative w-full h-full group bg-slate-50 flex items-center justify-center overflow-hidden">
+                <img src="${val}" class="max-w-full max-h-full object-contain">
+                ${this.state.isEditing ? `
+                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button onclick="document.getElementById('file_${widgetId}').click()" class="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-50">Change</button>
+                    <button onclick="mBTDB.updateData('${docId}', 'additional.${widgetId}', '')" class="bg-white text-rose-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-50">Remove</button>
+                </div>
+                <input type="file" id="file_${widgetId}" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, '${docId}', '${widgetId}')">` : ''}
+            </div>`;
+                            } else {
+                                // Empty State
+                                if (!this.state.isEditing) return `<div class="w-full h-full flex items-center justify-center bg-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-widest">Empty Image Block</div>`;
+                                return `
+            <div class="w-full h-full flex flex-col items-center justify-center bg-slate-50 hover:bg-blue-50/50 transition-colors border-2 border-dashed border-slate-100 hover:border-blue-200 cursor-pointer p-4 group" onclick="document.getElementById('file_${widgetId}').click()">
+                <div class="text-slate-300 group-hover:text-blue-400 mb-2 scale-125 transition-transform group-hover:scale-150">${this.icons.image}</div>
+                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-500">Upload Image</span>
+                <input type="file" id="file_${widgetId}" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, '${docId}', '${widgetId}')">
+            </div>`;
+                            }
+                        },
+
+                        // --- Batch 2: Logistics Widgets (Transport, MudMap, Footer) ---
+                        _renderTransport: function (docId, d) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var hideTool = this.state.isEditing ? '' : 'hidden';
+                            // Updated: Header Removed
+                            return `
+        <div class="h-full flex flex-col border-none">
+            <div class="flex-grow overflow-auto no-scrollbar">
+                <table class="cs-table w-full text-[9px]">
+                    <thead>
+                        <tr>
+                            <th class="w-1/4">DRIVER / CONTACT</th>
+                            <th class="w-1/5">VEHICLE</th>
+                            <th class="w-10 text-center">PAX</th>
+                            <th class="w-20 text-center">TIME</th>
+                            <th>FROM > TO</th>
+                            <th class="w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(d.transport || []).map(function (t, i) {
+                                return `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-1">
+                                <input ${lock} value="${t.driver || ''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'driver',this.value)" class="font-bold text-slate-900 w-full" placeholder="Driver Name">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.vehicle || ''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'vehicle',this.value)" class="text-slate-600 w-full" placeholder="Type/Plate">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.pax || ''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'pax',this.value)" class="text-center font-mono" placeholder="#">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} type="time" value="${t.pickup || ''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'pickup',this.value)" class="text-center font-black text-blue-600">
+                            </td>
+                            <td class="p-1">
+                                <input ${lock} value="${t.route || ''}" onchange="mBTDB.updateRow('${docId}','transport',${i},'route',this.value)" class="w-full italic text-slate-500" placeholder="Loc A > Loc B">
+                            </td>
+                            <td class="p-1 text-center ${hideTool}">
+                                <button onclick="mBTDB.deleteRow('${docId}','transport',${i},'transport')" class="text-slate-300 hover:text-red-500 font-bold">×</button>
+                            </td>
+                        </tr>`;
+                            }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-2 border-t border-black bg-slate-50 ${hideTool}">
+                <button onclick="mBTDB.addRow('${docId}','transport','move')" class="w-full bg-white border border-slate-300 text-[9px] font-bold uppercase py-1 hover:bg-slate-100">+ Add Movement</button>
+            </div>
+        </div>`;
+                        },
+
+                        _renderMudMap: function (docId, widgetId, data) {
+                            // Logic Resolution: Use data-attributes to store ID references for the init function
+                            return `
+        <div class="w-full h-full bg-white relative group border-2 border-black" id="mudmap_container_${widgetId}">
+            <canvas id="canvas_${widgetId}" class="mudmap-canvas absolute inset-0 w-full h-full z-10 cursor-crosshair" data-doc-id="${docId}" data-widget-id="${widgetId}"></canvas>
+            
+            ${this.state.isEditing ? `
+            <div class="absolute bottom-2 right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <!-- [Feat16] Satellite Trigger -->
+                <button onclick="mBTDB.loadMapBackground('${widgetId}', '${docId}')" class="bg-white text-blue-600 px-2 py-1 rounded shadow text-[9px] font-black uppercase tracking-widest border border-blue-200 hover:bg-blue-50" title="Load Site Plan from Logistics Address">Satellite</button>
+                <button onclick="mBTDB._clearMudMap('${docId}', '${widgetId}')" class="bg-white text-rose-600 px-2 py-1 rounded shadow text-[9px] font-black uppercase tracking-widest border border-rose-200 hover:bg-rose-50">Clear</button>
+            </div>
+            <div class="absolute top-2 left-2 z-0 text-[10px] font-black text-slate-100 uppercase pointer-events-none select-none tracking-widest">
+                SKETCH AREA (MUD MAP)
+            </div>` : ''}
+        </div>`;
+                        },
+
+                        _renderFooter: function (docId, widgetId, data) {
+                            var lock = this.state.isEditing ? '' : 'disabled';
+                            var val = data.additional ? data.additional[widgetId] : "";
+                            // Logic Resolution: Default Caribbean/UK Safety Standard if empty
+                            var defaultSafety = "EMERGENCY: DIAL 110/119 (JA) | NEAREST HOSPITAL: See Locations | SAFETY OFFICER: 1st AD\n\nHARASSMENT POLICY: This production operates a zero-tolerance policy towards harassment and bullying. Report concerns to the Producer or Unit Manager.";
+
+                            return `
+        <div class="h-full flex flex-col justify-end p-3 border-t-4 border-black mt-2 bg-slate-50">
+            <div class="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1 flex items-center gap-2">
+                ${this.icons.hazard} HEALTH & SAFETY PROTOCOLS
+            </div>
+            <textarea ${lock} onchange="mBTDB.updateData('${docId}', 'additional.${widgetId}', this.value)" class="w-full h-full resize-none text-[9px] font-bold text-slate-800 bg-transparent outline-none leading-relaxed" placeholder="Enter safety details...">${val || defaultSafety}</textarea>
+        </div>`;
+                        },
+
+                        _initMudMaps: function () {
+                            var canvases = document.querySelectorAll('.mudmap-canvas');
+                            canvases.forEach(function (cvs) {
+                                if (cvs.dataset.initialized) return;
+
+                                // 1. Resize Logic
+                                var rect = cvs.parentElement.getBoundingClientRect();
+                                cvs.width = rect.width;
+                                cvs.height = rect.height;
+
+                                var ctx = cvs.getContext('2d');
+                                var docId = cvs.dataset.docId;
+                                var widgetId = cvs.dataset.widgetId;
+
+                                // 2. Hydrate Data
+                                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                                if (doc && doc.content.data.additional && doc.content.data.additional[widgetId]) {
+                                    var img = new Image();
+                                    img.onload = function () { return ctx.drawImage(img, 0, 0); };
+                                    img.src = doc.content.data.additional[widgetId];
+                                }
+
+                                // 3. Drawing Logic
+                                var isDrawing = false;
+
+                                var start = function (e) {
+                                    if (!mBTDB.state.isEditing) return;
+                                    isDrawing = true;
+                                    ctx.beginPath();
+                                    // Fix: Calculate offset correctly relative to canvas, not window
+                                    var bounds = cvs.getBoundingClientRect();
+                                    var x = (e.clientX || e.touches[0].clientX) - bounds.left;
+                                    var y = (e.clientY || e.touches[0].clientY) - bounds.top;
+                                    ctx.moveTo(x, y);
+                                };
+
+                                var draw = function (e) {
+                                    if (!isDrawing) return;
+                                    var bounds = cvs.getBoundingClientRect();
+                                    var x = (e.clientX || e.touches[0].clientX) - bounds.left;
+                                    var y = (e.clientY || e.touches[0].clientY) - bounds.top;
+
+                                    ctx.lineTo(x, y);
+                                    ctx.strokeStyle = "#000";
+                                    ctx.lineWidth = 2;
+                                    ctx.lineCap = "round";
+                                    ctx.stroke();
+                                };
+
+                                var end = function () {
+                                    if (!isDrawing) return;
+                                    isDrawing = false;
+                                    // Auto-save on stroke end
+                                    mBTDB.updateData(docId, `additional.${widgetId}`, cvs.toDataURL());
+                                };
+
+                                // 4. Bind Events (Mouse & Touch)
+                                cvs.addEventListener('mousedown', start);
+                                cvs.addEventListener('mousemove', draw);
+                                cvs.addEventListener('mouseup', end);
+                                cvs.addEventListener('mouseout', end);
+
+                                cvs.addEventListener('touchstart', function (e) { e.preventDefault(); start(e); });
+                                cvs.addEventListener('touchmove', function (e) { e.preventDefault(); draw(e); });
+                                cvs.addEventListener('touchend', end);
+
+                                cvs.dataset.initialized = "true";
+                            });
+                        },
+
+                        _clearMudMap: function (docId, widgetId) {
+                            var cvs = document.getElementById(`canvas_${widgetId}`);
+                            if (cvs) {
+                                var ctx = cvs.getContext('2d');
+                                ctx.clearRect(0, 0, cvs.width, cvs.height);
+                                this.updateData(docId, `additional.${widgetId}`, '');
+                            }
+                        },
+
+                        // Logic Resolution: Silent High-Fidelity Image Processing (2K Max)
+                        _handleImageUpload: function (input, docId, widgetId) {
+                            if (!input.files || !input.files[0]) return;
+                            var file = input.files[0];
+
+                            var reader = new FileReader();
+                            reader.onload = function (e) {
+                                var img = new Image();
+                                img.onload = function () {
+                                    var canvas = document.createElement('canvas');
+                                    // Constraint: Max width 2048px (2K) for retina quality but safe storage
+                                    var MAX_WIDTH = 2048;
+
+                                    // Only scale down if larger than max width to preserve fidelity
+                                    var width = img.width;
+                                    var height = img.height;
+
+                                    if (width > MAX_WIDTH) {
+                                        var scaleSize = MAX_WIDTH / width;
+                                        width = MAX_WIDTH;
+                                        height = img.height * scaleSize;
+                                    }
+
+                                    canvas.width = width;
+                                    canvas.height = height;
+
+                                    var ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0, width, height);
+
+                                    // Compress to JPEG 0.8 quality (High Fidelity)
+                                    var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                    this.updateData(docId, `additional.${widgetId}`, dataUrl);
+                                    this.renderFrame();
+                                };
+                                img.src = e.target.result;
+                            };
+                            reader.readAsDataURL(file);
+                        },
+
+                        // --- 5. Navigation & Logic Controllers ---
+                        _refreshWidget: function (docId, widgetId) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return;
+                            var widget = doc.content.widgets.find(function (w) { return w.id === widgetId; });
+                            if (!widget) return;
+
+                            var el = document.querySelector(`.grid-stack-item[gs-id="${widget.id}"] .widget-body`);
+
+                            if (el) {
+                                var currentScroll = el.scrollTop;
+                                el.innerHTML = this._getContentForWidget(widget, doc);
+
+                                if (widget.type === 'mudmap') this._initMudMaps();
+
+                                // Logic Resolution: Restore scroll position of the widget body surgically
+                                requestAnimationFrame(function () { if (el) el.scrollTop = currentScroll; });
+                            }
+                        },
+
+                        toggleVertical: function (wid) { var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; }); var w = doc.content.widgets.find(function (x) { return x.id === wid; }); if (w) { w.vertical = !w.vertical; this._refreshWidget(doc.id, wid); } },
+                        updateWidgetLabel: function (docId, widgetId, newLabel) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            var w = doc.content.widgets.find(function (x) { return x.id === widgetId; });
+                            if (w) {
+                                w.label = newLabel;
+                                this._triggerSave();
+                                // Sprint 2: Surgical Label Sync
+                                var input = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"] .widget-header input`);
+                                if (input && input.value !== newLabel) input.value = newLabel;
+                            }
+                        },
+
+                        updateData: function (docId, path, value) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            // Invalidate Cache
+                            if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+                            var parts = path.split('.');
+                            var target = doc.content.data;
+                            for (var i = 0; i < parts.length - 1; i++) { if (!target[parts[i]]) target[parts[i]] = {}; target = target[parts[i]]; }
+                            target[parts[parts.length - 1]] = value;
+
+                            // Phase 9: Sync Request Broadcast
+                            if (mBT.core && mBT.core.events) mBT.core.events.emit('sync-req', { docId, path });
+
+                            this._triggerSave();
+                        },
+
+                        updateDataDebounced: function (docId, path, value) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+                            var parts = path.split('.');
+                            var target = doc.content.data;
+                            for (var i = 0; i < parts.length - 1; i++) { if (!target[parts[i]]) target[parts[i]] = {}; target = target[parts[i]]; }
+                            target[parts[parts.length - 1]] = value;
+
+                            if (mBT.core && mBT.core.events) mBT.core.events.emit('sync-req', { docId, path });
+
+                            this._debouncedSave();
+                        },
+
+                        updateRow: function (docId, section, index, key, value) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (doc.content.data[section][index]) {
+                                // Invalidate Cache
+                                if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+                                doc.content.data[section][index][key] = value;
+                                this._triggerSave();
+                                // Batch 3.2: Removed auto-resize logic. Data saves silently without moving UI.
+                            }
+                        },
+
+                        addRow: function (docId, section, type, presetData) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            // Invalidate Cache
+                            if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+                            if (!doc.content.data[section]) doc.content.data[section] = [];
+                            var newRow = presetData || { id: Date.now() };
+                            if (!presetData) {
+                                if (section === 'schedule') { newRow.type = type; newRow.time = ""; newRow.scene = ""; newRow.description = type === 'meal' ? "LUNCH" : "New Shot"; newRow.cast = ""; newRow.ie = ""; newRow.loc = ""; newRow.note = ""; }
+                                else if (section === 'cast') { newRow.character = ""; newRow.actor = ""; newRow.status = "W"; newRow.pickup = ""; newRow.hmu = ""; newRow.setCall = ""; newRow.contact = ""; }
+                                else if (section === 'crew') { newRow.department = ""; newRow.position = ""; newRow.name = ""; newRow.contact = ""; newRow.callTime = ""; }
+                                else if (section === 'contacts') { newRow.role = ""; newRow.name = ""; }
+                                else if (section === 'locations') { newRow.name = ""; newRow.address = ""; newRow.weather = ""; newRow.hospital = ""; newRow.mapLink = ""; newRow.timeOnLocation = ""; }
+                                else if (section === 'transport') { newRow.driver = ""; newRow.vehicle = ""; newRow.pax = ""; newRow.pickup = ""; newRow.loc = ""; newRow.dest = ""; }
+                            }
+                            doc.content.data[section].push(newRow);
+                            this._triggerSave();
+
+                            // Surgical Widget Refresh
+                            var widgetType = (section === 'locations') ? 'logistics' : section;
+                            var widget = doc.content.widgets.find(function (w) { return w.type === widgetType; });
+                            if (widget) this._refreshWidget(docId, widget.id);
+                            else this.renderFrame();
+                        },
+
+                        deleteRow: function (docId, section, index, widgetType) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            // Invalidate Cache
+                            if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
+
+                            doc.content.data[section].splice(index, 1);
+                            this._triggerSave();
+
+                            // Surgical Widget Refresh
+                            var type = widgetType || section;
+                            var widget = doc.content.widgets.find(function (w) { return w.type === type; });
+                            if (widget) this._refreshWidget(docId, widget.id);
+                            else this.renderFrame();
+                        },
+                        deleteWidget: function (id) {
+                            mBTME.confirm("Delete Widget", "Remove this block from layout?", function () {
+                                var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                                var el = document.querySelector(`.grid-stack-item[gs-id="${id}"]`);
+                                if (el) this.state.grid.removeWidget(el);
+                                doc.content.widgets = doc.content.widgets.filter(function (w) { return w.id !== id; });
+                                this._triggerSave();
+                            });
+                        },
+                        addWidget: function () {
+                            var select = document.getElementById('mBTDB_WidgetSelect');
+                            if (!select) return;
+                            var type = select.value;
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            var w = { id: type + '_' + Date.now(), type, w: 6, h: 4, autoPosition: true, label: type.toUpperCase() };
+                            var html = this._generateWidgetHTML(w, doc);
+                            var node = this.state.grid.addWidget({ w: 6, h: 4, content: html, id: w.id, autoPosition: true });
+                            w.x = node.gridstackNode.x; w.y = node.gridstackNode.y;
+                            doc.content.widgets.push(w);
+                            this._triggerSave();
+                            // Logic Fix: Ensure canvas initializes immediately after adding
+                            if (type === 'mudmap') setTimeout(function () { return this._initMudMaps(); }, 50);
+                        },
+                        _autoResizeWidget: function (widgetId) {
+                            // Batch 3.2: Deprecated.
+                            // We rely on GridStack manual sizing + Internal Flex Scrollbars (Batch 3.1).
+                            // No-op to prevent logic errors in legacy calls.
+                            return;
+                        },
+                        formatTime: function (el, docId) {
+                            // Logic Resolution: Robust manual time formatting (Smart Text)
+                            // 1400 -> 14:00, 930 -> 09:30
+                            var val = el.value.replace(/[^0-9]/g, '');
+                            if (val.length < 3) return; // Wait for at least 3 digits
+
+                            // Pad 3 digits to 4 (e.g., 800 -> 0800)
+                            if (val.length === 3) val = '0' + val;
+                            // Truncate if too long (e.g., pasted 12345)
+                            if (val.length > 4) val = val.substring(0, 4);
+
+                            var hh = parseInt(val.substring(0, 2));
+                            var mm = parseInt(val.substring(2, 4));
+
+                            // Logic Resolution: Enforce Military Time Constraint from Header Setting
+                            // This ensures the row data matches the document's declared format
+                            var is24h = false;
+                            if (docId) {
+                                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                                if (doc && doc.content.data.meta.is24h) is24h = true;
+                            }
+
+                            if (is24h) {
+                                // Military Clamp
+                                if (hh > 23) hh = 23;
+                            } else {
+                                // Standard Time Heuristics (Optional intelligent conversion could go here)
+                                if (hh > 23) hh = 23;
+                            }
+
+                            if (mm > 59) mm = 59;
+
+                            // Output format is always HH:MM for data consistency
+                            el.value = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+                        },
+                        saveTemplate: function () {
+                            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            mBTME.prompt("Save Template", "Template Name:", doc.label + " Preset", function (name) {
+                                if (!name) return;
+                                var tmpl = { id: 'tmpl_' + Date.now(), label: name, widgets: JSON.parse(JSON.stringify(doc.content.widgets)) };
+                                if (!budget.templates) budget.templates = [];
+                                budget.templates.push(tmpl);
+                                mBTME.alert("Success", `Template "${name}" saved.`);
+                            });
+                        },
+                        calcShootDay: function (dateStr) { if (!budget.startDate) return "Day 1"; var start = new Date(budget.startDate); var current = new Date(dateStr); if (isNaN(start) || isNaN(current)) return "Day 1"; var diffDays = Math.ceil((current - start) / (1000 * 60 * 60 * 24)) + 1; return `Day ${diffDays}`; },
+
+                        syncFromBudget: function () {
+                            mBTME.confirm("Sync Data", "Import crew & data from current Budget?", function () {
+                                var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                                // Invalidate Cache
+                                if (this.state._cache && this.state._cache.docId === doc.id) this.state._cache = null;
+
+                                // 1. Crew Map Logic (Budget Line Items -> Crew List)
+                                Object.values(budget.sections).forEach(function (sec) {
+                                    return sec.items.forEach(function (i) {
+                                        if (i.crew && i.crew.name) {
+                                            // Check if already in list to avoid duplicates
+                                            var exists = doc.content.data.crew.some(function (c) { return c.name === i.crew.name && c.department === i.description; });
+                                            if (!exists) {
+                                                this.addRow(doc.id, 'crew', 'person', {
+                                                    department: i.description,
+                                                    name: i.crew.name,
+                                                    contact: i.crew.phone,
+                                                    linkedItemId: i.id
+                                                });
+                                            }
+                                        }
+                                    });
+                                });
+
+                                // 2. Key Contacts Logic (Map Specific Roles)
+                                var map = { 'director': 'Director', 'producer': 'Producer', 'ad': '1st AD' };
+                                Object.entries(map).forEach(function ([key, role]) {
+                                    // Scan Budget Line Items
+                                    var found = null;
+                                    Object.values(budget.sections).some(function (s) {
+                                        var i = s.items.find(function (x) { return x.description.toLowerCase().includes(role.toLowerCase()) && x.crew && x.crew.name; });
+                                        if (i) { found = i.crew.name; return true; }
+                                    });
+                                    if (found) doc.content.data.contacts[key] = found;
+                                });
+
+                                // 3. Refresh
+                                mBTLE.reconcile();
+                                this.renderFrame();
+                                mBTME.alert("Sync Complete", "Budget personnel imported.");
+                            });
+                        },
+                        syncFromPrevious: function () {
+                            var cur = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                            if (!cur) return;
+
+                            var prev = null;
+                            var msg = "";
+
+                            if (cur.type === 'prodReport') {
+                                // Logic Resolution: Cross-Document Inheritance (DPR pulls from Call Sheet)
+                                var sheets = budget.documents.filter(function (d) { return d.type === 'callSheet'; })
+                                    .sort(function (a, b) { return (parseInt(b.id.split('_')[1]) || 0) - (parseInt(a.id.split('_')[1]) || 0); });
+                                prev = sheets[0];
+                                msg = `Import data from Call Sheet "${(prev && prev.label) || ''}"?`;
+                            } else {
+                                // Standard History: Inherit from previous of same type
+                                var others = budget.documents.filter(function (d) { return d.type === cur.type && d.id !== cur.id; })
+                                    .sort(function (a, b) { return (parseInt(b.id.split('_')[1]) || 0) - (parseInt(a.id.split('_')[1]) || 0); });
+                                prev = others[0];
+                                msg = `Import crew & contacts from "${(prev && prev.label) || ''}"?`;
+                            }
+
+                            if (!prev) return mBTME.alert("Sync Info", "No source document found.");
+
+                            mBTME.confirm("Sync Previous", msg, function () {
+                                // Invalidate Cache
+                                if (this.state._cache && this.state._cache.docId === cur.id) this.state._cache = null;
+
+                                if (prev.content && prev.content.data && prev.content.data.contacts) cur.content.data.contacts = JSON.parse(JSON.stringify(prev.content.data.contacts));
+                                if (prev.content && prev.content.data && prev.content.data.crew) cur.content.data.crew = JSON.parse(JSON.stringify(prev.content.data.crew));
+
+                                // Logic Resolution: Date Inheritance for DPR
+                                if (cur.type === 'prodReport' && prev.content && prev.content.data && prev.content.data.meta && prev.content.data.meta.shootDate) {
+                                    cur.content.data.meta.shootDate = prev.content.data.meta.shootDate;
+                                }
+
+                                this._triggerSave();
+                                this.renderFrame();
+                            });
+                        },
+
+                        snapshotDoc: function () { var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; }); var newDoc = JSON.parse(JSON.stringify(doc)); newDoc.id = 'doc_' + Date.now(); newDoc.label = doc.label + " (Copy)"; budget.documents.push(newDoc); mBTDB.open(newDoc.id); },
+                        pullFromOpenGate: function (docId, path, roleQuery) {
+                            if (typeof mBTOG === 'undefined') return mBTME.alert("System Error", "Database Resolution Failure.");
+
+                            // Logic Resolution: Tier 5 Context-Aware Search
+                            // 1. Scan Active Budget First (Inheritance)
+                            var matches = [];
+                            var seen = new Set(); // Prevent duplicates
+
+                            if (budget.sections) {
+                                Object.values(budget.sections).forEach(function (sec) {
+                                    sec.items.forEach(function (i) {
+                                        if (i.crew && i.crew.name && i.description.toLowerCase().includes(roleQuery.toLowerCase())) {
+                                            var key = `${i.crew.name}|${i.crew.phone}`;
+                                            if (!seen.has(key)) {
+                                                matches.push({
+                                                    name: i.crew.name,
+                                                    contact: i.crew.phone || i.crew.email,
+                                                    role: i.description,
+                                                    source: 'Budget' // Logic Resolution: Source tagging
+                                                });
+                                                seen.add(key);
+                                            }
+                                        }
+                                    });
+                                });
+                            }
+
+                            // 2. Scan Global DB (Fallback)
+                            var globalMatches = mBTOG.contacts.filter(function (c) { return c.role && c.role.toLowerCase().includes(roleQuery.toLowerCase()); });
+                            globalMatches.forEach(function (c) {
+                                var key = `${c.name}|${c.contact || c.phone}`;
+                                if (!seen.has(key)) {
+                                    var _cCopy = {}; var _cKeys = Object.keys(c); for (var _ci = 0; _ci < _cKeys.length; _ci++) { _cCopy[_cKeys[_ci]] = c[_cKeys[_ci]]; } _cCopy.source = 'Global DB';
+                                    matches.push(_cCopy);
+                                    seen.add(key);
+                                }
+                            });
+
+                            if (matches.length === 0) return mBTME.alert("Not Found", `No ${roleQuery} found.`);
+
+                            var apply = function (c) {
+                                var parts = path.split('.');
+                                if (parts.length === 3 && (parts[0] === 'crew' || parts[0] === 'cast')) {
+                                    this.updateRow(docId, parts[0], parseInt(parts[1]), parts[2], c.name);
+                                    if (c.contact) this.updateRow(docId, parts[0], parseInt(parts[1]), 'contact', c.contact);
+                                } else {
+                                    this.updateData(docId, path, `${c.name} ${c.contact ? '(' + c.contact + ')' : ''}`);
+                                }
+                                this.renderFrame();
+                            };
+
+                            if (matches.length === 1) {
+                                apply(matches[0]);
+                            } else {
+                                // Modern UI Replacement: Custom Modal with Buttons
+                                var listHtml = matches.map(function (c, i) {
+                                    return `<button onclick="mBTDB._resolveOGSelection(${i})" class="w-full text-left p-3 bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-xl transition-all group mb-2">
+                    <div class="flex justify-between items-center">
+                        <div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">${c.name}</div>
+                        <div class="text-[8px] font-bold text-slate-300 bg-white border border-slate-200 rounded px-1.5 py-0.5">${c.source}</div>
+                    </div>
+                    <div class="text-[9px] text-slate-400 font-mono">${c.contact || 'No Contact'}</div>
+                </button>`;
+                                }
+                                ).join('');
+
+                                // Temporary resolver stored on the object to handle the async click
+                                this._resolveOGSelection = function (idx) {
+                                    mBTME.close('ogSelectModal');
+                                    if (matches[idx]) apply(matches[idx]);
+                                    delete this._resolveOGSelection;
+                                };
+
+                                mBTME.open('ogSelect', `Select ${roleQuery}`, `<div class="p-4 max-h-[400px] overflow-y-auto no-scrollbar">${listHtml}</div>`, 'max-w-sm');
+                            }
+                        },
+                        printToPDF: function (mode) {
+                            if (typeof mBTPublisher === 'undefined') return mBTME.alert("Error", "Publisher Resolution Failure.");
+                            var original = document.getElementById('mBTDB_Workspace');
+                            var clone = original.cloneNode(true);
+                            clone.id = "mBTDB_Print_Container";
+                            clone.classList.remove('editing-mode');
+                            clone.classList.add('print-container', mode === 'standard' ? 'print-standard' : 'print-graphic');
+                            var originalInputs = original.querySelectorAll('input, textarea');
+                            var cloneInputs = clone.querySelectorAll('input, textarea');
+                            originalInputs.forEach(function (input, i) { if (cloneInputs[i]) cloneInputs[i].value = input.value; });
+                            document.body.appendChild(clone);
+                            mBTPublisher.exportToPDF('mBTDB_Print_Container', `${budget.projectName}_CallSheet`);
+                            setTimeout(function () { document.body.removeChild(clone); }, 2000);
+                        },
+
+                        // --- 6. Switchboard Integration ---
+                        _updateHeaderButtons: function () {
+                            var btnContainer = document.getElementById('mBTDB_Buttons');
+                            if (!btnContainer) return;
+                            var isEd = this.state.isEditing;
+
+                            var pencilIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+                            var checkIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+                            // Widget Selector (Edit Mode Only)
+                            var widgetSelector = isEd ? `
+            <div class="flex items-center bg-white rounded-lg pl-2 mr-3 shadow-sm animate-in fade-in zoom-in duration-200 border border-slate-700/30">
+                <select id="mBTDB_WidgetSelect" class="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-900 h-7 outline-none cursor-pointer border-none mr-2">
+                    <option value="richText">Note</option>
+                    <option value="image">Image</option>
+                    <option value="schedule">Schedule</option>
+                    <option value="cast">Cast List</option>
+                    <option value="crew">Crew List</option>
+                    <option value="logistics">Logistics</option>
+                    <option value="contacts">Contacts</option>
+                    <option value="transport">Transport</option>
+                    <option value="mudmap">Mud Map</option>
+                    <option value="footer">Safety Footer</option>
+                </select>
+                <button onclick="mBTDB.addWidget()" class="w-8 h-8 flex items-center justify-center text-blue-600 hover:text-white hover:bg-blue-600 transition-colors rounded-r-lg" title="Add Widget">
+                    ${this.icons.plus}
+                </button>
+            </div>` : '';
+
+                            // Main Toolbar with Functional Grouping
+                            // Improvement: Added Paper Size Selector (Sprint 02)
+                            // Accesses mBTDB.config.paperSizes defined in Sprint 01
+                            btnContainer.innerHTML = `
+            <div class="flex-grow overflow-x-auto no-scrollbar min-w-0">
+                <div class="flex items-center gap-1 whitespace-nowrap">
+                    ${widgetSelector}
+
+                    <!-- Paper Size Selector -->
+                    <div class="relative group mr-3 border-r border-slate-700/50 pr-3">
+                        <select data-action="studio-set-paper" class="bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest p-2 rounded-lg outline-none cursor-pointer border border-transparent focus:border-blue-500 appearance-none hover:bg-slate-700 transition-colors" title="Canvas Size">
+                            ${Object.entries(mBTDB.config.paperSizes).map(function ([key, conf]) {
+                                var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                                var currentSize = (doc && doc.content.data.meta.paperSize) || 'a4';
+                                return `<option value="${key}" ${key === currentSize ? 'selected' : ''}>${conf.label}</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+                    
+                    <!-- History Controls -->
+                    <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                        <button data-action="studio-undo" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Undo">${this.icons.undo}</button>
+                        <button data-action="studio-redo" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Redo">${this.icons.redo}</button>
+                    </div>
+
+                    <!-- Integration Hub: Sync & Preview -->
+                    <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                        <button data-action="studio-sync" class="p-2 text-emerald-500 hover:text-emerald-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Budget">${mBTAssets.sync}</button>
+                        <button data-action="studio-sync-prev" class="p-2 text-blue-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800" title="Sync from Previous">${mBTAssets.refresh}</button>
+                        <button data-action="studio-preview" class="p-2 text-purple-500 hover:text-purple-400 transition-colors rounded-lg hover:bg-slate-800" title="Document Preview">${mBTAssets.image}</button>
+                    </div>
+
+                    <!-- Snapshot Tools -->
+                    <div class="flex gap-1 mr-3 border-r border-slate-700/50 pr-3">
+                        <button data-action="studio-snapshot" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Duplicate Document">${this.icons.copy}</button>
+                        <button data-action="studio-template" class="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title="Save Blueprint">${this.icons.save}</button>
+                    </div>
+
+                    <!-- Layout Toggle -->
+                    <button data-action="studio-toggle-edit" class="p-2 rounded-lg transition-all ${isEd ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}" title="${isEd ? 'Finish Editing' : 'Edit Layout'}">
+                        ${isEd ? checkIcon : pencilIcon}
+                    </button>
+                </div>
+            </div>
+        `;
+                        },
+
+                        _triggerSave: function () {
+                            clearTimeout(this._saveTimer);
+                            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                            if (typeof saveBudget === 'function') saveBudget();
+                        },
+                        _generateDefaultData: function () {
+                            // Phase 1: Hard Save - Base Schema Definition
+                            return {
+                                meta: {
+                                    productionTitle: budget.projectName || "",
+                                    productionCompany: budget.company || "",
+                                    shootDate: new Date().toISOString().split('T')[0],
+                                    crewCallTime: "08:00",
+                                    is24h: false,
+                                    sunriseSunset: ""
+                                },
+                                contacts: { director: "", producer: "", ad: "" },
+                                agency: { producer: "", creative: "" },
+                                production: { address: "", phone: "", email: "", wifi: "", pass: "" },
+                                schedule: [],
+                                crew: [],
+                                cast: [],
+                                locations: [{ name: "Base Camp", address: "", weather: "", hospital: "", mapLink: "", timeOnLocation: "" }],
+                                transport: [],
+                                additional: {}
+                            };
+                        }
+                    };
+
+                    /* ======= TIER 5: Part 2: Module Controllers & Intelligence ======== */
+                    // --- ROOT NAMESPACE DECLARATION ---
+                    // Note: Namespace definition hoisted to Tier 1. 
+                    // We extend it here for Feature modules.
+
+                    /* ========= v19.54 BLUEPRINT ENGINE (mBT.features.blueprints) ========= */
+                    mBT.features.blueprints = {
+                        saveCurrentAsBlueprint: function () {
+                            if (!budget) return;
+                            mBTME.prompt("Save Blueprint", "Name this template:", budget.projectName + " Template", function (name) {
+                                if (!name) return;
+
+                                var structure = [];
+                                Object.values(budget.sections).forEach(function (sec) {
+                                    structure.push({
+                                        id: sec.id,
+                                        name: sec.name,
+                                        items: sec.items.map(function (i) {
+                                            return ({
+                                                description: i.description,
+                                                unit: i.unit,
+                                                rate: i.rate,
+                                                multiplier: i.multiplier,
+                                                rateType: i.rateType
+                                                // Note: We strip actuals, crew, and transient IDs to create a clean template
+                                            });
+                                        })
+                                    });
+                                });
+
+                                mBT.data.templates.saveTemplate(name, {
+                                    structure: structure,
+                                    label: name,
+                                    desc: 'Custom User Blueprint',
+                                    icon: 'file'
+                                });
+
+                                mBTME.alert("Success", `Blueprint "${name}" saved! It is now available in the New Project menu.`);
+                            });
+                        },
+
+                        /* Phase 116 — The Universal Studio Hub: Unified AI & Blueprint Portal */
+                        showStudioHub: function () {
+                            var self = this;
+                            var content = `
+                <div class="flex flex-col h-[75vh] bg-slate-900 text-white font-sans">
+                    <!-- Top Section: Quick Setup Tiles -->
+                    <div class="p-6 border-b border-white/5">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                    moo Budget Tool
+                                </h3>
+                                <p class="text-[10px] text-white/40 font-bold uppercase tracking-tight">Select a starting blueprint or use the AI Assistant below</p>
+                            </div>
+                            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">
+                                    <div class="w-8 h-4 bg-slate-700 rounded-full relative transition-colors peer-checked:bg-blue-600">
+                                        <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                                    </div>
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Inject Rates</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <button onclick="mBT.features.blueprints.applyFromHub('commercial')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Standard</span>
+                                <span class="block text-xs font-black text-white">TV Commercial</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('documentary')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Run & Gun</span>
+                                <span class="block text-xs font-black text-white">Documentary</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('live_stream')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Technical</span>
+                                <span class="block text-xs font-black text-white">Live Broadcast</span>
+                            </button>
+                            <button onclick="mBT.features.blueprints.applyFromHub('music_video')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
+                                <span class="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Creative</span>
+                                <span class="block text-xs font-black text-white">Music Video</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Section: AI Assistant Iframe -->
+                    <div class="flex-1 relative bg-black/20">
+                        <iframe id="mbtHubAiIframe" src="src/tools/ai/index.html?embedded=true" class="w-full h-full border-none"></iframe>
+                    </div>
+                </div>
+            `;
+
+                            mBTME.open('studio-hub', 'Studio Center', content, 'max-w-4xl', { hideHeader: true, noPadding: true });
+                        },
+
+                        /* Phase 116: Hub tile trigger — maps lowercase hub key to BUDGET_TEMPLATES title-case key */
+                        applyFromHub: function (templateName) {
+                            var withRates = !!(document.getElementById('mbtHubRatesToggle') || { checked: true }).checked;
+                            var KEY_MAP = { commercial: 'Commercial', documentary: 'Documentary', live_stream: 'Live Stream', music_video: 'Music Video' };
+                            var tmplKey = KEY_MAP[templateName] || templateName;
+                            mBT.features.blueprints.applyTemplate(tmplKey, withRates, true);
+                        },
+
+                        /* Phase 116 Step 2: Programmatic bridge — called by Hub tiles and postMessage handler */
+                        applyTemplate: function (tmplKey, withRates, askConfirm) {
+                            var tmpl = (typeof BUDGET_TEMPLATES !== 'undefined') ? BUDGET_TEMPLATES[tmplKey] : null;
+                            if (!tmpl || !tmpl.structure) {
+                                if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Blueprint not found: ' + tmplKey);
+                                return;
+                            }
+                            var label = tmpl.label || tmplKey;
+                            function doApply() {
+                                var rateDb = (withRates && typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+                                var regionMult = (withRates && typeof mBT.opengate !== 'undefined') ? (mBT.opengate.settings.regionMultiplier || 1) : 1;
+                                var newSections = {};
+                                tmpl.structure.forEach(function (s) {
+                                    newSections[s.name] = {
+                                        id: s.id,
+                                        isOpen: true,
+                                        items: s.items.map(function (desc, idx) {
+                                            var match = null;
+                                            for (var ri = 0; ri < rateDb.length; ri++) {
+                                                if (rateDb[ri] && rateDb[ri].description && rateDb[ri].description.toLowerCase() === desc.toLowerCase()) { match = rateDb[ri]; break; }
+                                            }
+                                            return {
+                                                id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+                                                description: desc,
+                                                quantity: 1,
+                                                unit: match ? match.unit : 'Day',
+                                                rate: match ? Math.round(match.rate * regionMult) : 0,
+                                                multiplier: 1,
+                                                actual: 0,
+                                                notes: '',
+                                                stageData: {}
+                                            };
+                                        })
+                                    };
+                                });
+                                budget.sections = newSections;
+                                if (typeof saveBudget === 'function') saveBudget();
+                                if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+                                if (typeof render === 'function') render();
+                                if (typeof mBTME !== 'undefined') {
+                                    mBTME.close('studio-hub');
+                                    mBTME.alert('Blueprint Applied', '"' + label + '" structure loaded' + (withRates ? ' with industry rates.' : '.'));
+                                }
+                            }
+                            if (askConfirm && typeof mBTME !== 'undefined') {
+                                mBTME.confirm('Apply Blueprint?', '"' + label + '" will replace current sections. Continue?', doApply);
+                            } else {
+                                doApply();
+                            }
+                        },
+
+                        openTool: function () {
+                            this.showStudioHub();
+                        }
+                    };
+
+                    /* Phase 114: expose mBT.blueprints alias so onclick="mBT.blueprints.openTool()" resolves */
+                    mBT.blueprints = mBT.features.blueprints;
+
+                    // Core Action Binding for Blueprint
+                    mBT.core.action('blueprint-save', function () { return mBT.features.blueprints.saveCurrentAsBlueprint(); });
+
+                    /* ========= v19.54 ACTIVITY HISTORY (mBT.features.history) ========= */
+                    mBT.features.history = {
+                        open: function () {
+                            // Get logs, newest first
+                            var logs = (budget.activityLog || []).slice().reverse();
+
+                            var renderDiff = function (diff) {
+                                if (!diff || (diff.oldValue === undefined && diff.newValue === undefined)) return '';
+                                // Logic Resolution: Render visual diff for transparency
+                                return `<div class="mt-1 text-[9px] font-mono text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100 flex items-center gap-2">
+                    <span class="line-through text-red-400 opacity-70">${mBT.ui.render.esc(diff.oldValue)}</span>
+                    <span class="text-slate-300">→</span>
+                    <span class="text-emerald-600 font-bold">${mBT.ui.render.esc(diff.newValue)}</span>
+                </div>`;
+                            };
+
+                            var listHtml = logs.length ? logs.map(function (l) {
+                                var iconColor = 'bg-blue-500';
+                                if (l.action === 'DELETE') iconColor = 'bg-rose-500';
+                                if (l.action === 'ADD') iconColor = 'bg-emerald-500';
+                                if (l.action === 'REORDER') iconColor = 'bg-amber-500';
+                                if (l.action === 'REVERT') iconColor = 'bg-purple-500';
+
+                                // Tier 5 Logic: Inject Revert Button for Reversible Actions
+                                var revertBtn = '';
+                                if (l.diff && l.action === 'UPDATE' && l.itemId) {
+                                    revertBtn = `<button onclick="mBT.data.history.revert('${l.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-2 px-2 py-1 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded text-[8px] font-black uppercase tracking-widest" title="Revert value">Revert</button>`;
+                                }
+
+                                return `
+                <div class="p-3 bg-white border-b border-slate-50 hover:bg-slate-50 transition-colors flex gap-3 group">
+                    <div class="flex-shrink-0 mt-1.5">
+                        <div class="w-1.5 h-1.5 rounded-full ${iconColor} shadow-sm"></div>
+                    </div>
+                    <div class="flex-grow min-w-0">
+                        <div class="flex justify-between items-start">
+                            <span class="text-[10px] font-black uppercase text-slate-700 tracking-widest truncate pr-2">${l.action}: ${mBT.ui.render.esc(l.target)}</span>
+                            <span class="text-[8px] font-mono text-slate-400 shrink-0">${new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">${l.section}</div>
+                            ${revertBtn}
+                        </div>
+                        ${renderDiff(l.diff)}
+                    </div>
+                </div>`;
+                            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.list, message: 'No Activity Recorded' });
+
+                            var content = `
+                <div class="flex flex-col h-[500px] bg-slate-50">
+                    <div class="p-4 bg-white border-b border-slate-100 shrink-0 flex justify-between items-center shadow-sm z-10">
+                        <div>
+                            <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Project Audit Log</h3>
+                            <p class="text-[9px] text-slate-400 font-bold mt-0.5">${logs.length} Events</p>
+                        </div>
+                        <button onclick="mBT.features.history.export()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-[9px] font-black uppercase tracking-widest">
+                            ${mBTAssets.save} Export CSV
+                        </button>
+                    </div>
+                    <div class="flex-grow overflow-y-auto no-scrollbar">
+                        ${listHtml}
+                    </div>
+                </div>`;
+
+                            mBTME.open('activityLog', 'History', content, 'max-w-md', { hideHeader: true, noPadding: true });
+                        },
+
+                        export: function () {
+                            if (!budget.activityLog || !budget.activityLog.length) return mBTME.alert("Empty", "No history to export.");
+
+                            // Logic Resolution: ISO Standard CSV Generation
+                            var headers = ["Timestamp", "User", "Action", "Target", "Section", "Old Value", "New Value"];
+                            var rows = budget.activityLog.map(function (e) {
+                                var escapeCsv = function (val) { return `"${String(val || '').replace(/"/g, '""')}"`; };
+                                return [
+                                    e.ts,
+                                    e.user,
+                                    e.action,
+                                    e.target,
+                                    e.section,
+                                    (e.diff && e.diff.oldValue),
+                                    (e.diff && e.diff.newValue)
+                                ].map(escapeCsv).join(",");
+                            });
+
+                            var csvContent = "data:text/csv;charset=utf-8," + [headers.join(",")].concat(rows).join("\n");
+                            var encodedUri = encodeURI(csvContent);
+                            var link = document.createElement("a");
+                            link.setAttribute("href", encodedUri);
+                            link.setAttribute("download", `${budget.projectName}_AuditLog_${new Date().toISOString().split('T')[0]}.csv`);
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }
+                    };
+
+                    /* ========= v19.54 ANALYTICS CORTEX (mBT.features.cortex) ========= */
+                    mBT.features.cortex = {
+                        // --- 1. Logic Engine (The Brain) ---
+                        logic: {
+                            analyze: function () {
+                                var data = {
+                                    financials: { topCosts: [], bleeders: [], burnRate: 0 },
+                                    crew: { burnout: [], departmentLoad: {} },
+                                    stats: { totalItems: 0, assignedCrew: 0 }
+                                };
+
+                                var crewMap = {};
+                                var totalEst = 0;
+                                var totalAct = 0;
+                                var allItems = [];
+
+                                // A. Aggregation Loop
+                                if (budget && budget.sections) {
+                                    Object.values(budget.sections).forEach(function (sec) {
+                                        sec.items.forEach(function (item) {
+                                            data.stats.totalItems++;
+                                            var est = parseFloat(item.total) || 0;
+                                            var act = parseFloat(item.actual) || 0;
+                                            var variance = act - est;
+
+                                            totalEst += est;
+                                            totalAct += act;
+
+                                            var _aC = {}; var _aK = Object.keys(item); for (var _ai = 0; _ai < _aK.length; _ai++) { _aC[_aK[_ai]] = item[_aK[_ai]]; } _aC.sectionName = sec.name; _aC.est = est; _aC.act = act; _aC.variance = variance;
+                                            allItems.push(_aC);
+
+                                            // Crew Aggregation Logic
+                                            if (item.crew && item.crew.name) {
+                                                data.stats.assignedCrew++;
+                                                var key = item.crew.name.toLowerCase();
+                                                if (!crewMap[key]) crewMap[key] = { name: item.crew.name, days: 0, roles: [], cost: 0 };
+
+                                                // Day normalization (converting units to days for heatmap)
+                                                var days = parseFloat(item.quantity) || 0;
+                                                if (item.unit === 'Week') days *= 5;
+                                                else if (item.unit === 'Month') days *= 20;
+                                                else if (item.unit === 'Flat') days = 1; // Assumption for flat fees
+
+                                                // Check Stage Data override (More accurate time tracking)
+                                                if (item.stageData) {
+                                                    var sDays = 0;
+                                                    Object.values(item.stageData).forEach(function (d) { return sDays += (parseFloat(d.days) || 0); });
+                                                    if (sDays > 0) days = sDays;
+                                                }
+
+                                                crewMap[key].days += days;
+                                                crewMap[key].cost += est;
+                                                // Avoid duplicate role names
+                                                var roleLabel = `${item.description} (${days}d)`;
+                                                if (!crewMap[key].roles.includes(roleLabel)) crewMap[key].roles.push(roleLabel);
+                                            }
+                                        });
+                                    });
+                                }
+
+                                // B. Financial Metrics
+                                data.financials.burnRate = totalEst > 0 ? (totalAct / totalEst) * 100 : 0;
+
+                                // Top Cost Drivers (The Heavy Hitters)
+                                data.financials.topCosts = allItems.slice(0)
+                                    .sort(function (a, b) { return b.est - a.est; })
+                                    .slice(0, 5);
+
+                                // Top Bleeders (Variance > 0, highest mismatch)
+                                data.financials.bleeders = allItems.slice(0)
+                                    .filter(function (i) { return i.variance > 0.01; }) // Filter out floating point noise
+                                    .sort(function (a, b) { return b.variance - a.variance; })
+                                    .slice(0, 5);
+
+                                // C. Crew Metrics
+                                data.crew.burnout = Object.values(crewMap)
+                                    .sort(function (a, b) { return b.days - a.days; })
+                                    .slice(0, 8); // Top 8 busiest people
+
+                                return data;
+                            },
+
+                            // --- Phase 9: Global Studio Scanner ---
+                            runGlobalAudit: function () {
+                                return mBT.data.getList().then(function (projects) {
+                                    var globalData = {
+                                        projectCount: projects.length,
+                                        totalBudget: 0,
+                                        totalSpend: 0,
+                                        crewEarnings: {},
+                                        projectSummaries: []
+                                    };
+
+                                    // Sequential load to prevent memory spike
+                                    return projects.reduce(function (chain, pName) {
+                                        return chain.then(function () {
+                                            // Manual load to bypass state wrapper
+                                            return mBT.data.storage.load(storageKeyPrefix + pName).then(function (raw) {
+                                                if (!raw) return;
+
+                                                // Extract Metadata
+                                                var grandTotal = parseFloat(raw.grandTotal) || 0;
+                                                var actualTotal = parseFloat(raw.actualTotal) || 0;
+
+                                                globalData.totalBudget += grandTotal;
+                                                globalData.totalSpend += actualTotal;
+
+                                                globalData.projectSummaries.push({
+                                                    name: raw.projectName,
+                                                    date: raw.startDate,
+                                                    budget: grandTotal,
+                                                    actual: actualTotal,
+                                                    status: actualTotal > grandTotal ? 'Over' : 'Under'
+                                                });
+
+                                                // Deep Crew Scan
+                                                if (raw.sections) {
+                                                    Object.values(raw.sections).forEach(function (sec) {
+                                                        sec.items.forEach(function (item) {
+                                                            if (item.crew && item.crew.name) {
+                                                                var key = item.crew.name;
+                                                                if (!globalData.crewEarnings[key]) globalData.crewEarnings[key] = 0;
+                                                                // Estimate earnings based on item total (Est) or Actual if available
+                                                                // Use Actual if > 0, else Est
+                                                                var earnings = (parseFloat(item.actual) > 0) ? parseFloat(item.actual) : (parseFloat(item.total) || 0);
+                                                                globalData.crewEarnings[key] += earnings;
+                                                            }
+                                                        });
+                                                    });
+                                                }
+                                            });
+                                        });
+                                    }, Promise.resolve()).then(function () {
+                                        // Sort Top Crew
+                                        globalData.topCrew = Object.keys(globalData.crewEarnings)
+                                            .map(function (name) { return { name: name, amount: globalData.crewEarnings[name] }; })
+                                            .sort(function (a, b) { return b.amount - a.amount; })
+                                            .slice(0, 10);
+
+                                        return globalData;
+                                    });
+                                });
+                            }
+                        },
+
+                        // --- 2. UI Engine (The Dashboard) ---
+                        ui: {
+                            openHub: function () {
+                                var analysis = mBT.features.cortex.logic.analyze();
+                                var fmt = mBTLE.format.currency;
+
+                                // --- Widget 1: Burn Rate KPI (Compact) ---
+                                // Visual logic: Green if <80%, Yellow <100%, Red >100%
+                                var burnRate = analysis.financials.burnRate;
+                                var burnColor = 'text-slate-800';
+                                if (burnRate > 100) burnColor = 'text-rose-600';
+                                else if (burnRate > 80) burnColor = 'text-amber-500';
+
+                                var burnWidget = `
+                    <div class="col-span-1 md:col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full flex flex-col justify-center items-center text-center">
+                        <div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">Burn Rate</div>
+                        <span class="text-3xl font-black ${burnColor} tracking-tighter">${burnRate.toFixed(1)}%</span>
+                        <span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">of budget</span>
+                    </div>`;
+
+                                // --- Widget 2: Cost Drivers (List) ---
+                                var renderBar = function (label, val, max, colorClass, subText) {
+                                    var pct = max > 0 ? Math.min((val / max) * 100, 100) : 0;
+                                    return `
+                    <div class="mb-3">
+                        <div class="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">
+                            <span class="truncate pr-2" title="${RenderEngine.esc(label)}">${RenderEngine.esc(label)}</span>
+                            <span>${fmt(val)}</span>
+                        </div>
+                        <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="h-full ${colorClass}" style="width: ${pct}%"></div>
+                        </div>
+                        ${subText ? `<div class="text-[8px] text-slate-400 font-mono mt-0.5 text-right">${subText}</div>` : ''}
+                    </div>`;
+                                };
+
+                                var maxCost = analysis.financials.topCosts.length ? analysis.financials.topCosts[0].est : 1;
+                                var financialsWidget = `
+                    <div class="col-span-1 md:col-span-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full overflow-y-auto no-scrollbar">
+                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Cost Drivers</h4>
+                        
+                        <div class="mb-6">
+                            ${analysis.financials.topCosts.length ? analysis.financials.topCosts.map(function (i) { return renderBar(i.description, i.est, maxCost, 'bg-blue-600'); }).join('') : '<div class="text-[9px] text-slate-300 italic">No data</div>'}
+                        </div>
+
+                        ${analysis.financials.bleeders.length ? `
+                            <div>
+                                <div class="text-[9px] font-black uppercase text-rose-300 mb-3">Variance Alert</div>
+                                ${analysis.financials.bleeders.map(function (i) { return renderBar(i.description, i.variance, i.variance, 'bg-rose-500', `Act: ${fmt(i.act)}`); }).join('')}
+                            </div>
+                        ` : ''}
+                    </div>`;
+
+                                // --- Widget 3: Human Heatmap Render ---
+                                var renderCrewRow = function (c) {
+                                    var statusColor = 'bg-emerald-100 text-emerald-700'; // Safe
+                                    var statusLabel = 'OK';
+
+                                    if (c.days > 20) { statusColor = 'bg-rose-100 text-rose-700'; statusLabel = 'CRITICAL'; }
+                                    else if (c.days > 10) { statusColor = 'bg-amber-100 text-amber-700'; statusLabel = 'HEAVY'; }
+
+                                    return `
+                    <div class="flex items-center justify-between p-2 mb-2 bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-colors">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="w-8 h-8 rounded-full bg-white text-slate-400 flex items-center justify-center font-black text-[9px] shadow-sm border border-slate-100 shrink-0">
+                                ${c.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-black text-slate-700 uppercase truncate" title="${RenderEngine.esc(c.name)}">${RenderEngine.esc(c.name)}</div>
+                                <div class="text-[8px] text-slate-400 font-bold truncate">${c.roles.length} roles assigned</div>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="px-2 py-1 rounded-md text-[9px] font-black ${statusColor} text-center">${statusLabel}</div>
+                            <div class="text-[8px] text-slate-400 font-mono mt-0.5">${c.days} Days</div>
+                        </div>
+                    </div>`;
+                                };
+
+                                var crewWidget = `
+                    <div class="col-span-1 md:col-span-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full overflow-y-auto no-scrollbar">
+                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Human Capital</h4>
+                        
+                        <div class="mb-6">
+                            ${analysis.crew.burnout.length ? analysis.crew.burnout.map(renderCrewRow).join('') : '<div class="text-[9px] text-slate-300 italic">No crew data</div>'}
+                        </div>
+                    </div>`;
+
+                                // --- Widget 4: Live Auditor (Terminal) ---
+                                var auditorWidget = `
+                    <div class="col-span-1 md:col-span-3 p-4 bg-slate-900 rounded-2xl border border-black shadow-2xl h-full flex flex-col relative overflow-hidden group">
+                        <!-- Carbon Fiber Texture Overlay -->
+                        <div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(circle, #333 1px, transparent 1px); background-size: 4px 4px;"></div>
+                        
+                        <h4 class="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-4 border-b border-slate-800 pb-2 flex justify-between items-center z-10">
+                            <span>Live Auditor</span>
+                            <span class="flex h-2 w-2 relative">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                        </h4>
+                        
+                        <div id="cortex-terminal" class="flex-grow font-mono text-[10px] text-emerald-400 space-y-2 overflow-y-auto no-scrollbar leading-relaxed z-10">
+                            <div class="opacity-50">> Initializing Cortex Engine v1.0...</div>
+                            <div class="opacity-50">> Scanning ${analysis.stats.totalItems} data points...</div>
+                            <div class="opacity-50">> Financial velocity calculated at ${analysis.financials.burnRate.toFixed(2)}%</div>
+                            <div class="opacity-50">> Crew fatigue analysis complete.</div>
+                            <div class="text-white mt-4 border-t border-slate-700 pt-2 font-bold">> SYSTEM READY. WAITING FOR AI AUDIT...</div>
+                            <!-- AI Output targets here -->
+                        </div>
+
+                        <div class="mt-4 pt-4 border-t border-slate-800 z-10">
+                             <button onclick="mBT.features.cortex.startLiveAuditor()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                                ${mBTAssets.zap} Run AI Risk Assessment
+                             </button>
+                        </div>
+                    </div>`;
+
+                                // --- Grid Container (With Mission Control Toolbar) ---
+                                var content = `
+                    <div class="flex flex-col h-[600px] max-h-[80vh] bg-slate-50 p-4">
+                        <!-- Mission Control Toolbar -->
+                        <div class="flex justify-between items-center mb-4 shrink-0">
+                            <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Mission Control</h3>
+                            <div class="flex gap-2">
+                                <button onclick="mBT.features.cortex.ui.openGlobalDashboard()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white border border-slate-900 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">
+                                    Global View
+                                </button>
+                                <button onclick="mBT.features.ai.analyzeCurrentBudget()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm">
+                                    ${mBTAssets.doctor} Deep Scan
+                                </button>
+                                <button onclick="mBT.features.ai.openChat()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm">
+                                    ${mBTAssets.chat} Chat
+                                </button>
+                                <button onclick="showSettingsModal('ai')" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+                                    ${mBTAssets.gear}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-4 flex-grow overflow-hidden min-h-0">
+                            ${burnWidget}
+                            ${financialsWidget}
+                            ${crewWidget}
+                            ${auditorWidget}
+                        </div>
+                    </div>`;
+
+                                mBTME.open('analyticsHub', 'Cortex Dashboard', content, 'max-w-5xl', { noPadding: true, hideHeader: true });
+
+                                // Manually inject close button since header is hidden
+                                var closeBtn = `<button onclick="mBTME.close('analyticsHubModal')" class="absolute top-4 right-4 z-50 p-2 bg-white rounded-full text-slate-400 hover:text-rose-500 shadow-sm transition-all hover:rotate-90">${mBTAssets.close}</button>`;
+                                var body = document.getElementById('analyticsHubModalBody');
+                                if (body) body.insertAdjacentHTML('beforeend', closeBtn);
+                            },
+
+                            openGlobalDashboard: function () {
+                                mBTME.showLoader("Scanning Studio Archives...");
+                                mBT.features.cortex.logic.runGlobalAudit().then(function (data) {
+                                    mBTME.hideLoader();
+
+                                    var fmt = mBTLE.format.currency;
+
+                                    var kpiCard = function (label, val, sub, color) {
+                                        return `
+                        <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center text-center">
+                            <div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">${label}</div>
+                            <span class="text-2xl font-black ${color} tracking-tighter">${val}</span>
+                            <span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">${sub}</span>
+                        </div>`;
+                                    };
+
+                                    var crewList = data.topCrew.map(function (c, i) {
+                                        return `
+                        <div class="flex justify-between items-center p-2 border-b border-slate-50 last:border-0">
+                            <div class="flex items-center gap-3">
+                                <div class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[9px] font-black">${i + 1}</div>
+                                <span class="text-[10px] font-bold text-slate-700 uppercase">${RenderEngine.esc(c.name)}</span>
+                            </div>
+                            <span class="text-[10px] font-mono font-bold text-emerald-600">${fmt(c.amount)}</span>
+                        </div>
+                    `;
+                                    }).join('');
+
+                                    var projectList = data.projectSummaries.map(function (p) {
+                                        return `
+                        <div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2 border border-transparent hover:border-blue-200 transition-colors cursor-pointer" onclick="mBT.data.load('${p.name}'); mBTME.close('analyticsHubModal');">
+                            <div>
+                                <div class="text-[10px] font-black text-slate-800 uppercase">${RenderEngine.esc(p.name)}</div>
+                                <div class="text-[8px] text-slate-400 font-bold">${p.date || 'No Date'}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[10px] font-mono font-bold text-slate-600">${fmt(p.actual)} / ${fmt(p.budget)}</div>
+                                <div class="text-[8px] font-black uppercase tracking-widest ${p.status === 'Over' ? 'text-rose-500' : 'text-emerald-500'}">${p.status}</div>
+                            </div>
+                        </div>
+                    `;
+                                    }).join('');
+
+                                    var content = `
+                        <div class="flex flex-col h-[600px] max-h-[80vh] bg-slate-50 p-6 overflow-hidden">
+                            <div class="flex justify-between items-center mb-6 shrink-0">
+                                <div>
+                                    <h3 class="text-lg font-black uppercase tracking-tighter text-slate-900">Global Studio Audit</h3>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aggregate Analysis across ${data.projectCount} Projects</p>
+                                </div>
+                                <button onclick="mBT.features.cortex.ui.openHub()" class="text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-widest">
+                                    ← Back to Project
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-4 mb-6 shrink-0">
+                                ${kpiCard('Total Spend (Actual)', fmt(data.totalSpend), 'Across All Projects', 'text-slate-800')}
+                                ${kpiCard('Total Budget (Est)', fmt(data.totalBudget), 'Lifetime Projection', 'text-blue-600')}
+                                ${kpiCard('Project Volume', data.projectCount, 'Active Files', 'text-indigo-500')}
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow min-h-0">
+                                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Top Earners (Crew)</h4>
+                                    <div class="overflow-y-auto no-scrollbar space-y-1">
+                                        ${crewList || '<div class="text-center text-slate-300 text-[10px] mt-10">No crew data found.</div>'}
+                                    </div>
+                                </div>
+                                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Recent Projects</h4>
+                                    <div class="overflow-y-auto no-scrollbar">
+                                        ${projectList}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+
+                                    mBTME.open('analyticsHub', 'Global Dashboard', content, 'max-w-5xl', { noPadding: true, hideHeader: true });
+
+                                }).catch(function (e) {
+                                    mBTME.hideLoader();
+                                    mBTME.alert("Audit Failed", "Could not scan local database.");
+                                    console.error(e);
+                                });
+                            },
+
+                            // Phase 3: Active AI Auditor Wiring
+                            startAuditor: function () {
+                                var term = document.getElementById('cortex-terminal');
+                                if (!term) return;
+
+                                // 1. UI Feedback
+                                term.innerHTML += `<div class="mt-4 text-emerald-400 animate-pulse">> ESTABLISHING SECURE CONNECTION...</div>`;
+                                term.scrollTop = term.scrollHeight;
+
+                                // 2. Security Check
+                                var provider = mBT.features.ai.getSelectedProvider();
+                                var apiKey = mBT.features.ai.getStoredApiKey(provider);
+
+                                if (!apiKey) {
+                                    term.innerHTML += `<div class="mt-2 text-rose-500 font-bold">> ERROR: NO API KEY DETECTED. CONFIGURE SETTINGS.</div>`;
+                                    term.scrollTop = term.scrollHeight;
+                                    return;
+                                }
+
+                                // 3. Payload Construction
+                                var analysis = mBT.features.cortex.logic.analyze();
+                                var context = {
+                                    burnRate: analysis.financials.burnRate.toFixed(1) + '%',
+                                    topCosts: analysis.financials.topCosts.map(function (i) { return `${i.description}: ${mBTLE.format.currency(i.est)}`; }),
+                                    varianceBleeders: analysis.financials.bleeders.map(function (i) { return `${i.description} (Over by ${mBTLE.format.currency(i.variance)})`; }),
+                                    overworkedCrew: analysis.crew.burnout.filter(function (c) { return c.days > 6; }).map(function (c) { return `${c.name} (${c.days} days)`; }),
+                                    totalItems: analysis.stats.totalItems
+                                };
+
+                                var prompt = `ACT AS A HOSTILE COMPLETION GUARANTOR.
+                 DATA: ${JSON.stringify(context)}.
+                 TASK: Issue 3 short, brutal directives to reduce risk.
+                 FORMAT: Plain text, no markdown formatting (no bold/italic), typewriter style. Start lines with "> "`;
+
+                                // 4. Execution
+                                mBT.features.ai.callUnifiedAI(provider, apiKey, prompt).then(function (response) {
+                                    // 5. Typewriter Effect Render
+                                    term.innerHTML += `<div class="mt-4 text-white border-t border-slate-700 pt-2">> INCOMING TRANSMISSION:</div><div class="mt-2 text-emerald-300 space-y-2" id="cortex-stream"></div>`;
+
+                                    var streamEl = document.getElementById('cortex-stream');
+                                    // Split by newlines but handle markdown bullet points if AI ignores instructions
+                                    var lines = response.split('\n').filter(function (l) { return l.trim(); });
+
+                                    var delay = 0;
+                                    lines.forEach(function (line, i) {
+                                        setTimeout(function () {
+                                            // clean markdown bold
+                                            var cleanLine = line.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+                                            streamEl.innerHTML += `<div class="mb-1 font-mono text-[10px]">${mBT.ui.render.esc(cleanLine)}</div>`;
+                                            term.scrollTop = term.scrollHeight;
+                                        }, delay);
+                                        delay += 800; // Slow typewriter pace
+                                    });
+
+                                }).catch(function (err) {
+                                    term.innerHTML += `<div class="mt-2 text-rose-500">> CONNECTION FAILURE: ${mBT.ui.render.esc(err.message)}</div>`;
+                                    term.scrollTop = term.scrollHeight;
+                                });
+                            }
+                        },
+
+                        // --- Public Accessor ---
+                        startLiveAuditor: function () { this.ui.startAuditor(); }
+                    };
+
+
+                    // Core Action
+                    mBT.core.action('analytics-hub', function () { return mBT.features.cortex.ui.openHub(); });
+
+                    // Global Alias Overrides (Replacing the old AI menu with the new Dashboard)
+                    window.openAnalyticsHub = function () { return mBT.features.cortex.ui.openHub(); };
+
+                    /* ========= v19.54 STAGE INTELLIGENCE (mBT.features.stages) ========= */
+                    mBT.features.stages = {
+                        definitions: {
+                            'dev': ['writer', 'script', 'research', 'option', 'rights', 'legal', 'development', 'story', 'attorney', 'concept'],
+                            'pre': ['scout', 'casting', 'rehearsal', 'director', 'producer', 'coordinator', 'location', 'travel', 'prep', 'storyboard'],
+                            'prod': ['camera', 'sound mixer', 'boom', 'lighting', 'grip', 'gaffer', 'electric', 'art', 'wardrobe', 'costume', 'makeup', 'hair', 'unit', 'pa', 'production assistant', 'catering', 'craft', 'medic', 'security', 'transport', 'dop', 'cinematographer', 'operator', 'dit', 'utility'],
+                            'post': ['editor', 'color', 'vfx', 'sound design', 'sound edit', 'mix', 'music', 'score', 'post', 'titles', 'graphic', 'visual effects', 'composer'],
+                            'dist': ['marketing', 'sales', 'festival', 'publicity', 'premiere', 'distribution', 'deliverables', 'trailer']
+                        },
+                        logic: {
+                            // Strategy A: Find items existing in budget but not linked to stage
+                            findMatchesInBudget: function (stageKey) {
+                                var keywords = mBT.features.stages.definitions[stageKey] || [];
+                                var matches = [];
+                                if (!budget || !budget.sections) return [];
+
+                                Object.entries(budget.sections).forEach(function ([secName, sec]) {
+                                    sec.items.forEach(function (item) {
+                                        // Skip if already in this stage
+                                        if (item.stageData && item.stageData[stageKey]) return;
+
+                                        var text = (item.description + ' ' + secName).toLowerCase();
+                                        if (keywords.some(function (w) { return text.includes(w); })) {
+                                            matches.push(item);
+                                        }
+                                    });
+                                });
+                                return matches;
+                            },
+                            // Strategy B: Find items in DB that are missing from budget entirely
+                            findMissingEssentials: function (stageKey) {
+                                var keywords = mBT.features.stages.definitions[stageKey] || [];
+                                var db = mBTOG.rates || [];
+                                var existingDesc = new Set();
+
+                                if (budget && budget.sections) {
+                                    Object.values(budget.sections).forEach(function (s) { return s.items.forEach(function (i) { return existingDesc.add(i.description.toLowerCase()); }); });
+                                }
+
+                                return db.filter(function (dbItem) {
+                                    var text = dbItem.description.toLowerCase();
+                                    var isRelevant = keywords.some(function (w) { return text.includes(w); });
+                                    var exists = existingDesc.has(text);
+                                    return isRelevant && !exists;
+                                });
+                            },
+                            // Logic Resolution: Smart removal logic linked to UI button
+                            removeItem: function (btn) {
+                                var itemId = btn.dataset.id;
+                                var sectionName = btn.dataset.section;
+                                var stageKey = btn.dataset.stage;
+
+                                var item = null;
+                                // Try fast lookup
+                                if (sectionName && budget.sections[sectionName]) {
+                                    item = budget.sections[sectionName].items.find(function (i) { return String(i.id) === String(itemId); });
+                                }
+                                // Fallback scan
+                                if (!item) {
+                                    Object.values(budget.sections).forEach(function (sec) {
+                                        if (!item) item = sec.items.find(function (i) { return String(i.id) === String(itemId); });
+                                    });
+                                }
+
+                                if (item) {
+                                    // Enhanced Confirmation with item name
+                                    mBTME.confirm("Remove from Stage", `Remove "${item.description}" from this stage? The main budget item will remain.`, function () {
+                                        if (item.stageData && item.stageData[stageKey]) {
+                                            delete item.stageData[stageKey];
+                                            saveBudget();
+                                            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                                            if (window.showStagesModal) window.showStagesModal();
+                                        }
+                                    });
+                                }
+                            }
+                        },
+                        ui: {
+                            openAutoFillMenu: function (stageKey) {
+                                var matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
+                                var missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
+                                var stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
+
+                                var content = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                    <!-- Option A: Link Existing -->
+                    <div class="bg-blue-50 border border-blue-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-blue-200 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-8 h-8 rounded-lg bg-blue-200 text-blue-700 flex items-center justify-center shadow-sm">${mBTAssets.clip}</div>
+                                <h4 class="font-black text-[10px] uppercase tracking-widest text-blue-800">Link Existing</h4>
+                            </div>
+                            <p class="text-[10px] text-blue-600/80 leading-relaxed mb-4">
+                                Scan your current budget line items. We found <strong>${matches.length}</strong> items that match this stage's criteria but haven't been assigned yet.
+                            </p>
+                        </div>
+                        <button onclick="window.handleStageAutoFill('${stageKey}', 'link'); mBTME.close('autoFillModal');" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ${matches.length === 0 ? 'disabled style="opacity:0.5"' : ''}>
+                            Sync ${matches.length} Items
+                        </button>
+                    </div>
+
+                    <!-- Option B: Generate Missing -->
+                    <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-emerald-200 transition-colors">
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-700 flex items-center justify-center shadow-sm">${mBTAssets.wand}</div>
+                                <h4 class="font-black text-[10px] uppercase tracking-widest text-emerald-800">Generate Missing</h4>
+                            </div>
+                            <p class="text-[10px] text-emerald-600/80 leading-relaxed mb-4">
+                                Database check complete. We found <strong>${missing.length}</strong> standard industry roles/items for this stage that are completely missing from your budget.
+                            </p>
+                        </div>
+                        <button onclick="window.handleStageAutoFill('${stageKey}', 'generate'); mBTME.close('autoFillModal');" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ${missing.length === 0 ? 'disabled style="opacity:0.5"' : ''}>
+                            ${mBTAssets.plus} Add ${missing.length} Items
+                        </button>
+                    </div>
+                </div>
+                <div class="px-4 pb-4 text-center">
+                    <p class="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Changes are saved automatically upon execution</p>
+                </div>`;
+
+                                mBTME.open('autoFill', `Smart Fill: ${stageLabel}`, content, 'max-w-xl');
+                            }
+                        }
+                    };
+
+                    /* ========= v19.54 RECYCLE BIN (mBT.features.trash) ========= */
+                    mBT.features.trash = {
+                        state: { activeTab: 'documents', selected: new Set() },
+                        icons: { folder: mBTAssets.folder, file: mBTAssets.file, trash: mBTAssets.trash, undo: mBTAssets.undo, check: mBTAssets.target },
+
+                        open: function (tab = 'documents') {
+                            var currentTab = this.state.activeTab;
+                            // Logic Resolution: Clear selections only when switching context
+                            if (tab !== currentTab) this.state.selected.clear();
+                            this.state.activeTab = tab;
+
+                            var type = this.state.activeTab;
+                            var docTrash = budget.documentTrash || [];
+                            var projectTrash = JSON.parse(localStorage.getItem(trashKey) || '[]');
+
+                            var items = type === 'documents' ? docTrash : projectTrash;
+                            var selectedCount = this.state.selected.size;
+                            var hasItems = items.length > 0;
+
+                            // Tier 5 Update: Manual Tab Construction for Event Delegation
+                            var tabs = [
+                                { id: 'documents', label: 'Documents', count: docTrash.length },
+                                { id: 'projects', label: 'Projects', count: projectTrash.length }
+                            ];
+
+                            var tabHtml = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                ${tabs.map(function (t) {
+                                var isActive = t.id === type;
+                                var activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                                var inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                                return `<button data-action="nav-trash" data-tab="${t.id}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        ${t.label} <span class="opacity-50 ml-1">(${t.count})</span>
+                    </button>`;
+                            }).join('')}
+            </div>`;
+
+                            // Logic Resolution: Dynamic Toolbar for Bulk Actions with Checkbox Logic
+                            var toolbarHtml = `
+                <div class="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" 
+                               data-action="trash-toggle-all"
+                               ${hasItems && selectedCount === items.length ? 'checked' : ''} 
+                               ${!hasItems ? 'disabled' : ''}
+                               class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${selectedCount} Selected</span>
+                    </div>
+                    <div class="flex gap-2">
+                        ${selectedCount > 0 ? `
+                            <button data-action="trash-bulk" data-type="restore" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center gap-1">${this.icons.undo} Restore</button>
+                            <button data-action="trash-bulk" data-type="delete" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">${this.icons.trash} Delete</button>
+                        ` : `
+                            <button data-action="trash-bulk" data-type="empty" class="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all" ${!hasItems ? 'disabled style="opacity:0.5"' : ''}>Empty Bin</button>
+                        `}
+                    </div>
+                </div>`;
+
+                            var listHtml = '';
+
+                            if (!hasItems) {
+                                listHtml = RenderEngine.ui.emptyState({
+                                    icon: this.icons.trash,
+                                    message: 'Bin is Empty',
+                                    subtext: type === 'documents' ? 'No deleted documents found' : 'No deleted projects found'
+                                });
+                            } else {
+                                listHtml = items.map(function (item) {
+                                    var id = type === 'documents' ? item.id : item.projectName; // Projects use name as ID in trash
+                                    var isSel = this.state.selected.has(id);
+                                    var label = type === 'documents' ? (item.label || item.name || 'Untitled') : (item.projectName || 'Untitled Project');
+                                    var meta = type === 'documents' ? `Type: ${item.type || 'Custom'}` : `Company: ${item.company || 'Indie'}`;
+
+                                    return `
+                    <div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer" data-action="trash-toggle" data-id="${RenderEngine.esc(id)}">
+                        <div class="flex items-center gap-3 overflow-hidden flex-grow">
+                            <div class="flex-shrink-0">
+                                <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none">
+                            </div>
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-blue-500 group-hover:shadow-sm transition-all text-lg shrink-0">
+                                ${type === 'documents' ? this.icons.file : this.icons.folder}
+                            </div>
+                            <div class="overflow-hidden min-w-0">
+                                <div class="text-[10px] font-black uppercase text-slate-700 truncate">${RenderEngine.esc(label)}</div>
+                                <div class="text-[9px] text-slate-400 font-bold truncate">${RenderEngine.esc(meta)}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button data-action="trash-single" data-type="restore" data-id="${RenderEngine.esc(id)}" class="p-2 text-slate-300 hover:text-emerald-500 transition-colors" title="Restore">${this.icons.undo}</button>
+                            <button data-action="trash-single" data-type="delete" data-id="${RenderEngine.esc(id)}" class="p-2 text-slate-300 hover:text-rose-500 transition-colors" title="Delete Forever">${this.icons.trash}</button>
+                        </div>
+                    </div>`;
+                                }).join('');
+                            }
+
+                            // Logic Resolution: Persistent UI Updates (Prevents Flickering/Re-opening)
+                            var domId = 'trashModal';
+                            var existingModal = document.getElementById(domId);
+
+                            if (existingModal) {
+                                var nav = document.getElementById('trashTabNav');
+                                var tool = document.getElementById('trashToolbarArea');
+                                var list = document.getElementById('trashListArea');
+
+                                if (nav) nav.innerHTML = tabHtml;
+                                if (tool) tool.innerHTML = toolbarHtml;
+                                if (list) list.innerHTML = listHtml;
+                                return;
+                            }
+
+                            var content = `
+                <div class="flex flex-col h-[600px] max-h-[80vh]">
+                    <div id="trashTabNav">${tabHtml}</div>
+                    <div id="trashToolbarArea">${toolbarHtml}</div>
+                    <div id="trashListArea" class="flex-grow overflow-y-auto p-4 bg-slate-50 no-scrollbar space-y-2">
+                        ${listHtml}
+                    </div>
+                </div>`;
+                            mBTME.open('trash', 'Recycle Bin', content, 'max-w-lg', { noPadding: true, hideHeader: true });
+                        },
+
+                        // --- Selection Logic ---
+                        toggleItem: function (id) {
+                            if (this.state.selected.has(id)) this.state.selected.delete(id);
+                            else this.state.selected.add(id);
+                            this.open(this.state.activeTab); // Re-render state
+                        },
+                        toggleAll: function (checked) {
+                            this.state.selected.clear();
+                            if (checked) {
+                                var list = this.state.activeTab === 'documents' ? (budget.documentTrash || []) : JSON.parse(localStorage.getItem(trashKey) || '[]');
+                                list.forEach(function (i) { return this.state.selected.add(this.state.activeTab === 'documents' ? i.id : i.projectName); });
+                            }
+                            this.open(this.state.activeTab);
+                        },
+
+                        // --- Action Routers ---
+                        singleAction: function (action, id) {
+                            this.state.selected.clear();
+                            this.state.selected.add(id);
+                            this.performAction(action);
+                        },
+
+                        performAction: function (action) {
+                            var isDoc = this.state.activeTab === 'documents';
+                            var count = this.state.selected.size;
+
+                            // Empty Bin Logic
+                            if (action === 'empty') {
+                                mBTME.confirm("Empty Bin", `Permanently delete ALL items in the ${isDoc ? 'Documents' : 'Projects'} bin? This cannot be undone.`, function () {
+                                    if (isDoc) budget.documentTrash = [];
+                                    else localStorage.setItem(trashKey, '[]');
+                                    saveBudget();
+                                    this.open(this.state.activeTab);
+                                });
+                                return;
+                            }
+
+                            if (count === 0) return;
+
+                            // Delete / Restore Logic
+                            if (action === 'delete') {
+                                mBTME.confirm("Delete Forever", `Permanently delete ${count} selected item(s)? This cannot be undone.`, function () {
+                                    if (isDoc) {
+                                        budget.documentTrash = budget.documentTrash.filter(function (d) { return !this.state.selected.has(d.id); });
+                                        saveBudget();
+                                    } else {
+                                        var list = JSON.parse(localStorage.getItem(trashKey) || '[]');
+                                        var filtered = list.filter(function (p) { return !this.state.selected.has(p.projectName); });
+                                        localStorage.setItem(trashKey, JSON.stringify(filtered));
+                                    }
+                                    this.state.selected.clear();
+                                    this.open(this.state.activeTab);
+                                });
+                            } else if (action === 'restore') {
+                                mBTME.confirm("Restore Items", `Restore ${count} selected item(s)?`, function () {
+                                    if (isDoc) {
+                                        var toRestore = budget.documentTrash.filter(function (d) { return this.state.selected.has(d.id); });
+                                        budget.documentTrash = budget.documentTrash.filter(function (d) { return !this.state.selected.has(d.id); });
+                                        if (!budget.documents) budget.documents = [];
+                                        Array.prototype.push.apply(budget.documents, toRestore);
+                                        saveBudget();
+                                        render(); // Refresh main view to show restored docs
+                                    } else {
+                                        var list = JSON.parse(localStorage.getItem(trashKey) || '[]');
+                                        var keptTrash = [];
+                                        list.forEach(function (p) {
+                                            if (this.state.selected.has(p.projectName)) {
+                                                var key = storageKeyPrefix + p.projectName;
+                                                // Check collision
+                                                if (localStorage.getItem(key)) {
+                                                    // Note: Simplified logic here for restoration collision to avoid nested confirms
+                                                    localStorage.setItem(key, JSON.stringify(p));
+                                                } else {
+                                                    localStorage.setItem(key, JSON.stringify(p));
+                                                }
+                                            } else {
+                                                keptTrash.push(p);
+                                            }
+                                        });
+                                        localStorage.setItem(trashKey, JSON.stringify(keptTrash));
+                                        if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt(); // Refresh project dropdown
+                                    }
+                                    this.state.selected.clear();
+                                    this.open(this.state.activeTab);
+                                });
+                            }
+                        },
+
+                        // --- External Hooks ---
+                        trashDocument: function (docId) {
+                            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
+                            mBTME.confirm("Archive Document", "Move this document to the Recycle Bin?", function () {
+                                var idx = budget.documents.findIndex(function (d) { return d.id === docId; });
+                                if (idx > -1) {
+                                    var doc = budget.documents.splice(idx, 1)[0];
+                                    if (!budget.documentTrash) budget.documentTrash = [];
+                                    budget.documentTrash.push(doc);
+                                    saveBudget();
+                                    render(); // Update Vault UI if open
+                                    if (document.getElementById('documentsModal')) showDocumentsModal();
+                                }
+                            });
+                        }
+                    };
+
+                    // --- Backward Compatibility Alias (for buttons using old global names) ---
+                    window.mBTTrash = mBT.features.trash;
+
+
+                    /* ========= v19.54 SETTINGS & CONFIGURATION (mBT.features.settings) ========= */
+                    mBT.features.settings = {
+
+                        // --- 1. Sub-View Generators ---
+                        renderDbView: function (subTab) {
+                            if (subTab === 'contacts') {
+                                var globalContacts = mBTOG.contacts || [];
+                                var assignedContacts = [];
+                                Object.values(budget.sections || {}).forEach(function (sec) {
+                                    sec.items.forEach(function (item) {
+                                        if (item.crew && item.crew.name) {
+                                            assignedContacts.push({
+                                                id: 'assigned_' + item.id,
+                                                name: item.crew.name,
+                                                role: item.description || 'Crew',
+                                                phone: item.crew.phone || '',
+                                                email: item.crew.email || '',
+                                                assigned: true
+                                            });
+                                        }
+                                    });
+                                });
+                                var allContacts = globalContacts.slice(0);
+                                assignedContacts.forEach(function (ac) {
+                                    if (!allContacts.some(function (gc) { return gc.name.toLowerCase() === ac.name.toLowerCase(); })) {
+                                        allContacts.push(ac);
+                                    }
+                                });
+
+                                var listContent = allContacts.length > 0 ? allContacts.map(function (c) {
+                                    return RenderEngine.ui.listRow({
+                                        id: c.id,
+                                        icon: c.name ? c.name.charAt(0).toUpperCase() : '?',
+                                        title: c.name,
+                                        subtitle: `${c.role || 'No Role'}${c.assigned ? ' (Assigned)' : ''}`,
+                                        onClick: `openCrewProfile(this, event, '${c.id}', null)`,
+                                        actions: c.assigned ? [] : [{
+                                            icon: mBTAssets.trash,
+                                            title: 'Delete',
+                                            color: 'rose',
+                                            onClick: `mBT.features.settings.deleteContact('${c.id}')`
+                                        }]
+                                    });
+                                }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.user, message: 'No Contacts Found' });
+
+                                return `
+                    <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+                        <div class="p-3 bg-indigo-50 border-b border-indigo-100 flex flex-col gap-3 shrink-0 z-10">
+                            <div class="flex justify-center gap-3 flex-wrap">
+                                <button onclick="mBT.features.settings.openAddContactModal()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">
+                                    ${mBTAssets.plus} Add
+                                </button>
+                                <input type="file" id="csvImportInput" class="hidden" accept=".csv" onchange="importContactsCSV(this)">
+                                <button onclick="document.getElementById('csvImportInput').click()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">
+                                    ${mBTAssets.plus} Import CSV
+                                </button>
+                                <button onclick="mBTAssign.assignFromContacts()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all">
+                                    Auto-Assign
+                                </button>
+                            </div>
+                            <div class="relative">
+                                <input type="text" id="contactsSearchInput" placeholder="SEARCH PERSONNEL..." class="w-full p-2.5 pr-10 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none">${mBTAssets.search}</div>
+                            </div>
+                        </div>
+                        <div id="contactsListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">
+                            ${listContent}
+                        </div>
+                    </div>`;
+                            }
+                            if (subTab === 'lineItems') {
+                                var isSharing = mBTOG.settings.optInSharing;
+                                var cloudSyncOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                                var lastSync = mBTOG.lastSync ? mBTOG.lastSync() : null;
+                                var lastSyncLabel = lastSync ? new Date(lastSync).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+                                return `
+                    <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 z-10 space-y-3">
+                            <div class="flex gap-2">
+                                <button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm flex items-center justify-center gap-2">
+                                    ${mBTAssets.plus} Add Rate
+                                </button>
+                                <button onclick="mBT.features.settings.toggleCloudSync()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}" title="Pull updated rates from the OpenGate community database">
+                                    ${mBTAssets.cloud} ${cloudSyncOn ? 'Cloud On' : 'Cloud Off'}
+                                </button>
+                                <button onclick="mBT.features.settings.toggleOpenGateSharing()" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}" title="Contribute your anonymized rates back to the community">
+                                    ${mBTAssets.upload || mBTAssets.cloud} ${isSharing ? 'Contributing' : 'Contribute'}
+                                </button>
+                            </div>
+                            <div class="text-[9px] text-slate-400 font-medium px-1">Last cloud sync: ${lastSyncLabel}</div>
+                            <div class="flex items-center gap-2">
+                                <div class="relative flex-1">
+                                    <input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES..." class="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">
+                                    <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                                </div>
+                                <select onchange="mBT.features.settings.setRateRegion(this.value)" aria-label="Rate region" title="Rate region multiplier" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all text-slate-600">
+                                    ${Object.keys(mBTOG.RATE_REGIONS).map(function (r) { return `<option value="${r}"${mBTOG.settings.location === r ? ' selected' : ''}>${r}${mBTOG.RATE_REGIONS[r] !== 1 ? ' ×' + mBTOG.RATE_REGIONS[r] : ' (Base)'}</option>`; }).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">
+                            ${(function () {
+                                        var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+                                        var avgs = {};
+                                        try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
+                                        var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                                        return mBTOG.rates.map(function (r) {
+                                            var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+                                            var avg = avgs[key];
+                                            var sub = mBTLE.format.currency(r.rate) + ' / ' + r.unit;
+                                            if (avg && avg.contributor_count > 0) {
+                                                sub += ' · Avg: ' + mBTLE.format.currency(avg.avg_rate) + ' (' + avg.contributor_count + ')';
+                                            }
+                                            return RenderEngine.ui.listRow({
+                                                id: r.id || r.description,
+                                                icon: mBTAssets.money,
+                                                title: r.description,
+                                                subtitle: sub,
+                                                classes: 'border-b border-slate-50'
+                                            });
+                                        }).join('');
+                                    })()}
+                        </div>
+                    </div>`;
+                            }
+                            if (subTab === 'templates') {
+                                var templates = Array.isArray(mBTOG.templates) ? mBTOG.templates : [];
+                                var listContent = templates.length > 0 ? templates.map(function (t) {
+                                    return RenderEngine.ui.listRow({
+                                        id: t.id,
+                                        icon: mBTAssets[t.icon] || mBTAssets.file,
+                                        title: t.label,
+                                        subtitle: t.cat || 'General',
+                                        actions: [{
+                                            icon: mBTAssets.plus,
+                                            title: 'Use Template',
+                                            color: 'blue',
+                                            onClick: `createNewDocumentFromTemplate('${t.id}')`
+                                        }]
+                                    });
+                                }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.file, message: 'No Templates' });
+
+                                return `
+                    <div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">
+                        <div class="p-3 bg-indigo-50 border-b border-indigo-100 shrink-0 z-10">
+                             <div class="relative">
+                                <input type="text" id="templateSearchInput" placeholder="SEARCH TEMPLATES..." class="w-full p-2.5 pr-10 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none">${mBTAssets.search}</div>
+                            </div>
+                        </div>
+                        <div id="templatesListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">
+                            ${listContent}
+                        </div>
+                    </div>`;
+                            }
+                            /* Phase 125: Projects sub-tab — multi-select + batch delete */
+                            if (subTab === 'projects') {
+                                var _sPrefix = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                                var _allKeys = [];
+                                try {
+                                    for (var _ki = 0; _ki < localStorage.length; _ki++) {
+                                        var _k = localStorage.key(_ki);
+                                        if (_k.indexOf(_sPrefix) === 0) _allKeys.push(_k.replace(_sPrefix, ''));
+                                    }
+                                } catch (e) { }
+                                /* Filter out non-project keys */
+                                var _ignoreKeys = ['lastLoaded', 'currency', 'rates', 'auto_fetch_rates', 'projectDateFormat', 'projectNameSeparator', 'projectStorageProtocol', 'trash', 'globalItems', 'templates', 'lmstudioEndpoint', 'lmstudioModel', 'selectedAiProvider', 'openToolsInternal', 'showFundingBar', 'showTimelineBar', 'ratesLocked', 'ratesLockedSnap', 'autoHideNav', 'devMode', 'cloudWebhook'];
+                                var projects = _allKeys.filter(function (k) { return _ignoreKeys.indexOf(k) === -1; });
+                                projects.sort().reverse();
+
+                                var _sel = mBT.features.settings._selectedProjects || new Set();
+                                var _selCount = _sel.size;
+                                var _hasItems = projects.length > 0;
+
+                                var _listHtml = _hasItems ? projects.map(function (pName) {
+                                    var _checked = _sel.has(pName) ? 'checked' : '';
+                                    return '<div class="flex items-center justify-between p-3 bg-white border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer" data-action="project-select-toggle" data-name="' + mBT.ui.render.esc(pName) + '">' +
+                                        '<div class="flex items-center gap-3 overflow-hidden flex-grow">' +
+                                        '<input type="checkbox" ' + _checked + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none flex-shrink-0">' +
+                                        '<div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-blue-500 group-hover:shadow-sm transition-all text-lg shrink-0">' + mBTAssets.folder + '</div>' +
+                                        '<div class="overflow-hidden min-w-0">' +
+                                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + mBT.ui.render.esc(pName) + '</div>' +
+                                        '<div class="text-[9px] text-slate-400 font-bold truncate">Budget Project</div>' +
+                                        '</div></div>' +
+                                        '<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">' +
+                                        '<button onclick="event.stopPropagation(); mBT.data.load(\'' + mBT.ui.render.esc(pName).replace(/'/g, "\\'") + '\');" class="p-2 text-slate-300 hover:text-emerald-500 transition-colors" title="Open">' + mBTAssets.edit + '</button>' +
+                                        '</div></div>';
+                                }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.folder, message: 'No Projects Found' });
+
+                                return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                                    '<div class="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 z-10">' +
+                                    '<div class="flex items-center gap-2">' +
+                                    '<input type="checkbox" id="projectSelectAll" data-action="project-select-all" ' + (_hasItems && _selCount === projects.length ? 'checked' : '') + ' ' + (!_hasItems ? 'disabled' : '') + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">' +
+                                    '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + _selCount + ' Selected</span>' +
+                                    '</div>' +
+                                    '<div class="flex gap-2">' +
+                                    (_selCount > 0 ? '<button onclick="mBT.features.settings.trashSelectedProjects()" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">' + mBTAssets.trash + ' Move to Trash</button>' : '') +
+                                    '</div></div>' +
+                                    '<div id="projectListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">' + _listHtml + '</div>' +
+                                    '</div>';
+                            }
+                            return '';
+                        },
+
+                        // --- 2. Main Content Generator ---
+                        getTabContent: window.mBT_UI_Settings_getTabContent,
+
+                        // --- 3. Main Entry Point ---
+                        open: function (tab, subTab) {
+                            tab = tab || 'general';
+                            subTab = subTab || 'lineItems';
+                            var domId = 'settingsModal';
+                            var contentHTML = this.getTabContent(tab, subTab);
+
+                            // Tier 5 Update: Manual Tab Construction for Event Delegation
+                            var tabs = [
+                                { id: 'general', label: 'General' },
+                                { id: 'database', label: 'DATABASE' },
+                                { id: 'ai', label: 'AI' },
+                                { id: 'connections', label: 'Connections' },
+                                { id: 'cloud', label: 'Cloud' }
+                            ];
+
+                            var tabNavHTML = '<div class="flex border-b border-slate-200 rounded-t-xl overflow-hidden select-none settings-tab-bar">' +
+                                tabs.map(function (t) {
+                                    var tabClass = t.id === tab ? 'settings-tab-active' : 'settings-tab-inactive';
+                                    return '<button data-action="nav-settings" data-tab="' + t.id + '" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ' + tabClass + '">' +
+                                        t.label +
+                                        '</button>';
+                                }).join('') +
+                                '</div>';
+
+                            var existingModal = document.getElementById(domId);
+                            if (existingModal) {
+                                var contentArea = document.getElementById('settingsContentArea');
+                                var navArea = document.getElementById('settingsTabNav');
+                                if (contentArea) contentArea.innerHTML = contentHTML;
+                                if (navArea) navArea.innerHTML = tabNavHTML;
+                                this._attachListeners(tab, subTab);
+                                return;
+                            }
+
+                            var fullContent = '<div class="flex flex-col h-[80vh] max-h-[700px] settings-modal-shell">' +
+                                '<div id="settingsTabNav" class="shrink-0 settings-tab-nav">' +
+                                tabNavHTML +
+                                '</div>' +
+                                '<div id="settingsContentArea" class="flex-grow flex flex-col relative overflow-hidden">' +
+                                contentHTML +
+                                '</div>' +
+                                '</div>';
+                            mBTME.open('settings', 'Settings', fullContent, 'max-w-2xl', { noPadding: true, hideHeader: true });
+                            this._attachListeners(tab, subTab);
+                        },
+
+                        // --- 4. Internal Logic & Listeners ---
+                        _attachListeners: function (tab, subTab) {
+                            if (tab === 'database' && subTab === 'lineItems') {
+                                var mult = mBTOG.settings.regionMultiplier;
+                                var regionLabel = mBTOG.settings.location !== 'Jamaica' ? ' (' + mBTOG.settings.location + ' \u00D7' + mult + ')' : '';
+                                mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, function (r) {
+                                    var isCommunity = r.source === 'community';
+                                    return RenderEngine.ui.listRow({
+                                        id: r.id || r.description,
+                                        icon: mBTAssets.money,
+                                        title: r.description,
+                                        subtitle: mBTLE.format.currency(r.rate * mult) + ' / ' + r.unit + regionLabel,
+                                        classes: 'border-b border-slate-50',
+                                        actions: isCommunity ? [
+                                            { icon: mBTAssets.check, title: 'Approve', color: 'emerald', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'approve')" },
+                                            { icon: mBTAssets.close, title: 'Disapprove', color: 'rose', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'disapprove')" }
+                                        ] : []
+                                    });
+                                });
+                            }
+                            if (tab === 'database' && subTab === 'contacts') {
+                                var globalContacts = mBTOG.contacts || [];
+                                var assignedContacts = [];
+                                var sections = window.budget.sections || {};
+                                Object.keys(sections).forEach(function (secKey) {
+                                    var sec = sections[secKey];
+                                    sec.items.forEach(function (item) {
+                                        if (item.crew && item.crew.name) assignedContacts.push({ id: 'assigned_' + item.id, name: item.crew.name, role: item.description || 'Crew', assigned: true });
+                                    });
+                                });
+                                var allContacts = globalContacts.slice();
+                                assignedContacts.forEach(function (ac) {
+                                    if (!allContacts.some(function (gc) { return gc.name.toLowerCase() === ac.name.toLowerCase(); })) allContacts.push(ac);
+                                });
+
+                                mBTME.attachSearch('contactsSearchInput', 'contactsListBody', allContacts, function (c) {
+                                    return RenderEngine.ui.listRow({
+                                        id: c.id,
+                                        icon: c.name ? c.name.charAt(0).toUpperCase() : '?',
+                                        title: c.name,
+                                        subtitle: (c.role || 'No Role') + (c.assigned ? ' (Assigned)' : ''),
+                                        actions: c.assigned ? [] : [{ icon: mBTAssets.trash, title: 'Delete', color: 'rose', onClick: "mBT.features.settings.deleteContact('" + c.id + "')" }]
+                                    });
+                                });
+                            }
+                            if (tab === 'database' && subTab === 'templates') {
+                                mBTME.attachSearch('templateSearchInput', 'templatesListBody', mBTOG.templates, function (t) {
+                                    return RenderEngine.ui.listRow({
+                                        id: t.id,
+                                        icon: mBTAssets[t.icon] || mBTAssets.file,
+                                        title: t.label,
+                                        subtitle: t.cat || 'General',
+                                        actions: [{ icon: mBTAssets.plus, title: 'Use Template', color: 'blue', onClick: "createNewDocumentFromTemplate('" + t.id + "')" }]
+                                    });
+                                });
+                            }
+                        },
+
+                        // --- 5. Action Handlers ---
+                        openAddContactModal: function () {
+                            var dummyItem = { id: 'dummy_new_contact', crew: { name: '', phone: '', email: '' } };
+                            var dummySection = 'general';
+                            openCrewProfile(null, null, dummyItem.id, dummySection);
+                        },
+                        addContact: function (e) {
+                            // ... Logic moved here if invoked directly, but mostly handled by openCrewProfile form commit ...
+                        },
+                        deleteContact: function (id) {
+                            var _this = this;
+                            mBTME.confirm("Delete Contact", "Remove this global contact?", function () {
+                                var idx = mBTOG.contacts.findIndex(function (c) { return c.id === id; });
+                                if (idx > -1) {
+                                    mBTOG.contacts.splice(idx, 1);
+                                    localStorage.setItem('moo_contacts', JSON.stringify(mBTOG.contacts));
+                                    _this.open('database', 'contacts'); // Refresh
+                                }
+                            });
+                        },
+
+                        // --- Phase 125: Project Selection & Batch Delete ---
+                        _selectedProjects: new Set(),
+                        toggleProjectSelection: function (name) {
+                            if (this._selectedProjects.has(name)) this._selectedProjects.delete(name);
+                            else this._selectedProjects.add(name);
+                            this.open('database', 'projects');
+                        },
+                        toggleAllProjects: function (checked) {
+                            this._selectedProjects.clear();
+                            if (checked) {
+                                var _sPrefix = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                                var _ignoreKeys = ['lastLoaded', 'currency', 'rates', 'auto_fetch_rates', 'projectDateFormat', 'projectNameSeparator', 'projectStorageProtocol', 'trash', 'globalItems', 'templates', 'lmstudioEndpoint', 'lmstudioModel', 'selectedAiProvider', 'openToolsInternal', 'showFundingBar', 'showTimelineBar', 'ratesLocked', 'ratesLockedSnap', 'autoHideNav', 'devMode', 'cloudWebhook'];
+                                try {
+                                    for (var _ki = 0; _ki < localStorage.length; _ki++) {
+                                        var _k = localStorage.key(_ki);
+                                        if (_k.indexOf(_sPrefix) === 0) {
+                                            var _name = _k.replace(_sPrefix, '');
+                                            if (_ignoreKeys.indexOf(_name) === -1) this._selectedProjects.add(_name);
+                                        }
+                                    }
+                                } catch (e) { }
+                            }
+                            this.open('database', 'projects');
+                        },
+                        trashSelectedProjects: function () {
+                            var self = this;
+                            var selected = Array.from(this._selectedProjects);
+                            if (selected.length === 0) return;
+                            var label = selected.length === 1 ? '"' + selected[0] + '"' : selected.length + ' projects';
+                            mBTME.confirm('Move to Trash', 'Move ' + label + ' to the Recycle Bin?', function () {
+                                mBT.data.deleteProject(selected).then(function () {
+                                    self._selectedProjects.clear();
+                                    self.open('database', 'projects');
+                                    mBTME.alert('Success', label + ' moved to trash.');
+                                }).catch(function (e) {
+                                    mBTME.alert('Error', 'Failed to move projects: ' + e.message);
+                                });
+                            });
+                        },
+
+                        // --- Phase 126: Navigation Visibility ---
+                        openFooterVisModal: function () {
+                            var _hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
+                            var _hidden = [];
+                            try { _hidden = _hiddenRaw ? JSON.parse(_hiddenRaw) : []; } catch (e) { _hidden = []; }
+
+                            var _items = [
+                                { id: 'stagesFooterBtn', label: 'Stages Tool', icon: mBTAssets.film || '🎞️' },
+                                { id: 'docsFooterBtn', label: 'Documents Hub', icon: mBTAssets.file || '📄' },
+                                { id: 'contactsFooterBtn', label: 'Contacts Tool', icon: mBTAssets.user || '👤' },
+                                { id: 'actualsToggleBtn', label: 'Actuals Mode', icon: mBTAssets.money || '💰' },
+                                { id: 'searchFooterBtn', label: 'Global Search', icon: mBTAssets.search || '🔍' },
+                                { id: 'toolsDrawerBtn', label: 'Tools Drawer', icon: mBTAssets.grid || '📦' },
+                                { id: 'calendarFooterBtn', label: 'Calendar', icon: mBTAssets.calendar || '📅' },
+                                { id: 'secondaryActionBtn', label: 'Publish Menu', icon: mBTAssets.paperPlane || '📤' },
+                                { id: 'footerCoffeeBtn', label: 'Support', icon: mBTAssets.coffee || '☕' },
+                                { id: 'footerHelpBtn', label: 'Help', icon: mBTAssets.help || '❓' },
+                                { id: 'activityFeedBtn', label: 'Activity Feed', icon: mBTAssets.bell || '🔔' },
+                                { id: 'sync-status-pill', label: 'Sync Status', icon: mBTAssets.sync || '🔄' }
+                            ];
+
+                            var _checkboxes = _items.map(function (item) {
+                                var isChecked = _hidden.indexOf(item.id) === -1;
+                                return '<div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">' +
+                                    '<div class="flex items-center gap-3">' +
+                                    '<div class="w-8 h-8 rounded-lg bg-white text-slate-500 flex items-center justify-center text-lg shadow-sm">' + item.icon + '</div>' +
+                                    '<div>' +
+                                    '<h5 class="text-[10px] font-black uppercase tracking-widest text-slate-700">' + item.label + '</h5>' +
+                                    '<p class="text-[8px] text-slate-400 font-bold truncate">' + item.id + '</p>' +
+                                    '</div></div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<input type="checkbox" class="footer-vis-toggle sr-only peer" data-btn-id="' + item.id + '" ' + (isChecked ? 'checked' : '') + '>' +
+                                    '<div class="w-10 h-5 rounded-full bg-slate-200 peer-checked:bg-blue-600 after:content-[\'\'] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-5"></div>' +
+                                    '</label></div>';
+                            }).join('');
+
+                            var content = '<div class="p-6 space-y-4">' +
+                                '<h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Navigation Visibility</h3>' +
+                                '<p class="text-[9px] text-slate-400 font-bold mb-2">Toggle the buttons you want to see in the footer HUD.</p>' +
+                                '<div class="space-y-2 max-h-[60vh] overflow-y-auto no-scrollbar pr-2">' + _checkboxes + '</div>' +
+                                '<div class="flex gap-2 pt-2">' +
+                                '<button onclick="mBTME.close(\'footerVisModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Done</button>' +
+                                '<button onclick="mBT.features.settings.applyFooterVis();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all shadow-sm">Apply Changes</button>' +
+                                '</div></div>';
+
+                            mBTME.open('footerVisModal', 'Manage HUD Buttons', content, 'max-w-md', { noPadding: true });
+                        },
+
+                        applyFooterVis: function () {
+                            var _toggles = document.querySelectorAll('.footer-vis-toggle');
+                            var _hidden = [];
+                            _toggles.forEach(function (cb) {
+                                if (!cb.checked) _hidden.push(cb.getAttribute('data-btn-id'));
+                            });
+                            localStorage.setItem('mBT_footerHiddenBtns', JSON.stringify(_hidden));
+                            if (mBT.ui && mBT.ui.footer && typeof mBT.ui.footer.rebalance === 'function') {
+                                mBT.ui.footer.rebalance();
+                            }
+                            mBTME.close('footerVisModal');
+                            mBTME.alert('Applied', 'Navigation visibility updated.');
+                        },
+
+                        // --- 6. Database Tools (Tier 5 Additions) ---
+                        openAddRateModal: function () {
+                            var content = `
+                <div class="space-y-4 p-2">
+                    <div>
+                        <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
+                        <input type="text" id="newRateDesc" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-tighter outline-none focus:ring-2 focus:ring-blue-100" placeholder="ITEM NAME">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Rate</label>
+                            <input type="number" id="newRateVal" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Unit</label>
+                            <select id="newRateUnit" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none cursor-pointer">
+                                <option value="Day">Day</option>
+                                <option value="Flat">Flat</option>
+                                <option value="Week">Week</option>
+                                <option value="Hour">Hour</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="mBT.features.settings.addRate()" class="w-full py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95 mt-4">Add to Database</button>
+                </div>`;
+                            mBTME.open('addRate', 'New Global Rate', content, 'max-w-sm');
+                        },
+
+                        addRate: function () {
+                            var desc = document.getElementById('newRateDesc').value.trim();
+                            var rate = parseFloat(document.getElementById('newRateVal').value) || 0;
+                            var unit = document.getElementById('newRateUnit').value;
+
+                            if (!desc) return mBTME.alert("Error", "Description required");
+
+                            mBTOG.rates.push({ description: desc, rate: rate, unit: unit });
+                            mBTOG.saveRates(); // Calls Tier 2.5 persistence
+
+                            mBTME.close('addRateModal');
+                            this.open('database', 'lineItems'); // Refresh list
+                        },
+
+                        setRateRegion: function (region) {
+                            mBTOG.settings.location = region;
+                            localStorage.setItem('moo_og_loc', region);
+                            /* Re-render the lineItems tab to reflect updated multiplier */
+                            mBT.features.settings.renderSubTab('database', 'lineItems');
+                        },
+
+                        toggleCloudSync: function () {
+                            var current = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+                            var next = !current;
+                            localStorage.setItem('moo_og_cloud_sync', JSON.stringify(next));
+                            if (next && typeof mBTOG.syncFromCloud === 'function') {
+                                mBTOG.syncFromCloud().catch(function (e) { console.error("Cloud Sync Failed", e); });
+                            }
+                            this.open('database', 'lineItems');
+                        },
+
+                        toggleOpenGateSharing: function () {
+                            mBTOG.settings.optInSharing = !mBTOG.settings.optInSharing;
+                            localStorage.setItem('moo_og_share', JSON.stringify(mBTOG.settings.optInSharing));
+                            if (mBTOG.settings.optInSharing) {
+                                mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
+                            }
+                            this.open('database', 'lineItems');
+                        },
+
+                        /* --- 46.1 Auth handlers --- */
+
+                        cloudSignIn: function () {
+                            var email = (document.getElementById('cloudEmail') || {}).value || '';
+                            var pass = (document.getElementById('cloudPassword') || {}).value || '';
+                            var errEl = document.getElementById('cloudAuthError');
+                            email = email.trim();
+                            if (!email || !pass) {
+                                if (errEl) { errEl.textContent = 'Email and password required.'; errEl.classList.remove('hidden'); }
+                                return;
+                            }
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            mBTSync.signIn(email, pass).then(function () {
+                                /* On sign-in, push local data and pull remote to merge sequentially to avoid lockouts. */
+                                if (window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()) {
+                                    return mBTSync.pushAll()
+                                        .then(function () { return mBTSync.pullAll(); })
+                                        .then(function () { return mBTSync.fetchProfile(); })
+                                        .catch(function (e) { console.warn('[mBT] Sync post-login error', e); });
+                                }
+                            }).then(function () {
+                                /* Sub-Phase 51.2: Connect realtime and subscribe to current project */
+                                if (window.mBTRealtime) {
+                                    mBTRealtime.connect();
+                                    if (typeof budget !== 'undefined' && budget) {
+                                        var rtId = budget.id || budget.projectName;
+                                        if (rtId) mBTRealtime.subscribeToProject(rtId);
+                                    }
+                                }
+                                mBT.features.settings.open('cloud');
+                            }).catch(function (e) {
+                                if (errEl) { errEl.textContent = e.message || 'Sign-in failed.'; errEl.classList.remove('hidden'); }
+                            });
+                        },
+
+                        cloudSignUp: function () {
+                            var user = (document.getElementById('cloudUsername') || {}).value || '';
+                            var email = (document.getElementById('cloudEmail') || {}).value || '';
+                            var pass = (document.getElementById('cloudPassword') || {}).value || '';
+                            var errEl = document.getElementById('cloudAuthError');
+                            user = user.trim();
+                            email = email.trim();
+                            if (!user || !email || !pass) {
+                                if (errEl) { errEl.textContent = 'All fields are required.'; errEl.classList.remove('hidden'); }
+                                return;
+                            }
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            mBTSync.signUp(user, email, pass).then(function (data) {
+                                if (data.access_token) {
+                                    mBTME.alert('Welcome!', 'Your account has been created and you are now signed in.');
+                                    if (window.mBTSupabaseConfig && mBTSupabaseConfig.isConfigured()) {
+                                        return mBTSync.pushAll()
+                                            .then(function () { return mBTSync.pullAll(); })
+                                            .then(function () { return mBTSync.fetchProfile(); })
+                                            .catch(function (e) { console.warn('[mBT] Sync post-signup error', e); });
+                                    }
+                                } else {
+                                    mBTME.alert('Verification Required', 'Please check your email to confirm your account before signing in.');
+                                }
+                            }).then(function () {
+                                /* Sub-Phase 51.2: Connect realtime on new account with session */
+                                if (window.mBTRealtime && localStorage.getItem('mbt_supabase_auth_token')) {
+                                    mBTRealtime.connect();
+                                    if (typeof budget !== 'undefined' && budget) {
+                                        var rtId = budget.id || budget.projectName;
+                                        if (rtId) mBTRealtime.subscribeToProject(rtId);
+                                    }
+                                }
+                                localStorage.setItem('mbt_auth_view', 'login');
+                                mBT.features.settings.open('cloud');
+                            }).catch(function (e) {
+                                if (errEl) { errEl.textContent = e.message || 'Sign-up failed.'; errEl.classList.remove('hidden'); }
+                            });
+                        },
+
+                        cloudForgotPassword: function () {
+                            var email = (document.getElementById('cloudEmail') || {}).value || '';
+                            var errEl = document.getElementById('cloudAuthError');
+                            email = email.trim();
+                            if (!email) {
+                                if (errEl) { errEl.textContent = 'Email address is required.'; errEl.classList.remove('hidden'); }
+                                return;
+                            }
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            mBTSync.forgotPassword(email).then(function () {
+                                mBTME.alert('Reset Link Sent', 'If an account exists for ' + email + ', a recovery link has been sent.');
+                                localStorage.setItem('mbt_auth_view', 'login');
+                                mBT.features.settings.open('cloud');
+                            }).catch(function (e) {
+                                if (errEl) { errEl.textContent = e.message || 'Recovery failed.'; errEl.classList.remove('hidden'); }
+                            });
+                        },
+
+                        cloudChangePassword: function () {
+                            var newPass = (document.getElementById('newPasswordInput') || {}).value || '';
+                            if (!newPass) return mBTME.alert('Error', 'New password cannot be empty.');
+
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            mBTSync.updatePassword(newPass).then(function () {
+                                mBTME.alert('Security Updated', 'Your password has been changed successfully.');
+                                var el = document.getElementById('passwordChangeSect');
+                                if (el) el.classList.add('hidden');
+                            }).catch(function (e) {
+                                mBTME.alert('Error', e.message || 'Failed to update password.');
+                            });
+                        },
+
+                        cloudSignInGoogle: function () {
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            try {
+                                mBTSync.signInWithGoogle();
+                            } catch (e) {
+                                mBTME.alert('Google Sign-In', e.message || 'Supabase URL not configured.');
+                            }
+                        },
+
+                        cloudSignOut: function () {
+                            if (!window.mBTSync) { mBTME.alert('Auth', 'Sync service not loaded.'); return; }
+                            /* Sub-Phase 51.2: Disconnect realtime before clearing auth tokens */
+                            if (window.mBTRealtime) mBTRealtime.disconnect();
+                            mBTSync.signOut().then(function () {
+                                mBT.features.settings.open('cloud');
+                            }).catch(function (e) {
+                                console.warn('[mBT] Error during sign-out', e);
+                                mBT.features.settings.open('cloud');
+                            });
+                        },
+
+                        /* --- 46.4 Profile save --- */
+
+                        saveProfile: function () {
+                            if (!window.mBTSync) { mBTME.alert('Profile', 'Sync service not loaded.'); return; }
+                            var name = (document.getElementById('profileDisplayName') || {}).value || '';
+                            var region = (document.getElementById('profileRegion') || {}).value || 'Jamaica';
+                            var role = (document.getElementById('profileRole') || {}).value || '';
+                            mBTSync.saveProfile(name, region, role).then(function () {
+                                /* Sync region into OpenGate settings so multiplier is correct. */
+                                if (window.mBTOG && mBTOG.settings) { mBTOG.settings.location = region; localStorage.setItem('moo_og_loc', region); }
+                                mBTME.alert('Profile', 'Profile saved.');
+                                mBT.features.settings.open('cloud');
+                            }).catch(function (e) {
+                                mBTME.alert('Profile', 'Could not save profile: ' + (e.message || 'Unknown error'));
+                            });
+                        }
+                    };
+
+                    /* ========= v19.54 FINANCE ENGINE (mBT.features.finance) ========= */
+                    mBT.features.finance = window.mBT_Finance_Engine;
+
+                    /* ========= FUNDING TRACKER (mBT.features.funding) ========= */
+                    mBT.features.funding = {
+
+                        /* --- Refresh the #fundingCard DOM element --- */
+                        updateCard: function () {
+                            var el = document.getElementById('fundingCard');
+                            if (!el) return;
+
+                            var sources = budget.fundingSources || [];
+                            var grandTotal = budget.grandTotal || 0;
+
+                            var totalSecured = 0;
+                            var totalLiquid = 0;
+                            var liquidConfirmed = 0;
+                            var sumConfirmed = 0, sumPending = 0, sumLOI = 0;
+
+                            var currencyConfig = (typeof mBTLE !== 'undefined' && mBTLE.config && mBTLE.config.currencies) ? mBTLE.config.currencies : { 'JMD': { rate: 1 }, 'USD': { rate: 1 }, 'GBP': { rate: 1 }, 'CAD': { rate: 1 }, 'EUR': { rate: 1 } };
+                            var baseDisplayCurrency = typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD';
+                            var baseRate = currencyConfig[baseDisplayCurrency] ? (currencyConfig[baseDisplayCurrency].rate || 1) : 1;
+
+                            for (var i = 0; i < sources.length; i++) {
+                                var rawAmt = parseFloat(sources[i].amount) || 0;
+                                var rawCash = parseFloat(sources[i].cashInBank) || 0;
+
+                                var sc = sources[i].currency || baseDisplayCurrency;
+                                var scRate = currencyConfig[sc] ? (currencyConfig[sc].rate || 1) : 1;
+                                var multiplier = (scRate / baseRate);
+
+                                var amt = rawAmt * multiplier;
+                                var cash = rawCash * multiplier;
+
+                                totalSecured += amt;
+                                totalLiquid += cash;
+
+                                if (sources[i].status === 'Confirmed') {
+                                    sumConfirmed += amt;
+                                    /* Track liquid portion of confirmed sources for deduplication */
+                                    liquidConfirmed += cash;
+                                } else if (sources[i].status === 'LOI') sumLOI += amt;
+                                else sumPending += amt;
+                            }
+                            /* Phase 107: totalCap acts as physics ceiling; fall back to grandTotal when unset */
+                            var totalCap = (budget.targetLock && budget.targetLock.totalCap > 0) ? budget.targetLock.totalCap : 0;
+                            var reference = totalCap > 0 ? totalCap : grandTotal;
+
+                            /* Phase 107.11: Deduplicated 3-tier HUD — Secured = Confirmed (includes its liquid), Pipeline = Pending + LOI, Gap = remainder */
+                            var pipeline = sumPending + sumLOI;
+                            var gap = reference - (sumConfirmed + pipeline);
+                            var pct = reference > 0 ? Math.min(100, Math.max(0, Math.round(((sumConfirmed + pipeline) / reference) * 100))) : 0;
+                            var fullyFunded = reference > 0 && gap <= 0;
+                            var isInsolvent = totalCap > 0 && grandTotal > totalCap;
+
+                            var gapColor = isInsolvent ? 'text-rose-600' : (fullyFunded ? 'text-emerald-600' : 'text-rose-500');
+
+                            /* Phase 107.11: Deduplicated bar segments — liquid / confirmed-non-liquid / pipeline / gap */
+                            var pctLiquid = reference > 0 ? (totalLiquid / reference) * 100 : 0;
+                            var pctConfirmedNonLiquid = reference > 0 ? Math.max(0, ((sumConfirmed - liquidConfirmed) / reference) * 100) : 0;
+                            var pctPipeline = reference > 0 ? (pipeline / reference) * 100 : 0;
+                            var pctGap = reference > 0 ? Math.max(0, (gap / reference) * 100) : 0;
+
+                            /* Normalize all 4 segments if total exceeds 100 */
+                            var totalPctFloat = pctLiquid + pctConfirmedNonLiquid + pctPipeline + pctGap;
+                            if (totalPctFloat > 100) {
+                                var factor = 100 / totalPctFloat;
+                                pctLiquid *= factor;
+                                pctConfirmedNonLiquid *= factor;
+                                pctPipeline *= factor;
+                                pctGap *= factor;
+                            }
+
+                            var esc = mBT.ui.render.esc;
+                            var fmt = function (v) { return mBTLE.format.currency(v, displayCurrency); };
+
+                            var rowsHtml = '';
+                            for (var j = 0; j < sources.length; j++) {
+                                var s = sources[j];
+                                var statusCls = s.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' : s.status === 'LOI' ? 'bg-pink-100 text-pink-700' : 'bg-amber-100 text-amber-700'; /* Phase 50.1: Updated to Pink/Amber */
+                                rowsHtml += '<div class="flex items-center justify-between py-2 px-2 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group cursor-pointer rounded-lg" onclick="mBT.features.funding.openSourceModal(' + j + ')">' +
+                                    '<div class="flex items-center gap-2 min-w-0">' +
+                                    '<span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ' + statusCls + '">' + esc(s.status || 'Pending') + '</span>' +
+                                    '<div class="flex flex-col">' +
+                                    '<span class="text-[10px] font-bold text-slate-700 truncate">' + esc(s.name || 'Unnamed Source') + '</span>' +
+                                    (s.contactName ? '<span class="text-[8px] text-slate-400 font-bold truncate">Contact: ' + esc(s.contactName) + '</span>' : '') +
+                                    '</div>' +
+                                    '</div>' +
+                                    '<div class="flex items-center gap-3 shrink-0">' +
+                                    '<span class="text-[10px] font-mono font-black text-slate-800">' + fmt(s.amount || 0) + '</span>' +
+                                    '<button onclick="event.stopPropagation(); mBT.features.funding.deleteSource(' + j + ')" class="p-1 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all rounded">' + mBTAssets.trash + '</button>' +
+                                    '</div>' +
+                                    '</div>';
+                            }
+
+                            el.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">' +
+                                '<div class="px-5 pt-4 pb-3 cursor-pointer select-none hover:bg-slate-50 transition-colors" onclick="mBT.features.funding.toggleList()">' +
+                                '<div class="flex items-center justify-between mb-3">' +
+                                '<div class="flex items-center gap-2">' +
+                                (fullyFunded ? '<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div>' : '<div class="w-2 h-2 rounded-full bg-slate-300"></div>') +
+                                '<div class="flex flex-col">' +
+                                '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-700">Funding</h3>' +
+                                '<span class="text-[9px] font-bold text-slate-400">' + pct + '%' + (fullyFunded ? ' — Fully Funded' : ' Secured') + '</span>' +
+                                '</div>' +
+                                '<div class="pl-4 ml-2 flex flex-col" onclick="event.stopPropagation()">' +
+                                '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Budget Cap</span>' +
+                                '<div class="flex items-center gap-0.5 border-b border-slate-300">' +
+                                '<span class="text-[9px] text-slate-400">$</span>' +
+                                '<input type="number" value="' + (totalCap > 0 ? totalCap : '') + '" placeholder="0" ' +
+                                'onchange="mBT.features.funding.setTotalCap(this.value)" ' +
+                                'onclick="event.stopPropagation()" ' +
+                                'class="w-20 bg-transparent text-sm font-black text-slate-700 outline-none text-left no-spinner placeholder-slate-300">' +
+                                '</div>' +
+                                '</div>' +
+                                '</div>' +
+                                '<button onclick="event.stopPropagation(); mBT.features.funding.openSourceModal(-1)" class="flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">' + mBTAssets.plus + ' Add Source</button>' +
+                                '</div>' +
+                                '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3 flex">' +
+                                (pctLiquid > 0 ? '<div class="h-full transition-all duration-500 bg-blue-500" style="width:' + pctLiquid + '%"></div>' : '') +
+                                (pctConfirmedNonLiquid > 0 ? '<div class="h-full transition-all duration-500 bg-emerald-500" style="width:' + pctConfirmedNonLiquid + '%"></div>' : '') +
+                                (pctPipeline > 0 ? '<div class="h-full transition-all duration-500 bg-amber-400" style="width:' + pctPipeline + '%"></div>' : '') +
+                                (pctGap > 0 ? '<div class="h-full transition-all duration-500 bg-rose-300" style="width:' + pctGap + '%"></div>' : '') +
+                                '</div>' +
+                                '<div class="flex gap-4">' +
+                                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Secured</p><p class="text-sm font-black text-emerald-600">' + fmt(sumConfirmed) + '</p></div>' +
+                                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Pipeline</p><p class="text-sm font-black text-amber-600">' + fmt(pipeline) + '</p></div>' +
+                                '<div><p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Gap</p><p class="text-sm font-black ' + gapColor + '">' + (gap > 0 ? fmt(gap) : '-' + fmt(Math.abs(gap))) + '</p></div>' +
+                                '<div class="ml-auto self-end">' +
+                                (sources.length > 0 ? '<button onclick="event.stopPropagation(); mBT.features.funding.exportCredits()" class="text-[9px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors">Export Credits</button>' : '') +
+                                '</div>' +
+                                '</div>' +
+                                '</div>' +
+                                '<div id="fundingItemsContainer" class="hidden transition-all bg-slate-50/30 border-t border-slate-100">' +
+                                (sources.length > 0 ? '<div class="px-3 py-2">' + rowsHtml + '</div>' : '') +
+                                '</div>' +
+                                '</div>';
+                        },
+
+                        /* --- Toggle visibility of the funding sources list --- */
+                        toggleList: function () {
+                            var container = document.getElementById('fundingItemsContainer');
+                            if (container) {
+                                if (container.classList.contains('hidden')) {
+                                    container.classList.remove('hidden');
+                                } else {
+                                    container.classList.add('hidden');
+                                }
+                            }
+                        },
+
+                        /* --- Open modal to add or edit a funding source --- */
+                        openSourceModal: function (index) {
+                            var s = index >= 0 ? (budget.fundingSources[index] || {}) : {};
+                            var title = index >= 0 ? 'Edit Funding Source' : 'Add Funding Source';
+                            var escObj = typeof mBT !== 'undefined' && mBT.ui && mBT.ui.render && mBT.ui.render.esc ? mBT.ui.render.esc : function (x) { return x; };
+
+                            // Phase 50.1: Local Attachments Initialization
+                            window._currentFundingAttachments = s.attachments ? JSON.parse(JSON.stringify(s.attachments)) : [];
+                            window._renderFundingAttachments = function () {
+                                var c = document.getElementById('fundingAttachmentsList');
+                                if (!c) return;
+                                var a = window._currentFundingAttachments;
+                                if (!a || a.length === 0) {
+                                    c.innerHTML = '<div class="text-[9px] text-slate-400 font-bold p-2 text-center border-2 border-dashed border-slate-100 rounded-xl">No physical attachments</div>';
+                                    return;
+                                }
+                                var h = '';
+                                for (var i = 0; i < a.length; i++) {
+                                    var att = a[i];
+                                    h += '<div class="flex items-center justify-between p-2 bg-white border border-slate-100 rounded-lg group mb-1 last:mb-0">' +
+                                        '<div class="flex items-center gap-2 overflow-hidden">' +
+                                        '<div class="text-blue-500 w-4 h-4">' + (typeof mBTAssets !== 'undefined' && mBTAssets.file ? mBTAssets.file : '📄') + '</div>' +
+                                        '<span class="text-[10px] font-bold text-slate-700 truncate" title="' + escObj(att.filename) + '">' + escObj(att.filename) + '</span>' +
+                                        '</div>' +
+                                        '<div class="flex items-center gap-2 shrink-0">' +
+                                        '<a href="' + att.data + '" download="' + escObj(att.filename) + '" class="text-slate-300 hover:text-blue-500 transition-colors w-4 h-4 block" title="Download">' + (typeof mBTAssets !== 'undefined' && mBTAssets.export ? mBTAssets.export : '⬇') + '</a>' +
+                                        '<button onclick="window._removeFundingAttachment(' + i + ')" class="text-slate-300 hover:text-rose-500 transition-colors w-4 h-4 block" title="Delete">' + (typeof mBTAssets !== 'undefined' && mBTAssets.trash ? mBTAssets.trash : '🗑') + '</button>' +
+                                        '</div></div>';
+                                }
+                                c.innerHTML = h;
+                            };
+                            window._removeFundingAttachment = function (i) {
+                                if (typeof mBTME !== 'undefined' && mBTME.confirm) {
+                                    mBTME.confirm('Delete Attachment', 'Remove this file?', function () {
+                                        window._currentFundingAttachments.splice(i, 1);
+                                        window._renderFundingAttachments();
+                                    });
+                                } else if (confirm("Remove this file?")) {
+                                    window._currentFundingAttachments.splice(i, 1);
+                                    window._renderFundingAttachments();
+                                }
+                            };
+                            window._handleFundingFiles = function (input) {
+                                if (!input.files || input.files.length === 0) return;
+                                var lbl = document.getElementById('fundingFileUploaderLabel');
+                                var originalText = lbl ? lbl.innerHTML : 'Attach Docs';
+                                if (lbl) lbl.innerHTML = 'Reading...';
+
+                                var files = Array.from(input.files);
+                                var loaded = 0;
+                                files.forEach(function (f) {
+                                    var reader = new FileReader();
+                                    reader.onload = function (e) {
+                                        window._currentFundingAttachments.push({
+                                            title: f.name,
+                                            filename: f.name,
+                                            data: e.target.result
+                                        });
+                                        loaded++;
+                                        if (loaded === files.length) {
+                                            if (lbl) lbl.innerHTML = originalText;
+                                            window._renderFundingAttachments();
+                                            input.value = ''; // reset so same file can be clicked again
+                                        }
+                                    };
+                                    reader.readAsDataURL(f);
+                                });
+                            };
+                            window._addFundingCloudLink = function () {
+                                var input = document.getElementById('fundingCloudLinkInput');
+                                var val = input ? input.value.trim() : '';
+                                if (!val) return;
+                                if (!/^https?:\/\//i.test(val)) val = 'https://' + val;
+
+                                var nameParts = val.replace(/^https?:\/\//i, '').split('/');
+                                var display = nameParts[0] + (nameParts.length > 1 ? '/...' : '');
+
+                                window._currentFundingAttachments.push({
+                                    title: display,
+                                    filename: val,
+                                    data: val
+                                });
+                                if (input) input.value = '';
+                                window._renderFundingAttachments();
+                            };
+
+                            var currencies = (typeof mBTLE !== 'undefined' && mBTLE.config && mBTLE.config.currencies) ? Object.keys(mBTLE.config.currencies) : ['JMD', 'USD', 'GBP', 'CAD', 'EUR'];
+                            var sourceCurrency = s.currency || (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD');
+                            var currencyOptionsHtml = currencies.map(function (c) { return `<option value="${c}" ${c === sourceCurrency ? 'selected' : ''}>${c}</option>`; }).join('');
+
+                            var content = `<div class="space-y-4 p-2">
+                <div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Source Name</label>
+                <input type="text" id="fundingName" value="${escObj(s.name || '')}" placeholder="e.g. Creative BC, Private Investor" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Amount</label>
+                        <div class="flex gap-1">
+                            <input type="number" id="fundingAmount" value="${s.amount || ''}" placeholder="0.00" class="flex-grow p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100 min-w-0">
+                            <select id="fundingCurrency" class="w-20 p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer shrink-0">
+                                ${currencyOptionsHtml}
+                            </select>
+                        </div>
+                    </div>
+                    <div><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>
+                        <select id="fundingStatus" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">
+                            <option value="Confirmed" ${s.status === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+                            <option value="LOI" ${s.status === 'LOI' ? 'selected' : ''}>LOI</option>
+                            <option value="Pending" ${(!s.status || s.status === 'Pending') ? 'selected' : ''}>Pending</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2 md:col-span-1"><label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Liquid Cash (Deposited)</label>
+                    <input type="number" id="fundingCashInBank" value="${s.cashInBank || ''}" placeholder="0.00" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100"></div>
+                </div>
+                
+                <div class="space-y-3 pt-3 border-t border-slate-100">
+                    <div class="flex items-center justify-between mb-1">
+                        <h4 class="text-[9px] font-black uppercase tracking-widest text-slate-500">Contact & Agreement Details</h4>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <div class="flex-grow relative">
+                            <input type="text" id="fundingCloudLinkInput" placeholder="Paste Cloud Link (Drive, Dropbox)" class="w-full p-2 bg-slate-50 border-none rounded-lg text-[9px] font-bold outline-none focus:ring-2 focus:ring-blue-100 pr-8">
+                            <button onclick="window._addFundingCloudLink()" class="absolute right-1 top-1 bottom-1 px-2.5 bg-blue-100 text-blue-600 rounded text-[14px] font-black hover:bg-blue-200 transition-colors leading-none pb-1" title="Add Cloud Link">+</button>
+                        </div>
+                        <label id="fundingFileUploaderLabel" for="fundingFileUploader" class="shrink-0 flex items-center gap-1 px-2 py-1.5 bg-slate-100 text-slate-500 rounded cursor-pointer hover:bg-slate-200 transition-colors text-[9px] font-black uppercase tracking-widest whitespace-nowrap leading-none" title="Upload Local File">${typeof mBTAssets !== 'undefined' && mBTAssets.plus ? mBTAssets.plus : '+'} File</label>
+                        <input type="file" id="fundingFileUploader" multiple class="hidden" onchange="window._handleFundingFiles(this)">
+                    </div>
+                    
+                    <div id="fundingAttachmentsList" class="my-2 bg-slate-50/50 rounded-lg p-1">
+                        <!-- Loaded dynamically via window._renderFundingAttachments() -->
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="text" id="fundingContactName" value="${escObj(s.contactName || '')}" placeholder="Contact Name" class="w-full p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">
+                        <input type="tel" id="fundingContactPhone" value="${escObj(s.contactPhone || '')}" placeholder="Phone Number" class="w-full p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">
+                    </div>
+                    <input type="email" id="fundingContactEmail" value="${escObj(s.contactEmail || '')}" placeholder="Email Address" class="w-full p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">
+                    <input type="url" id="fundingContractUrl" value="${escObj(s.contractUrl || '')}" placeholder="Contract/Agreement URL" class="w-full p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">
+                    <textarea id="fundingNotes" placeholder="Notes, terms, emails, etc." class="w-full p-3 bg-slate-50 border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 h-20 resize-none">${escObj(s.notes || '')}</textarea>
+                </div>
+                
+                <button onclick="mBT.features.funding.saveSource(${index >= 0 ? index : -1})" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">${index >= 0 ? 'Save Changes' : 'Add Source'}</button>
+            </div>`;
+                            mBTME.open('fundingAddModal', title, content, 'max-w-md'); // Made wider for the detailed fields
+                            setTimeout(function () { window._renderFundingAttachments(); }, 10);
+                        },
+
+                        /* --- Commit the add-source form --- */
+                        saveSource: function (idx) {
+                            var name = (document.getElementById('fundingName') || {}).value || '';
+                            var amount = parseFloat((document.getElementById('fundingAmount') || {}).value) || 0;
+                            var currency = (document.getElementById('fundingCurrency') || {}).value || 'JMD';
+                            var cashInBank = parseFloat((document.getElementById('fundingCashInBank') || {}).value) || 0;
+                            var status = (document.getElementById('fundingStatus') || {}).value || 'Pending';
+                            var contactName = (document.getElementById('fundingContactName') || {}).value || '';
+                            var contactEmail = (document.getElementById('fundingContactEmail') || {}).value || '';
+                            var contactPhone = (document.getElementById('fundingContactPhone') || {}).value || '';
+                            var contractUrl = (document.getElementById('fundingContractUrl') || {}).value || '';
+                            var notes = (document.getElementById('fundingNotes') || {}).value || '';
+                            var attachments = window._currentFundingAttachments || [];
+
+                            if (!name.trim()) { mBTME.alert('Missing Info', 'Please enter a source name.'); return; }
+                            if (!budget.fundingSources) budget.fundingSources = [];
+
+                            var obj = {
+                                name: name.trim(), amount: amount, currency: currency, cashInBank: cashInBank, status: status,
+                                contactName: contactName, contactEmail: contactEmail, contactPhone: contactPhone,
+                                contractUrl: contractUrl, notes: notes,
+                                attachments: JSON.parse(JSON.stringify(attachments))
+                            };
+
+                            if (idx >= 0 && idx < budget.fundingSources.length) {
+                                budget.fundingSources[idx] = obj;
+                            } else {
+                                budget.fundingSources.push(obj);
+                            }
+
+                            saveBudget();
+                            mBTME.close('fundingAddModal');
+                            mBT.features.funding.updateCard();
+
+                            // Re-open the list to show the new item
+                            var container = document.getElementById('fundingItemsContainer');
+                            if (container && container.classList.contains('hidden')) {
+                                container.classList.remove('hidden');
+                            }
+                        },
+
+                        /* --- Delete a funding source by index --- */
+                        deleteSource: function (index) {
+                            if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('delete');
+                            mBTME.confirm('Remove Source', 'Remove this funding source?', function () {
+                                if (!budget.fundingSources) return;
+                                budget.fundingSources.splice(index, 1);
+                                saveBudget();
+                                mBT.features.funding.updateCard();
+                            });
+                        },
+
+                        /* --- Export funding sources as a CSV credits list --- */
+                        exportCredits: function () {
+                            var sources = budget.fundingSources || [];
+                            if (!sources.length) { mBTME.alert('No Sources', 'Add funding sources first.'); return; }
+
+                            var lines = ['Source,Amount,Status'];
+                            for (var i = 0; i < sources.length; i++) {
+                                var s = sources[i];
+                                lines.push('"' + (s.name || '').replace(/"/g, '""') + '",' + (parseFloat(s.amount) || 0).toFixed(2) + ',' + (s.status || 'Pending'));
+                            }
+                            var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = (budget.projectName || 'project') + '-credits.csv';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        },
+
+                        /* --- Phase 107: Hub-First Funding — set Budget Cap and trigger physics check --- */
+                        setTotalCap: function (rawVal) {
+                            if (!budget) return;
+                            if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
+                            var val = parseFloat(rawVal) || 0;
+                            budget.targetLock.totalCap = val;
+                            saveBudget();
+                            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                            mBT.features.funding.updateCard();
+                            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+                            /* Cross-PWA Sync: push new totalCap to any open tool iframe */
+                            var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                            if (toolIframe && toolIframe.contentWindow) {
+                                toolIframe.contentWindow.postMessage({ type: 'mbt:totalCap', totalCap: val }, '*');
+                            }
+                        },
+
+                        /* --- Phase 107.6: Global Physics Hub — set Work Week and trigger global reconciliation --- */
+                        setWorkWeek: function (days) {
+                            if (!budget) return;
+                            if (!budget.settings) budget.settings = {};
+                            budget.settings.workWeek = days;
+                            saveBudget();
+                            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                            mBT.features.funding.updateCard();
+                            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+                            /* Cross-PWA Sync: push workWeek change to Stages tool and other open iframes */
+                            var toolIframes = document.querySelectorAll('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                            for (var i = 0; i < toolIframes.length; i++) {
+                                if (toolIframes[i].contentWindow) {
+                                    toolIframes[i].contentWindow.postMessage({ type: 'mbt:workWeek', workWeek: days }, '*');
+                                }
+                            }
+                        }
+                    };
+
+                    /* --- v19.54 PUBLISH BRIDGE --- */
+                    window.showPublishModal = function () {
+                        var content = `
+        <div class="grid grid-cols-1 gap-4 p-6">
+            <!-- PDF Button -->
+            <button data-action="export" data-type="pdf" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.print}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Export PDF (Report)</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Professional Formatted Document</p>
+                </div>
+            </button>
+
+            <!-- Save Project (Bundle .moo) -->
+            <button data-action="export" data-type="bundle" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.save}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Master Project File</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Unified Container (.moo) - Includes Assets</p>
+                </div>
+            </button>
+            
+            <!-- Digital/HTML -->
+           <button data-action="export" data-type="html" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.phone}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Digital Export</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive HTML Call Sheet</p>
+                </div>
+            </button>
+
+            <!-- Excel -->
+            <button data-action="export" data-type="xlsx" class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-500 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${mBTAssets.grid}</div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Excel Export</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Spreadsheet (.xlsx)</p>
+                </div>
+            </button>
+
+            <!-- Production Package (Wrap Export) -->
+            <button data-action="export" data-type="wrap" class="flex items-center gap-4 p-4 bg-slate-900 border border-slate-700 rounded-2xl hover:border-amber-400 hover:shadow-lg transition-all group text-left">
+                <div class="w-12 h-12 bg-amber-400/10 text-amber-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div>
+                    <h4 class="font-black text-xs uppercase tracking-widest text-amber-400">Production Package</h4>
+                    <p class="text-[10px] text-slate-400 font-bold mt-1">Budget PDF + Contacts CSV + .moo — Zipped</p>
+                </div>
+            </button>
+        </div>`;
+                        mBTME.open('publish', 'Publish & Export', content, 'max-w-sm');
+                    };
+
+                    // --- Backward Compatibility Alias ---
+                    // Fix: We use .bind() to ensure 'this' refers to the settings object, not the window
+                    window.showSettingsModal = mBT.features.settings.open.bind(mBT.features.settings);
+
+                    // ---- Tier 5 Part 3 ---- //
+
+
+
+                    /* ========= v19.54 DOCUMENTS HUB (mBT.features.documents) ========= */
+                    mBT.features.documents = {
+                        // Logic Resolution: Creates a new document instance from a template definition
+                        createFromTemplate: function (templateId) {
+                            var tmpl = mBTOG.templates.find(function (t) { return t.id === templateId; });
+                            if (!tmpl) return mBTME.alert("Error", "Template definition not found.");
+
+                            var newDoc = {
+                                id: 'doc_' + Date.now(),
+                                type: tmpl.id,
+                                label: tmpl.label,
+                                content: {
+                                    data: mBTDB._generateDefaultData(),
+                                    widgets: [] // Populated by mBTDB.open based on type defaults
+                                }
+                            };
+
+                            if (!budget.documents) budget.documents = [];
+                            budget.documents.push(newDoc);
+
+                            saveBudget();
+                            mBTME.close('newDocSelectorModal');
+
+                            // Refresh Vault list if open
+                            if (document.getElementById('documentsModal')) this.openVault();
+
+                            // Logic Resolution: Intercept auto-open. Show options instead.
+                            this.showOptions(newDoc.id);
+                        },
+
+                        // Logic Resolution: Opens the Document Vault (List of saved docs)
+                        openVault: function (activeTab = 'All') {
+                            var docs = budget.documents || [];
+
+                            // Helper: Resolve Template Metadata
+                            var getTmpl = function (type) { return mBTOG.templates.find(function (x) { return x.id === type; }) || { cat: 'Other', icon: 'file' }; };
+                            var getCat = function (type) { return getTmpl(type).cat; };
+                            var getIcon = function (type) { return mBTAssets[getTmpl(type).icon] || mBTAssets.file; };
+
+                            // Filter Logic
+                            var filteredDocs = activeTab === 'All'
+                                ? docs
+                                : docs.filter(function (d) { return getCat(d.type) === activeTab; });
+
+                            // Logic Resolution: View Layout Strategy linked to Settings
+                            var isCompact = (budget.settings && budget.settings.compactMode) || false;
+
+                            // 2. Define Layout Classes (Grid vs List)
+                            var listContainerClass = (isCompact && filteredDocs.length > 0)
+                                ? 'grid grid-cols-2 md:grid-cols-3 gap-4 content-start'
+                                : 'flex flex-col gap-3';
+
+                            // 3. Adjust Modal Width based on View
+                            var modalWidth = (isCompact && filteredDocs.length > 0) ? 'max-w-5xl' : 'max-w-2xl';
+
+                            // Logic Resolution: Dynamic Item Renderer (Grid Card vs List Row)
+                            var renderDocItem = function (doc) {
+                                var iconSvg = getIcon(doc.type);
+                                if (isCompact) {
+                                    // Grid Card (Vertical Layout) - Tier 5 Event Delegation Update
+                                    return `
+                    <div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" data-action="doc-options" data-id="${doc.id}">
+                         <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors shrink-0">
+                            ${iconSvg}
+                         </div>
+                         <div class="w-full overflow-hidden">
+                            <div class="text-[10px] font-black uppercase text-slate-700 truncate w-full" title="${RenderEngine.esc(doc.label)}">${RenderEngine.esc(doc.label || 'Untitled')}</div>
+                            <div class="text-[9px] text-slate-400 font-bold truncate w-full">${doc.type ? doc.type.toUpperCase() : 'DOC'}</div>
+                         </div>
+                         <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/90 rounded-lg shadow-sm p-1">
+                            <button data-action="doc-duplicate" data-id="${doc.id}" class="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded" title="Duplicate">${mBTAssets.copy}</button>
+                            <button data-action="doc-archive" data-id="${doc.id}" class="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded" title="Archive">${mBTAssets.trash}</button>
+                         </div>
+                    </div>`;
+                                } else {
+                                    // List Row (Horizontal Layout) - Tier 5 Event Delegation Update
+                                    return `<div class="group bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex items-center justify-between cursor-pointer">
+                        <div class="flex items-center gap-4 flex-grow overflow-hidden" data-action="doc-options" data-id="${doc.id}">
+                            <div class="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 group-hover:scale-110 transition-transform shrink-0">
+                                ${iconSvg}
+                            </div>
+                            <div class="min-w-0">
+                                <h4 class="font-black text-slate-900 text-xs uppercase tracking-tighter truncate">${mBT.ui.render.esc(doc.label || 'Untitled Document')}</h4>
+                                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest truncate">${doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document'}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button data-action="doc-duplicate" data-id="${doc.id}" class="p-2 text-slate-300 hover:text-blue-600 transition-colors" title="Duplicate">${mBTAssets.copy}</button>
+                            <button data-action="doc-archive" data-id="${doc.id}" class="p-2 text-slate-300 hover:text-rose-600 transition-colors" title="Archive">${mBTAssets.trash}</button>
+                        </div>
+                    </div>`;
+                                }
+                            };
+
+                            var docsHtml = filteredDocs.length > 0
+                                ? filteredDocs.map(renderDocItem).join('')
+                                : `<div class="col-span-full">${RenderEngine.ui.emptyState({
+                                    icon: mBTAssets.file,
+                                    message: activeTab === 'All' ? 'Vault is Empty' : 'No Documents',
+                                    subtext: 'Create a new document to get started'
+                                })}</div>`;
+
+                            // Tab Navigation
+                            var categories = ['All', 'Pre-Prod', 'Production', 'Post-Prod', 'Legal'];
+
+                            // Tier 5 Update: Manual Tab Construction for Event Delegation
+                            var tabHtml = `<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">
+                ${categories.map(function (c) {
+                                var count = c === 'All' ? docs.length : docs.filter(function (d) { return getCat(d.type) === c; }).length;
+                                var isActive = c === activeTab;
+                                var activeClass = "bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm";
+                                var inactiveClass = "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50";
+                                return `<button data-action="nav-docs" data-tab="${c}" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${isActive ? activeClass : inactiveClass}">
+                        ${c} <span class="opacity-50 ml-1">(${count})</span>
+                    </button>`;
+                            }).join('')}
+            </div>`;
+
+                            // Logic Resolution: Persistent UI Updates (Prevents Flickering/Re-opening)
+                            var domId = 'documentsModal';
+                            var existingModal = document.getElementById(domId);
+
+                            if (existingModal) {
+                                var nav = document.getElementById('docsTabNav');
+                                var list = document.getElementById('activeDocsList');
+
+                                if (nav) nav.innerHTML = tabHtml;
+                                if (list) {
+                                    list.className = listContainerClass;
+                                    list.innerHTML = docsHtml;
+                                }
+
+                                var searchContainer = document.getElementById('docSearchContainer');
+                                if (searchContainer) {
+                                    searchContainer.innerHTML = `<input type="text" id="docSearch" placeholder="SEARCH ${activeTab.toUpperCase()}..." class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all"><div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>`;
+                                }
+
+                                mBTME.attachSearch('docSearch', 'activeDocsList', filteredDocs, renderDocItem);
+                                return;
+                            }
+
+                            var content = `
+                <div class="flex flex-col max-h-[90vh]">
+                    <div class="p-6 pb-0 bg-white border-b border-slate-100 flex-shrink-0 z-10 space-y-4">
+                        <div class="flex justify-between items-center relative">
+                            <!-- Left: Add Button -->
+                            <button onclick="mBT.features.documents.openTemplateSelector()" class="px-4 py-2 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2 shadow-sm active:scale-95">
+                                ${mBTAssets.plus} Add
+                            </button>
+                            
+                            <!-- Center: Title -->
+                            <h3 class="absolute left-1/2 -translate-x-1/2 font-black text-slate-900 text-xs uppercase tracking-widest">DOCUMENTS</h3>
+                            
+                            <!-- Right: Actions -->
+                            <div class="flex gap-2">
+                                <button onclick="mBT.features.trash.open('documents')" class="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all" title="Recycle Bin">${mBTAssets.trash}</button>
+                                <button onclick="mBTME.close('documentsModal')" class="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all">${mBTAssets.close}</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Search -->
+                        <div class="relative" id="docSearchContainer">
+                            <input type="text" id="docSearch" placeholder="SEARCH DOCUMENTS..." class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                        </div>
+
+                        <!-- Tab Nav -->
+                        <div id="docsTabNav" class="-mb-px">
+                            ${tabHtml}
+                        </div>
+                    </div>
+                    
+                    <div class="flex-grow overflow-y-auto no-scrollbar bg-slate-50/50 p-6">
+                        <div id="activeDocsList" class="${listContainerClass}">
+                            ${docsHtml}
+                        </div>
+                    </div>
+                </div>`;
+
+                            mBTME.open('documents', 'Documents', content, modalWidth, { noPadding: true, hideHeader: true });
+
+                            mBTME.attachSearch('docSearch', 'activeDocsList', filteredDocs, renderDocItem);
+                        },
+
+                        // Logic Resolution: Opens the Template Selector (Blueprints)
+                        openTemplateSelector: function () {
+                            var templates = mBTOG.templates || [];
+                            var renderTmplItem = function (tmpl) {
+                                return RenderEngine.ui.card({
+                                    id: tmpl.id,
+                                    icon: mBTAssets[tmpl.icon] || mBTAssets.file,
+                                    title: tmpl.label,
+                                    subtitle: tmpl.cat || 'General',
+                                    onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')`,
+                                    actions: [{ icon: mBTAssets.plus, title: 'Create', color: 'blue', onClick: `mBT.features.documents.createFromTemplate('${tmpl.id}')` }]
+                                });
+                            };
+
+                            var templateHtml = templates.map(renderTmplItem).join('');
+
+                            // Logic Resolution: Custom Layout (White Theme) to eliminate black studio headers
+                            var content = `
+                <div class="flex flex-col max-h-[80vh] bg-slate-50">
+                    <div class="p-4 bg-white border-b border-slate-100 flex-shrink-0 z-10 space-y-2">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Select Template</h3>
+                            <button onclick="mBTME.close('newDocSelectorModal')" class="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-all">${mBTAssets.close}</button>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="tmplSearch" placeholder="FILTER TEMPLATES..." class="w-full p-3 pr-10 bg-slate-50 border-none rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${mBTAssets.search}</div>
+                        </div>
+                    </div>
+                    <div id="templateListBody" class="flex-grow overflow-y-auto no-scrollbar p-4 space-y-3">
+                        ${templateHtml}
+                    </div>
+                </div>`;
+
+                            mBTME.open('newDocSelector', 'Studio Blueprints', content, 'max-w-md', { noPadding: true, hideHeader: true });
+
+                            mBTME.attachSearch('tmplSearch', 'templateListBody', templates, renderTmplItem);
+                        },
+
+                        // Logic Resolution: Opens the Action Menu for choosing editor or storage
+                        showOptions: function (docId) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return;
+
+                            var attachments = doc.attachments || [];
+                            var hasFile = attachments.length > 0;
+
+                            // Helper: Render Attachment List
+                            var renderAttachmentList = function () {
+                                if (attachments.length === 0) return '<div class="text-center text-[10px] text-slate-400 font-bold p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 col-span-2">No files attached</div>';
+
+                                return attachments.map(function (file, idx) {
+                                    var isImg = file.type && file.type.startsWith('image/');
+                                    var src = (isImg && file.location !== 'internal') ? file.data : null;
+
+                                    return RenderEngine.ui.mediaCard({
+                                        id: idx,
+                                        title: file.name,
+                                        type: (file.type.split('/')[1] && file.type.split('/')[1].toUpperCase()) || 'FILE',
+                                        size: file.size || 'N/A',
+                                        location: file.location || 'legacy',
+                                        src: src,
+                                        onClick: `mBT.features.documents.previewAttachment('${docId}', ${idx})`,
+                                        actions: [
+                                            { icon: mBTAssets.print, title: 'Print', color: 'slate', onClick: `mBT.features.documents.printAttachment('${docId}', ${idx})` },
+                                            { icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`, title: 'Download', color: 'blue', onClick: `mBT.features.documents.downloadAttachment('${docId}', ${idx})` },
+                                            { icon: mBTAssets.trash, title: 'Remove', color: 'rose', onClick: `mBT.features.documents.removeAttachment('${docId}', ${idx})` }
+                                        ]
+                                    });
+                                }).join('');
+                            };
+
+                            var content = `
+                <div class="flex flex-col h-full bg-slate-50">
+                    <div class="grid grid-cols-1 gap-4 p-6 shrink-0">
+                        ${!hasFile ? `
+                        <button onclick="mBTME.close('docOptionsModal'); mBTDB.open('${docId}');" 
+                            class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-lg transition-all group text-left w-full">
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                ${mBTAssets.wand}
+                            </div>
+                            <div>
+                                <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">Open Studio</h4>
+                                <p class="text-[10px] text-slate-400 font-bold mt-1">Interactive Editor</p>
+                            </div>
+                        </button>` : ''}
+
+                        <div class="relative">
+                            <button onclick="document.getElementById('docUpload_${docId}').click()" 
+                                class="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-lg transition-all group text-left w-full">
+                                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                    ${mBTAssets.cloud}
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-xs uppercase tracking-widest text-slate-800">${hasFile ? 'Replace Existing' : 'Upload Existing'}</h4>
+                                    <p class="text-[10px] text-slate-400 font-bold mt-1">PDF, Word, Excel, Images</p>
+                                </div>
+                            </button>
+                            <input type="file" id="docUpload_${docId}" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" onchange="mBT.features.documents.handleFileUpload('${docId}', this)">
+                        </div>
+                    </div>
+                    
+                    <div class="px-6 pb-2">
+                        <h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-2 mb-3">Attachments</h4>
+                    </div>
+                    <div class="flex-grow overflow-y-auto px-6 pb-6 no-scrollbar grid grid-cols-2 gap-3 content-start" style="max-height: 200px;">
+                        ${renderAttachmentList()}
+                    </div>
+                </div>`;
+
+                            mBTME.open('docOptions', 'Document Actions', content, 'max-w-sm', { noPadding: true });
+                        },
+
+                        // Logic Resolution: Handles file attachments with proper format support
+                        handleFileUpload: function (docId, input) {
+                            var file = input.files[0];
+                            if (!file) return;
+                            var self = this;
+
+                            // Stability Limit: 7MB (IndexedDB Support)
+                            if (file.size > 7 * 1024 * 1024) {
+                                mBTME.alert("File Too Large", "Please upload files smaller than 7MB to ensure offline storage stability.");
+                                return;
+                            }
+
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc) return;
+                            if (!doc.attachments) doc.attachments = [];
+
+                            // Protocol Branching: Bundle Mode vs Legacy
+                            if (budget.storageProtocol === 'internal') {
+                                var blobKey = `blob_${docId}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                                return mBT.data.storage.saveBlob(blobKey, file).then(function () {
+                                    doc.attachments.push({
+                                        name: file.name,
+                                        type: file.type || 'application/octet-stream',
+                                        location: 'internal',
+                                        key: blobKey,
+                                        data: null,
+                                        size: (file.size / 1024).toFixed(1) + ' KB',
+                                        ts: new Date().toISOString()
+                                    });
+                                    saveBudget();
+                                    self.showOptions(docId);
+                                }).catch(function (e) {
+                                    console.error("Blob Storage Failed", e);
+                                    mBTME.alert("Upload Error", "Failed to store file internally.");
+                                });
+                            } else {
+                                // Legacy Base64 Path
+                                var reader = new FileReader();
+                                reader.onload = function (e) {
+                                    doc.attachments.push({
+                                        name: file.name,
+                                        type: file.type || 'application/octet-stream',
+                                        data: e.target.result,
+                                        ts: new Date().toISOString()
+                                    });
+                                    saveBudget();
+                                    // Instant Refresh (No blocking alert)
+                                    self.showOptions(docId);
+                                };
+                                reader.readAsDataURL(file);
+                            }
+                        },
+
+                        // --- NEW: Binary Conversion Utility ---
+                        _base64ToBuffer: function (base64) {
+                            var binary_string = window.atob(base64.split(',')[1]);
+                            var len = binary_string.length;
+                            var bytes = new Uint8Array(len);
+                            for (var i = 0; i < len; i++) {
+                                bytes[i] = binary_string.charCodeAt(i);
+                            }
+                            return bytes.buffer;
+                        },
+
+                        // --- NEW: Universal Preview Engine ---
+                        previewAttachment: function (docId, index) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc || !doc.attachments || !doc.attachments[index]) return;
+                            var self = this;
+
+                            // Hybrid Clone to protect state
+                            var file = {}; var _fSrc = doc.attachments[index]; var _fKeys = Object.keys(_fSrc); for (var _fi = 0; _fi < _fKeys.length; _fi++) { file[_fKeys[_fi]] = _fSrc[_fKeys[_fi]]; }
+                            var name = file.name.toLowerCase();
+
+                            // Resolve Internal Blob, then continue rendering
+                            var blobResolve = (file.location === 'internal' && file.key)
+                                ? mBT.data.storage.loadBlob(file.key).then(function (blobUrl) { file.data = blobUrl; })
+                                : Promise.resolve();
+
+                            return blobResolve.then(function () {
+                                // A. Images: Direct Render
+                                if (file.type.includes('image')) {
+                                    mBTME.open('previewFile', file.name, `<div class="flex justify-center bg-slate-900 p-4"><img src="${file.data}" class="max-w-full h-auto rounded shadow-lg"></div>`, 'max-w-4xl');
+                                    return;
+                                }
+
+                                // B. Binary Buffer Resolution (Legacy Base64 or Blob Fetch)
+                                var bufferPromise;
+                                if (file.location === 'internal') {
+                                    bufferPromise = fetch(file.data).then(function (response) { // file.data is blobUrl here
+                                        return response.arrayBuffer();
+                                    });
+                                } else {
+                                    bufferPromise = Promise.resolve(self._base64ToBuffer(file.data));
+                                }
+
+                                return bufferPromise.then(function (buffer) {
+                                    // C. PDF: Blob URL -> iFrame
+                                    if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+                                        var url;
+                                        if (file.location === 'internal') {
+                                            url = file.data;
+                                        } else {
+                                            var blob = new Blob([buffer], { type: 'application/pdf' });
+                                            url = URL.createObjectURL(blob);
+                                        }
+                                        mBTME.open('previewFile', file.name, `<iframe src="${url}" class="w-full h-[80vh] border-none bg-slate-100"></iframe>`, 'max-w-5xl', { noPadding: true });
+                                    }
+                                    // D. Word (DOCX): Mammoth.js
+                                    else if (name.endsWith('.docx')) {
+                                        if (typeof mammoth === 'undefined') { mBTME.alert("Error", "Word viewer offline."); return; }
+                                        mBTME.showLoader("Converting DOCX...");
+                                        mammoth.convertToHtml({ arrayBuffer: buffer })
+                                            .then(function (result) {
+                                                mBTME.hideLoader();
+                                                mBTME.open('previewFile', file.name, `<div class="prose prose-sm max-w-none p-8 bg-white text-slate-800">${result.value}</div>`, 'max-w-3xl');
+                                            })
+                                            .catch(function (err) { mBTME.hideLoader(); mBTME.alert("Conversion Error", err.message); });
+                                    }
+                                    // E. Excel (XLSX): SheetJS
+                                    else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+                                        if (typeof XLSX === 'undefined') { mBTME.alert("Error", "Excel viewer offline."); return; }
+                                        try {
+                                            var wb = XLSX.read(buffer, { type: 'array' });
+                                            var sheetName = wb.SheetNames[0];
+                                            var html = XLSX.utils.sheet_to_html(wb.Sheets[sheetName]);
+                                            mBTME.open('previewFile', file.name, `<div class="overflow-auto p-4 bg-white text-xs spreadsheet-view">${html}</div>`, 'max-w-5xl');
+                                        } catch (e) { mBTME.alert("Error", "Could not parse spreadsheet."); }
+                                    }
+                                    // Fallback
+                                    else {
+                                        mBTME.alert("Preview Unavailable", "This file type cannot be previewed. Please download it.");
+                                    }
+                                });
+                            });
+                        },
+
+                        // --- NEW: Print Driver (Indirect Iframe Injection) ---
+                        printAttachment: function (docId, index) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc || !doc.attachments || !doc.attachments[index]) return;
+
+                            var file = {}; var _pSrc = doc.attachments[index]; var _pKeys = Object.keys(_pSrc); for (var _pi = 0; _pi < _pKeys.length; _pi++) { file[_pKeys[_pi]] = _pSrc[_pKeys[_pi]]; }
+
+                            // Resolve Internal Blob if needed
+                            var blobResolve = (file.location === 'internal' && file.key)
+                                ? mBT.data.storage.loadBlob(file.key).then(function (blobUrl) { file.data = blobUrl; })
+                                : Promise.resolve();
+
+                            return blobResolve.then(function () {
+                                if (file.type.includes('image') || file.type === 'application/pdf') {
+                                    var iframe = document.createElement('iframe');
+                                    iframe.style.display = 'none';
+                                    iframe.src = file.data;
+                                    document.body.appendChild(iframe);
+
+                                    // Allow buffer time for rendering before print dialog
+                                    iframe.onload = function () {
+                                        setTimeout(function () {
+                                            try {
+                                                iframe.contentWindow.focus();
+                                                iframe.contentWindow.print();
+                                            } catch (e) {
+                                                console.warn("Auto-print failed, opening new tab fallback.");
+                                                window.open(file.data, '_blank');
+                                            }
+                                            // Cleanup
+                                            setTimeout(function () { return document.body.removeChild(iframe); }, 60000);
+                                        }, 500);
+                                    };
+                                } else {
+                                    mBTME.alert("Print Error", "Cannot print this file type directly. Please download it.");
+                                }
+                            });
+                        },
+
+                        // Logic Resolution: Trigger download from internal DataURL
+                        downloadAttachment: function (docId, index) {
+                            var doc = budget.documents.find(function (d) { return d.id === docId; });
+                            if (!doc || !doc.attachments || !doc.attachments[index]) return;
+
+                            var file = doc.attachments[index];
+
+                            // Helper: DataURL to Blob for robust download
+                            var dataURLtoBlob = function (dataurl) {
+                                try {
+                                    var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+                                        bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+                                    while (n--) { u8arr[n] = bstr.charCodeAt(n); }
+                                    return new Blob([u8arr], { type: mime });
+                                } catch (e) {
+                                    console.error("Blob Conversion Failed", e);
+                                    return null;
+                                }
+                            };
+
+                            var doDownload = function (blob) {
+                                // Primary Path: Use Publisher Engine
+                                if (blob && typeof mBTPublisher !== 'undefined' && mBTPublisher.io) {
+                                    mBTPublisher.io.forceDownload(blob, file.name);
+                                }
+                                // Fallback Path: Direct Browser Action
+                                else if (blob) {
+                                    var url = URL.createObjectURL(blob);
+                                    var a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = file.name;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                }
+                            };
+
+                            // Logic Upgrade: Hybrid Download
+                            if (file.location === 'internal' && file.key) {
+                                return mBT.data.storage.loadBlob(file.key).then(function (blobUrl) {
+                                    if (blobUrl) {
+                                        return fetch(blobUrl).then(function (response) {
+                                            return response.blob();
+                                        }).then(function (blob) {
+                                            doDownload(blob);
+                                        });
+                                    }
+                                });
+                            } else {
+                                doDownload(dataURLtoBlob(file.data));
+                            }
+                        },
+
+                        removeAttachment: function (docId, index) {
+                            mBTME.confirm("Remove Attachment", "Delete this file attachment?", function () {
+                                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                                if (doc && doc.attachments) {
+                                    doc.attachments.splice(index, 1);
+                                    saveBudget();
+                                    this.showOptions(docId);
+                                }
+                            });
+                        }
+                    };
+
+                    // --- Global Aliases for Backward Compatibility (Footer Buttons & Switchboard) ---
+                    window.showDocumentsModal = mBT.features.documents.openVault.bind(mBT.features.documents);
+                    window.showNewDocumentSelector = mBT.features.documents.openTemplateSelector.bind(mBT.features.documents);
+                    window.createNewDocumentFromTemplate = mBT.features.documents.createFromTemplate.bind(mBT.features.documents);
+
+                    // (openAddContactModal and renderDatabaseSubView removed from global scope to enforce strict mode)
+
+                    /* ======= Studio Orchestration & Switchboard ======== */
+
+                    /* --- 1. Personnel Hub Intelligence (Interaction behavior) --- */
+                    window.toggleCrewPopup = function (el, event) {
+                        if (event) event.stopPropagation();
+                        var wrapper = el.parentElement;
+                        document.querySelectorAll('.crew-wrapper').forEach(function (div) { if (div !== wrapper) div.classList.remove('mobile-active'); });
+                        wrapper.classList.toggle('mobile-active');
+                    };
+
+                    // Helper for Contact Card Tabs (Phase 8.1 - Tier 6)
+                    window.toggleCrewProfileTab = function (tabId) {
+                        // Toggle Buttons
+                        document.querySelectorAll('.crew-tab-btn').forEach(function (btn) {
+                            var isActive = btn.dataset.tab === tabId;
+                            btn.className = `crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`;
+                        });
+
+                        // Toggle Views
+                        var profile = document.getElementById('tab-profile');
+                        var history = document.getElementById('tab-history');
+
+                        if (tabId === 'profile') {
+                            if (profile) profile.classList.remove('hidden');
+                            if (history) history.classList.add('hidden');
+                        } else {
+                            if (profile) profile.classList.add('hidden');
+                            if (history) history.classList.remove('hidden');
+                        }
+                    };
+
+                    window.openCrewProfile = function (el, event, itemId, sectionName) {
+                        if (event) event.stopPropagation();
+
+                        // --- LOGIC UPDATE: Phase 2 Context Detection ---
+                        var item = null;
+                        var isGlobalEdit = false;
+
+                        // 1. Try finding in Budget (Context: Line Item Click)
+                        if (itemId && sectionName && budget.sections && budget.sections[sectionName]) {
+                            item = budget.sections[sectionName].items.find(function (i) { return i.id === itemId; });
+                        }
+
+                        // 2. Try finding in Global DB (Context: Database Manager Click)
+                        if (!item && !sectionName && itemId && !itemId.startsWith('dummy_')) {
+                            var globalC = mBTOG.contacts.find(function (c) { return c.id === itemId; });
+                            if (globalC) {
+                                item = {
+                                    id: globalC.id,
+                                    crew: { name: globalC.name, phone: globalC.phone, email: globalC.email },
+                                    description: globalC.role || 'Global Contact',
+                                    payments: globalC.payments || []
+                                };
+                                isGlobalEdit = true;
+                            }
+                        }
+
+                        // 3. Fallback to Empty State (Context: Add New)
+                        if (!item) item = { id: itemId || 'temp', crew: { name: '', phone: '', email: '' }, description: 'New Contact' };
+
+                        var crew = item.crew || { name: '', phone: '', email: '' };
+
+                        // --- Render Components ---
+                        // 1. Ledger (History Tab)
+                        var ledgerHtml = '';
+                        if (typeof mBT.ui.render.paymentHistory === 'function') {
+                            // Resolve global payments if local item lacks them but has a name match
+                            var contextForHistory = item;
+                            if (!item.payments && item.crew && item.crew.name) {
+                                var globalC = mBTOG.contacts.find(function (c) { return c.name.toLowerCase() === item.crew.name.toLowerCase(); });
+                                if (globalC) contextForHistory = globalC;
+                            }
+                            ledgerHtml = mBT.ui.render.paymentHistory(contextForHistory);
+                        }
+
+                        // 2. Profile Form (Profile Tab)
+                        var profileHtml = `
+            <div class="space-y-4 pt-2">
+                <div class="flex justify-end">
+                     <button type="button" id="importContactBtn" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">${mBTAssets.plus} Import Contact</button>
+                </div>
+                <div class="space-y-3">
+                    <input type="text" id="crewName" value="${mBT.ui.render.esc(crew.name || '')}" placeholder="FULL NAME" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="tel" id="crewPhone" value="${mBT.ui.render.esc(crew.phone || '')}" placeholder="PHONE" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                        <input type="email" id="crewEmail" value="${mBT.ui.render.esc(crew.email || '')}" placeholder="EMAIL" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    ${!isGlobalEdit && sectionName ? `<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment('${mBT.ui.render.esc(itemId)}', '${mBT.ui.render.esc(sectionName)}')">Unassign</button>` : '<div></div>'}
+                    <button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>
+                </div>
+            </div>`;
+
+                        var content = `
+            <form id="crewProfileForm" class="flex flex-col h-[500px]">
+                <!-- Header -->
+                <div class="text-center relative shrink-0 mb-4">
+                    <div class="w-20 h-20 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-white">
+                        ${crew.name ? mBT.ui.render.esc(crew.name.substring(0, 1).toUpperCase()) : '?'}
+                    </div>
+                    <h3 class="text-lg font-black text-slate-900 mt-2 uppercase tracking-tighter">${mBT.ui.render.esc(crew.name || 'Unknown')}</h3>
+                    <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">${mBT.ui.render.esc(item.description || 'New Contact')}</p>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex bg-slate-100 p-1 rounded-xl shrink-0 mb-4">
+                    <button type="button" data-tab="profile" onclick="toggleCrewProfileTab('profile')" class="crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all bg-white text-blue-600 shadow-sm">Profile</button>
+                    <button type="button" data-tab="history" onclick="toggleCrewProfileTab('history')" class="crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Ledger</button>
+                </div>
+
+                <!-- Content Area -->
+                <div class="flex-grow overflow-hidden relative bg-slate-50 rounded-2xl border border-slate-100">
+                    <div id="tab-profile" class="absolute inset-0 p-5 overflow-y-auto no-scrollbar">
+                        ${profileHtml}
+                    </div>
+                    <div id="tab-history" class="absolute inset-0 overflow-y-auto no-scrollbar hidden">
+                        ${ledgerHtml}
+                    </div>
+                </div>
+            </form>`;
+
+                        mBTME.open('crewProfile', '', content, 'max-w-sm', { hideHeader: true });
+
+                        // Bind events after render
+                        setTimeout(function () {
+                            var form = document.getElementById('crewProfileForm');
+                            if (form) {
+                                form.addEventListener('submit', function (e) {
+                                    e.preventDefault();
+                                    var name = document.getElementById('crewName').value.trim();
+                                    var phone = document.getElementById('crewPhone').value.trim();
+                                    var email = document.getElementById('crewEmail').value.trim();
+
+                                    if (itemId && itemId.startsWith('dummy_new_contact')) {
+                                        if (!name) return mBTME.alert("Required", "Name is required.");
+                                        mBTOG.contacts.push({ id: 'c_' + Date.now(), name, role: 'Crew', phone, email });
+                                        mBTOG.saveContacts();
+                                        mBTME.close('crewProfileModal');
+                                        if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
+                                    }
+                                    else if (isGlobalEdit) {
+                                        var gIdx = mBTOG.contacts.findIndex(function (c) { return c.id === itemId; });
+                                        if (gIdx > -1) {
+                                            mBTOG.contacts[gIdx].name = name;
+                                            mBTOG.contacts[gIdx].phone = phone;
+                                            mBTOG.contacts[gIdx].email = email;
+                                            mBTOG.saveContacts();
+                                            mBTME.close('crewProfileModal');
+                                            if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
+                                        }
+                                    }
+                                    else if (item) {
+                                        item.crew = { name, phone, email };
+                                        mBTME.close('crewProfileModal');
+                                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                                        if (typeof render === 'function') render();
+                                        if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                                    }
+                                });
+                            }
+
+                            var importBtn = document.getElementById('importContactBtn');
+                            if (importBtn) {
+                                importBtn.addEventListener('click', function () {
+                                    if ('contacts' in navigator && 'ContactsManager' in window) {
+                                        navigator.contacts.select(['name', 'tel', 'email'], { multiple: false }).then(function (contacts) {
+                                            if (contacts.length) {
+                                                var c = contacts[0];
+                                                if (c.name && c.name[0]) document.getElementById('crewName').value = c.name[0];
+                                                if (c.tel && c.tel[0]) document.getElementById('crewPhone').value = c.tel[0];
+                                                if (c.email && c.email[0]) document.getElementById('crewEmail').value = c.email[0];
+                                            }
+                                        }).catch(function (ex) { console.log('Contact Import cancelled'); });
+                                    } else { mBTME.alert("Not Supported", "Contact import not available in this browser."); }
+                                });
+                            }
+                        }, 50);
+                    };
+
+                    window.clearCrewAssignment = function (itemId, sectionName) {
+                        mBTME.confirm("Remove Assignment", "Remove this crew assignment?", function () {
+                            var item = budget.sections[sectionName].items.find(function (i) { return i.id === itemId; });
+                            if (item) {
+                                delete item.crew;
+                                mBTME.close('crewProfileModal');
+                                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                                if (typeof render === 'function') render();
+                                if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                            }
+                        });
+                    };
+
+                    /* --- 2. Stage & Analytics Interface (Orchestration) --- */
+
+                    // UI Helpers for Stages Modal
+                    window.handleStageAddItem = function (stageKey) {
+                        var sectionNames = Object.keys(budget.sections);
+                        var targetSectionName = sectionNames.find(function (s) { return s.toLowerCase().includes('production'); }) || sectionNames[0];
+
+                        // Intelligent Section Guessing
+                        if (stageKey === 'post') targetSectionName = sectionNames.find(function (s) { return /post|edit/.test(s.toLowerCase()); }) || targetSectionName;
+                        else if (stageKey === 'dev') targetSectionName = sectionNames.find(function (s) { return /dev|creative/.test(s.toLowerCase()); }) || targetSectionName;
+
+                        var existingItems = [];
+                        Object.entries(budget.sections).forEach(function ([secName, sec]) {
+                            sec.items.forEach(function (i) {
+                                if (!(i.stageData && i.stageData[stageKey])) {
+                                    var _eC = {}; var _eK = Object.keys(i); for (var _ei = 0; _ei < _eK.length; _ei++) { _eC[_eK[_ei]] = i[_eK[_ei]]; } _eC.isExisting = true; _eC.sectionName = secName;
+                                    existingItems.push(_eC);
+                                }
+                            });
+                        });
+
+                        var initialList = existingItems.slice(0, 10).concat(mBTOG.rates.slice(0, 20));
+                        var content = `
+            <div class="flex flex-col h-[400px]">
+                <div class="mb-3"><input type="text" id="stageDbSearch" placeholder="Search..." class="w-full p-3 border rounded-lg shadow-sm text-sm font-bold"></div>
+                <div id="stageDbList" class="flex-grow overflow-y-auto border rounded-lg bg-gray-50 mb-3">${renderStageDatabaseList(initialList, stageKey, targetSectionName)}</div>
+                <button id="toggleStageCustomForm" class="text-xs text-blue-600 font-bold hover:underline mb-2">+ Create Custom Item</button>
+                <div id="stageCustomForm" class="hidden space-y-3 border-t pt-3 bg-white">
+                    <input type="text" id="stageCustomDesc" class="w-full p-2 border rounded text-sm" placeholder="Item Name">
+                    <div class="flex gap-2"><input type="number" id="stageCustomRate" class="flex-1 p-2 border rounded text-sm" placeholder="0.00"><select id="stageCustomUnit" class="w-1/3 p-2 border rounded text-sm"><option>Day</option><option>Flat</option></select></div>
+                    <button id="stageAddCustomBtn" class="w-full py-2 bg-blue-600 text-white font-bold rounded">Add Item</button>
+                </div>
+            </div>`;
+
+                        mBTME.open('stageAdd', `Add to ${budget.targetLock.stages[stageKey].label}`, content, 'max-w-sm');
+
+                        // Attach Listeners
+                        var searchInput = document.getElementById('stageDbSearch');
+                        if (searchInput) searchInput.addEventListener('input', function (e) {
+                            var term = e.target.value.toLowerCase();
+                            var filtered = existingItems.concat(mBTOG.rates).filter(function (i) { return i.description.toLowerCase().includes(term); }).slice(0, 30);
+                            document.getElementById('stageDbList').innerHTML = renderStageDatabaseList(filtered, stageKey, targetSectionName);
+                        });
+
+                        var _toggleStageCustomForm = document.getElementById('toggleStageCustomForm');
+                        if (_toggleStageCustomForm) _toggleStageCustomForm.addEventListener('click', function (e) {
+                            document.getElementById('stageCustomForm').classList.toggle('hidden');
+                            document.getElementById('stageDbList').classList.toggle('hidden');
+                        });
+
+                        var _stageAddCustomBtn = document.getElementById('stageAddCustomBtn');
+                        if (_stageAddCustomBtn) _stageAddCustomBtn.addEventListener('click', function () {
+                            var desc = document.getElementById('stageCustomDesc').value.trim();
+                            var rate = parseFloat(document.getElementById('stageCustomRate').value) || 0;
+                            var unit = document.getElementById('stageCustomUnit').value;
+                            if (desc) addStageItemToBudget(desc, rate, unit, stageKey, targetSectionName);
+                        });
+                    };
+
+                    window.renderStageDatabaseList = function (items, stageKey, targetSectionName) {
+                        if (!items.length) return `<div class="p-4 text-center text-xs text-gray-400">No matches.</div>`;
+                        return items.map(function (item) {
+                            return `
+            <div onclick="${item.isExisting ? `assignItemToStage('${RenderEngine.esc(item.id)}', '${RenderEngine.esc(stageKey)}')` : `addStageItemToBudget('${RenderEngine.esc(item.description)}', ${item.rate}, '${RenderEngine.esc(item.unit)}', '${RenderEngine.esc(stageKey)}', '${RenderEngine.esc(targetSectionName)}')`}" 
+                 class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">
+                <div><div class="text-sm font-bold text-gray-700">${item.description}</div>${item.isExisting ? `<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ${item.sectionName}</div>` : ''}</div>
+                <div class="font-mono text-xs text-gray-500 font-bold">${mBTLE.format.currency(item.rate)}</div>
+            </div>`;
+                        }).join('');
+                    };
+
+                    window.assignItemToStage = function (itemId, stageKey) {
+                        var item = null;
+                        Object.values(budget.sections).forEach(function (sec) { if (!item) item = sec.items.find(function (i) { return i.id === itemId; }); });
+                        if (item) {
+                            if (!item.stageData) item.stageData = {};
+                            if (!item.stageData[stageKey]) {
+                                item.stageData[stageKey] = { days: 1, rate: item.rate || 0 };
+                                saveBudget();
+                                mBTME.close('stageAddModal');
+                                if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                                mBTLE.reconcile();
+                            }
+                        }
+                    };
+
+                    window.addStageItemToBudget = function (desc, rate, unit, stageKey, targetSectionName) {
+                        var newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit, multiplier: 1, rate, actual: 0, rateType: 'negotiable', stageData: {} };
+                        newItem.stageData[stageKey] = { days: 1, rate };
+                        if (budget.sections[targetSectionName]) {
+                            budget.sections[targetSectionName].items.push(newItem);
+                            mBTME.close('stageAddModal');
+                            saveBudget();
+                            if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                            if (typeof render === 'function') render();
+                        }
+                    };
+
+                    // Stage Drag & Drop
+                    window.handleStageDragStart = function (e, itemId, sourceStage) { e.dataTransfer.setData('text/plain', JSON.stringify({ itemId: itemId, sourceStage: sourceStage })); };
+                    window.handleStageDragOver = function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+                    window.handleStageDrop = function (e, targetStage) {
+                        e.preventDefault();
+                        var data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                        var itemId = data.itemId;
+                        var sourceStage = data.sourceStage;
+                        if (sourceStage === targetStage) return;
+                        var item = null;
+                        Object.values(budget.sections).forEach(function (sec) { if (!item) item = sec.items.find(function (i) { return i.id === itemId; }); });
+                        if (item && item.stageData && item.stageData[sourceStage]) {
+                            var clonedData = {};
+                            var srcKeys = Object.keys(item.stageData[sourceStage]);
+                            for (var ci = 0; ci < srcKeys.length; ci++) { clonedData[srcKeys[ci]] = item.stageData[sourceStage][srcKeys[ci]]; }
+                            item.stageData[targetStage] = clonedData; // Clone to new stage
+                            saveBudget();
+                            showStagesModal();
+                        }
+                    };
+
+                    window.updateStageItem = function (itemId, sectionName, stageKey, field, value, isRealTime = false) {
+                        var item = (budget.sections[sectionName] && budget.sections[sectionName].items.find(function (i) { return i.id === itemId; }));
+                        if (item && item.stageData && item.stageData[stageKey]) {
+                            item.stageData[stageKey][field] = parseFloat(value) || 0;
+
+                            // Surgical Paint: Update Card Cost Immediately
+                            var days = item.stageData[stageKey].days || 0;
+                            var rate = item.stageData[stageKey].rate || 0;
+                            var cost = days * rate;
+                            var costEl = document.getElementById(`cost-${itemId}-${stageKey}`);
+                            if (costEl) costEl.innerText = mBTLE.format.currency(cost);
+
+                            // Update Headers & Main Budget
+                            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+                            mBTLE.reconcile();
+                            if (typeof mBT.ui.paint === 'function') mBT.ui.paint();
+
+                            // Save Strategy: Debounce if realtime
+                            if (isRealTime) {
+                                if (mBT.features.stages.state._timer) clearTimeout(mBT.features.stages.state._timer);
+                                mBT.features.stages.state._timer = setTimeout(saveBudget, 1000);
+                            } else {
+                                // Fix: Clear any pending debounce to prevent double-save on blur
+                                if (mBT.features.stages.state._timer) clearTimeout(mBT.features.stages.state._timer);
+                                saveBudget();
+                            }
+                        }
+                    };
+
+                    window.handleStageBulkAction = function (action) {
+                        var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+                        if (action === 'lockAll' || action === 'unlockAll') {
+                            validKeys.forEach(function (k) { return budget.targetLock.stages[k].locked = (action === 'lockAll'); });
+                            saveBudget();
+                            window.showStagesModal();
+                        } else if (action === 'syncDays') {
+                            mBTME.confirm("Sync Duration", "Overwrite individual item days with Stage settings?", function () {
+                                validKeys.forEach(function (k) {
+                                    var d = budget.targetLock.stages[k].days;
+                                    if (d > 0) Object.values(budget.sections).forEach(function (s) { return s.items.forEach(function (i) { if (i.stageData && i.stageData[k]) i.stageData[k].days = d; }); });
+                                });
+                                saveBudget();
+                                window.showStagesModal();
+                            });
+                        }
+                    };
+
+                    // --- TIER 5 UPGRADE: Manual Duration Handler (Phase 2 Fix) ---
+                    window.updateStageDuration = function (stageKey, value) {
+                        if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
+
+                        // 1. Update Data Model — create key if Stages tool hasn't visited it yet
+                        var days = parseFloat(value) || 0;
+                        if (!budget.targetLock.stages[stageKey]) {
+                            budget.targetLock.stages[stageKey] = { label: stageKey.toUpperCase(), ratio: 20, days: 0, locked: false };
+                        }
+                        budget.targetLock.stages[stageKey].days = days;
+
+                        // 2. Persist
+                        saveBudget();
+
+                        // 3. Trigger Temporal Engine (Updates Dates instantly)
+                        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+
+                        // 4. Update Logic Engine (Burn Rates)
+                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    };
+
+                    // --- TIER 5 UPGRADE: Smart Sync Controller ---
+                    window.syncStageDays = function (stageKey) {
+                        // 1. Ask Tier 3 for the Truth
+                        var validation = mBT.logic.stages.validateTimeline(stageKey);
+
+                        if (validation.maxNeeded > 0) {
+                            // 2. Update the Governor (User Input) to match Reality
+                            if (!budget.targetLock.stages[stageKey]) return;
+
+                            budget.targetLock.stages[stageKey].days = validation.maxNeeded;
+
+                            // 3. Persist & Refresh
+                            saveBudget();
+                            mBTLE.reconcile(); // Recalc burn rates
+
+                            // 4. Update UI (Removes Red Warning)
+                            if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                        } else {
+                            mBTME.alert("Sync Info", "No scheduled items found in this stage to sync with.");
+                        }
+                    };
+
+                    // --- NEW: Smart Auto-Fill Logic (Tier 5 Bridge) ---
+                    window.handleStageAutoFill = function (stageKey, mode = 'link') {
+                        var stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
+                        var count = 0;
+
+                        if (mode === 'link') {
+                            var matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
+                            if (matches.length === 0) return mBTME.alert("No Matches", "No matching items found to link.");
+
+                            matches.forEach(function (item) {
+                                if (!item.stageData) item.stageData = {};
+                                item.stageData[stageKey] = { days: 1, rate: item.rate };
+                                count++;
+                            });
+                        }
+                        else if (mode === 'generate') {
+                            var missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
+                            if (missing.length === 0) return mBTME.alert("Complete", "No missing essentials found.");
+
+                            // Determine target section
+                            var sectionNames = Object.keys(budget.sections);
+                            var targetSec = sectionNames.find(function (s) { return s.toLowerCase().includes('production'); }) || sectionNames[0];
+                            if (stageKey === 'post') targetSec = sectionNames.find(function (s) { return /post|edit/.test(s.toLowerCase()); }) || targetSec;
+                            else if (stageKey === 'dev') targetSec = sectionNames.find(function (s) { return /dev|creative/.test(s.toLowerCase()); }) || targetSec;
+
+                            if (!budget.sections[targetSec]) return mBTME.alert("Error", "Target section not found.");
+
+                            missing.forEach(function (dbItem) {
+                                var newItem = {
+                                    id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                                    description: dbItem.description,
+                                    quantity: 1,
+                                    unit: dbItem.unit,
+                                    rate: dbItem.rate,
+                                    multiplier: 1,
+                                    actual: 0,
+                                    rateType: 'negotiable',
+                                    stageData: {}
+                                };
+                                newItem.stageData[stageKey] = { days: 1, rate: dbItem.rate };
+                                budget.sections[targetSec].items.push(newItem);
+                                count++;
+                            });
+                        }
+
+                        if (count > 0) {
+                            saveBudget();
+                            mBTLE.reconcile();
+                            if (document.getElementById('stagesViewModal')) window.showStagesModal();
+                            mBTME.alert("Auto-Fill Complete", `${count} items processed for ${stageLabel}.`);
+                        }
+                    };
+
+                    window.handleStageBulkAutoFill = function () {
+                        mBTME.confirm("Smart Scan", "Auto-populate ALL stages with existing budget items?", function () {
+                            var total = 0;
+                            var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+
+                            validKeys.forEach(function (k) {
+                                var matches = mBT.features.stages.logic.findMatchesInBudget(k);
+                                matches.forEach(function (item) {
+                                    if (!item.stageData) item.stageData = {};
+                                    item.stageData[k] = { days: 1, rate: item.rate };
+                                    total++;
+                                });
+                            });
+
+                            if (total > 0) {
+                                saveBudget();
+                                mBTLE.reconcile();
+                                window.showStagesModal();
+                                mBTME.alert("Scan Complete", `Smart Scan Linked ${total} items.`);
+                            } else {
+                                mBTME.alert("Scan Complete", "No new matches found.");
+                            }
+                        });
+                    };
+
+                    window.toggleStageLock = function (stageKey) {
+                        if (budget.targetLock.stages[stageKey]) {
+                            budget.targetLock.stages[stageKey].locked = !budget.targetLock.stages[stageKey].locked;
+                            saveBudget();
+                            window.showStagesModal();
+                        }
+                    };
+
+                    // Main Stage Modal Render (Uses Tier 4 Components)
+                    window.showStagesModal = function () {
+                        if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
+                        var tl = budget.targetLock;
+                        var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+                        validKeys.forEach(function (k) { if (!tl.stages[k]) tl.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false }; });
+
+                        // 1. Setup Card (Configuration & Sliders)
+                        var setupCard = `
+        <div id="card-setup" class="stage-card min-w-[320px] w-[320px] flex-shrink-0 bg-slate-900 text-white flex flex-col snap-center border-r border-slate-800 h-full">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-black text-xs uppercase tracking-widest text-slate-400">Configuration</h3>
+                <div class="relative group">
+                    <button class="text-slate-400 hover:text-white transition-colors">${mBTAssets.gear}</button>
+                    <!-- Bulk Actions Menu (Simple absolute positioning) -->
+                    <div class="hidden group-hover:block absolute right-0 top-full mt-2 w-48 bg-white border border-slate-200 shadow-xl rounded-xl z-50 overflow-hidden">
+                        <div class="p-2 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50">Bulk Actions</div>
+                        <button onclick="handleStageBulkAutoFill()" class="w-full text-left text-[10px] font-bold text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 px-4 py-2 transition-colors flex items-center gap-2">
+                             ${mBTAssets.wand} Smart Auto-Fill
+                        </button>
+                        <button onclick="handleStageBulkAction('syncDays')" class="w-full text-left text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 px-4 py-2 transition-colors">Sync Days</button>
+                        <button onclick="handleStageBulkAction('dedupe')" class="w-full text-left text-[10px] font-bold text-slate-600 hover:text-red-600 hover:bg-red-50 px-4 py-2 transition-colors">Remove Dupes</button>
+                        <div class="border-t border-slate-100 my-1"></div>
+                        <button onclick="handleStageBulkAction('lockAll')" class="w-full text-left text-[10px] font-bold text-slate-600 hover:bg-slate-50 px-4 py-2 transition-colors">Lock All</button>
+                        <button onclick="handleStageBulkAction('unlockAll')" class="w-full text-left text-[10px] font-bold text-slate-600 hover:bg-slate-50 px-4 py-2 transition-colors">Unlock All</button>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5 space-y-6 overflow-y-auto no-scrollbar">
+                <!-- TIER 5 UPGRADE: Phase 2 - Temporal Control Center -->
+                <div>
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Project Start Date</label>
+                    <input type="date" value="${budget.startDate || new Date().toISOString().split('T')[0]}" 
+                           onchange="budget.startDate=this.value; saveBudget(); window.updateAllHeaders();" 
+                           class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer uppercase tracking-widest shadow-inner">
+                </div>
+
+                <!-- TIER 5 UPGRADE: Phase 3.2 - Deadline Manager -->
+                <div>
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Target Delivery Date</label>
+                    <input type="date" value="${budget.deliveryDate || ''}" 
+                           onchange="budget.deliveryDate=this.value; saveBudget(); window.updateAllHeaders();" 
+                           class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer uppercase tracking-widest shadow-inner">
+                </div>
+
+                <div>
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Cap Limit</label>
+                    <div class="flex items-center gap-2 border-b border-slate-600 pb-1">
+                        <span class="text-slate-500 text-lg">$</span>
+                        <input type="number" value="${tl.totalCap}" onchange="budget.targetLock.totalCap=parseFloat(this.value); saveBudget(); window.updateAllHeaders();" class="w-full bg-transparent text-xl font-black text-white outline-none no-spinner placeholder-slate-700">
+                    </div>
+                </div>
+                <div class="space-y-5">
+                    ${validKeys.map(function (k) {
+                            return `
+                        <div class="relative">
+                            <div class="flex justify-between text-[9px] font-black uppercase text-slate-400 mb-1.5">
+                                <span class="tracking-widest">${tl.stages[k].label}</span>
+                                <span id="setup_perc_disp_${k}" class="text-white">${tl.stages[k].ratio.toFixed(1)}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-800 rounded-full relative overflow-visible">
+                                <div id="setup_bar_${k}" class="absolute h-full bg-blue-600 rounded-full opacity-80 pointer-events-none transition-all duration-300" style="width:0%"></div>
+                                <input type="range" min="0" max="100" step="0.1" value="${tl.stages[k].ratio}" data-stage-key="${k}" class="stage-slider absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" ${tl.stages[k].locked ? 'disabled' : ''}>
+                                <div id="setup_knob_${k}" class="absolute w-4 h-4 bg-white rounded-full top-1/2 -translate-y-1/2 shadow-md pointer-events-none transition-all duration-75" style="left: ${tl.stages[k].ratio}%; margin-left: -8px;"></div>
+                            </div>
+                        </div>`;
+                        }).join('')}
+                </div>
+                <div class="pt-6 border-t border-slate-800">
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Distribution Model</label>
+                    <select onchange="window.applyStagePreset(this.value); window.showStagesModal();" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors cursor-pointer appearance-none">
+                        <option value="" disabled selected>Load Industry Preset...</option>
+                        ${Object.keys(STAGE_PRESETS).map(function (k) { return `<option value="${k}">${k}</option>`; }).join('')}
+                    </select>
+                </div>
+            </div>
+        </div>`;
+
+                        // 2. Overview Card (Burn Rate & Analytics Link)
+                        var overviewCard = `
+        <div id="card-overview" class="stage-card min-w-[320px] w-[320px] flex-shrink-0 bg-white flex flex-col snap-center border-r border-slate-200 h-full">
+            <div class="p-8 flex flex-col items-center justify-center border-b border-slate-100 flex-grow relative overflow-hidden">
+                <div class="absolute inset-0 bg-slate-50/50 -skew-y-12 scale-150 origin-bottom-left z-0 pointer-events-none"></div>
+                <div id="burnRateRing" class="w-48 h-48 rounded-full border-[16px] border-slate-100 flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm">
+                    <div class="text-center w-full px-4 overflow-hidden">
+                        <span id="burnRateText" class="text-3xl sm:text-5xl font-black text-slate-300 block leading-none tracking-tighter truncate">0%</span>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-2 block truncate">Burn Rate</span>
+                    </div>
+                </div>
+                <div class="text-center w-full z-10 space-y-4">
+                    <div class="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-2">
+                        <span>Estimated</span>
+                        <span id="ovGrandTotal" class="text-slate-800 text-xs">$0.00</span>
+                    </div>
+                    <div class="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <span>Cap Limit</span>
+                        <span id="ovTotalCap" class="text-slate-800 text-xs">$0.00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-white z-10">
+                <button onclick="openAnalyticsHub()" class="w-full py-4 bg-white border-2 border-slate-100 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:shadow-md hover:border-blue-200 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 group">
+                    <span class="scale-125 group-hover:scale-110 transition-transform">${mBTAssets.doctor}</span> Open Analytics Hub
+                </button>
+            </div>
+        </div>`;
+
+                        // 3. Main Modal Structure (Injecting Cards)
+                        // NOTE: Redesigned Navigation to be "Tab-Like" with Glow
+                        var modalWrapper = `
+        <div class="flex flex-col h-[85vh] w-full max-w-[95vw] bg-white rounded-[32px] shadow-2xl overflow-hidden font-sans">
+            <!-- New Compact Tab Navigation (Fit to Width) -->
+            <div class="flex items-center w-full bg-white border-b border-slate-100 h-10 flex-shrink-0 shadow-[0_4px_12px_rgba(0,0,0,0.02)] z-30 sticky top-0 divide-x divide-slate-50">
+                <button id="nav-tab-setup" onclick="document.getElementById('card-setup').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                        class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                    Setup
+                </button>
+                <button id="nav-tab-overview" onclick="document.getElementById('card-overview').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                        class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                    View
+                </button>
+                ${validKeys.map(function (k) {
+                            return `
+                    <button id="nav-tab-${k}" onclick="document.getElementById('card-${k}').scrollIntoView({behavior:'smooth',inline:'center'})" 
+                            class="stage-nav-tab flex-1 h-full flex items-center justify-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition-all select-none min-w-0 px-1 truncate">
+                        ${tl.stages[k].label}
+                    </button>
+                `;
+                        }).join('')}
+            </div>
+            
+            <!-- Content Carousel -->
+            <div id="stagesCarousel" class="flex-grow flex overflow-x-auto snap-x snap-mandatory no-scrollbar cursor-grab active:cursor-grabbing select-none bg-slate-100">
+                ${setupCard}
+                ${overviewCard}
+                ${validKeys.map(function (k) {
+                            var config = tl.stages[k];
+
+                            // TIER 4 VISUALS: Smart Days Validation
+                            var val = mBT.logic.stages.validateTimeline(k);
+                            var syncBtn = (val.maxNeeded > val.current)
+                                ? `<button onclick="syncStageDays('${k}')" class="absolute -right-3 -top-3 bg-amber-500 text-white w-6 h-6 rounded-full shadow-lg hover:bg-amber-600 transition-all z-50 flex items-center justify-center animate-bounce" title="Sync to ${val.maxNeeded} days needed">${mBTAssets.sync}</button>`
+                                : '';
+
+                            var fullTitles = { 'dev': 'Development', 'pre': 'Pre-Production', 'prod': 'Production', 'post': 'Post-Production', 'dist': 'Distribution' };
+                            var displayTitle = fullTitles[k] || config.label;
+
+                            return `
+                    <div id="card-${k}" class="stage-card min-w-[340px] w-[340px] flex-shrink-0 flex flex-col h-full bg-white border-r border-slate-200 snap-center relative group">
+                        <!-- ... Card Content ... -->
+                        <div class="p-4 bg-white border-b border-slate-50 flex-shrink-0 sticky top-0 z-20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]">
+                            <div class="relative flex items-center justify-between mb-4 h-8">
+                                <div class="flex items-center gap-1">
+                                    <button onclick="budget.targetLock.stages['${k}'].locked = !budget.targetLock.stages['${k}'].locked; saveBudget(); showStagesModal();" class="relative z-10 text-slate-300 hover:text-blue-500 transition-colors p-1 hover:bg-slate-50 rounded-lg">
+                                        ${config.locked ? mBTAssets.lock : mBTAssets.unlock}
+                                    </button>
+                                    <button onclick="mBT.features.stages.ui.openAutoFillMenu('${k}')" class="relative z-10 text-slate-300 hover:text-purple-500 transition-colors p-1 hover:bg-purple-50 rounded-lg" title="Auto-Fill Matching Items">
+                                    ${mBTAssets.wand}
+                                </button>
+                            </div>
+                            
+                            <!-- Updated Header: Title + Temporal Projection -->
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <span class="font-black text-xs text-slate-800 uppercase tracking-widest leading-none">
+                                    ${displayTitle}
+                                </span>
+                                <span id="date-range-${k}" class="text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight">--</span>
+                            </div>
+                            
+                            <div class="relative z-10 flex items-center gap-2">
+                                <div class="relative w-14 group/input">
+                                    <input type="number" id="header_perc_${k}" value="${config.ratio.toFixed(1)}" class="stage-number-input w-full text-right text-[10px] font-bold bg-slate-50 rounded-lg px-2 py-1 outline-none no-spinner text-slate-600 focus:text-blue-600 focus:bg-blue-50 focus:ring-2 focus:ring-blue-100 transition-all" data-stage-key="${k}" ${config.locked ? 'disabled' : ''}>
+                                    <span class="absolute right-7 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 group-hover/input:text-blue-400 pointer-events-none">%</span>
+                                </div>
+                                <div class="relative w-12 group/days">
+                                    ${syncBtn}
+                                    <input type="number" value="${config.days}" onchange="updateStageDuration('${k}', this.value)" class="w-full text-center text-[10px] font-bold ${val.maxNeeded > val.current ? 'bg-amber-50 text-amber-600 ring-2 ring-amber-100' : 'bg-slate-50 text-blue-600'} rounded-lg px-1 py-1 outline-none no-spinner focus:ring-2 focus:ring-blue-100 transition-all" placeholder="0">
+                                    <span class="absolute right-1 top-1/2 -translate-y-1/2 text-[6px] text-slate-300 font-black uppercase pointer-events-none">Day</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5 mb-3 overflow-hidden"><div id="bar-${k}" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div></div>
+                        <div class="flex justify-between text-[9px] font-mono font-bold text-slate-400 mb-4"><span id="total-${k}" class="text-slate-600">$0</span><span id="limit-${k}">Cap: $0</span></div>
+                        <button onclick="handleStageAddItem('${k}')" class="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-95">${mBTAssets.plus} Add Item</button>
+                    </div>
+                    <div class="stage-drop-zone flex-grow overflow-y-auto p-3 space-y-3 bg-slate-50/50 no-scrollbar pb-10" data-stage-key="${k}">
+                        ${renderStageItems(k)}
+                    </div>
+                </div>`;
+                        }).join('')}
+            </div>
+        </div>`;
+
+                        mBTME.open('stagesView', '', modalWrapper, 'max-w-none w-fit !bg-transparent !shadow-none !border-0', {
+                            hideHeader: true, noPadding: true, onOpen: function () {
+                                if (typeof initializeStageDragAndDrop === 'function') initializeStageDragAndDrop();
+
+                                // --- NEW: Tab Scroll Spy (Intersection Observer) ---
+                                // This watches the carousel and lights up the matching tab with a glow
+                                var carousel = document.getElementById('stagesCarousel');
+                                var cards = document.querySelectorAll('.stage-card');
+                                var tabs = document.querySelectorAll('.stage-nav-tab');
+
+                                var observer = new IntersectionObserver(function (entries) {
+                                    entries.forEach(function (entry) {
+                                        if (entry.isIntersecting) {
+                                            /* 1. Identify active ID */
+                                            var cardId = entry.target.id;
+                                            var tabId = cardId.replace('card-', 'nav-tab-');
+                                            var activeTab = document.getElementById(tabId);
+
+                                            if (activeTab) {
+                                                /* 2. Reset all tabs */
+                                                tabs.forEach(function (t) {
+                                                    t.classList.remove('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
+                                                    t.classList.add('text-slate-400', 'border-transparent');
+                                                    t.style.textShadow = 'none'; /* Remove glow */
+                                                });
+
+                                                /* 3. Activate current tab */
+                                                activeTab.classList.remove('text-slate-400', 'border-transparent');
+                                                activeTab.classList.add('text-blue-600', 'border-blue-600', 'bg-blue-50/50');
+
+                                                /* 4. Apply the requested GLOW */
+                                                activeTab.style.textShadow = '0 0 12px rgba(37,99,235,0.4)';
+
+                                                /* 5. Ensure tab is visible on mobile nav */
+                                                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                                            }
+                                        }
+                                    });
+                                }, { root: carousel, threshold: 0.6 }); /* 60% visibility required to trigger snap active state */
+
+                                cards.forEach(function (card) { observer.observe(card); });
+
+                                /* Interaction Bindings for Real-time Slider Sync */
+                                var bindInput = function (el) {
+                                    el.addEventListener('input', function (e) {
+                                        if (typeof balanceStageSliders === 'function') balanceStageSliders(e.target.dataset.stageKey, parseFloat(e.target.value));
+                                        if (window.updateAllHeaders) window.updateAllHeaders();
+                                    });
+                                    el.addEventListener('change', function () { saveBudget(); });
+                                };
+                                document.querySelectorAll('.stage-slider').forEach(bindInput);
+                                document.querySelectorAll('.stage-number-input').forEach(bindInput);
+
+                                // NEW: Real-time Item Inputs Listener (Tier 6 emulation for Tier 5 modal)
+                                document.querySelectorAll('input[data-action="stage-update"]').forEach(function (el) {
+                                    el.addEventListener('input', function (e) {
+                                        updateStageItem(e.target.dataset.id, e.target.dataset.section, e.target.dataset.stage, e.target.dataset.field, e.target.value, true);
+                                    });
+                                });
+
+                                window.updateAllHeaders();
+
+                                // Drag to Scroll Logic
+                                var slider = document.getElementById('stagesCarousel');
+                                if (slider) {
+                                    var isDown = false; var startX; var scrollLeft;
+                                    slider.addEventListener('mousedown', function (e) {
+                                        if (['INPUT', 'BUTTON', 'SELECT'].indexOf(e.target.tagName) !== -1 || e.target.closest('.stage-draggable')) return;
+                                        isDown = true; startX = e.pageX - slider.offsetLeft; scrollLeft = slider.scrollLeft;
+                                    });
+                                    slider.addEventListener('mouseleave', function () { isDown = false; });
+                                    slider.addEventListener('mouseup', function () { isDown = false; });
+                                    slider.addEventListener('mousemove', function (e) {
+                                        if (!isDown) return; e.preventDefault();
+                                        var x = e.pageX - slider.offsetLeft;
+                                        slider.scrollLeft = scrollLeft - (x - startX) * 2;
+                                    });
+                                }
+                            }
+                        });
+                    };
+                    function renderStageItems(stageKey) {
+                        var stageItems = [];
+
+                        // 1. Collect all items for this stage
+                        Object.keys(budget.sections).forEach(function (secName) {
+                            var sec = budget.sections[secName];
+                            sec.items.forEach(function (item) {
+                                if (item.stageData && item.stageData[stageKey]) {
+                                    stageItems.push({
+                                        item: item,
+                                        secName: secName,
+                                        // Default to large number if no order exists so they go to end
+                                        order: (item.stageData[stageKey].order !== undefined) ? item.stageData[stageKey].order : 99999
+                                    });
+                                }
+                            });
+                        });
+
+                        // 2. Sort based on 'order' property
+                        stageItems.sort(function (a, b) { return a.order - b.order; });
+
+                        if (stageItems.length === 0) return '<p class="text-[8px] text-center mt-10 font-black text-slate-300 uppercase">Drop Items Here</p>';
+
+                        // 3. Render
+                        return stageItems.map(function (entry) {
+                            var cardData = {};
+                            var itemKeys = Object.keys(entry.item);
+                            for (var ki = 0; ki < itemKeys.length; ki++) {
+                                cardData[itemKeys[ki]] = entry.item[itemKeys[ki]];
+                            }
+                            cardData._sDays = entry.item.stageData[stageKey].days;
+                            cardData._sRate = entry.item.stageData[stageKey].rate;
+                            cardData._sec = entry.secName;
+                            return RenderEngine.stageCard(cardData, stageKey);
+                        }).join('');
+                    }
+                    // --- Global Stages Header Update Logic (Available before modal open) ---
+                    window.updateAllHeaders = function () {
+                        // Safety check
+                        if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
+
+                        /* Phase 118.5: perspective converter — display-only, non-destructive */
+                        var conv = function (v) { return (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(v) : (parseFloat(v) || 0); };
+
+                        var metrics = mBTStagesEngine.getMetrics();
+                        var burn = mBTStagesEngine.getBurnStatus(metrics.grandTotal, metrics.totalCap);
+
+                        // --- Phase 3.4: The Messenger (Intelligent Risk Visuals) ---
+                        // We fetch the deep risk analysis calculated by the Logic Engine
+                        var timeline = mBTStagesEngine.calculateTimeline();
+                        var risk = mBTStagesEngine.analyzeRisk(metrics, timeline);
+
+                        // Logic Resolution: Risk Override
+                        // If a risk is detected (Critical or Warning), it overrides the standard financial display
+                        if (risk) {
+                            if (risk.status === 'CRITICAL') {
+                                burn.color = 'text-rose-600';
+                                burn.ring = 'border-rose-500';
+                                burn.message = "CRITICAL";
+                                burn.subMessage = risk.subMessage; // "Projected $X exceeds Cap"
+                            } else if (risk.status === 'WARNING') {
+                                burn.ring = 'border-amber-400';
+                                if (burn.color !== 'text-red-600') burn.color = 'text-amber-500';
+                                burn.message = "DELAY";
+                                burn.subMessage = risk.subMessage; // "Est. Penalty: $X"
+                            }
+
+                        }
+
+                        // Update Overview Card (Visuals)
+                        var ovGrandTotal = document.getElementById('ovGrandTotal');
+                        var ovTotalCap = document.getElementById('ovTotalCap');
+
+                        if (ovGrandTotal) ovGrandTotal.innerText = mBTLE.format.currency(conv(metrics.grandTotal));
+                        if (ovTotalCap) ovTotalCap.innerText = mBTLE.format.currency(conv(metrics.totalCap));
+
+                        // Update Burn Ring
+                        var ring = document.getElementById('burnRateRing');
+                        var ringTxt = document.getElementById('burnRateText');
+                        var ringLabel = ringTxt ? ringTxt.nextElementSibling : null; // "Burn Rate" text
+
+                        if (ring && ringTxt) {
+                            ring.className = 'w-48 h-48 rounded-full border-[16px] ' + burn.ring + ' flex items-center justify-center relative mb-8 transition-all duration-500 z-10 bg-white shadow-sm';
+                            ringTxt.className = 'text-3xl sm:text-5xl font-black ' + burn.color + ' block leading-none tracking-tighter truncate';
+
+                            if (burn.message) {
+                                // Time Alert Mode
+                                ringTxt.innerText = burn.message;
+                                ringTxt.style.fontSize = ""; // Reset inline style, rely on class
+                                ringTxt.classList.remove('text-5xl', 'sm:text-5xl');
+                                ringTxt.classList.add('text-2xl', 'sm:text-3xl'); // Smaller for text messages
+
+                                if (ringLabel) {
+                                    ringLabel.innerText = burn.subMessage || "SCHEDULE CRITICAL";
+                                    ringLabel.className = "text-[9px] font-black uppercase tracking-widest text-rose-500 mt-2 block animate-pulse truncate";
+                                }
+                            } else {
+                                // Standard Financial Mode
+                                ringTxt.innerText = Math.round(burn.pct) + '%';
+                                ringTxt.classList.remove('text-2xl', 'sm:text-3xl');
+                                ringTxt.classList.add('text-3xl', 'sm:text-5xl');
+
+                                if (ringLabel) {
+                                    ringLabel.innerText = "Burn Rate";
+                                    ringLabel.className = "text-[9px] font-black uppercase tracking-widest text-slate-400 mt-2 block truncate";
+                                }
+                            }
+                        }
+
+                        // Phase 101: Tem    l Projections delegated to Calendar component
+                        if (window.mBT && window.mBT.ui && window.mBT.ui.calendar) {
+                            window.mBT.ui.calendar.update();
+                        }
+
+                        // 3. Update Setup Sliders (Visual Synchronization)
+                        var stages = budget.targetLock.stages;
+                        var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
+
+                        validKeys.forEach(function (k) {
+                            var cfg = stages[k];
+                            if (!cfg) return;
+
+                            // A. Update Text Display (Target Ratio)
+                            var disp = document.getElementById('setup_perc_disp_' + k);
+                            if (disp) disp.innerText = (cfg.ratio || 0).toFixed(1) + '%';
+
+                            // B. Update Bar Width (ACTUAL UTILIZATION)
+                            var stageCost = (metrics.stageTotals && metrics.stageTotals[k]) ? metrics.stageTotals[k] : 0;
+                            var stageCap = metrics.totalCap * ((cfg.ratio || 0) / 100);
+                            var utilPct = stageCap > 0 ? (stageCost / stageCap) * 100 : 0;
+
+                            var bar = document.getElementById('setup_bar_' + k);
+                            if (bar) {
+                                bar.style.width = Math.min(utilPct || 0, 100).toFixed(2) + '%';
+                                bar.className = 'absolute h-full rounded-full opacity-80 pointer-events-none transition-all duration-300 ' + (stageCost > stageCap ? 'bg-red-500' : 'bg-blue-600');
+                            }
+
+                            // C. Update Knob Position (TARGET STRATEGY)
+                            var knob = document.getElementById('setup_knob_' + k);
+                            if (knob) knob.style.left = cfg.ratio + '%';
+
+                            // D. Update Card Stats
+                            var totalEl = document.getElementById('total-' + k);
+                            var limitEl = document.getElementById('limit-' + k);
+                            if (totalEl) totalEl.innerText = mBTLE.format.currency(conv(stageCost));
+                            if (limitEl) limitEl.innerText = 'Cap: ' + mBTLE.format.currency(conv(stageCap));
+                        });
+                    };
+
+                    /* ========= v19.54 CONNECTIVE UI & Interaction Handlers ========= */
+
+                    function updateUndoRedoButtons() {
+                        var undoBtn = document.getElementById('undoBtn');
+                        var redoBtn = document.getElementById('redoBtn');
+                        if (!undoBtn || !redoBtn) return;
+                        var canUndo = historyIndex > 0;
+                        var canRedo = historyIndex < historyStack.length - 1;
+                        undoBtn.disabled = !canUndo;
+                        redoBtn.disabled = !canRedo;
+                        undoBtn.style.opacity = canUndo ? '1' : '0.35';
+                        redoBtn.style.opacity = canRedo ? '1' : '0.35';
+                    }
+
+                    /* Phase 94.2: var/var/template-literal/optional-chain → ES5 */
+                    function renderStatusBar() {
+                        var container = document.getElementById('statusBar');
+                        if (!container) return;
+
+                        var isRecording = budget.activityLog && budget.activityLog.length > 0;
+
+                        /* Tier 4 Logic: Prioritize Modern Audit Log > Legacy History Stack > Default */
+                        var lastAction = 'Ready to Go!';
+                        if (isRecording) {
+                            var lastEntry = budget.activityLog[budget.activityLog.length - 1];
+                            var safeAction = mBT.ui.render.esc(lastEntry.action);
+                            var safeTarget = mBT.ui.render.esc(lastEntry.target);
+                            lastAction = safeAction + ': ' + safeTarget;
+                        } else if (typeof historyStack !== 'undefined' && historyStack.length > 0) {
+                            var snap = historyStack[historyIndex];
+                            lastAction = (snap && snap.description) ? snap.description : 'Ready to Go!';
+                        }
+
+                        container.innerHTML =
+                            '<div class="flex items-center justify-between w-full h-full px-2">' +
+                            '<div class="flex items-center gap-3 overflow-hidden mr-4 flex-1 min-w-0">' +
+                            '<div class="flex items-center gap-2 shrink-0">' +
+                            '<span class="relative flex h-2 w-2">' +
+                            (isRecording ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>' : '') +
+                            '<span class="relative inline-flex rounded-full h-2 w-2 ' + (isRecording ? 'bg-red-500' : 'bg-slate-600') + '"></span>' +
+                            '</span>' +
+                            '<span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">REC</span>' +
+                            '</div>' +
+                            '<div class="w-px h-3 bg-slate-800"></div>' +
+                            '<span class="truncate font-mono text-slate-400 text-[10px] uppercase tracking-widest">' + lastAction + '</span>' +
+                            '</div>' +
+                            '<button onclick="mBT.features.history.open()" class="flex items-center gap-2 hover:text-blue-400 transition-colors group cursor-pointer shrink-0" title="View Activity Log &amp; Undo Changes">' +
+                            '<span class="text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors hidden sm:block">Activity History</span>' +
+                            '<div class="w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:text-slate-900 transition-all shadow-sm border border-slate-700">' +
+                            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>' +
+                            '</div></button>' +
+                            '</div>';
+                    }
+
+                    function renderCurrencyBtn() {
+                        var cur = FILM_CURRENCIES.find(function (c) { return c.code === displayCurrency; }) || FILM_CURRENCIES[0];
+                        var btn = document.getElementById('currencyBtn');
+                        var codeEl = document.getElementById('currencyBtnCode');
+                        if (btn) btn.style.background = cur.bg;
+                        if (codeEl) codeEl.innerHTML =
+                            '<span style="color:' + cur.c1 + '">' + cur.cc[0] + '</span>' +
+                            '<span style="color:' + cur.c2 + '">' + cur.cc[1] + '</span>';
+
+                        var pop = document.getElementById('currencyPopover');
+                        if (!pop) return;
+                        var _isLocked = mBT.logic && mBT.logic.currency && mBT.logic.currency.isLocked();
+                        pop.innerHTML = FILM_CURRENCIES.map(function (c) {
+                            var isActive = c.code === displayCurrency;
+                            var badge =
+                                '<span class="inline-flex items-center justify-center w-9 h-6 rounded text-[15px] font-black tracking-tight shrink-0" ' +
+                                'style="background:' + c.bg + '">' +
+                                '<span style="color:' + c.c1 + '">' + c.cc[0] + '</span>' +
+                                '<span style="color:' + c.c2 + '">' + c.cc[1] + '</span>' +
+                                '</span>';
+                            return '<button data-currency-code="' + c.code + '" ' +
+                                'style="background:' + (isActive ? 'rgba(255,255,255,0.08)' : 'transparent') + '" ' +
+                                'class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-all text-left hover:bg-white/10">' +
+                                badge +
+                                '<span class="text-[10px] font-black uppercase tracking-widest ' + (isActive ? 'text-white' : 'text-slate-400') + '">' + c.code + '</span>' +
+                                '</button>';
+                        }).join('') +
+                            /* Phase 118: Rate lock toggle */
+                            '<div class="h-px bg-white/10 my-1"></div>' +
+                            '<button onclick="if(mBT.logic&&mBT.logic.currency){mBT.logic.currency.isLocked()?mBT.logic.currency.unlock():mBT.logic.currency.lock();}" ' +
+                            'class="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-all text-left hover:bg-white/10">' +
+                            '<span class="text-[10px] font-black uppercase tracking-widest ' + (_isLocked ? 'text-amber-400' : 'text-slate-400') + '">' +
+                            (_isLocked ? 'Rates: Locked' : 'Rates: Live') + '</span>' +
+                            '<span class="ml-auto text-[8px] font-black uppercase ' + (_isLocked ? 'text-amber-300' : 'text-emerald-400') + '">' + (_isLocked ? 'Unlock' : 'Lock') + '</span>' +
+                            '</button>';
+                    }
+
+                    function handleUndo() {
+                        if (historyIndex > 0) {
+                            historyIndex--;
+                            budget = mBTState.wrap(JSON.parse(JSON.stringify(historyStack[historyIndex].budget)));
+                            render();
+                        }
+                    }
+                    function handleRedo() {
+                        if (historyIndex < historyStack.length - 1) {
+                            historyIndex++;
+                            budget = mBTState.wrap(JSON.parse(JSON.stringify(historyStack[historyIndex].budget)));
+                            render();
+                        }
+                    }
+
+                    function handleNewProjectSelection(e) { /* Stub kept for safety */ }
+
+                    /* Phase 94.2: Thin wrapper — delegates directly to mBT.data.importFile.
+                       var removed; preliminary validation removed to avoid double-parsing. */
+                    function handleImportFile(input) {
+                        if (!input || !input.files || !input.files[0]) return;
+                        mBT.data.importFile(input);
+                    }
+
+                    /* Phase 94.2: var/var/arrow → ES5 */
+                    window.importContactsCSV = function (input) {
+                        var file = input.files[0];
+                        if (!file) return;
+                        var reader = new FileReader();
+                        reader.onload = function (e) {
+                            var text = e.target.result;
+                            if (!text) return;
+                            var lines = text.split(/\r\n|\n/);
+                            if (lines.length < 2) return mBTME.alert('Error', 'Invalid CSV format.');
+                            var headers = lines[0].split(',').map(function (h) { return h.trim(); });
+                            var contacts = [];
+                            for (var i = 1; i < lines.length; i++) {
+                                var line = lines[i].trim();
+                                if (!line) continue;
+                                var values = line.split(',');
+                                var obj = {};
+                                headers.forEach(function (h, idx) {
+                                    var val = values[idx] ? values[idx].trim() : '';
+                                    if (val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') val = val.slice(1, -1);
+                                    obj[h] = val;
+                                });
+                                contacts.push(obj);
+                            }
+                            var count = mBTOG.ingest(contacts, 'contact');
+                            if (count > 0) {
+                                mBTME.alert('Success', count + ' new contacts imported.', function () {
+                                    if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
+                                });
+                            } else {
+                                mBTME.alert('Info', 'Import completed. No new contacts added.');
+                            }
+                            input.value = '';
+                        };
+                        reader.readAsText(file);
+                    };
+
+                    /* ========= v1.0 Global Error Boundary v1.0 ========= */
+
+                    /* --- Unhandled promise rejection catcher --- */
+                    window.addEventListener('unhandledrejection', function (event) {
+                        console.error('[mBT] Unhandled rejection:', event.reason);
+                        if (event.reason && event.reason.name === 'QuotaExceededError') {
+                            event.preventDefault();
+                            if (typeof mBTME !== 'undefined') {
+                                mBTME.alert('Storage Full', 'Browser storage is at capacity. Export your data from the Supabase tool or use backup-env, then clear browser data to free space.');
+                            }
+                        }
+                    });
+
+                    /* --- Storage quota event from IDB layer --- */
+                    window.addEventListener('mbt:quota-exceeded', function (event) {
+                        if (typeof mBTME !== 'undefined') {
+                            mBTME.alert('Storage Full', 'IndexedDB quota exceeded. Export your data from Cloud Backup or use the export button before continuing.');
+                        }
+                    });
+
+                    /* --- Global JS error logger --- */
+                    window.onerror = function (msg, src, line, col, err) {
+                        console.error('[mBT] Error:', msg, 'at', src + ':' + line + ':' + col);
+                        return false;
+                    };
+
+                    /* ================= v19.54 TIER 6: SYSTEM IGNITION & EVENTS ================= */
+
+                    /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
+                    if ('serviceWorker' in navigator) {
+                        window.addEventListener('load', function () {
+                            navigator.serviceWorker.register('./sw.js?v=21', { scope: './', updateViaCache: 'none' })
+                                .then(function (reg) {
+                                    console.log('SW Synchronization active:', reg.scope);
+                                    reg.onupdatefound = function () {
+                                        var installingWorker = reg.installing;
+                                        installingWorker.onstatechange = function () {
+                                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                                mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", function () {
+                                                    window.location.reload();
+                                                });
+                                            }
+                                        };
+                                    };
+                                })
+                                .catch(function (err) { console.log('Service Worker initialization failure:', err); });
+                        });
+                    }
+
+                    /* --- 2. ACTION REGISTRY (The Nervous System Configuration) --- */
+                    function registerCoreActions() {
+                        /* A. Header / Project Actions */
+                        mBT.core.action('project-switch', function (e, el) {
+                            if (e.type !== 'change') return;
+                            if (el.value) {
+                                var originalText = el.options[el.selectedIndex].text;
+                                el.options[el.selectedIndex].text = "Loading...";
+                                mBT.data.load(el.value);
+                            }
+                        });
+
+                        mBT.core.action('project-new', function () { showNewProjectModal(); });
+                        mBT.core.action('project-duplicate', function () { mBT.data.duplicate(); });
+                        mBT.core.action('project-delete', function () { if (currentProjectName) mBT.data.deleteProject(currentProjectName); });
+                        mBT.core.action('project-export', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveBundle(budget, function (key) { return mBT.data.storage.loadBlob(key); }); });
+
+                        /* Phase 87B Fix: Explicitly mapped File Menu Toggler */
+                        mBT.core.action('file-menu-toggle', function () {
+                            var dropdown = document.getElementById('fileMenuDropdown');
+                            if (dropdown) dropdown.classList.toggle('hidden');
+                        });
+
+                        mBT.core.action('blueprint-save', function () { if (typeof mBT_saveAsBlueprint === 'function') mBT_saveAsBlueprint(); });
+
+                        // New File Menu Actions
+                        mBT.core.action('project-recycle', function () { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
+                        mBT.core.action('project-sync', function () { fetchExchangeRates(); mBTME.alert('Rates Updated', 'Exchange rates refreshed from network.'); });
+                        mBT.core.action('template-manager', function () { openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
+                        mBT.core.action('project-import-trigger', function () { var input = document.getElementById('importFile'); if (input) input.click(); });
+                        /* Phase 88: Open PO/Ledger tool — sole entry point per Phase 80 architecture */
+                        mBT.core.action('open-payments-ledger', function () { openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
+                        mBT.core.action('project-import-file', function (e, el) { if (e.type === 'change') mBT.data.importFile(el); });
+
+                        /* Phase 109: Cross-tab sync — reload when another tab saves the same or different project */
+                        window.addEventListener('storage', function (e) {
+                            if (e.key === storageKeyPrefix + 'lastLoaded' && e.newValue) {
+                                try {
+                                    var d = JSON.parse(e.newValue);
+                                    if (d && d.name) mBT.data.load(d.name);
+                                } catch (ex) {
+                                    if (e.newValue) mBT.data.load(e.newValue);
+                                }
+                            }
+                        });
+
+                        /* B. Global Utilities */
+
+                        mBT.core.action('backup-env', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
+                        mBT.core.action('export-all-data', function () {
+                            if (!window.mBT || !window.mBT.storage) { mBTME.alert('Error', 'Storage not available.'); return; }
+                            try {
+                                var json = window.mBT.storage.exportAllData();
+                                var blob = new Blob([json], { type: 'application/json' });
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.json';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                                mBTME.alert('Export Complete', 'All project data downloaded as JSON backup.');
+                            } catch (e) {
+                                mBTME.alert('Export Failed', e.message);
+                            }
+                        });
+                        mBT.core.action('print-pdf', function () { window.print(); });
+                        mBT.core.action('export-xlsx', function () { mBTME.alert("Coming Soon", "Excel export is currently being built. All features will be free to use."); });
+                        mBT.core.action('publish-modal', function () { showPublishModal(); });
+
+                        /* C. Footer / Global Modals */
+                        mBT.core.action('stages-modal', function () { showStagesModal(); });
+                        mBT.core.action('docs-modal', function () { showDocumentsModal(); });
+                        mBT.core.action('settings-modal', function () { showSettingsModal(); });
+                        mBT.core.action('support-modal', function () { showCoffeeWidget(); });
+                        /* Phase 92.8: Activity Feed opens Multiplayer Hub */
+                        mBT.core.action('activity-feed', function () { openShareHub(); });
+
+                        /* D. Budget Interaction (The Synapse) */
+                        mBT.core.action('section-toggle', function (e, el) { handleToggleSection(el.dataset.id, el); });
+                        mBT.core.action('section-add', function (e, el) { showItemSelectorModal(el.dataset.id); });
+                        mBT.core.action('row-delete', function (e, el) { handleRemoveItem(el.dataset.section, el.dataset.id); });
+
+                        /* Phase 114: Section spending cap — target icon opens a cap input modal */
+                        mBT.core.action('section-cap', function (e, el) {
+                            e.stopPropagation();
+                            var sectionName = el.dataset.id;
+                            if (!budget || !budget.sections[sectionName]) return;
+                            var currentCap = budget.sections[sectionName].targetCap || 0;
+                            window._mBT_pendingCapSection = sectionName;
+                            var capContent =
+                                '<div class="p-5 space-y-3">' +
+                                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Set a spending limit. Section total exceeding this cap will show a red overage badge.</p>' +
+                                '<input type="number" id="sectionCapInput" min="0" step="1000" value="' + (currentCap || '') + '" placeholder="No cap (0 = off)"' +
+                                ' class="w-full bg-slate-100 rounded-xl p-3 text-sm border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none font-black">' +
+                                '<div class="flex gap-2 pt-1">' +
+                                '<button onclick="mBTME.close(\'sectionCapModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+                                '<button onclick="(function(){var v=parseFloat((document.getElementById(\'sectionCapInput\')||{}).value)||0;if(budget&&budget.sections&&window._mBT_pendingCapSection&&budget.sections[window._mBT_pendingCapSection]){budget.sections[window._mBT_pendingCapSection].targetCap=v;saveBudget();if(typeof mBTLE!==\'undefined\')mBTLE.reconcile();mBT.ui.paint();}mBTME.close(\'sectionCapModal\');})();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all">Set Cap</button>' +
+                                '</div></div>';
+                            mBTME.open('sectionCapModal', 'Section Cap \u2014 ' + sectionName, capContent, 'max-w-xs');
+                        });
+
+                        mBT.core.action('row-lock', function (e, el) {
+                            var item = budget.sections[el.dataset.section] && budget.sections[el.dataset.section].items.find(function (i) { return i.id === el.dataset.id; });
+                            if (item) {
+                                item.rateType = item.rateType === 'fixed' ? 'negotiable' : 'fixed';
+                                saveBudget();
+                                render(); /* Full render needed to swap icon state */
+                            }
+                        });
+
+                        /* Phase 76: qualifying spend toggle */
+                        mBT.core.action('item-qualifying-toggle', function (e, el) {
+                            var _sec = el.dataset.section;
+                            var _id = el.dataset.id;
+                            if (!budget || !budget.sections[_sec]) return;
+                            var _item = budget.sections[_sec].items.find(function (i) { return i.id === _id; });
+                            if (_item) {
+                                _item.qualifying = !_item.qualifying;
+                                saveBudget();
+                                mBTLE.reconcile();
+                                /* surgical button swap without full re-render */
+                                el.classList.toggle('bg-emerald-500', _item.qualifying);
+                                el.classList.toggle('text-white', _item.qualifying);
+                                el.classList.toggle('shadow-sm', _item.qualifying);
+                                el.classList.toggle('bg-slate-100', !_item.qualifying);
+                                el.classList.toggle('text-slate-300', !_item.qualifying);
+                                el.title = _item.qualifying ? 'Qualifying spend' : 'Mark as qualifying';
+                                if (typeof mBT.ui.paint === 'function') mBT.ui.paint();
+                            }
+                        });
+
+                        /* E. Personnel Actions */
+                        mBT.core.action('crew-toggle', function (e, el) {
+                            var itemId = (el.closest('tr') && el.closest('tr').dataset.itemId) || el.dataset.id;
+                            var section = (el.closest('tr') && el.closest('tr').dataset.section) || el.dataset.section;
+
+                            var item = null;
+                            if (section && budget.sections[section]) {
+                                item = budget.sections[section].items.find(function (i) { return i.id === itemId; });
+                            }
+
+                            /* Enhanced Interaction: If unassigned, go straight to Profile/Import */
+                            if (!item || !item.crew || !item.crew.name) {
+                                openCrewProfile(el, e, itemId, section);
+                            } else {
+                                toggleCrewPopup(el, e);
+                            }
+                        });
+                        mBT.core.action('crew-profile', function (e, el) { return openCrewProfile(el, e, el.dataset.id, el.dataset.section); });
+
+                        /* --- Phase 87A: Quick-Pay --- */
+                        mBT.core.action('quick-pay', function (e, el) {
+                            var contactId = el.dataset.contactId;
+                            var itemId = el.dataset.itemId;
+                            var sectionName = el.dataset.section;
+                            if (!contactId) return;
+
+                            /* Pre-flight: verify contact exists in mbt_contacts */
+                            var lookupPromise;
+                            if (typeof STORAGE !== 'undefined' && STORAGE.getAllContacts) {
+                                lookupPromise = STORAGE.getAllContacts();
+                            } else if (typeof localforage !== 'undefined') {
+                                lookupPromise = localforage.getItem('mbt_contacts').then(function (raw) { return raw || []; });
+                            } else {
+                                lookupPromise = Promise.resolve([]);
+                            }
+
+                            lookupPromise.catch(function (err) {
+                                console.warn('[QuickPay] Contact lookup failed:', err);
+                                return [];
+                            }).then(function (contacts) {
+                                var contact = contacts.find(function (c) {
+                                    return c.id === contactId || (c.name && c.name.toLowerCase() === contactId.toLowerCase());
+                                });
+
+                                if (!contact) {
+                                    mBTME.alert('Contact Not Found', 'No contact found matching this item. Link a contact first.');
+                                    return;
+                                }
+
+                                /* Open Contacts tool with highlightId for tool-ready handshake */
+                                var projectKey = storageKeyPrefix + (budget ? budget.projectName : '');
+                                var toolUrl = './src/tools/contacts/index.html?projectKey=' + encodeURIComponent(projectKey) +
+                                    '&highlightId=' + encodeURIComponent(contact.id) +
+                                    '&currency=' + encodeURIComponent(displayCurrency || 'JMD');
+
+                                /* Tool-ready handshake: listen for tool-ready postMessage instead of setTimeout */
+                                var _toolReadyHandler = function (evt) {
+                                    if (evt.data && evt.data.type === 'mbt:tool-ready') {
+                                        window.removeEventListener('message', _toolReadyHandler);
+                                        /* Send payment context to the tool */
+                                        var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                                        if (toolIframe && toolIframe.contentWindow) {
+                                            toolIframe.contentWindow.postMessage({
+                                                type: 'mbt:quick-pay-context',
+                                                payload: {
+                                                    contactId: contact.id,
+                                                    contactName: contact.name,
+                                                    itemId: itemId,
+                                                    sectionName: sectionName
+                                                }
+                                            }, '*');
+                                        }
+                                    }
+                                };
+                                window.addEventListener('message', _toolReadyHandler);
+
+                                /* Listen f  payment completion toast from c tool */
+                                var _paymentHandler = function (evt) {
+                                    if (evt.data && evt.data.type === 'mbt:toast' && evt.data.payload && evt.data.payload.source === 'quick-pay') {
+                                window.removeEventListener('message', _paymentHandler);
+                        /* Wire to Phase 65 Undo histor /
+                        if (mBT && mBT.data.recorder) {
+                            mBT.data.recorder.snapshot('Quick Pay: ' + (evt.data.payload.contactName || 'Contact'));
+                        }
+                        /* Show toast in monolith */
+                        if (typeof mBTME !== 'undefined' && mBTME.alert) {
+                            mBTME.alert('Payment Logged', evt.data.payload.message || 'Payment recorded successfully.');
+                        }
+                    }
+                };
+                window.addEventListener('message', _paymentHandler);
+
+                /* Open the tool */
+                if (typeof openTool === 'function') {
+                openTool(toolUrl);
+            } else {
+                window.open(toolUrl, '_blank');
+            }
+        }); // end .then(contacts)
+    });
+
+    // --- NEW: Registry Expan struction Set 4) ---
+
+    // 1. Export Bridge
+    mBT.core.action('export', function (e, el) {
+        var type = el.dataset.type;
+        if (document.getElementById('publishModal')) mBTME.close('publishModal');
+        if (typeof mBTPublisher === 'undefined') return;
+
+    if (type === 'pdf') mBTPublisher.format.professionalPdf(budget, displayCurrency);
+    else if (type === 'moo') mBTPublisher.io.saveMoo(budget);
+    else if (type === 'bundle') mBTPublisher.io.saveBundle(budget, function (key) { return mBT.data.storage.loadBlob(key); });
+            else if (type === 'html') mBTPublisher.format.htmlStandalone('budget-sections', budget.projectName);
+    else if (type === 'xlsx') mBTPublisher.format.professionalXlsx(budget);
+    else if (type === 'wrap') mBTPublisher.io.wrapExport(budget, displayCurrency, mBTOG ? mBTOG.contacts : []);
+        });
+
+    // 2. Navigation
+    mBT.core.action('nav-settings', function (e, el) { return mBT.features.settings.open(el.dataset.tab); });
+
+    // 3. Studio Engine
+    mBT.core.action('studio-undo', function () {
+        if (typeof handleUndo === 'function') handleUndo();
+    });
+    mBT.core.action('studio-redo', function () { if (typeof handleRedo === 'function') handleRedo(); });
+        mBT.core.action('studio-set-paper', function (e, el) {
+            if (e.type !== 'change') return;
+            var docId = mBTDB && mBTDB.state && mBTDB.state.currentDocId;
+            if (!docId) return;
+            mBTDB.updateData(docId, 'meta.paperSize', el.value);
+            mBTDB.renderFrame();
+        });
+        mBT.core.action('studio-sync', function () { return mBTDB.syncFromBudget(); });
+        mBT.core.action('studio-sync-prev', function () { return mBTDB.syncFromPrevious(); });
+        mBT.core.action('studio-preview', function () { return mBTDB.openPreviewSelector(); });
+        mBT.core.action('studio-snapshot', function () { return mBTDB.snapshotDoc(); });
+        mBT.core.action('studio-template', function () { return mBTDB.saveTemplate(); });
+        mBT.core.action('studio-toggle-edit', function () { return mBTDB.toggleEditMode(); });
+
+        mBT.core.action('widget-toggle-view', function (e, el) { return mBTDB.toggleVertical(el.dataset.id); });
+        mBT.core.action('widget-neural-fill', function (e, el) { return mBTDB.neuralFill(el.dataset.id, el.dataset.docId); });
+        mBT.core.action('widget-autofill', function (e, el) { return mBTDB.autoFillWidget(el.dataset.type, el.dataset.docId); });
+        mBT.core.action('widget-delete', function (e, el) { return mBTDB.deleteWidget(el.dataset.id); });
+
+        // --- NEW: Documents Hub Actions ---
+        mBT.core.action('nav-docs', function (e, el) { return mBT.features.documents.openVault(el.dataset.tab); });
+        mBT.core.action('doc-options', function (e, el) { return mBT.features.documents.showOptions(el.dataset.id); });
+        mBT.core.action('doc-duplicate', function (e, el) { return mBTDB.snapshotDoc(el.dataset.id); });
+        mBT.core.action('doc-archive', function (e, el) { return window.handleDocTrash(el.dataset.id); });
+
+        // 4. Trash Logic
+        mBT.core.action('nav-trash', function (e, el) { return mBT.features.trash.open(el.dataset.tab); });
+        mBT.core.action('trash-toggle', function (e, el) { return mBT.features.trash.toggleItem(el.dataset.id); });
+        mBT.core.action('trash-toggle-all', function (e, el) { return mBT.features.trash.toggleAll(el.checked); });
+        mBT.core.action('trash-bulk', function (e, el) { return mBT.features.trash.performAction(el.dataset.type); });
+        mBT.core.action('trash-single', function (e, el) { return mBT.features.trash.singleAction(el.dataset.type, el.dataset.id); });
+
+        // Phase 125: Project batch selection
+        mBT.core.action('project-select-toggle', function (e, el) { return mBT.features.settings.toggleProjectSelection(el.dataset.name); });
+        mBT.core.action('project-select-all', function (e, el) {
+            var cb = document.getElementById('projectSelectAll');
+            if (cb) mBT.features.settings.toggleAllProjects(cb.checked);
+        });
+
+        // F. Stage Actions
+        mBT.core.action('stage-update', function (e, el) {
+            updateStageItem(el.dataset.id, el.dataset.section, el.dataset.stage, el.dataset.field, el.value);
+        });
+
+        // G. History (Tier 4/5/6 Alignment)
+        // Logic Resolution: Prioritize Tier 2 Namespace if available
+        /* Phase 73B: route undo/redo into active tool iframe when one is open */
+        mBT.core.action('undo', function () {
+            if (mBTActiveTool) {
+                var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo-action' }, '*'); return; }
+            }
+            if (mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
+            else if (typeof handleUndo === 'function') handleUndo();
+        });
+        mBT.core.action('redo', function () {
+            if (mBTActiveTool) {
+                var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo-action' }, '*'); return; }
+            }
+            if (mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
+            else if (typeof handleRedo === 'function') handleRedo();
+        });
+
+        /* --- Phase 138: Universal Search Engine --- */
+        (function () {
+            var _open = false;
+            var _inputBound = false;
+            var _budgetCache = [];
+            var _budgetsLoaded = false;
+
+            /* ========= Frequency Engine (Task 3): click-count smart sorting ========= */
+            var _FREQ_KEY = 'mBT_searchFreq';
+            function loadFreq() {
+                try { return JSON.parse(localStorage.getItem(_FREQ_KEY) || '{}'); }
+                catch (e) { return {}; }
+            }
+            function bumpFreq(id) {
+                var f = loadFreq();
+                f[id] = (f[id] || 0) + 1;
+                try { localStorage.setItem(_FREQ_KEY, JSON.stringify(f)); } catch (e) { }
+            }
+
+            /* ========= Universal Registry (Phase 137.RESTORE): consume from mBT.registry ========= */
+            var TOOL_REGISTRY = (mBT.registry && mBT.registry.tools) || [];
+            var TOOL_URLS = (mBT.registry && mBT.registry.toolUrls) || {};
+            var TEMPLATE_REGISTRY = (mBT.registry && mBT.registry.templates) || [];
+            var SETTINGS_REGISTRY = (mBT.registry && mBT.registry.settings) || [];
+
+            /* ========= Funding Bridge (Task 4): keyword-triggered financial snapshot ========= */
+            var FUNDING_KEYWORDS = ['fund', 'secur', 'pipeline', 'gap', 'financ', 'invest', 'capital', 'money', 'sponsor'];
+            function getFundingResult(q) {
+                if (!q || !window.budget) return null;
+                var matched = false;
+                for (var k = 0; k < FUNDING_KEYWORDS.length; k++) {
+                    if (q.indexOf(FUNDING_KEYWORDS[k]) !== -1 || FUNDING_KEYWORDS[k].indexOf(q) !== -1) { matched = true; break; }
+                }
+                if (!matched) return null;
+                var sources = window.budget.fundingSources || [];
+                var grandTotal = window.budget.grandTotal || 0;
+                var sumConfirmed = 0, sumPending = 0, sumLOI = 0;
+                for (var j = 0; j < sources.length; j++) {
+                    var amt = parseFloat(sources[j].amount) || 0;
+                    if (sources[j].status === 'Confirmed') sumConfirmed += amt;
+                    else if (sources[j].status === 'LOI') sumLOI += amt;
+                    else sumPending += amt;
+                }
+                var pipeline = sumPending + sumLOI;
+                var gap = grandTotal - (sumConfirmed + pipeline);
+                var fmt = (typeof formatAbbreviated === 'function') ? formatAbbreviated : function (v) { return String(Math.round(v)); };
+                return {
+                    id: 'funding_bridge',
+                    type: 'funding',
+                    label: 'Funding Status',
+                    desc: 'Secured: ' + fmt(sumConfirmed) + ' &bull; Pipeline: ' + fmt(pipeline) + ' &bull; Gap: ' + (gap > 0 ? fmt(gap) : '&#8722;' + fmt(Math.abs(gap)))
+                };
+            }
+
+            /* --- Load saved project list async on first open --- */
+            function loadBudgetCache() {
+                if (_budgetsLoaded || typeof localforage === 'undefined') return;
+                _budgetsLoaded = true;
+                var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                localforage.keys().then(function (keys) {
+                    _budgetCache = [];
+                    (keys || []).forEach(function (k) {
+                        if (k.indexOf(_pfx) === 0) {
+                            var name = k.slice(_pfx.length);
+                            if (name) _budgetCache.push({ id: 'budget_' + name, type: 'budget', label: name, desc: 'Saved project', budgetKey: k });
+                        }
+                    });
+                }).catch(function () { _budgetCache = []; });
+            }
+
+            function openPalette() {
+                var el = document.getElementById('cmdPalette');
+                if (!el) return;
+                _open = true;
+                el.classList.remove('hidden');
+                loadBudgetCache();
+                var inp = document.getElementById('cmdInput');
+                if (inp) {
+                    inp.value = '';
+                    inp.focus();
+                    if (!_inputBound) {
+                        inp.addEventListener('input', function () { renderResults(this.value); });
+                        _inputBound = true;
+                    }
+                }
+                renderResults('');
+            }
+
+            function closePalette() {
+                var el = document.getElementById('cmdPalette');
+                if (el) el.classList.add('hidden');
+                _open = false;
+            }
+
+            /* ========= Universal renderResults (Tasks 1–6) ========= */
+            function renderResults(query) {
+                var ul = document.getElementById('cmdResults');
+                var hint = document.getElementById('cmdHint');
+                if (!ul) return;
+                var q = (query || '').trim().toLowerCase();
+                var freq = loadFreq();
+
+                /* --- Bucket results into typed groups --- */
+                var TYPE_ORDER = ['tool', 'template', 'setting', 'budget', 'funding', 'lineitem'];
+                var TYPE_LABELS = { tool: 'Tools', template: 'Templates', setting: 'Settings', budget: 'Projects', funding: 'Funding', lineitem: 'Line Items' };
+                var grouped = { tool: [], template: [], setting: [], budget: [], funding: [], lineitem: [] };
+
+                /* 1. Static registry: tools, templates, settings */
+                var staticItems = TOOL_REGISTRY.concat(SETTINGS_REGISTRY).concat(TEMPLATE_REGISTRY);
+                for (var si = 0; si < staticItems.length; si++) {
+                    var sItem = staticItems[si];
+                    if (!q || sItem.label.toLowerCase().indexOf(q) !== -1 || sItem.desc.toLowerCase().indexOf(q) !== -1) {
+                        if (grouped[sItem.type]) grouped[sItem.type].push(sItem);
+                    }
+                }
+
+                /* 2. Saved budget projects */
+                for (var bi = 0; bi < _budgetCache.length; bi++) {
+                    var bItem = _budgetCache[bi];
+                    if (!q || bItem.label.toLowerCase().indexOf(q) !== -1) grouped.budget.push(bItem);
+                }
+
+                /* 3. Funding Bridge */
+                var fundResult = getFundingResult(q);
+                if (fundResult) grouped.funding.push(fundResult);
+
+                /* 4. Dynamic line items */
+                if (window.budget && window.budget.sections) {
+                    Object.keys(window.budget.sections).forEach(function (secKey) {
+                        var sec = window.budget.sections[secKey];
+                        if (!sec || !sec.items) return;
+                        sec.items.forEach(function (item) {
+                            var iDesc = (item.description || '').toLowerCase();
+                            var iCrew = (item.crew && item.crew.name ? item.crew.name : '').toLowerCase();
+                            if (!q || iDesc.indexOf(q) !== -1 || iCrew.indexOf(q) !== -1 || secKey.toLowerCase().indexOf(q) !== -1) {
+                                grouped.lineitem.push({
+                                    id: item.id,
+                                    type: 'lineitem',
+                                    label: item.description || 'Untitled',
+                                    desc: esc(secKey) + (item.crew && item.crew.name ? ' \u2014 ' + esc(item.crew.name) : '')
+                                });
+                            }
+                        });
+                    });
+                }
+
+                /* 5. Frequency sort within each group independently */
+                for (var ti = 0; ti < TYPE_ORDER.length; ti++) {
+                    grouped[TYPE_ORDER[ti]].sort(function (a, b) { return (freq[b.id] || 0) - (freq[a.id] || 0); });
+                }
+
+                /* Total count */
+                var totalCount = 0;
+                for (var ci = 0; ci < TYPE_ORDER.length; ci++) totalCount += grouped[TYPE_ORDER[ci]].length;
+
+                if (totalCount === 0) {
+                    ul.innerHTML = '<li class="cmd-empty-state"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span class="text-slate-500 text-[11px] font-black uppercase tracking-widest">No results</span></li>';
+                    if (hint) hint.textContent = 'No results';
+                    return;
+                }
+
+                /* Render: .cmd-group-hdr separator before each non-empty group */
+                var html = '';
+                var rendered = 0;
+                var limit = 50;
+
+                for (var gi = 0; gi < TYPE_ORDER.length; gi++) {
+                    var gType = TYPE_ORDER[gi];
+                    var group = grouped[gType];
+                    if (!group.length || rendered >= limit) continue;
+
+                    html += '<li class="cmd-group-hdr">' + TYPE_LABELS[gType] + '</li>';
+
+                    for (var ri = 0; ri < group.length && rendered < limit; ri++) {
+                        var r = group[ri];
+                        var typePill = '';
+                        var bodyHtml = '';
+
+                        if (r.type === 'tool') {
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300">Tool</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + esc(r.desc) + '</span>';
+                        } else if (r.type === 'template') {
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-violet-500/30 text-violet-300">Template</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + esc(r.desc) + '</span>';
+                        } else if (r.type === 'setting') {
+                            var isOn = r.getState();
+                            /* .cmd-pill-toggle consumed here — Qwen CSS override point */
+                            typePill = '<div class="shrink-0 flex items-center gap-1.5">' +
+                                '<span class="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-amber-500/30 text-amber-300">Setting</span>' +
+                                '<div class="cmd-pill-toggle relative w-8 h-4 rounded-full ' + (isOn ? 'bg-indigo-500' : 'bg-slate-600') + '">' +
+                                '<div class="absolute top-0.5 rounded-full bg-white w-3 h-3" style="' + (isOn ? 'right:2px' : 'left:2px') + '"></div>' +
+                                '</div></div>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + esc(r.desc) + '</span>';
+                        } else if (r.type === 'budget') {
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300">Project</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">Saved project</span>';
+                        } else if (r.type === 'funding') {
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-rose-500/30 text-rose-300">Funding</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + r.desc + '</span>';
+                        } else {
+                            /* lineitem */
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-slate-500/30 text-slate-400">Line Item</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + r.desc + '</span>';
+                        }
+
+                        html += '<li data-result-id="' + esc(r.id) + '" data-result-type="' + esc(r.type) + '" ' +
+                            'class="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">' +
+                            '<div class="flex flex-col min-w-0 flex-1">' + bodyHtml + '</div>' +
+                            typePill + '</li>';
+                        rendered++;
+                    }
+                }
+
+                if (totalCount > limit) html += '<li class="px-4 py-2 text-slate-500 text-[10px] text-center">+ ' + (totalCount - limit) + ' more &mdash; refine your search</li>';
+                ul.innerHTML = html;
+                if (hint) hint.textContent = totalCount + ' result' + (totalCount !== 1 ? 's' : '');
+            }
+
+            /* --- Unified click delegation --- */
+            var overlay = document.getElementById('cmdPalette');
+            var ul = document.getElementById('cmdResults');
+            if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closePalette(); });
+            if (ul) ul.addEventListener('click', function (e) {
+                var li = e.target.closest('[data-result-id]');
+                if (!li) return;
+                var rId = li.dataset.resultId;
+                var rType = li.dataset.resultType;
+                bumpFreq(rId);
+
+                if (rType === 'lineitem') {
+                    var row = document.querySelector('[data-id="' + rId + '"]');
+                    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    closePalette();
+                } else if (rType === 'tool') {
+                    if (TOOL_URLS[rId] && typeof openTool === 'function') openTool(TOOL_URLS[rId]());
+                    closePalette();
+                } else if (rType === 'template') {
+                    if (TOOL_URLS['tool_template'] && typeof openTool === 'function') openTool(TOOL_URLS['tool_template']());
+                    closePalette();
+                } else if (rType === 'setting') {
+                    var matchedSetting = null;
+                    for (var si = 0; si < SETTINGS_REGISTRY.length; si++) {
+                        if (SETTINGS_REGISTRY[si].id === rId) { matchedSetting = SETTINGS_REGISTRY[si]; break; }
+                    }
+                    if (matchedSetting) {
+                        matchedSetting.action(!matchedSetting.getState());
+                        /* Re-render pill state in place — palette stays open for rapid toggling */
+                        renderResults(document.getElementById('cmdInput').value);
+                    }
+                } else if (rType === 'budget') {
+                    var matchedBudget = null;
+                    for (var bi = 0; bi < _budgetCache.length; bi++) {
+                        if (_budgetCache[bi].id === rId) { matchedBudget = _budgetCache[bi]; break; }
+                    }
+                    if (matchedBudget && typeof mBT !== 'undefined' && mBT.data && typeof mBT.data.load === 'function') {
+                        mBT.data.load(matchedBudget.budgetKey);
+                    }
+                    closePalette();
+                } else if (rType === 'funding') {
+                    var fc = document.getElementById('fundingCard');
+                    if (fc) fc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    closePalette();
+                }
+            });
+
+            document.body.addEventListener('keydown', function (e) {
+                if (_open && e.key === 'Escape') { e.preventDefault(); closePalette(); }
+            }, true);
+
+            /* Phase 66 Update: Mobile Swipe-Up to Search (PWA constraints) */
+            var _startY = 0;
+            document.addEventListener('touchstart', function (e) {
+                if (e.touches && e.touches.length > 0) _startY = e.touches[0].clientY;
+            }, { passive: true });
+            document.addEventListener('touchend', function (e) {
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    var endY = e.changedTouches[0].clientY;
+                    if (_startY > window.innerHeight - 100 && (_startY - endY) > 50) openPalette();
+                }
+            }, { passive: true });
+
+            /* Phase 130.B: Expose palette API for EventRouter action bridge */
+            mBT.features = mBT.features || {};
+            mBT.features.search = { open: openPalette, close: closePalette };
+        }());
+
+    /* --- Phase 87C: Help Overlay --- */
+    mBT.core.action('help-overlay', function () {
+        var activeTool = (typeof mBTActiveTool !== 'undefined' && mBTActiveTool) ? mBTActiveTool : null;
+        if (typeof helpOverlayTemplate === 'function') {
+            var content = helpOverlayTemplate(activeTool);
+            mBTME.open('help-overlay', '', content, 'max-w-md', {
+                hideHeader: true,
+                noPadding: true
+            });
+        } else {
+            /* Fallback if template function not loaded */
+            var fallbackContent = '<div class="p-6 text-center text-slate-400">' +
+                '<p class="text-[10px] font-black uppercase tracking-widest">Help template not loaded</p>' +
+                '<p class="text-[9px] mt-2">Press Ctrl+K for Command Palette</p>' +
+                '</div>';
+            mBTME.open('help-overlay', '', fallbackContent, 'max-w-md', { hideHeader: true, noPadding: true });
+        }
+    });
+    }
+
+    /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
+    function bindAppEventListeners() {
+        var footer = document.querySelector('footer');
+
+        // Initialize Registry
+        registerCoreActions();
+        mBT.data.scavengeOrphans();
+
+        if (!document.body.dataset.listenersBound) {
+            document.body.dataset.listenersBound = 'true';
+
+            // --- Master Router (Delegation) ---
+            var router = function (e) {
+                if (mBT.core.route(e)) return;
+                var target = e.target;
+                if (target.closest('#loginBtn')) mBT.router.handleLogin();
+                if (target.closest('#openAiToolsBtn')) mBT.blueprints.openTool();
+            };
+
+            document.body.addEventListener('click', router);
+            document.body.addEventListener('change', router);
+
+            // --- Keyboard Shortcuts (Tier 6 Wiring) ---
+            document.body.addEventListener('keydown', function (e) {
+                // Undo: Ctrl+Z
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                    e.preventDefault();
+                    if (mBT.core.actions['undo']) mBT.core.actions['undo']();
+                }
+                // Redo: Ctrl+Y or Ctrl+Shift+Z (standard Mac/Linux)
+                if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                    e.preventDefault();
+                    if (mBT.core.actions['redo']) mBT.core.actions['redo']();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
+                    e.preventDefault();
+                    if (mBT.core.actions['redo']) mBT.core.actions['redo']();
+                }
+                // Search: Ctrl+K
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    if (mBT.core.actions['command-palette']) mBT.core.actions['command-palette']();
+                }
+                // Phase 87C: Help Overlay (? key, only when not typing)
+                if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && !e.target.isContentEditable) {
+                    e.preventDefault();
+                    if (mBT.core.actions['help-overlay']) mBT.core.actions['help-overlay']();
+                }
+            });
+
+            // --- Real-time Input Handling ---
+            document.body.addEventListener('input', function (e) {
+                var input = e.target;
+                if (input.id === 'projectName') return; /* handled by change listener in EventRouter */
+                if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
+                    budget[input.id] = parseFloat(input.value) || 0;
+                    if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    return;
+                }
+                if (input.dataset.field) {
+                    if (input.dataset.action === 'stage-update') {
+                        if (typeof updateStageItem === 'function') updateStageItem(input.dataset.id, input.dataset.section, input.dataset.stage, input.dataset.field, input.value, true);
+                    } else if (!input.dataset.action) {
+                        handleUpdate(input.dataset.section, input.dataset.id, input.dataset.field, input.value, 'User Input');
+                    }
+                }
+            });
+        }
+
+        /* --- Phase 64: Ghost Cursor Locking --- Wire focus/blur on line item inputs to broadcastTypingLock/Release --- */
+        document.addEventListener('focus', function (e) {
+            var input = e.target;
+            if (input.matches && input.matches('input[data-id][data-field], select[data-id][data-field]')) {
+                var fieldId = (input.dataset.section || '') + '::' + (input.dataset.id || '') + '::' + (input.dataset.field || '');
+                if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingLock === 'function') {
+                    mBTRealtime.broadcastTypingLock(fieldId);
+                }
+            }
+        }, true);
+
+        document.addEventListener('blur', function (e) {
+            var input = e.target;
+            if (input.matches && input.matches('input[data-id][data-field], select[data-id][data-field]')) {
+                var fieldId = (input.dataset.section || '') + '::' + (input.dataset.id || '') + '::' + (input.dataset.field || '');
+                if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingRelease === 'function') {
+                    mBTRealtime.broadcastTypingRelease(fieldId);
+                }
+            }
+        }, true);
+
+        /* --- Phase 64: Ghost Cursor Visuals --- Listen for peer locks and tint the DOM --- */
+        window.addEventListener('mbt:peer-typing', function (e) {
+            var detail = e.detail;
+            if (!detail || !detail.fieldId) return;
+            var parts = detail.fieldId.split('::');
+            if (parts.length !== 3) return;
+            var secName = parts[0], id = parts[1], fieldName = parts[2];
+            var selector = 'input[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"], select[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"]';
+            var inputs = document.querySelectorAll(selector);
+            for (var i = 0; i < inputs.length; i++) {
+                var input = inputs[i];
+                // Force read-only and overlay styling
+                input.setAttribute('readonly', 'true');
+                if (input.tagName.toLowerCase() === 'select') input.setAttribute('disabled', 'true');
+                input.classList.add('peer-locked', 'ring-2', 'ring-rose-500', '!bg-rose-50/50', 'text-rose-900', 'cursor-not-allowed');
+                input.title = 'Locked by: ' + (detail.displayName || 'Collaborator');
+                /* Optional: create a small absolute floating badge if it doesn't exist */
+                if (!input.parentNode.querySelector('.ghost-badge')) {
+                var badge = document.createElement('span');
+                badge.className = 'ghost-badge absolute -top-4 right-0 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm z-50 pointer-events-none whitespace-nowrap opacity-90';
+                badge.textContent = detail.displayName || 'Peer';
+                input.parentNode.style.position = 'relative';
+                input.parentNode.appendChild(badge);
+            }
+        }
+        });
+
+    window.addEventListener('mbt:peer-release', function (e) {
+        var detail = e.detail;
+        if (!detail || !detail.fieldId) return;
+        var parts = detail.fieldId.split('::');
+        if (parts.length !== 3) return;
+        var secName = parts[0], id = parts[1], fieldName = parts[2];
+        var selector = 'input[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"], select[data-section="' + secName + '"][data-id="' + id + '"][data-field="' + fieldName + '"]';
+        var inputs = document.querySelectorAll(selector);
+        for (var i = 0; i < inputs.length; i++) {
+            var input = inputs[i];
+            // Check if someone else immediately grabbed it before releasing
+            if (window.mBTRealtime && typeof mBTRealtime.isFieldLocked === 'function' && !mBTRealtime.isFieldLocked(detail.fieldId)) {
+                input.removeAttribute('readonly');
+                input.removeAttribute('disabled');
+                input.classList.remove('peer-locked', 'ring-2', 'ring-rose-500', '!bg-rose-50/50', 'text-rose-900', 'cursor-not-allowed');
+                input.title = '';
+                var badge = input.parentNode.querySelector('.ghost-badge');
+                if (badge) badge.remove();
+            }
+        }
+    });
+
+
+    // Phase 16: Hybrid Tool Loader — opens sub-PWAs in internal modal or new tab
+    window.openTool = function (url) {
+        /* Lifecycle sync: push local changes before handing off to a tool.
+           Sub-Phase 51.2 Task 8: Skip REST push when realtime is live — it
+           propagates changes in real-time, so an immediate REST push is redundant. */
+        var _rtLive = window.mBTRealtime && mBTRealtime.isConnected();
+        if (!_rtLive && window.mBTSync && localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true' && localStorage.getItem('mbt_supabase_auth_token')) {
+            mBTSync.pushAll().catch(function (e) { console.warn('[mBT] Lifecycle push on tool open failed:', e); });
+        }
+        var isInternal = localStorage.getItem('mBT_openToolsInternal');
+        // Default true if not set
+        if (isInternal === null) isInternal = 'true';
+        if (isInternal === 'true') {
+            var content = '<div class="w-full" style="height:85vh;"><iframe src="' + url + '" style="width:100%;height:100%;border:none;"></iframe></div>';
+            mBTME.open('tool-window', '', content, 'max-w-7xl', { noPadding: true, hideHeader: true });
+            /* Phase 73B: record active tool name for undo/redo routing */
+            var _tm = url.match(/\/tools\/([^\/]+)\//);
+            mBTActiveTool = _tm ? _tm[1] : 'unknown';
+        } else {
+            window.open(url, '_blank');
+        }
+    };
+
+    /* --- Phase 64 / 68B / 92.8: Share Hub trigger — clears pending and activity badges on open --- */
+    window.openShareHub = function () {
+        openTool('./src/tools/share/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+        if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
+        if (typeof window.mBTClearActivityBadge === 'function') window.mBTClearActivityBadge();
+    };
+
+    if (footer) {
+        footer.addEventListener('click', function (e) {
+            var btn = e.target.closest('button');
+            if (!btn) return;
+            // Phase 16: Footer Nav uses hybrid openTool() loader
+            if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+            else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
+            else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+            else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar_benchmark/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+            else if (btn.id === 'toolsDrawerBtn') { var _td = document.getElementById('toolsDrawer'); if (_td) _td.classList.toggle('hidden'); }
+            else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
+            else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
+        });
+    }
+
+    /* --- Phase 73: Contingency & Fringes card click — opens Fringes tool --- */
+    (function () {
+        var card = document.getElementById('contingencyFringesCard');
+        if (!card) return;
+        card.addEventListener('click', function () {
+            if (budget && currentProjectName) {
+                openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + budget.projectName) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+            }
+        });
+    })();
+
+    /* --- Phase 73: Tools Drawer — tool dispatch + backdrop close --- */
+    (function () {
+        var drawer = document.getElementById('toolsDrawer');
+        if (!drawer) return;
+        drawer.addEventListener('click', function (e) {
+            var toolBtn = e.target.closest('.drawer-tool-btn');
+            if (toolBtn) {
+                drawer.classList.add('hidden');
+                var tool = toolBtn.dataset.tool;
+                if (tool === 'stages') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                if (tool === 'fringes') openTool('./src/tools/fringes/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                /* Phase 78: PO & Petty Cash */
+                if (tool === 'po') openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
+                return;
+            }
+            if (e.target === drawer) drawer.classList.add('hidden');
+        });
+    })();
+
+    /* --- Phase 76: Jurisdiction modal --- */
+    var JURISDICTION_PRESETS = {
+        'JAMPRO': { incentiveRate: 20, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
+        'UK HETV': { incentiveRate: 25, minSpend: 1000000, atlSections: ['Story', 'Producer', 'Cast'] },
+        'Georgia': { incentiveRate: 20, minSpend: 500000, atlSections: ['Story', 'Producer', 'Cast'] },
+        'Louisiana': { incentiveRate: 25, minSpend: 300000, atlSections: ['Story', 'Producer', 'Cast'] },
+        'Custom': { incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] }
+    };
+
+    function showJurisdictionModal() {
+        if (!budget) return;
+        var j = budget.jurisdiction || {};
+        var presetsHtml = '<option value="">-- None --</option>' +
+            Object.keys(JURISDICTION_PRESETS).map(function (k) {
+                return '<option value="' + k + '"' + (j.name === k ? ' selected' : '') + '>' + k + '</option>';
+            }).join('');
+        var body = '<div class="space-y-4">' +
+            '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Jurisdiction Preset</label>' +
+            '<select id="jur-preset" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400">' + presetsHtml + '</select></div>' +
+            '<div class="grid grid-cols-2 gap-3">' +
+            '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Incentive Rate %</label>' +
+            '<input type="number" id="jur-rate" step="0.1" min="0" max="100" value="' + (j.incentiveRate || 0) + '" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400"></div>' +
+            '<div><label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Min Qualifying Spend</label>' +
+            '<input type="number" id="jur-minspend" step="1000" min="0" value="' + (j.minSpend || 0) + '" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-400"></div></div>' +
+            '<p class="text-[10px] text-slate-400">ATL sections excluded: Story, Producer, Cast. Mark qualifying rows with the Q button.</p>' +
+            '</div>';
+        mBTME.confirm('Tax Incentive Jurisdiction', body, function () {
+            var preset = document.getElementById('jur-preset');
+            var rateEl = document.getElementById('jur-rate');
+            var minEl = document.getElementById('jur-minspend');
+            var name = preset ? preset.value : '';
+            var rate = rateEl ? (parseFloat(rateEl.value) || 0) : 0;
+            var minSpend = minEl ? (parseFloat(minEl.value) || 0) : 0;
+            budget.jurisdiction = { name: name, incentiveRate: rate, minSpend: minSpend, atlSections: ['Story', 'Producer', 'Cast'] };
+            saveBudget();
+            mBTLE.reconcile();
+            render();
+        }, { confirmLabel: 'Save' });
+        /* auto-fill rate/minSpend when preset changes */
+        setTimeout(function () {
+            var ps = document.getElementById('jur-preset');
+            if (!ps) return;
+            ps.addEventListener('change', function () {
+                var p = JURISDICTION_PRESETS[ps.value];
+                if (!p) return;
+                var re = document.getElementById('jur-rate');
+                var me = document.getElementById('jur-minspend');
+                if (re) re.value = p.incentiveRate;
+                if (me) me.value = p.minSpend;
+            });
+        }, 50);
+    }
+
+    mBT.core.action('jurisdiction-modal', function () { showJurisdictionModal(); });
+
+    /* Phase 76: Tax Incentive card click → jurisdiction modal */
+    (function () {
+        var card = document.getElementById('taxIncentiveCard');
+        if (card) card.addEventListener('click', function () { showJurisdictionModal(); });
+    })();
+
+    /* --- Phase 77: Actuals toggle button --- */
+    (function () {
+        var btn = document.getElementById('actualsToggleBtn');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            if (!budget) return;
+            budget.actualsMode = !budget.actualsMode;
+            saveBudget();
+            mBTLE.reconcile();
+            render();
+        });
+    })();
+
+    /* --- Phase 121: Event Router Bridge (extracted to src/core/logic/EventRouter.js) --- */
+    mBT.router.init({
+        storageKeyPrefix: storageKeyPrefix,
+        getBudget: function () { return budget; },
+        setBudget: function (b) { budget = b; },
+        getCurrentProjectName: function () { return currentProjectName; },
+        setCurrentProjectName: function (n) { currentProjectName = n; },
+        getDisplayCurrency: function () { return displayCurrency; },
+        setDisplayCurrency: function (v) { displayCurrency = v; },
+        getMBTActiveTool: function () { return mBTActiveTool; },
+        setMBTActiveTool: function (v) { mBTActiveTool = v; },
+        getDiffActive: function () { return _diffActive; },
+        setDiffActive: function (v) { _diffActive = v; },
+        getDiffPendingRecord: function () {
+            return _diffPendingRecord;
+        },
+        setDiffPendingRecord: function (v) { _diffPendingRecord = v; },
+            handleProjectNameChange: handleProjectNameChange,
+                renderCurrencyBtn: renderCurrencyBtn,
+                    fetchExchangeRates: fetchExchangeRates,
+                        unsealRealtimeRenderer: _unsealRealtimeRenderer
+        });
+    }
+
+    /* --- 5. GLOBAL BOOT TRIGGER --- */
+    // Logic Resolution: Global Bridge Hooks for external calls
+    window.showBinModal = function () { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('documents'); };
+    window.handleDocTrash = function (id) { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.trashDocument(id); };
+
+    // OAuth callback handler
+    (function () {
+        var hash = window.location.hash;
+        if (!hash || hash.indexOf('access_token=') === -1) return;
+        var params = {};
+        hash.substring(1).split('&').forEach(function (pair) {
+            var kv = pair.split('=');
+            params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+        });
+        if (params.access_token) {
+            localStorage.setItem('mbt_supabase_auth_token', params.access_token);
+            if (params.refresh_token) localStorage.setItem('mbt_supabase_refresh_token', params.refresh_token);
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        }
+    })();
+
+    // System Start
+    document.addEventListener('DOMContentLoaded', function () {
+        if (mBT.core && typeof mBT.core.init === 'function') {
+            mBT.core.init().catch(function (err) {
+                console.error('[mBT] Critical init failure:', err);
+            });
+        } else if (typeof init === 'function') {
+            init(); // Fallback for safety
+        }
+        // Ensure Login UI reflects current connectivity
+        if (mBT.router && typeof mBT.router.resolveConnectivityStatus === 'function') mBT.router.resolveConnectivityStatus();
+        // Initialize undo/redo button states
+        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+    });
+
+    /* ======= END OF mBT ========== */
+
+
