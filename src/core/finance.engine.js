@@ -30,6 +30,11 @@ window.mBT_Finance_Engine = {
 
 window.mBT_Finance = (function () {
 
+    /* --- 2-decimal precision guard for all terminal multiplications --- */
+    function _round(val) {
+        return Math.round((parseFloat(val) || 0) * 100) / 100;
+    }
+
     /* --- Field validation: canonical defaults for a single line item --- */
     function _validateItem(item) {
         item.quantity = Math.max(0, parseFloat(item.quantity) || 0);
@@ -50,7 +55,7 @@ window.mBT_Finance = (function () {
         var qty = parseFloat(item.quantity) || 0;
         var rate = parseFloat(item.rate) || 0;
         var mult = parseFloat(item.multiplier) || 1;
-        var est = qty * rate * mult;
+        var est = _round(qty * rate * mult);
         var act = parseFloat(item.actual) || 0;
         return { estimated: est || 0, variance: (act - est) || 0 };
     }
@@ -108,7 +113,7 @@ window.mBT_Finance = (function () {
                         stageSumDays += payableDays;
                     });
                     item.quantity = stageSumDays;
-                    item.total = stageSumCost || 0;
+                    item.total = _round(stageSumCost) || 0;
                     item.rate = stageSumDays > 0 ? (stageSumCost / stageSumDays) : 0;
                     if (stageSumDays > 0) item.unit = 'Day';
                 } else {
@@ -140,20 +145,25 @@ window.mBT_Finance = (function () {
             subtotal += sectionEstTotal;
         });
 
-        var contingency = subtotal * ((b.contingencyPercentage || 0) / 100);
-        var tax = subtotal * ((b.salesTaxPercentage || 0) / 100);
+        /* Phase 135: section.ratio — each section's proportion of the budget subtotal (0–1 decimal) */
+        Object.keys(b.sections).forEach(function (sectionKey) {
+            b.sections[sectionKey].ratio = subtotal > 0 ? b.sections[sectionKey].total / subtotal : 0;
+        });
+
+        var contingency = _round(subtotal * ((b.contingencyPercentage || 0) / 100));
+        var tax = _round(subtotal * ((b.salesTaxPercentage || 0) / 100));
         var fringesTotal = 0;
         if (b.fringes && b.fringes.length) {
             b.fringes.forEach(function (f) {
-                if (f.enabled !== false) fringesTotal += subtotal * ((parseFloat(f.rate) || 0) / 100);
+                if (f.enabled !== false) fringesTotal += _round(subtotal * ((parseFloat(f.rate) || 0) / 100));
             });
         }
         var preDiscount = subtotal + contingency + tax + fringesTotal;
-        var discount = preDiscount * ((b.discountPercentage || 0) / 100);
+        var discount = _round(preDiscount * ((b.discountPercentage || 0) / 100));
 
         b.subtotal = subtotal || 0;
         b.fringesTotal = fringesTotal || 0;
-        b.grandTotal = (preDiscount - discount) || 0;
+        b.grandTotal = _round(preDiscount - discount) || 0;
         b.actualTotal = grandActual || 0;
 
         /* Phase 76: incentive rebate — add fringes on qualifying labor then apply rate */
@@ -165,10 +175,10 @@ window.mBT_Finance = (function () {
                     if (f.enabled !== false) _fringeRateQ += (parseFloat(f.rate) || 0);
                 });
             }
-            var _qualWithFringes = incentiveQualifyingTotal * (1 + _fringeRateQ / 100);
+            var _qualWithFringes = _round(incentiveQualifyingTotal * (1 + _fringeRateQ / 100));
             var _minSpend = parseFloat(b.jurisdiction.minSpend) || 0;
             if (_qualWithFringes >= _minSpend || _minSpend === 0) {
-                incentiveRebate = _qualWithFringes * ((parseFloat(b.jurisdiction.incentiveRate) || 0) / 100);
+                incentiveRebate = _round(_qualWithFringes * ((parseFloat(b.jurisdiction.incentiveRate) || 0) / 100));
             }
         }
         b.incentiveQualifyingTotal = incentiveQualifyingTotal;

@@ -600,6 +600,13 @@
                     self.state.KEYS.forEach(function(k) {
                         if (!project.targetLock.stages[k]) {
                             project.targetLock.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false };
+                        } else {
+                            /* Deep-default: repair partial stage objects from prior sessions */
+                            var s = project.targetLock.stages[k];
+                            if (s.ratio === undefined || s.ratio === null) s.ratio = 0;
+                            if (s.days === undefined || s.days === null) s.days = 0;
+                            if (s.locked === undefined || s.locked === null) s.locked = false;
+                            if (!s.label) s.label = k.toUpperCase();
                         }
                     });
 
@@ -642,7 +649,7 @@
                     return '<div class="relative">' +
                         '<div class="flex justify-between items-center mb-1.5">' +
                             '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + esc(self.state.TITLES[k]) + '</span>' +
-                            '<span class="text-[10px] font-black text-white">' + s.ratio.toFixed(1) + '%</span>' +
+                            '<span class="text-[10px] font-black text-white">' + (s.ratio || 0).toFixed(1) + '%</span>' +
                         '</div>' +
                         '<div class="h-2 bg-slate-800 rounded-full relative overflow-hidden">' +
                             '<div class="absolute top-0 left-0 h-full bg-blue-500 rounded-full pointer-events-none" style="width:' + s.ratio + '%"></div>' +
@@ -752,8 +759,8 @@
 
                 var html = this.state.KEYS.map(function(k) {
                     var s         = b.targetLock.stages[k];
-                    var stageCost = metrics.stageTotals[k];
-                    var stageCap  = metrics.totalCap * (s.ratio / 100);
+                    var stageCost = metrics.stageTotals[k] || 0;
+                    var stageCap  = metrics.totalCap * ((s.ratio || 0) / 100);
                     var isOver    = stageCost > stageCap && stageCap > 0;
                     var val       = validateTimeline(b, k);
                     var conflict  = val.maxNeeded > val.current;

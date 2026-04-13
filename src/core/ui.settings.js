@@ -11,8 +11,6 @@
             function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             if (tabName === 'general') {
                 var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-                var _t1 = isDark ? 'text-slate-200' : 'text-slate-800';
-                var _t2 = isDark ? 'text-slate-400' : 'text-slate-400';
                 var _sw = isDark ? 'bg-slate-600' : 'bg-slate-200';
                 var _inp = isDark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800';
                 var _btnBg = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
@@ -31,7 +29,7 @@
                         <div class="settings-card flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">${mBTAssets.appLogo}</div>
                             <div>
-                                <h3 class="text-xs font-black uppercase tracking-widest ${_t1}">moo Budget Tool</h3>
+                                <h3 class="text-xs font-black uppercase tracking-widest settings-text-primary">moo Budget Tool</h3>
                                 <p class="text-[9px] text-slate-400 font-bold">Build v${APP_VERSION} &bull; ${navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>'}</p>
                             </div>
                         </div>
@@ -62,7 +60,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Allow Page Zoom</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Allow Page Zoom</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Enable pinch-to-zoom gestures</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -74,7 +72,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Display Theme</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Display Theme</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Toggle Premium Dark / Classic Light</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -86,7 +84,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Compact View</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Compact View</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -98,7 +96,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Classic Theme</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Classic Theme</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Legacy visual style (Pre-v19.54)</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -110,7 +108,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Open Tools In-App</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Open Tools In-App</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Stages, Publish etc. open inside main window</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -122,7 +120,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Auto-Fetch Rates</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Auto-Fetch Rates</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Refresh exchange rates on startup</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -134,7 +132,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Auto-Hide Nav</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Auto-Hide Nav</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">HUD slides away when idle</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -146,7 +144,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Navigation Visibility</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Navigation Visibility</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Show/Hide HUD buttons</p>
                                     </div>
                                     <button onclick="mBT.features.settings.openFooterVisModal()" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center gap-1">${mBTAssets.eye} Manage</button>
@@ -155,7 +153,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Developer Mode</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Developer Mode</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Show advanced tools and logs</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -167,7 +165,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Show Funding Bar</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Show Funding Bar</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Secured / Gap funding meter</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -179,7 +177,7 @@
                             <div class="settings-card">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <h4 class="text-[10px] font-black uppercase tracking-widest ${_t1}">Show Timeline Bar</h4>
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Show Timeline Bar</h4>
                                         <p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Stages sparkline HUD</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -313,9 +311,7 @@
             }
             if (tabName === 'cloud') {
                 var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-                var _c  = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
                 var _i  = isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-800';
-                var _h  = isDark ? 'text-slate-200' : 'text-slate-800';
                 var _sep = isDark ? 'border-slate-700' : 'border-slate-50';
                 var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
                 var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
@@ -330,7 +326,7 @@
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
 
                         <!-- Authentication Section -->
-                        <div class="${_c} p-4 rounded-2xl shadow-sm transition-all duration-300">
+                        <div class="settings-card transition-all duration-300">
                             ${isSignedIn ? `
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3">
@@ -338,7 +334,7 @@
                                         ${signedInEmail.charAt(0)}
                                     </div>
                                     <div>
-                                        <div class="text-[10px] font-black ${_h} tracking-tight leading-none mb-1">${esc(signedInEmail)}</div>
+                                        <div class="text-[10px] font-black settings-text-primary tracking-tight leading-none mb-1">${esc(signedInEmail)}</div>
                                         <div class="flex items-center gap-1.5">
                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                             <span class="text-[8px] text-slate-400 uppercase tracking-widest font-black">Connected to Cloud</span>
@@ -392,9 +388,9 @@
 
                         <!-- User Profile (visible when signed in) -->
                         ${isSignedIn ? `
-                        <div class="${_c} p-4 rounded-2xl shadow-sm space-y-3">
+                        <div class="settings-card space-y-3">
                             <div>
-                                <h3 class="text-[10px] font-black uppercase tracking-widest ${_h} mb-0.5">Profile Identity</h3>
+                                <h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Profile Identity</h3>
                                 <p class="text-[9px] text-slate-400 font-bold">Public identity used for community database contributions.</p>
                             </div>
                             <div class="grid grid-cols-1 gap-2">
@@ -426,8 +422,8 @@
                         </div>` : ''}
 
                         <!-- DATABASE Community Rates -->
-                        <div class="${_c} p-4 rounded-2xl shadow-sm">
-                            <h3 class="text-[10px] font-black uppercase tracking-widest ${_h} mb-0.5">Community Rates</h3>
+                        <div class="settings-card">
+                            <h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Community Rates</h3>
                             <p class="text-[9px] text-slate-400 font-bold mb-2">Pull updated industry rates from the shared community database. No account required.</p>
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>
@@ -440,9 +436,9 @@
                         </div>
 
                         <!-- Project Backup + Sync -->
-                        <div class="${_c} p-4 rounded-2xl shadow-sm">
+                        <div class="settings-card">
                             <div class="flex items-center justify-between mb-0.5">
-                                <h3 class="text-[10px] font-black uppercase tracking-widest ${_h}">Background Sync</h3>
+                                <h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Background Sync</h3>
                                 <div id="sync-heartbeat-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400">
                                     <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
                                     Status Check...
