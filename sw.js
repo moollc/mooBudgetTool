@@ -1,6 +1,6 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.2 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22';
+var CACHE_NAME = 'mbt-monolith-cache-v22.1';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -29,51 +29,37 @@ var PRECACHE_ASSETS = [
     './src/scripts/storage.js',
     './src/scripts/migration.js',
     './src/scripts/icons.js',
-    './src/scripts/self_analysis.js',
     './src/scripts/engine/mbtle.js',
     './src/scripts/engine/opengate.js',
     './src/scripts/engine/opfs.js',
-    './src/scripts/engine/totalizer.js',
     './src/scripts/engine/publisher.js',
+
+    /* --- Event routing & AI bridge (loaded at L369/L372) --- */
+    './src/core/logic/EventRouter.js',
+    './src/core/logic/AIModule.js',
 
     /* --- App CSS --- */
     './public/css/mbt-core.css',
 
-    /* --- Core modules --- */
-    './src/core/mBT.core.js',
+    /* --- Core UI modules --- */
     './src/core/mBT.assets.js',
     './src/core/mBT.templates.js',
     './src/core/ui.settings.js',
     './src/core/finance.engine.js',
-    './src/core/blueprints.js',
-    './src/core/components/ToolHost.js',
-    './src/core/components/EmbeddedMode.js',
-    './src/core/services/OpenGate.js',
-    './src/core/services/Preflight.js',
-    './src/core/services/Contacts.js',
     './src/core/services/Security.js',
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
     './src/core/ui/Calendar.js',
     './src/core/wasm_node/pkg/mbt_wasm.js',
 
-    /* --- Config --- */
-    './src/config/ai.js',
+    /* --- Supabase services --- */
     './src/config/supabase.js',
-
-    /* --- Services --- */
-    './src/services/ai-context.js',
-    './src/services/ai-pattern-recognition.js',
-    './src/services/ai-reports.js',
     './src/services/supabase-sync.js',
     './src/services/supabase-realtime.js',
 
-    /* --- Tools manifest --- */
-    './src/tools/tools-manifest.json',
-
-    /* --- Tool HTML files --- */
+    /* --- Tool HTML files (dynamically loaded via openTool() iframes) --- */
     './src/tools/ai/index.html',
-    './src/tools/calendar/index.html',
+    './src/tools/calendar_benchmark/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
     './src/tools/diff/index.html',
@@ -83,7 +69,6 @@ var PRECACHE_ASSETS = [
     './src/tools/rsi/index.html',
     './src/tools/share/index.html',
     './src/tools/stages/index.html',
-    './src/tools/supabase/index.html',
     './src/tools/template/index.html',
 
     /* --- PWA icons (local — GitHub CDN would cause atomic install failure when offline) --- */
