@@ -1722,7 +1722,7 @@
         item.innerHTML = '<span class="feed-user">' + esc(entry.display_name || 'Collaborator') + '</span>' +
             ' <span class="feed-action">' + actionLabel + '</span>' +
             ' <span class="feed-time">' + esc(time) + '</span>';
-        list.insertBefore(firstChild);
+        list.insertBefore(item, list.firstChild);
         while (list.children.length > 50) { list.removeChild(list.lastChild); }
     }
 
@@ -10602,6 +10602,121 @@
                 }).catch(function () { _budgetCache = []; });
             }
 
+            /* ========= mBT.palette: Universal Provider Registry (Phase 138) ========= */
+            mBT.palette = mBT.palette || {};
+            mBT.palette._providers = [];
+            mBT.palette.register = function (p) { mBT.palette._providers.push(p); };
+
+            /* --- Tools provider --- */
+            mBT.palette.register({
+                id: 'p_tools', type: 'tool',
+                query: function (q) {
+                    var out = [];
+                    for (var i = 0; i < TOOL_REGISTRY.length; i++) {
+                        var r = TOOL_REGISTRY[i];
+                        if (!q || r.label.toLowerCase().indexOf(q) !== -1 || r.desc.toLowerCase().indexOf(q) !== -1) out.push(r);
+                    }
+                    return out;
+                }
+            });
+
+            /* --- Templates provider --- */
+            mBT.palette.register({
+                id: 'p_templates', type: 'template',
+                query: function (q) {
+                    var out = [];
+                    for (var i = 0; i < TEMPLATE_REGISTRY.length; i++) {
+                        var r = TEMPLATE_REGISTRY[i];
+                        if (!q || r.label.toLowerCase().indexOf(q) !== -1 || r.desc.toLowerCase().indexOf(q) !== -1) out.push(r);
+                    }
+                    return out;
+                }
+            });
+
+            /* --- Settings provider --- */
+            mBT.palette.register({
+                id: 'p_settings', type: 'setting',
+                query: function (q) {
+                    var out = [];
+                    for (var i = 0; i < SETTINGS_REGISTRY.length; i++) {
+                        var r = SETTINGS_REGISTRY[i];
+                        if (!q || r.label.toLowerCase().indexOf(q) !== -1 || r.desc.toLowerCase().indexOf(q) !== -1) out.push(r);
+                    }
+                    return out;
+                }
+            });
+
+            /* --- Projects provider (consumes _budgetCache populated by loadBudgetCache) --- */
+            mBT.palette.register({
+                id: 'p_projects', type: 'budget',
+                query: function (q) {
+                    var out = [];
+                    for (var i = 0; i < _budgetCache.length; i++) {
+                        var b = _budgetCache[i];
+                        if (!q || b.label.toLowerCase().indexOf(q) !== -1) out.push(b);
+                    }
+                    return out;
+                }
+            });
+
+            /* --- Funding provider (keyword-triggered snapshot, delegates to getFundingResult) --- */
+            mBT.palette.register({
+                id: 'p_funding', type: 'funding',
+                query: function (q) {
+                    var r = getFundingResult(q);
+                    return r ? [r] : [];
+                }
+            });
+
+            /* --- Finance provider (Task 3): bridges to mBT.data.getMetrics for cost metrics --- */
+            var FINANCE_KEYWORDS = ['budget', 'cost', 'spend', 'total', 'grand', 'stage', 'burn', 'cap', 'runway'];
+            mBT.palette.register({
+                id: 'p_finance', type: 'finance',
+                query: function (q) {
+                    if (!q || !window.budget) return [];
+                    var hit = false;
+                    for (var k = 0; k < FINANCE_KEYWORDS.length; k++) {
+                        if (q.indexOf(FINANCE_KEYWORDS[k]) !== -1) { hit = true; break; }
+                    }
+                    if (!hit) return [];
+                    var m = (mBT.data && typeof mBT.data.getMetrics === 'function') ? mBT.data.getMetrics() : null;
+                    if (!m) return [];
+                    var fmt = (typeof formatAbbreviated === 'function') ? formatAbbreviated : function (v) { return String(Math.round(v)); };
+                    return [{
+                        id: 'finance_metrics',
+                        type: 'finance',
+                        label: 'Budget Overview',
+                        desc: 'Total: ' + fmt(m.grandTotal) + ' &bull; Burn: ' + fmt(m.dailyBurn) + '/day &bull; Runway: ' + Math.round(m.runwayDays || 0) + ' days'
+                    }];
+                }
+            });
+
+            /* --- Line Items provider (dynamic scan of active budget sections) --- */
+            mBT.palette.register({
+                id: 'p_lineitems', type: 'lineitem',
+                query: function (q) {
+                    var out = [];
+                    if (!window.budget || !window.budget.sections) return out;
+                    Object.keys(window.budget.sections).forEach(function (secKey) {
+                        var sec = window.budget.sections[secKey];
+                        if (!sec || !sec.items) return;
+                        sec.items.forEach(function (item) {
+                            var iDesc = (item.description || '').toLowerCase();
+                            var iCrew = (item.crew && item.crew.name ? item.crew.name : '').toLowerCase();
+                            if (!q || iDesc.indexOf(q) !== -1 || iCrew.indexOf(q) !== -1 || secKey.toLowerCase().indexOf(q) !== -1) {
+                                out.push({
+                                    id: item.id,
+                                    type: 'lineitem',
+                                    label: item.description || 'Untitled',
+                                    desc: esc(secKey) + (item.crew && item.crew.name ? ' \u2014 ' + esc(item.crew.name) : '')
+                                });
+                            }
+                        });
+                    });
+                    return out;
+                }
+            });
+
             function openPalette() {
                 var el = document.getElementById('cmdPalette');
                 if (!el) return;
@@ -10626,7 +10741,7 @@
                 _open = false;
             }
 
-            /* ========= Universal renderResults (Tasks 1–6) ========= */
+            /* ========= renderResults: Provider Registry Loop (Phase 138) ========= */
             function renderResults(query) {
                 var ul = document.getElementById('cmdResults');
                 var hint = document.getElementById('cmdHint');
@@ -10634,53 +10749,24 @@
                 var q = (query || '').trim().toLowerCase();
                 var freq = loadFreq();
 
-                /* --- Bucket results into typed groups --- */
-                var TYPE_ORDER = ['tool', 'template', 'setting', 'budget', 'funding', 'lineitem'];
-                var TYPE_LABELS = { tool: 'Tools', template: 'Templates', setting: 'Settings', budget: 'Projects', funding: 'Funding', lineitem: 'Line Items' };
-                var grouped = { tool: [], template: [], setting: [], budget: [], funding: [], lineitem: [] };
+                /* Bucket results from all registered providers */
+                var TYPE_ORDER = ['tool', 'template', 'setting', 'budget', 'funding', 'finance', 'lineitem'];
+                var TYPE_LABELS = { tool: 'Tools', template: 'Templates', setting: 'Settings', budget: 'Projects', funding: 'Funding', finance: 'Finance', lineitem: 'Line Items' };
+                var grouped = {};
+                for (var ti = 0; ti < TYPE_ORDER.length; ti++) grouped[TYPE_ORDER[ti]] = [];
 
-                /* 1. Static registry: tools, templates, settings */
-                var staticItems = TOOL_REGISTRY.concat(SETTINGS_REGISTRY).concat(TEMPLATE_REGISTRY);
-                for (var si = 0; si < staticItems.length; si++) {
-                    var sItem = staticItems[si];
-                    if (!q || sItem.label.toLowerCase().indexOf(q) !== -1 || sItem.desc.toLowerCase().indexOf(q) !== -1) {
-                        if (grouped[sItem.type]) grouped[sItem.type].push(sItem);
+                var providers = mBT.palette._providers;
+                for (var pi = 0; pi < providers.length; pi++) {
+                    var pResults = providers[pi].query(q);
+                    for (var ri = 0; ri < pResults.length; ri++) {
+                        var pR = pResults[ri];
+                        if (grouped[pR.type]) grouped[pR.type].push(pR);
                     }
                 }
 
-                /* 2. Saved budget projects */
-                for (var bi = 0; bi < _budgetCache.length; bi++) {
-                    var bItem = _budgetCache[bi];
-                    if (!q || bItem.label.toLowerCase().indexOf(q) !== -1) grouped.budget.push(bItem);
-                }
-
-                /* 3. Funding Bridge */
-                var fundResult = getFundingResult(q);
-                if (fundResult) grouped.funding.push(fundResult);
-
-                /* 4. Dynamic line items */
-                if (window.budget && window.budget.sections) {
-                    Object.keys(window.budget.sections).forEach(function (secKey) {
-                        var sec = window.budget.sections[secKey];
-                        if (!sec || !sec.items) return;
-                        sec.items.forEach(function (item) {
-                            var iDesc = (item.description || '').toLowerCase();
-                            var iCrew = (item.crew && item.crew.name ? item.crew.name : '').toLowerCase();
-                            if (!q || iDesc.indexOf(q) !== -1 || iCrew.indexOf(q) !== -1 || secKey.toLowerCase().indexOf(q) !== -1) {
-                                grouped.lineitem.push({
-                                    id: item.id,
-                                    type: 'lineitem',
-                                    label: item.description || 'Untitled',
-                                    desc: esc(secKey) + (item.crew && item.crew.name ? ' \u2014 ' + esc(item.crew.name) : '')
-                                });
-                            }
-                        });
-                    });
-                }
-
-                /* 5. Frequency sort within each group independently */
-                for (var ti = 0; ti < TYPE_ORDER.length; ti++) {
-                    grouped[TYPE_ORDER[ti]].sort(function (a, b) { return (freq[b.id] || 0) - (freq[a.id] || 0); });
+                /* Frequency sort within each group (Task 4) */
+                for (var si = 0; si < TYPE_ORDER.length; si++) {
+                    grouped[TYPE_ORDER[si]].sort(function (a, b) { return (freq[b.id] || 0) - (freq[a.id] || 0); });
                 }
 
                 /* Total count */
@@ -10693,7 +10779,7 @@
                     return;
                 }
 
-                /* Render: .cmd-group-hdr separator before each non-empty group */
+                /* Render: group header before each non-empty bucket */
                 var html = '';
                 var rendered = 0;
                 var limit = 50;
@@ -10705,8 +10791,8 @@
 
                     html += '<li class="cmd-group-hdr">' + TYPE_LABELS[gType] + '</li>';
 
-                    for (var ri = 0; ri < group.length && rendered < limit; ri++) {
-                        var r = group[ri];
+                    for (var ri2 = 0; ri2 < group.length && rendered < limit; ri2++) {
+                        var r = group[ri2];
                         var typePill = '';
                         var bodyHtml = '';
 
@@ -10720,7 +10806,7 @@
                                 '<span class="text-slate-400 text-[10px] font-bold">' + esc(r.desc) + '</span>';
                         } else if (r.type === 'setting') {
                             var isOn = r.getState();
-                            /* .cmd-pill-toggle consumed here — Qwen CSS override point */
+                            /* .cmd-pill-toggle — Qwen CSS override point (Task 5) */
                             typePill = '<div class="shrink-0 flex items-center gap-1.5">' +
                                 '<span class="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-amber-500/30 text-amber-300">Setting</span>' +
                                 '<div class="cmd-pill-toggle relative w-8 h-4 rounded-full ' + (isOn ? 'bg-indigo-500' : 'bg-slate-600') + '">' +
@@ -10734,6 +10820,10 @@
                                 '<span class="text-slate-400 text-[10px] font-bold">Saved project</span>';
                         } else if (r.type === 'funding') {
                             typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-rose-500/30 text-rose-300">Funding</span>';
+                            bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
+                                '<span class="text-slate-400 text-[10px] font-bold">' + r.desc + '</span>';
+                        } else if (r.type === 'finance') {
+                            typePill = '<span class="shrink-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-sky-500/30 text-sky-300">Finance</span>';
                             bodyHtml = '<span class="text-white text-[12px] font-bold truncate">' + esc(r.label) + '</span>' +
                                 '<span class="text-slate-400 text-[10px] font-bold">' + r.desc + '</span>';
                         } else {
@@ -10799,6 +10889,10 @@
                 } else if (rType === 'funding') {
                     var fc = document.getElementById('fundingCard');
                     if (fc) fc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    closePalette();
+                } else if (rType === 'finance') {
+                    var fh = document.getElementById('budget-header') || document.getElementById('fundingCard');
+                    if (fh) fh.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     closePalette();
                 }
             });
