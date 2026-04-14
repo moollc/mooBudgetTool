@@ -1,8 +1,8 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.2 ========= */
 
-const CACHE_NAME = 'mbt-monolith-cache-v22';
+var CACHE_NAME = 'mbt-monolith-cache-v22';
 
-const PRECACHE_ASSETS = [
+var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
     './index.html',
     './manifest.json',
@@ -90,31 +90,33 @@ const PRECACHE_ASSETS = [
     './assets/mBT.svg'
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', function(event) {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => {
+            .then(function(cache) {
                 /* Map absolute bypass to installation assets to defeat old-SW interception */
-                const requests = PRECACHE_ASSETS.map(url => new Request(url, { cache: 'no-store' }));
+                var requests = PRECACHE_ASSETS.map(function(url) {
+                    return new Request(url, { cache: 'no-store' });
+                });
                 return cache.addAll(requests);
             })
-            .then(() => self.skipWaiting())
+            .then(function() { return self.skipWaiting(); })
     );
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', function(event) {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
+        caches.keys().then(function(cacheNames) {
             return Promise.all(
                 cacheNames
-                    .filter((name) => name !== CACHE_NAME)
-                    .map((name) => caches.delete(name))
+                    .filter(function(name) { return name !== CACHE_NAME; })
+                    .map(function(name) { return caches.delete(name); })
             );
-        }).then(() => self.clients.claim())
+        }).then(function() { return self.clients.claim(); })
     );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', function(event) {
     /* Only cache GET requests */
     if (event.request.method !== 'GET') return;
 
@@ -123,32 +125,36 @@ self.addEventListener('fetch', (event) => {
        Falls back to cached index.html only when the source is unreachable (true offline). */
     if (event.request.mode === 'navigate') {
         event.respondWith(
-            fetch(event.request, { cache: 'no-cache' }).then((networkResponse) => {
+            fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
                 if (networkResponse && networkResponse.status === 200) {
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+                    caches.open(CACHE_NAME).then(function(cache) {
+                        return cache.put(event.request, networkResponse.clone());
+                    });
                 }
                 return networkResponse;
-            }).catch(() => caches.match('./index.html', { ignoreSearch: true }))
+            }).catch(function() {
+                return caches.match('./index.html', { ignoreSearch: true });
+            })
         );
         return;
     }
 
     /* --- All other assets: stale-while-revalidate for fast loads --- */
     event.respondWith(
-        caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
+        caches.match(event.request, { ignoreSearch: true }).then(function(cachedResponse) {
             /* 1. Fire up a network fetch bypassing ALL browser HTTP caches to get the absolute newest version */
-            const fetchPromise = fetch(event.request, { cache: 'no-cache' }).then((networkResponse) => {
+            var fetchPromise = fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
                 /* 2. Silently update the bare-URL cache to prevent query-string bloat */
                 if (networkResponse && networkResponse.status === 200) {
-                    const clone = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        const cleanUrl = new URL(event.request.url);
+                    var clone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then(function(cache) {
+                        var cleanUrl = new URL(event.request.url);
                         cleanUrl.search = '';
-                        cache.put(cleanUrl, clone);
+                        return cache.put(cleanUrl, clone);
                     });
                 }
                 return networkResponse;
-            }).catch(() => {
+            }).catch(function() {
                 /* If network fails and we have no cache, fallback for navigation */
                 if (!cachedResponse && event.request.mode === 'navigate') {
                     return caches.match('./index.html', { ignoreSearch: true });
