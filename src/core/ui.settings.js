@@ -4,27 +4,27 @@
  * License: MIT
  */
 
-(function(window) {
+(function (window) {
     'use strict';
-    window.mBT_UI_Settings_getTabContent = function(tabName, subTab) {
-            subTab = subTab || 'lineItems';
-            function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-            if (tabName === 'general') {
-                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-                var _sw = isDark ? 'bg-slate-600' : 'bg-slate-200';
-                var _inp = isDark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800';
-                var _btnBg = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
-                var _btnRose = isDark ? 'bg-rose-900/30 text-rose-400 hover:bg-rose-900/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100';
-                var currentDateFormat = getProjectDateFormat();
-                var currentSeparator = getProjectNameSeparator();
-                var isCompact = (budget.settings && budget.settings.compactMode) || false;
-                var isClassic = (budget.settings && budget.settings.classicTheme) || false;
-                var allowZoom = (budget.settings && budget.settings.allowZoom) || false;
-                var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false';
-                var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
-                var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
+    window.mBT_UI_Settings_getTabContent = function (tabName, subTab) {
+        subTab = subTab || 'lineItems';
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        if (tabName === 'general') {
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _sw = isDark ? 'bg-slate-600' : 'bg-slate-200';
+            var _inp = isDark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800';
+            var _btnBg = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+            var _btnRose = isDark ? 'bg-rose-900/30 text-rose-400 hover:bg-rose-900/50' : 'bg-rose-50 text-rose-600 hover:bg-rose-100';
+            var currentDateFormat = getProjectDateFormat();
+            var currentSeparator = getProjectNameSeparator();
+            var isCompact = (budget.settings && budget.settings.compactMode) || false;
+            var isClassic = (budget.settings && budget.settings.classicTheme) || false;
+            var allowZoom = (budget.settings && budget.settings.allowZoom) || false;
+            var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false';
+            var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
+            var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
 
-                return `
+            return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
                         <div class="settings-card flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">${mBTAssets.appLogo}</div>
@@ -188,28 +188,28 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2">
-                             <a href="https://raw.githubusercontent.com/jaysonmy/moobudget/refs/heads/main/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnBg} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.cloud} Get Beta</a>
+                             <a href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/mBT/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnBg} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.cloud} Get Beta</a>
                              <button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnRose} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.zap} Fix Bugs</button>
                              <button onclick="mBTME.close('settingsModal'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 py-2 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] uppercase tracking-widest hover:opacity-90 transition-opacity">${mBTAssets.coffee} Support</button>
                         </div>
                     </div>`;
-            }
-            if (tabName === 'ai') {
-                var provider = getSelectedProvider();
-                var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
-                var storedPrompt = mBT.features.ai.getSystemPrompt();
-                var keyLinks = {
-                    'gemini':    'https://aistudio.google.com/app/apikey',
-                    'openai':    'https://platform.openai.com/api-keys',
-                    'deepseek':  'https://platform.deepseek.com/api_keys',
-                    'grok':      'https://console.x.ai/',
-                    'anthropic': 'https://console.anthropic.com/settings/keys',
-                    'lmstudio':  '#'
-                };
-                var storedLmEndpoint = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1/chat/completions';
-                var storedLmModel    = localStorage.getItem(storageKeyPrefix + 'lmstudioModel')    || 'local-model';
+        }
+        if (tabName === 'ai') {
+            var provider = getSelectedProvider();
+            var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
+            var storedPrompt = mBT.features.ai.getSystemPrompt();
+            var keyLinks = {
+                'gemini': 'https://aistudio.google.com/app/apikey',
+                'openai': 'https://platform.openai.com/api-keys',
+                'deepseek': 'https://platform.deepseek.com/api_keys',
+                'grok': 'https://console.x.ai/',
+                'anthropic': 'https://console.anthropic.com/settings/keys',
+                'lmstudio': '#'
+            };
+            var storedLmEndpoint = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1/chat/completions';
+            var storedLmModel = localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || 'local-model';
 
-                return `
+            return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
                         <div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">
                             <div class="flex justify-between items-start mb-3">
@@ -282,11 +282,11 @@
                             </div>
                         </div>
                     </div>`;
-            }
-            if (tabName === 'connections') {
-                var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
+        }
+        if (tabName === 'connections') {
+            var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
 
-                return `
+            return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
                         <div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">
                             <div class="flex justify-between items-start mb-3">
@@ -308,21 +308,21 @@
                             </div>
                         </div>
                     </div>`;
-            }
-            if (tabName === 'cloud') {
-                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-                var _i  = isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-800';
-                var _sep = isDark ? 'border-slate-700' : 'border-slate-50';
-                var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
-                var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
-                var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
-                var profileName = localStorage.getItem('mbt_profile_display_name') || '';
-                var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
-                var profileRole = localStorage.getItem('mbt_profile_role') || '';
-                var authView = localStorage.getItem('mbt_auth_view') || 'login';
-                var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
+        }
+        if (tabName === 'cloud') {
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _i = isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-800';
+            var _sep = isDark ? 'border-slate-700' : 'border-slate-50';
+            var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
+            var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
+            var profileName = localStorage.getItem('mbt_profile_display_name') || '';
+            var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
+            var profileRole = localStorage.getItem('mbt_profile_role') || '';
+            var authView = localStorage.getItem('mbt_auth_view') || 'login';
+            var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
 
-                return `
+            return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
 
                         <!-- Authentication Section -->
@@ -402,7 +402,7 @@
                                     <div class="space-y-1.5">
                                         <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Home Market</label>
                                         <select id="profileRegion" class="w-full px-3 py-2 ${_i} border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">
-                                            ${Object.keys(mBTOG.RATE_REGIONS).map(function(r){ return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
+                                            ${Object.keys(mBTOG.RATE_REGIONS).map(function (r) { return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('')}
                                         </select>
                                     </div>
                                     <div class="space-y-1.5">
@@ -455,63 +455,65 @@
                             <button onclick="if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }" class="w-full py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>
                         </div>
                     </div>`;
-            }
-            if (tabName === 'database') {
-                var nav = RenderEngine.ui.tabs({
-                    items: [
-                        { id: 'lineItems', label: 'Line Items' },
-                        { id: 'contacts', label: 'Contacts' },
-                        { id: 'projects', label: 'Projects' },
-                        { id: 'templates', label: 'Templates' }
-                    ],
-                    activeId: subTab,
-                    onClick: "mBT.features.settings.open('database',"
-                }).replace(/open\('database',\s*'([^']+)'\)/g, "open('database', '$1')");
+        }
+        if (tabName === 'database') {
+            var nav = RenderEngine.ui.tabs({
+                items: [
+                    { id: 'lineItems', label: 'Line Items' },
+                    { id: 'contacts', label: 'Contacts' },
+                    { id: 'projects', label: 'Projects' },
+                    { id: 'templates', label: 'Templates' }
+                ],
+                activeId: subTab,
+                onClick: "mBT.features.settings.open('database',"
+            }).replace(/open\('database',\s*'([^']+)'\)/g, "open('database', '$1')");
 
-                return `<div class="flex flex-col h-full p-4 pb-0 overflow-hidden space-y-3">
+            return `<div class="flex flex-col h-full p-4 pb-0 overflow-hidden space-y-3">
                     ${nav.replace(/onclick="mBT.features.settings.open\('database',\('([^']+)'\)\)"/g, "onclick=\"mBT.features.settings.open('database', '$1')\"")}
                     <div class="flex-grow flex flex-col relative overflow-hidden min-h-0">
                         ${this.renderDbView(subTab)}
                     </div>
                 </div>`;
-            }
-            if (tabName === 'updates') {
-                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-                var _card = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
-                var _btn = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
-                var _update = isDark ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-100 text-amber-600';
-                var updateAvailable = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.available) || false;
-                var currentVersion = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.localVersion) || 'v22.1';
-                var remoteVersion = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.remoteVersion) || '--';
+        }
+        if (tabName === 'updates') {
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _card = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
+            var _update = isDark ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-100 text-amber-600';
+            var _checking = isDark ? 'bg-blue-900/30 border-blue-700 text-blue-300' : 'bg-blue-50 border-blue-100 text-blue-600';
+            var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
+            var updateAvailable = updateStatus.available || false;
+            var isChecking = updateStatus.checking || false;
 
-                return `
+            /* Task 17: Status message based on native SW updatefound state */
+            var statusMsg = '';
+            if (isChecking) {
+                statusMsg = '<div class="border rounded-lg p-3 mt-3 ' + _checking + '"><p class="text-[9px] font-bold">⏳ Checking for updates...</p></div>';
+            } else if (updateAvailable) {
+                statusMsg = '<div class="border rounded-lg p-3 mt-3 ' + _update + '"><p class="text-[9px] font-bold">✓ Update available. Click below to install.</p></div>';
+            } else {
+                statusMsg = '<div class="border rounded-lg p-3 mt-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold">✓ Tool is up to date.</p></div>';
+            }
+
+            return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
                         <div class="border rounded-xl p-4 ${_card}">
                             <h3 class="text-xs font-black uppercase tracking-widest mb-3">Software Updates</h3>
                             <div class="space-y-3">
-                                <div class="grid grid-cols-2 gap-3 text-[10px]">
-                                    <div class="p-2 rounded-lg ${_btn}">
-                                        <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Local Version</p>
-                                        <p class="font-black text-sm">${esc(currentVersion)}</p>
-                                    </div>
-                                    <div class="p-2 rounded-lg ${_btn}">
-                                        <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Remote Version</p>
-                                        <p class="font-black text-sm">${esc(remoteVersion)}</p>
-                                    </div>
-                                </div>
-                                <button onclick="mBT.features.settings.checkForUpdates()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95">Check for Updates</button>
+                                <button onclick="mBT.features.settings.checkForUpdates()" ${isChecking ? 'disabled' : ''} class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 ${isChecking ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    ${isChecking ? '⏳ Checking...' : 'Check for Updates'}
+                                </button>
                                 ${updateAvailable ? '<button onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' : ''}
                             </div>
-                            ${updateAvailable ? '<div class="border rounded-lg p-3 mt-3 ' + _update + '"><p class="text-[9px] font-bold">✓ Update available. Click above to install.</p></div>' : '<div class="border rounded-lg p-3 mt-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold">✓ Tool is up to date.</p></div>'}
+                            ${statusMsg}
                         </div>
                     </div>`;
-            }
-            return `<div class="p-8 text-center text-slate-300 font-bold uppercase tracking-widest">Logic Stream Not Found</div>`;
-        };
+        }
+        return `<div class="p-8 text-center text-slate-300 font-bold uppercase tracking-widest">Logic Stream Not Found</div>`;
+    };
 
     /* --- mBT UI Theme Logic (Bridge Implementation) --- */
     mBT.ui = mBT.ui || {};
-    mBT.ui.setTheme = function(themeName) {
+    mBT.ui.setTheme = function (themeName) {
         themeName = themeName || 'dark';
         localStorage.setItem('mbt_active_theme', themeName);
         document.body.className = document.body.className.replace(/\bmbt-theme-\S+/g, '');
