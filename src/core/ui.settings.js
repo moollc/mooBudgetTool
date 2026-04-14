@@ -483,28 +483,32 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
+            var currentVersion = updateStatus.localVersion || 'v22.1';
+            var commitMessage = updateStatus.commitMessage || 'Update details unavailable';
 
-            /* Task 17: Status message based on native SW updatefound state */
+            /* Status message based on update state */
             var statusMsg = '';
             if (isChecking) {
-                statusMsg = '<div class="border rounded-lg p-3 mt-3 ' + _checking + '"><p class="text-[9px] font-bold">⏳ Checking for updates...</p></div>';
+                statusMsg = '<div class="border rounded-lg p-3 ' + _checking + '"><p class="text-[9px] font-bold text-center">⏳ Checking for updates...</p></div>';
             } else if (updateAvailable) {
-                statusMsg = '<div class="border rounded-lg p-3 mt-3 ' + _update + '"><p class="text-[9px] font-bold">✓ Update available. Click below to install.</p></div>';
+                statusMsg = '<div class="space-y-2"><div class="border rounded-lg p-3 ' + _update + '"><p class="text-[9px] font-bold text-center">✓ Update available</p></div><div class="border rounded-lg p-3 bg-slate-50 text-slate-600 text-center"><p class="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1">Release Notes</p><p class="text-[9px] font-medium">' + esc(commitMessage) + '</p></div></div>';
             } else {
-                statusMsg = '<div class="border rounded-lg p-3 mt-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold">✓ Tool is up to date.</p></div>';
+                statusMsg = '<div class="border rounded-lg p-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold text-center">✓ You have the latest version (' + esc(currentVersion) + ')</p></div>';
             }
 
             return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
-                        <div class="border rounded-xl p-4 ${_card}">
-                            <h3 class="text-xs font-black uppercase tracking-widest mb-3">Software Updates</h3>
+                        <div class="border rounded-xl p-6 ${_card} text-center">
+                            <h3 class="text-xs font-black uppercase tracking-widest mb-6 text-slate-600">Check for mBT Update</h3>
                             <div class="space-y-3">
                                 <button onclick="mBT.features.settings.checkForUpdates()" ${isChecking ? 'disabled' : ''} class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 ${isChecking ? 'opacity-50 cursor-not-allowed' : ''}">
                                     ${isChecking ? '⏳ Checking...' : 'Check for Updates'}
                                 </button>
                                 ${updateAvailable ? '<button onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' : ''}
                             </div>
-                            ${statusMsg}
+                            <div class="mt-4">
+                                ${statusMsg}
+                            </div>
                         </div>
                     </div>`;
         }
