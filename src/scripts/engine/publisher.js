@@ -181,7 +181,8 @@
 
                 var summaryData = [['Subtotal', fmt(budgetData.subtotal)]];
                 (budgetData.fringes || []).forEach(function(f) {
-                    if (f.enabled !== false) summaryData.push([esc(f.name) + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
+                    /* Plain string — jsPDF renders text, not HTML; esc() would produce literal &amp; */
+                    if (f.enabled !== false) summaryData.push([String(f.name || 'Fringe') + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
                 });
                 summaryData.push(['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))]);
                 summaryData.push(['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))]);
@@ -492,7 +493,8 @@
 
                 var summaryData = [['Subtotal', fmt(budgetData.subtotal)]];
                 (budgetData.fringes || []).forEach(function(f) {
-                    if (f.enabled !== false) summaryData.push([esc(f.name) + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
+                    /* Plain string — jsPDF renders text, not HTML; esc() would produce literal &amp; */
+                    if (f.enabled !== false) summaryData.push([String(f.name || 'Fringe') + ' (' + (f.rate || 0) + '%)', fmt((budgetData.subtotal || 0) * ((parseFloat(f.rate) || 0) / 100))]);
                 });
                 summaryData.push(['Contingency (' + (budgetData.contingencyPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.contingencyPercentage || 0) / 100))]);
                 summaryData.push(['Sales Tax (' + (budgetData.salesTaxPercentage || 0) + '%)', fmt((budgetData.subtotal || 0) * ((budgetData.salesTaxPercentage || 0) / 100))]);
@@ -509,39 +511,94 @@
                     margin: { left: 14, right: 14 }
                 });
 
+                /* --- Shoot Schedule section (10-day schedule support) --- */
+                var sd = budgetData.shootDays || {};
+                var phases = [
+                    { label: 'Development', key: 'dev' },
+                    { label: 'Pre-Production', key: 'pre' },
+                    { label: 'Production', key: 'prod' },
+                    { label: 'Post-Production', key: 'post' },
+                    { label: 'Distribution', key: 'dist' }
+                ];
+                var totalDays = 0;
+                var schedRows = [];
+                for (var pi = 0; pi < phases.length; pi++) {
+                    var days = parseInt(sd[phases[pi].key]) || 0;
+                    if (days > 0) {
+                        schedRows.push([phases[pi].label, days + (days === 1 ? ' day' : ' days')]);
+                        totalDays += days;
+                    }
+                }
+                if (schedRows.length > 0) {
+                    schedRows.push([{ content: 'TOTAL SHOOT DAYS', styles: { fontStyle: 'bold' } }, { content: String(totalDays), styles: { fontStyle: 'bold', halign: 'right' } }]);
+                    doc.autoTable({
+                        startY: doc.lastAutoTable.finalY + 8,
+                        head: [['Production Phase', 'Duration']],
+                        body: schedRows,
+                        theme: 'grid',
+                        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+                        columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 'auto', halign: 'right' } },
+                        margin: { left: 14, right: 14 }
+                    });
+                }
+
                 var finalY = doc.lastAutoTable.finalY + 10;
                 var bodyRows = [];
 
                 if (budgetData.sections) {
-                    Object.entries(budgetData.sections).forEach(function (entry) {
-                        var secName = entry[0];
-                        var sec = entry[1];
-                        bodyRows.push([{ content: secName.toUpperCase(), colSpan: 5, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [71, 85, 105] } }]);
+                    Object.keys(budgetData.sections).forEach(function (secName) {
+                        var sec = budgetData.sections[secName];
+                        /* colSpan 7 matches the new 7-column layout */
+                        bodyRows.push([{ content: secName.toUpperCase(), colSpan: 7, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [71, 85, 105] } }]);
 
+                        var secEst = 0;
+                        var secAct = 0;
                         (sec.items || []).forEach(function (item) {
-                            var total = parseFloat(item.total) || 0;
-                            var rate = parseFloat(item.rate) || 0;
                             var qty = parseFloat(item.quantity) || 0;
-                            bodyRows.push([item.description, qty, item.unit, fmt(rate), fmt(total)]);
+                            var rate = parseFloat(item.rate) || 0;
+                            var mult = parseFloat(item.multiplier) || 1;
+                            var est = parseFloat(item.total) || (qty * rate * mult);
+                            var act = parseFloat(item.actual) || 0;
+                            var variance = act - est;
+                            secEst += est;
+                            secAct += act;
+                            bodyRows.push([
+                                item.description || '',
+                                qty,
+                                item.unit || '',
+                                fmt(rate),
+                                fmt(est),
+                                fmt(act),
+                                /* Overrun alert: red text when actual exceeds estimated */
+                                { content: fmt(variance), styles: { textColor: variance > 0 ? [220, 38, 38] : variance < 0 ? [22, 163, 74] : [100, 116, 139], fontStyle: variance !== 0 ? 'bold' : 'normal' } }
+                            ]);
                         });
 
-                        bodyRows.push([{ content: 'Total ' + secName + ': ' + fmt(sec.total), colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } }]);
+                        var secVariance = secAct - secEst;
+                        bodyRows.push([
+                            { content: 'Total: ' + secName, colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } },
+                            { content: fmt(secEst), styles: { fontStyle: 'bold', halign: 'right' } },
+                            { content: fmt(secAct), styles: { fontStyle: 'bold', halign: 'right' } },
+                            { content: fmt(secVariance), styles: { fontStyle: 'bold', halign: 'right', textColor: secVariance > 0 ? [220, 38, 38] : [22, 163, 74] } }
+                        ]);
                     });
                 }
 
                 doc.autoTable({
                     startY: finalY,
-                    head: [['Description', 'Qty', 'Unit', 'Rate', 'Total']],
+                    head: [['Description', 'Qty', 'Unit', 'Rate', 'Estimated', 'Actual', 'Variance']],
                     body: bodyRows,
                     theme: 'plain',
                     styles: { fontSize: 9, cellPadding: 2 },
                     headStyles: { fillColor: [51, 65, 85], textColor: 255 },
                     columnStyles: {
                         0: { cellWidth: 'auto' },
-                        1: { cellWidth: 15, halign: 'center' },
-                        2: { cellWidth: 20, halign: 'center' },
-                        3: { cellWidth: 30, halign: 'right' },
-                        4: { cellWidth: 30, halign: 'right' }
+                        1: { cellWidth: 12, halign: 'center' },
+                        2: { cellWidth: 16, halign: 'center' },
+                        3: { cellWidth: 24, halign: 'right' },
+                        4: { cellWidth: 26, halign: 'right' },
+                        5: { cellWidth: 26, halign: 'right' },
+                        6: { cellWidth: 26, halign: 'right' }
                     },
                     margin: { left: 14, right: 14 },
                     didDrawPage: function (data) {
