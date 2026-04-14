@@ -105,31 +105,20 @@ self.addEventListener('fetch', function(event) {
     /* Only cache GET requests */
     if (event.request.method !== 'GET') return;
 
-    /* --- Navigation requests: network-first so code updates reflect immediately ---
-       On file://, "network" is the local file system — always returns the latest version.
-       Falls back to cached index.html only when the source is unreachable (true offline). */
-    if (event.request.mode === 'navigate') {
-        event.respondWith(
-            fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
-                if (networkResponse && networkResponse.status === 200) {
-                    caches.open(CACHE_NAME).then(function(cache) {
-                        return cache.put(event.request, networkResponse.clone());
-                    });
-                }
-                return networkResponse;
-            }).catch(function() {
-                return caches.match('./index.html', { ignoreSearch: true });
-            })
-        );
-        return;
-    }
-
-    /* --- All other assets: stale-while-revalidate for fast loads --- */
+    /* --- Cache-first strategy: ALL assets (including navigate) served from cache first ---
+       Ensures zero-latency loads and infinite offline resilience. Network fetches only happen
+       when: (1) asset not in cache, or (2) user explicitly calls reg.update().
+       This fixes offline app breakage caused by slow network timeouts. */
     event.respondWith(
         caches.match(event.request, { ignoreSearch: true }).then(function(cachedResponse) {
-            /* 1. Fire up a network fetch bypassing ALL browser HTTP caches to get the absolute newest version */
-            var fetchPromise = fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
-                /* 2. Silently update the bare-URL cache to prevent query-string bloat */
+            /* 1. If cached, return immediately for zero-latency UX */
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+
+            /* 2. Not in cache — fetch from network */
+            return fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
+                /* 3. Silently update the cache with successful response */
                 if (networkResponse && networkResponse.status === 200) {
                     var clone = networkResponse.clone();
                     caches.open(CACHE_NAME).then(function(cache) {
@@ -140,14 +129,12 @@ self.addEventListener('fetch', function(event) {
                 }
                 return networkResponse;
             }).catch(function() {
-                /* If network fails and we have no cache, fallback for navigation */
-                if (!cachedResponse && event.request.mode === 'navigate') {
+                /* 4. Network failed and nothing in cache — fallback for navigation */
+                if (event.request.mode === 'navigate') {
                     return caches.match('./index.html', { ignoreSearch: true });
                 }
+                /* For non-navigation assets, let the network error propagate */
             });
-
-            /* 3. Instantly return the cached response for zero-latency UI */
-            return cachedResponse || fetchPromise;
         })
     );
 });

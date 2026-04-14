@@ -7656,7 +7656,8 @@
                 { id: 'database', label: 'DATABASE' },
                 { id: 'ai', label: 'AI' },
                 { id: 'connections', label: 'Connections' },
-                { id: 'cloud', label: 'Cloud' }
+                { id: 'cloud', label: 'Cloud' },
+                { id: 'updates', label: 'Updates' }
             ];
 
             var tabNavHTML = '<div class="flex border-b border-slate-200 rounded-t-xl overflow-hidden select-none settings-tab-bar">' +
@@ -8082,6 +8083,41 @@
             }).catch(function (e) {
                 mBTME.alert('Profile', 'Could not save profile: ' + (e.message || 'Unknown error'));
             });
+        },
+
+        /* --- Task 4: Check for SW updates from GitHub mBT branch --- */
+        checkForUpdates: function() {
+            var GITHUB_RAW_URL = 'https://raw.githubusercontent.com/Jayson-Moo-Young/mBT/mBT/sw.js';
+            var localVersion = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.localVersion) || (typeof CACHE_NAME !== 'undefined' ? CACHE_NAME : 'unknown');
+
+            /* Initialize update registry if needed */
+            if (!window.mBT) window.mBT = {};
+            if (!window.mBT.registry) window.mBT.registry = {};
+            if (!window.mBT.registry.updateStatus) window.mBT.registry.updateStatus = {};
+
+            window.mBT.registry.updateStatus.localVersion = localVersion;
+
+            /* Fetch remote sw.js and extract version */
+            fetch(GITHUB_RAW_URL, { cache: 'no-cache' })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Failed to fetch remote sw.js');
+                    return response.text();
+                })
+                .then(function(swCode) {
+                    /* Extract CACHE_NAME from remote sw.js */
+                    var match = swCode.match(/var\s+CACHE_NAME\s*=\s*['"](.*?)['"];/);
+                    var remoteVersion = match ? match[1] : 'unknown';
+
+                    window.mBT.registry.updateStatus.remoteVersion = remoteVersion;
+                    window.mBT.registry.updateStatus.available = (remoteVersion !== localVersion);
+
+                    /* Refresh Settings UI to show update status */
+                    mBT.features.settings.open('updates');
+                })
+                .catch(function(e) {
+                    mBTME.alert('Update Check', 'Could not check for updates (offline or network error).');
+                    console.error('Update check failed:', e);
+                });
         }
     };
 
