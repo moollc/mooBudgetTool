@@ -475,6 +475,37 @@
                     </div>
                 </div>`;
             }
+            if (tabName === 'updates') {
+                var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+                var _card = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
+                var _btn = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200';
+                var _update = isDark ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-100 text-amber-600';
+                var updateAvailable = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.available) || false;
+                var currentVersion = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.localVersion) || 'v22.1';
+                var remoteVersion = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.remoteVersion) || '--';
+
+                return `
+                    <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
+                        <div class="border rounded-xl p-4 ${_card}">
+                            <h3 class="text-xs font-black uppercase tracking-widest mb-3">Software Updates</h3>
+                            <div class="space-y-3">
+                                <div class="grid grid-cols-2 gap-3 text-[10px]">
+                                    <div class="p-2 rounded-lg ${_btn}">
+                                        <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Local Version</p>
+                                        <p class="font-black text-sm">${esc(currentVersion)}</p>
+                                    </div>
+                                    <div class="p-2 rounded-lg ${_btn}">
+                                        <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Remote Version</p>
+                                        <p class="font-black text-sm">${esc(remoteVersion)}</p>
+                                    </div>
+                                </div>
+                                <button onclick="mBT.features.settings.checkForUpdates()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95">Check for Updates</button>
+                                ${updateAvailable ? '<button onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' : ''}
+                            </div>
+                            ${updateAvailable ? '<div class="border rounded-lg p-3 mt-3 ' + _update + '"><p class="text-[9px] font-bold">✓ Update available. Click above to install.</p></div>' : '<div class="border rounded-lg p-3 mt-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold">✓ Tool is up to date.</p></div>'}
+                        </div>
+                    </div>`;
+            }
             return `<div class="p-8 text-center text-slate-300 font-bold uppercase tracking-widest">Logic Stream Not Found</div>`;
         };
 

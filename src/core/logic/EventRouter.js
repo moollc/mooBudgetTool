@@ -37,16 +37,33 @@ window.mBTRouter = (function () {
     function resolveConnectivityStatus() {
         var isOnline   = navigator.onLine;
         var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
+        var isUpdateAvailable = !!(window.mBT && window.mBT.registry && window.mBT.registry.updateStatus && window.mBT.registry.updateStatus.available);
         var btn = document.getElementById('loginBtn');
         if (btn) {
-            btn.className = 'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 ' +
-                (isSignedIn
-                    ? 'border-blue-400 bg-blue-50 text-blue-600'
-                    : (isOnline
-                        ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
-                        : 'border-rose-400 bg-rose-50 text-rose-600'));
-            btn.title     = isSignedIn ? 'Signed In' : (isOnline ? 'Studio Online' : 'Studio Offline');
-            btn.innerHTML = window.mBTAssets ? window.mBTAssets.user : '';
+            var updateIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.2em; height:1.2em;"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>';
+            btn.className = 'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-sm flex-shrink-0 cursor-pointer ' +
+                (isUpdateAvailable && isSignedIn
+                    ? 'border-amber-400 bg-amber-50 text-amber-600'
+                    : (isSignedIn
+                        ? 'border-blue-400 bg-blue-50 text-blue-600'
+                        : (isOnline
+                            ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+                            : 'border-rose-400 bg-rose-50 text-rose-600')));
+            btn.title     = isUpdateAvailable && isSignedIn ? 'Update Available' : (isSignedIn ? 'Signed In' : (isOnline ? 'Studio Online' : 'Studio Offline'));
+            btn.innerHTML = isUpdateAvailable && isSignedIn ? updateIcon : (window.mBTAssets ? window.mBTAssets.user : '');
+            btn.onclick = function() {
+                if (isUpdateAvailable && isSignedIn) {
+                    /* Update available — navigate to Settings > Updates */
+                    if (window.mBT && window.mBT.features && window.mBT.features.settings) {
+                        window.mBT.features.settings.open('updates');
+                    }
+                } else if (!isSignedIn) {
+                    /* Not logged in — handle login */
+                    if (window.mBTRouter && typeof window.mBTRouter.handleLogin === 'function') {
+                        window.mBTRouter.handleLogin();
+                    }
+                }
+            };
         }
         var aiBtn = document.getElementById('openAiToolsBtn');
         if (aiBtn) {
