@@ -8097,6 +8097,17 @@
                 window.mBT.registry.updateStatus.checking = true;
                 mBT.features.settings.open('updates');
 
+                /* Attempt to fetch commit message details from GitHub */
+                fetch('https://api.github.com/repos/moollc/mooBudgetTool/commits/main', { cache: 'no-cache' })
+                    .then(function(response) { return response.ok ? response.json() : null; })
+                    .then(function(data) {
+                        if (data && data.commit && data.commit.message) {
+                            var msg = data.commit.message.split('\n')[0]; /* First line only */
+                            window.mBT.registry.updateStatus.commitMessage = msg;
+                        }
+                    })
+                    .catch(function() { /* Silent fail */ });
+
                 window.mBT.registry.swReg.update()
                     .then(function () {
                         /* updatefound event will fire if update found, otherwise nothing happens */
@@ -8105,12 +8116,14 @@
                     })
                     .catch(function (e) {
                         window.mBT.registry.updateStatus.checking = false;
-                        mBTME.alert('Update Check', 'Could not check for updates (offline or network error).');
                         console.error('Update check failed:', e);
+                        /* Silent fail - just refresh UI to show "no update found" */
                         mBT.features.settings.open('updates');
                     });
             } else {
-                mBTME.alert('Update Check', 'Service Worker not initialized.');
+                /* Silent fail - SW not initialized yet */
+                window.mBT.registry.updateStatus.checking = false;
+                mBT.features.settings.open('updates');
             }
         }
     };
