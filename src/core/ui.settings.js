@@ -483,17 +483,16 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.5';
-            var commitMessage = updateStatus.commitMessage || 'Update details unavailable';
+            var currentVersion = updateStatus.localVersion || 'v22.6';
 
-            /* Status message based on update state */
+            /* Status message bound to native SW updatefound state (Task 17) */
             var statusMsg = '';
             if (isChecking) {
-                statusMsg = '<div class="border rounded-lg p-3 ' + _checking + '"><p class="text-[9px] font-bold text-center">⏳ Checking for updates...</p></div>';
+                statusMsg = '<div class="border rounded-lg p-3 ' + _checking + '"><p class="text-[9px] font-bold text-center">Checking for updates...</p></div>';
             } else if (updateAvailable) {
-                statusMsg = '<div class="space-y-2"><div class="border rounded-lg p-3 ' + _update + '"><p class="text-[9px] font-bold text-center">✓ Update available</p></div><div class="border rounded-lg p-3 bg-slate-50 text-slate-600 text-center"><p class="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1">Release Notes</p><p class="text-[9px] font-medium">' + esc(commitMessage) + '</p></div></div>';
+                statusMsg = '<div class="border rounded-lg p-3 ' + _update + '"><p class="text-[9px] font-bold text-center">Update ready — reload to activate the latest version</p></div>';
             } else {
-                statusMsg = '<div class="border rounded-lg p-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold text-center">✓ You have the latest version (' + esc(currentVersion) + ')</p></div>';
+                statusMsg = '<div class="border rounded-lg p-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold text-center">You are on the latest version (' + esc(currentVersion) + ')</p></div>';
             }
 
             return `
