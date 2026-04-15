@@ -11,10 +11,16 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "./assets/mBT.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "./assets/cow-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "maskable any"
+    },
+    {
+      "src": "./assets/cow-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "categories": [
