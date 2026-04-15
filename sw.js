@@ -1,6 +1,6 @@
 /* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.2 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.1';
+var CACHE_NAME = 'mbt-monolith-cache-v22.5';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -50,7 +50,11 @@ var PRECACHE_ASSETS = [
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
     './src/core/ui/Calendar.js',
+    './src/core/components/EmbeddedMode.js',
+
+    /* --- WebAssembly modules (full offline support) --- */
     './src/core/wasm_node/pkg/mbt_wasm.js',
+    './src/core/wasm_node/pkg/mbt_wasm_bg.wasm',
 
     /* --- Supabase services --- */
     './src/config/supabase.js',
@@ -69,9 +73,12 @@ var PRECACHE_ASSETS = [
     './src/tools/rsi/index.html',
     './src/tools/share/index.html',
     './src/tools/stages/index.html',
+    './src/tools/supabase/index.html',
     './src/tools/template/index.html',
 
-    /* --- PWA icons (local — GitHub CDN would cause atomic install failure when offline) --- */
+    /* --- PWA icons (offline-critical for installation) --- */
+    './assets/cow-192.png',
+    './assets/cow-512.png',
     './assets/mBT.svg'
 ];
 

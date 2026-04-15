@@ -483,7 +483,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.1';
+            var currentVersion = updateStatus.localVersion || 'v22.5';
             var commitMessage = updateStatus.commitMessage || 'Update details unavailable';
 
             /* Status message based on update state */
