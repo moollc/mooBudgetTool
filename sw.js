@@ -1,6 +1,6 @@
-/* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.2 ========= */
+/* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.3 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.5';
+var CACHE_NAME = 'mbt-monolith-cache-v22.6';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -86,11 +86,18 @@ self.addEventListener('install', function(event) {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(function(cache) {
-                /* Map absolute bypass to installation assets to defeat old-SW interception */
+                /* Map absolute bypass to installation assets to defeat old-SW interception.
+                   Individual .add() + .catch() ensures one failing asset never aborts install —
+                   missed assets are fetched from network on first use and cached at that point. */
                 var requests = PRECACHE_ASSETS.map(function(url) {
                     return new Request(url, { cache: 'no-store' });
                 });
-                return cache.addAll(requests);
+                var promises = requests.map(function(req) {
+                    return cache.add(req).catch(function() {
+                        /* Non-fatal: log miss, SW install continues */
+                    });
+                });
+                return Promise.all(promises);
             })
             .then(function() { return self.skipWaiting(); })
     );
@@ -144,6 +151,13 @@ self.addEventListener('fetch', function(event) {
             });
         })
     );
+});
+
+/* --- Task 13: SKIP_WAITING bridge — client sends this to activate a waiting SW immediately --- */
+self.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 /* --- Phase 92.9: Background Sync — Activity Log Replay --- */

@@ -8097,17 +8097,6 @@
                 window.mBT.registry.updateStatus.checking = true;
                 mBT.features.settings.open('updates');
 
-                /* Attempt to fetch commit message details from GitHub */
-                fetch('https://api.github.com/repos/moollc/mooBudgetTool/commits/main', { cache: 'no-cache' })
-                    .then(function(response) { return response.ok ? response.json() : null; })
-                    .then(function(data) {
-                        if (data && data.commit && data.commit.message) {
-                            var msg = data.commit.message.split('\n')[0]; /* First line only */
-                            window.mBT.registry.updateStatus.commitMessage = msg;
-                        }
-                    })
-                    .catch(function() { /* Silent fail */ });
-
                 window.mBT.registry.swReg.update()
                     .then(function () {
                         /* updatefound event will fire if update found, otherwise nothing happens */
@@ -10238,9 +10227,9 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=22', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=22.6', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
-                    /* Task 15: Store registration in registry for manual update checks */
+                    /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
                     if (!window.mBT.registry) window.mBT.registry = {};
                     window.mBT.registry.swReg = reg;
@@ -10250,19 +10239,28 @@
                         var installingWorker = reg.installing;
                         installingWorker.onstatechange = function () {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                /* Task 17: Set updateStatus flag when update is found */
-                                if (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) {
-                                    window.mBT.registry.updateStatus.available = true;
-                                    /* Trigger UI update if Settings is open */
-                                    if (window.mBT.features && window.mBT.features.settings) {
-                                        var settingsModal = document.getElementById('settingsModal');
-                                        if (settingsModal && !settingsModal.classList.contains('hidden')) {
-                                            window.mBT.features.settings.open('updates');
-                                        }
+                                /* Store pending worker ref for SKIP_WAITING bridge (Task 13) */
+                                if (!window.mBT.registry.updateStatus) window.mBT.registry.updateStatus = {};
+                                window.mBT.registry.pendingWorker = reg.waiting;
+                                window.mBT.registry.updateStatus.available = true;
+                                /* Refresh Settings panel if open (Task 17) */
+                                if (window.mBT.features && window.mBT.features.settings) {
+                                    var settingsModal = document.getElementById('settingsModal');
+                                    if (settingsModal && !settingsModal.classList.contains('hidden')) {
+                                        window.mBT.features.settings.open('updates');
                                     }
                                 }
                                 mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", function () {
-                                    window.location.reload();
+                                    var pending = window.mBT.registry.pendingWorker;
+                                    if (pending) {
+                                        /* SKIP_WAITING bridge: activate new SW, then reload on controllerchange */
+                                        navigator.serviceWorker.addEventListener('controllerchange', function () {
+                                            window.location.reload();
+                                        });
+                                        pending.postMessage({ type: 'SKIP_WAITING' });
+                                    } else {
+                                        window.location.reload();
+                                    }
                                 });
                             }
                         };
