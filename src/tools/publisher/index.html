@@ -14,6 +14,8 @@
   <script src="../../lib/jspdf.plugin.autotable.min.js"></script>
   <script src="../../lib/xlsx.full.min.js"></script>
   <script src="../../scripts/engine/publisher.js"></script>
+  <!-- SmartFill Bridge: receives postMessage data from parent Budget Editor -->
+  <script src="./SmartFill.js"></script>
   <style type="text/tailwindcss">
     /* --- Tap targets: 44px minimum for all buttons and links --- */
     button, a { min-height: 44px; }
@@ -318,6 +320,44 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       renderCommHub();
       renderBudgetPreview();
       bindExportButtons();
+
+      /* --- SmartFill Bridge: listen for AI-generated data from parent Budget Editor --- */
+      document.addEventListener('mbt:smartfill-ready', function (e) {
+        var payload = (e && e.detail) || {};
+        var templateId = payload.templateId || 'fundingStrategy';
+        var label = payload.label || 'SmartFill';
+        var editorData = payload.editorData || {};
+
+        /* Render action strip at bottom of viewport */
+        var existing = document.getElementById('sf-action-strip');
+        if (existing) existing.parentNode.removeChild(existing);
+
+        var strip = document.createElement('div');
+        strip.id = 'sf-action-strip';
+        strip.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;z-index:1000;border-top:2px solid #6366f1;gap:12px;';
+        strip.innerHTML =
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>' +
+          '<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">SmartFill Ready</span>' +
+          '<span style="font-size:9px;color:#94a3b8;">\u2014 ' + esc(label) + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;">' +
+          '<button id="sf-btn-generate" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:0;">Generate PDF</button>' +
+          '<button onclick="var s=document.getElementById(\'sf-action-strip\');if(s)s.parentNode.removeChild(s);" style="background:transparent;color:#64748b;border:none;padding:7px 10px;font-size:11px;cursor:pointer;min-height:0;">&times;</button>' +
+          '</div>';
+        document.body.appendChild(strip);
+
+        /* Bind generate button using closure over budget + editorData */
+        document.getElementById('sf-btn-generate').onclick = function () {
+          var pub = window.mBTPublisher;
+          if (!pub || !pub.format || typeof pub.format.pdf !== 'function') return;
+          pub.format.pdf(templateId, budget, { editorData: editorData, currency: currency });
+          /* Phase 144 Task 4: two-way sync — push editorData back to parent Budget Editor */
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'sync-funding-source', payload: { editorData: editorData } }, '*');
+          }
+        };
+      });
     }
 
     // ─── 3. Summary Card ────────────────────────────────────────────────────────

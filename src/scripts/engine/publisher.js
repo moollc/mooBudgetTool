@@ -2247,6 +2247,130 @@
                 }
             },
 
+            /* ---- TEMPLATE: FUNDING STRATEGY ---- */
+            fundingStrategy: {
+                id: 'fundingStrategy',
+                name: 'Funding Strategy',
+                description: 'Strategic financing overview: executive summary, sourcing approach, investor profile, and funding gap analysis.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                getDefaultData: function (b) {
+                    var d = {
+                        productionTitle: (b && b.projectName) || '',
+                        execSummary: '',
+                        sourcingApproach: '',
+                        investorProfile: '',
+                        fundingTimeline: '',
+                        askDetails: '',
+                        riskMitigation: '',
+                        contactName: (b && b.producerName) || '',
+                        contactEmail: (b && b.producerEmail) || ''
+                    };
+                    if (b && b.fundingSources && b.fundingSources.length) {
+                        d.sourcingApproach = b.fundingSources
+                            .filter(function (f) { return f.name; })
+                            .map(function (f) { return f.name + (f.status ? ' (' + f.status + ')' : ''); })
+                            .join(', ');
+                    }
+                    return d;
+                },
+                renderHtml: function (b, options, engine) {
+                    var d = options.editorData || this.getDefaultData(b);
+                    var currency = options.currency || 'JMD';
+                    var rate = parseFloat(options.rate) || 1;
+                    function fmt(v) {
+                        var n = (parseFloat(v) || 0) * rate;
+                        return currency + '\u00a0' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                    }
+
+                    /* Grand total from live budget */
+                    var grandEst = 0;
+                    if (b && b.sections) {
+                        Object.keys(b.sections).forEach(function (k) { grandEst += engine._sectionEst(b.sections[k]); });
+                    }
+                    var contingencyPct = parseFloat((b && b.targetLock && b.targetLock.contingency) || (b && b.contingency) || 0);
+                    if (contingencyPct) grandEst *= (1 + contingencyPct / 100);
+
+                    /* Funding sources from live budget */
+                    var sources = (b && b.fundingSources) || [];
+                    var totFunding = sources.reduce(function (s, f) { return s + (parseFloat(f.amount) || 0); }, 0);
+                    var gap = grandEst - totFunding;
+
+                    var coverHtml =
+                        '<div class="fs-cover">' +
+                        '<div class="fs-label">Funding Strategy</div>' +
+                        '<div class="fs-title">' + esc(d.productionTitle || (b && b.projectName) || 'UNTITLED') + '</div>' +
+                        '<div class="fs-budget-bar">' +
+                        '<span class="fs-budget-lbl">Budget</span>' +
+                        '<span class="fs-budget-amt">' + fmt(grandEst) + '</span>' +
+                        '<span class="fs-gap-pill ' + (gap > 0 ? 'fs-gap' : 'fs-surplus') + '">' +
+                        (gap > 0 ? 'Gap: ' + fmt(gap) : 'Fully Funded') + '</span>' +
+                        '</div></div>';
+
+                    function narrativeSection(title, body) {
+                        return body ? (
+                            '<div class="fs-section">' +
+                            '<div class="fs-section-hdr">' + esc(title) + '</div>' +
+                            '<div class="fs-section-body">' + esc(body) + '</div>' +
+                            '</div>'
+                        ) : '';
+                    }
+
+                    var narrative =
+                        narrativeSection('Executive Summary', d.execSummary) +
+                        narrativeSection('Sourcing Approach', d.sourcingApproach) +
+                        narrativeSection('Target Investor Profile', d.investorProfile) +
+                        narrativeSection('Funding Timeline', d.fundingTimeline) +
+                        narrativeSection('Investment Proposition', d.askDetails) +
+                        narrativeSection('Risk Mitigation', d.riskMitigation);
+
+                    /* Sources table */
+                    var sourceRows = sources.filter(function (f) { return f.name; }).map(function (f) {
+                        return '<tr><td>' + esc(f.name || '') + '</td>' +
+                            '<td>' + esc(f.status || '\u2014') + '</td>' +
+                            '<td class="col-r">' + fmt(f.amount || 0) + '</td></tr>';
+                    }).join('');
+                    var sourcesTable =
+                        '<div class="fs-section">' +
+                        '<div class="fs-section-hdr">Funding Sources</div>' +
+                        '<table><thead><tr class="th-row"><th>Source</th><th>Status</th><th class="col-r">Amount</th></tr></thead>' +
+                        '<tbody>' + (sourceRows || '<tr><td colspan="3" class="fp-empty-row">No funding sources defined.</td></tr>') + '</tbody>' +
+                        '<tfoot>' +
+                        '<tr class="ts-total-row"><td colspan="2"><strong>Total Funding</strong></td><td class="col-r">' + fmt(totFunding) + '</td></tr>' +
+                        '<tr class="ts-grand-total"><td colspan="2">Budget Total</td><td class="col-r">' + fmt(grandEst) + '</td></tr>' +
+                        '<tr class="' + (gap > 0 ? 'fp-gap-row' : 'fp-surplus-row') + '"><td colspan="2">' + (gap > 0 ? 'Funding Gap' : 'Surplus') + '</td>' +
+                        '<td class="col-r">' + fmt(Math.abs(gap)) + '</td></tr>' +
+                        '</tfoot></table></div>';
+
+                    var contactHtml = (d.contactName || d.contactEmail) ?
+                        '<div class="fs-contact">' + [d.contactName, d.contactEmail].filter(Boolean).map(esc).join(' &nbsp;&bull;&nbsp; ') + '</div>' : '';
+
+                    var css =
+                        '.fs-cover{text-align:center;padding:40px 0 24px;margin-bottom:16px;border-bottom:3px solid #0f172a;}' +
+                        '.fs-label{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:3px;color:#64748b;margin-bottom:8px;}' +
+                        '.fs-title{font-size:22pt;font-weight:900;color:#0f172a;letter-spacing:-0.5px;line-height:1.2;margin-bottom:12px;}' +
+                        '.fs-budget-bar{display:flex;align-items:baseline;justify-content:center;gap:16px;margin-top:8px;}' +
+                        '.fs-budget-lbl{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;}' +
+                        '.fs-budget-amt{font-size:16pt;font-weight:900;color:#0f172a;}' +
+                        '.fs-gap-pill{font-size:9pt;font-weight:800;padding:3px 10px;border-radius:999px;}' +
+                        '.fs-gap{background:#fee2e2;color:#dc2626;}' +
+                        '.fs-surplus{background:#dcfce7;color:#16a34a;}' +
+                        '.fs-section{margin:16px 0;}' +
+                        '.fs-section-hdr{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:8px;}' +
+                        '.fs-section-body{font-size:9.5pt;color:#334155;line-height:1.65;white-space:pre-wrap;}' +
+                        '.fs-contact{font-size:8pt;color:#64748b;text-align:center;margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;}' +
+                        '.fp-empty-row{text-align:center;color:#94a3b8;padding:14px!important;font-style:italic;}' +
+                        '.fp-gap-row td{color:#dc2626;font-weight:800;}' +
+                        '.fp-surplus-row td{color:#16a34a;font-weight:800;}';
+
+                    return engine._wrapHtml(
+                        esc(d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Strategy',
+                        coverHtml + narrative + sourcesTable + contactHtml,
+                        css
+                    );
+                }
+            },
+
             /* ---- TEMPLATE: BUDGET COMPARISON ---- */
             budgetComparison: {
                 id: 'budgetComparison',
@@ -3348,7 +3472,7 @@
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {
                 var self = this;
-                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher', 'weeklyCostReport'].map(function (key) {
+                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'fundingStrategy', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher', 'weeklyCostReport'].map(function (key) {
                     var t = self[key];
                     return { id: t.id, name: t.name, description: t.description, formats: t.formats, hasEditor: !!t.hasEditor };
                 });
