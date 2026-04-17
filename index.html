@@ -484,7 +484,8 @@
             if (handler) {
                 // Prevent default for clicks to stop form submissions or link jumps,
                 // but allow 'change' events to propagate if needed.
-                if (e.type === 'click' || e.type === 'submit') e.preventDefault();
+                /* project-import-trigger must NOT preventDefault — file dialog requires untainted gesture */
+                if ((e.type === 'click' || e.type === 'submit') && actionName !== 'project-import-trigger') e.preventDefault();
                 handler(e, el);
                 return true;
             }
@@ -1534,10 +1535,11 @@
 
             JSZip.loadAsync(file).then(function (zip) {
                 /* PATH A: Valid Bundle (.moo or .zip) */
-                var zipFiles = Object.values(zip.files);
+                var zipFileKeys = Object.keys(zip.files);
                 var mooFile = null;
-                for (var zi = 0; zi < zipFiles.length; zi++) {
-                    if (zipFiles[zi].name.slice(-4) === '.moo' && zipFiles[zi].name.indexOf('__MACOSX') !== 0) { mooFile = zipFiles[zi]; break; }
+                for (var zi = 0; zi < zipFileKeys.length; zi++) {
+                    var zf = zip.files[zipFileKeys[zi]];
+                    if (zf.name.slice(-4) === '.moo' && zf.name.indexOf('__MACOSX') !== 0) { mooFile = zf; break; }
                 }
                 if (!mooFile) throw new Error('Invalid Bundle: No .moo manifest found.');
 
@@ -1583,8 +1585,8 @@
                         askUserIntent(data, stats);
                     });
                 });
-            }).catch(function () {
-                /* PATH B: Legacy Text Import (JSON) */
+            }).catch(function (zipErr) {
+                /* PATH B: Legacy Text Import (JSON) — only runs if file is not a valid ZIP */
                 var reader = new FileReader();
                 reader.onload = function (e) {
                     mBTME.hideLoader();
@@ -1592,7 +1594,7 @@
                         var json = JSON.parse(e.target.result);
                         askUserIntent(json);
                     } catch (_) {
-                        mBTME.alert('Import Error', 'File format not recognized. (Not a valid Bundle or Legacy JSON)');
+                        mBTME.alert('Import Error', 'File format not recognized. Expected a .moo bundle or legacy JSON file. (' + (zipErr && zipErr.message ? zipErr.message : 'Unknown error') + ')');
                     }
                 };
                 reader.onerror = function () {
@@ -10315,10 +10317,21 @@
         mBT.core.action('project-recycle', function () { if (typeof mBT.features.trash !== 'undefined') mBT.features.trash.open('projects'); });
         mBT.core.action('project-sync', function () { fetchExchangeRates(); mBTME.alert('Rates Updated', 'Exchange rates refreshed from network.'); });
         mBT.core.action('template-manager', function () { openTool('./src/tools/template/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
-        mBT.core.action('project-import-trigger', function () { var input = document.getElementById('importFile'); if (input) input.click(); });
+        mBT.core.action('project-import-trigger', function () {
+            var input = document.getElementById('importFile');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'file';
+                input.id = 'importFile';
+                input.className = 'hidden';
+                input.accept = '.json,.moo,.zip';
+                input.onchange = function () { mBT.data.importFile(this); };
+                document.body.appendChild(input);
+            }
+            input.click();
+        });
         /* Phase 88: Open PO/Ledger tool -- sole entry point per Phase 80 architecture */
         mBT.core.action('open-payments-ledger', function () { openTool('./src/tools/po/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''))); });
-        mBT.core.action('project-import-file', function (e, el) { if (e.type === 'change') mBT.data.importFile(el); });
 
         /* Phase 109: Cross-tab sync -- reload when another tab saves the same or different project */
         window.addEventListener('storage', function (e) {

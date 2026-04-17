@@ -6220,7 +6220,7 @@ async function renderProjectManagement() {
                         ${menuItems.map(item => item.divider ? `<div class="h-px bg-slate-100 my-1"></div>` : `<button data-action="${item.action}" onclick="document.getElementById('fileMenuDropdown').classList.add('hidden')" class="w-full text-left px-4 py-2.5 flex items-center gap-3 ${item.color} ${item.bg} transition-colors group"><span class="opacity-70 group-hover:opacity-100 scale-90">${item.icon}</span><span class="text-[9px] font-black uppercase tracking-widest">${item.label}</span></button>`).join('')}
                     </div>
                 </div>
-                <input type="file" id="importFile" class="hidden" accept=".json" data-action="project-import-file">
+                <input type="file" id="importFile" class="hidden" accept=".json,.moo,.zip" data-action="project-import-file">
             </div>`;
     container.innerHTML = html;
 }

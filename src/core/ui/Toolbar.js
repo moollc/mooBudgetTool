@@ -313,7 +313,7 @@
                     { label: 'Template Manager', icon: mBTAssets.grid, color: 'text-violet-600', bg: 'hover:bg-violet-50', action: 'template-manager' },
                     { label: 'Sync Rates', icon: mBTAssets.cloud, color: 'text-sky-600', bg: 'hover:bg-sky-50', action: 'project-sync' },
                     { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
-                    { label: 'Export Budget (.mbt)', icon: mBTAssets.save, color: 'text-teal-600', bg: 'hover:bg-teal-50', action: 'project-export' },
+                    { label: 'Export Budget (.moo)', icon: mBTAssets.save, color: 'text-teal-600', bg: 'hover:bg-teal-50', action: 'project-export' },
                     { label: 'Payments / Ledger', icon: mBTAssets.wallet, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'open-payments-ledger' },
                     { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
                     { divider: true },
@@ -349,7 +349,6 @@
                     '<div id="fileMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-[200] overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 duration-200" onmouseleave="this.classList.add(\'hidden\')">'
                     + menuHtml +
                     '</div></div>' +
-                    '<input type="file" id="importFile" class="hidden" accept=".json,.moo,.zip" data-action="project-import-file">' +
                     '</div>';
 
                 container.innerHTML = html;
