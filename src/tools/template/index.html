@@ -8,21 +8,32 @@
   <script src="../../lib/localforage.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* Scrollbar Restoration for mobile UX affordance */
+    @media (min-width: 640px) {
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    }
     .tmpl-card {
       background: rgba(255,255,255,0.82);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       border: 1px solid rgba(255,255,255,0.9);
       box-shadow: 0 3px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05);
-      transition: box-shadow 0.2s, transform 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .tmpl-card:hover { box-shadow: 0 8px 28px rgba(15,23,42,0.12); transform: translateY(-1px); }
+    .tmpl-card:active { transform: scale(0.98); }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .fade-in { animation: fadeIn 0.25s ease-out forwards; }
     @keyframes slideUp { from { opacity:0; transform: translateY(20px) translateX(-50%); } to { opacity:1; transform: translateY(0) translateX(-50%); } }
     .snack-in { animation: slideUp 0.25s ease-out forwards; }
+    /* Mobile Density Shade */
+    .scroll-shade {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 40px;
+      background: linear-gradient(to top, rgba(241,245,249,0.9), transparent);
+      pointer-events: none; z-index: 10;
+    }
+
   </style>
 </head>
 <body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
@@ -54,14 +65,16 @@
       <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>
       <div class="h-px bg-slate-300/60 flex-grow"></div>
     </div>
-    <div id="built-in-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"></div>
+    <div id="built-in-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-6"></div>
+
 
     <!-- Section: My Blueprints -->
     <div class="mb-4 flex items-center gap-3">
       <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>
       <div class="h-px bg-slate-300/60 flex-grow"></div>
     </div>
-    <div id="custom-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-24"></div>
+    <div id="custom-grid" class="flex flex-col sm:grid sm:grid-cols-3 gap-2 sm:gap-3 mb-24"></div>
+
     <div id="custom-empty" class="hidden flex-col items-center justify-center py-12 text-center mb-24">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-slate-300 mb-3 mx-auto"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
       <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">No custom blueprints yet</p>
@@ -221,23 +234,24 @@
                 var t = BUILT_IN[key];
                 var sectionCount = t.structure ? t.structure.length : 0;
                 var itemCount = t.structure ? t.structure.reduce(function(acc, s) { return acc + s.items.length; }, 0) : 0;
-                return '<div class="tmpl-card rounded-2xl p-4 fade-in">' +
-                    '<div class="flex items-start justify-between mb-3">' +
+                return '<div class="tmpl-card rounded-2xl p-3 sm:p-4 fade-in">' +
+                    '<div class="flex items-start justify-between mb-2 sm:mb-3">' +
                         '<div>' +
-                            '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(t.label) + '</p>' +
-                            '<p class="text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections &bull; ' + itemCount + ' line items</p>' +
+                            '<p class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(t.label) + '</p>' +
+                            '<p class="text-[8px] sm:text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections &bull; ' + itemCount + ' line items</p>' +
                         '</div>' +
-                        '<span class="bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Built-in</span>' +
+                        '<span class="bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Built-in</span>' +
                     '</div>' +
-                    '<p class="text-[10px] text-slate-500 mb-3 leading-relaxed">' + esc(t.desc) + '</p>' +
-                    '<div class="mb-3">' + renderSectionPills(t.structure) + '</div>' +
+                    '<p class="text-[9px] sm:text-[10px] text-slate-500 mb-2 sm:mb-3 leading-relaxed line-clamp-2 sm:line-clamp-none">' + esc(t.desc) + '</p>' +
+                    '<div class="mb-2 sm:mb-3">' + renderSectionPills(t.structure) + '</div>' +
                     '<button data-apply-key="' + esc(key) + '" data-apply-type="builtin" ' +
-                        'class="w-full bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-colors">' +
+                        'class="w-full bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 sm:py-2.5 rounded-xl transition-colors">' +
                         'Apply to Budget' +
                     '</button>' +
                 '</div>';
             }).join('');
             grid.innerHTML = html;
+
         }
 
         /* --- Render custom templates (async — reads from IndexedDB) --- */
@@ -268,17 +282,17 @@
                     var desc = t.desc || 'Custom Blueprint';
                     var structure = Array.isArray(t.structure) ? t.structure : (Array.isArray(t.items) ? t.items : null);
                     var sectionCount = structure ? structure.length : '—';
-                    return '<div class="tmpl-card rounded-2xl p-4 fade-in">' +
-                        '<div class="flex items-start justify-between mb-3">' +
+                    return '<div class="tmpl-card rounded-2xl p-3 sm:p-4 fade-in flex flex-col sm:block">' +
+                        '<div class="flex items-center sm:items-start justify-between mb-1 sm:mb-3">' +
                             '<div>' +
-                                '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight pr-2">' + esc(t.label || key) + '</p>' +
-                                '<p class="text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections</p>' +
+                                '<p class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight pr-2">' + esc(t.label || key) + '</p>' +
+                                '<p class="text-[8px] sm:text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections' + (window.innerWidth < 640 ? ' &bull; ' + desc.substring(0,20) + '...' : '') + '</p>' +
                             '</div>' +
                             '<span class="bg-violet-100 text-violet-600 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Custom</span>' +
                         '</div>' +
-                        '<p class="text-[10px] text-slate-500 mb-3 leading-relaxed">' + esc(desc) + '</p>' +
-                        (structure ? '<div class="mb-3">' + renderSectionPills(structure) + '</div>' : '<div class="mb-3"></div>') +
-                        '<div class="flex gap-2">' +
+                        '<p class="hidden sm:block text-[10px] text-slate-500 mb-3 leading-relaxed">' + esc(desc) + '</p>' +
+                        (structure ? '<div class="hidden sm:block mb-3">' + renderSectionPills(structure) + '</div>' : '<div class="mb-3"></div>') +
+                        '<div class="flex gap-2 mt-2 sm:mt-0">' +
                             '<button data-apply-key="' + esc(key) + '" data-apply-type="custom" ' +
                                 'class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-colors">' +
                                 'Apply' +
@@ -292,6 +306,7 @@
                 }).join('');
 
                 grid.innerHTML = html;
+
             });
         }
 
