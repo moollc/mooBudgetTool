@@ -1,6 +1,6 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.61';
+var CACHE_NAME = 'mbt-monolith-cache-v22.62';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -180,7 +180,8 @@ self.addEventListener('fetch', function(event) {
                 if (event.request.mode === 'navigate') {
                     return caches.match('./index.html', { ignoreSearch: true });
                 }
-                /* For non-navigation assets, let the network error propagate */
+                /* Non-navigation miss: return empty 503 so respondWith gets a valid Response */
+                return new Response('', { status: 503, statusText: 'Offline' });
             });
         })
     );
