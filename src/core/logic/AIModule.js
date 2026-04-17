@@ -31,57 +31,80 @@ window.mBTAIModule = {
     saveSystemPrompt:   function (val) { localStorage.setItem((window.storageKeyPrefix || '') + 'aiSystemPrompt', val); },
 
     /* ── Centralized Intelligence Dispatcher ────────────────────────────── */
-    callUnifiedAI: async function (provider, apiKey, prompt, customSystemMsg) {
+    callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg) {
         var self = this;
         var userConstraints = self.getSystemPrompt();
         var baseInstruction = customSystemMsg || self.config.systemContext;
         var systemInstruction = userConstraints ? (baseInstruction + ' USER CONSTRAINTS: ' + userConstraints) : baseInstruction;
+        var promise;
 
-        try {
-            if (provider === 'gemini') {
-                var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + self.config.geminiModel + ':generateContent?key=' + apiKey;
-                var gRes = await fetch(gUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: systemInstruction }] } })
-                });
-                if (!gRes.ok) { var gErr = await gRes.json().catch(function () { return {}; }); throw new Error('Gemini Error ' + gRes.status + ': ' + (gErr.error && gErr.error.message ? gErr.error.message : gRes.statusText)); }
-                var gData = await gRes.json();
+        if (provider === 'gemini') {
+            var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + self.config.geminiModel + ':generateContent?key=' + apiKey;
+            promise = fetch(gUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: systemInstruction }] } })
+            }).then(function (gRes) {
+                if (!gRes.ok) {
+                    return gRes.json().catch(function () { return {}; }).then(function (gErr) {
+                        throw new Error('Gemini Error ' + gRes.status + ': ' + (gErr.error && gErr.error.message ? gErr.error.message : gRes.statusText));
+                    });
+                }
+                return gRes.json();
+            }).then(function (gData) {
                 return (gData.candidates && gData.candidates[0] && gData.candidates[0].content && gData.candidates[0].content.parts && gData.candidates[0].content.parts[0] && gData.candidates[0].content.parts[0].text) || 'Assistant: No analysis generated.';
+            });
 
-            } else if (provider === 'anthropic') {
-                var aRes = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-                    body: JSON.stringify({ model: self.config.claudeModel, max_tokens: 4096, system: systemInstruction, messages: [{ role: 'user', content: prompt }] })
-                });
-                if (!aRes.ok) { var aErr = await aRes.json().catch(function () { return {}; }); throw new Error('Anthropic Error ' + aRes.status + ': ' + (aErr.error && aErr.error.message ? aErr.error.message : aRes.statusText)); }
-                var aData = await aRes.json();
+        } else if (provider === 'anthropic') {
+            promise = fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+                body: JSON.stringify({ model: self.config.claudeModel, max_tokens: 4096, system: systemInstruction, messages: [{ role: 'user', content: prompt }] })
+            }).then(function (aRes) {
+                if (!aRes.ok) {
+                    return aRes.json().catch(function () { return {}; }).then(function (aErr) {
+                        throw new Error('Anthropic Error ' + aRes.status + ': ' + (aErr.error && aErr.error.message ? aErr.error.message : aRes.statusText));
+                    });
+                }
+                return aRes.json();
+            }).then(function (aData) {
                 return (aData.content && aData.content[0] && aData.content[0].text) || 'Assistant: No analysis generated.';
+            });
 
+        } else {
+            var oUrl, oModel;
+            if (provider === 'openai')        { oUrl = 'https://api.openai.com/v1/chat/completions'; oModel = self.config.openAiModel; }
+            else if (provider === 'deepseek') { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
+            else if (provider === 'grok')     { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
+            else if (provider === 'lmstudio') {
+                oUrl   = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioEndpoint') || self.config.lmstudioEndpoint;
+                oModel = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioModel')    || self.config.lmstudioModel;
+            }
+
+            if (!oUrl) {
+                promise = Promise.reject(new Error('Provider \'' + provider + '\' not supported.'));
             } else {
-                var oUrl, oModel;
-                if (provider === 'openai')        { oUrl = 'https://api.openai.com/v1/chat/completions'; oModel = self.config.openAiModel; }
-                else if (provider === 'deepseek') { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
-                else if (provider === 'grok')     { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
-                else if (provider === 'lmstudio') {
-                    oUrl   = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioEndpoint') || self.config.lmstudioEndpoint;
-                    oModel = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioModel')    || self.config.lmstudioModel;
-                } else { throw new Error('Provider \'' + provider + '\' not supported.'); }
-
-                var oRes = await fetch(oUrl, {
+                promise = fetch(oUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
                     body: JSON.stringify({ model: oModel, messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: prompt }] })
+                }).then(function (oRes) {
+                    if (!oRes.ok) {
+                        return oRes.json().catch(function () { return {}; }).then(function (oErr) {
+                            throw new Error(provider.toUpperCase() + ' Error ' + oRes.status + ': ' + (oErr.error && oErr.error.message ? oErr.error.message : oRes.statusText));
+                        });
+                    }
+                    return oRes.json();
+                }).then(function (oData) {
+                    return (oData.choices && oData.choices[0] && oData.choices[0].message && oData.choices[0].message.content) || 'Assistant: No analysis generated.';
                 });
-                if (!oRes.ok) { var oErr = await oRes.json().catch(function () { return {}; }); throw new Error(provider.toUpperCase() + ' Error ' + oRes.status + ': ' + (oErr.error && oErr.error.message ? oErr.error.message : oRes.statusText)); }
-                var oData = await oRes.json();
-                return (oData.choices && oData.choices[0] && oData.choices[0].message && oData.choices[0].message.content) || 'Assistant: No analysis generated.';
             }
-        } catch (error) {
+        }
+
+        return promise.catch(function (error) {
             console.error('mBT AI Failure:', error);
             return 'Analysis Failed: ' + error.message;
-        }
+        });
     },
 
     /* ── Phase 60.B: Action Block Parser ───────────────────────────────── */
@@ -156,7 +179,7 @@ window.mBTAIModule = {
     },
 
     /* ── Budget Analysis ────────────────────────────────────────────────── */
-    analyzeCurrentBudget: async function () {
+    analyzeCurrentBudget: function () {
         var self     = this;
         var budget   = window.budget;
         var mBTME    = window.mBTME;
@@ -183,17 +206,18 @@ window.mBTAIModule = {
         var prompt = 'Analyze this budget data: ' + JSON.stringify(context) + '. Review financials, logistics (documents), and staffing. Identify 3 risks and 3 savings opportunities. Be concise.';
 
         if (mBTME.showLoader) mBTME.showLoader('Neural Analysis in progress...');
-        var result = await self.callUnifiedAI(provider, apiKey, prompt);
-        if (mBTME.hideLoader) mBTME.hideLoader();
+        return self.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
+            if (mBTME.hideLoader) mBTME.hideLoader();
 
-        if (!budget.aiContext) budget.aiContext = { chat: [], analysis: '' };
-        budget.aiContext.analysis = result;
-        if (typeof window.saveBudget === 'function') window.saveBudget();
+            if (!budget.aiContext) budget.aiContext = { chat: [], analysis: '' };
+            budget.aiContext.analysis = result;
+            if (typeof window.saveBudget === 'function') window.saveBudget();
 
-        var formattedResult = (typeof window.marked !== 'undefined') ? window.marked.parse(result) : result;
-        mBTME.open('aiAnalysis', 'Budget Analysis',
-            '<div class="p-6 text-sm leading-relaxed text-slate-700 max-h-[60vh] overflow-y-auto prose prose-sm prose-slate max-w-none">' + formattedResult + '</div>',
-            'max-w-2xl');
+            var formattedResult = (typeof window.marked !== 'undefined') ? window.marked.parse(result) : result;
+            mBTME.open('aiAnalysis', 'Budget Analysis',
+                '<div class="p-6 text-sm leading-relaxed text-slate-700 max-h-[60vh] overflow-y-auto prose prose-sm prose-slate max-w-none">' + formattedResult + '</div>',
+                'max-w-2xl');
+        });
     },
 
     /* ── Context Management ─────────────────────────────────────────────── */
@@ -292,7 +316,7 @@ window.mBTAIModule = {
             var btn   = document.getElementById('aiChatSendBtn');
             var input = document.getElementById('aiChatInput');
             if (btn && input) {
-                btn.onclick = async function () {
+                btn.onclick = function () {
                     var text = input.value.trim();
                     if (!text) return;
 
@@ -323,13 +347,13 @@ window.mBTAIModule = {
 
                     /* Phase 60.B: inject action-trigger capability into chat system prompt */
                     var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
-                    var response = await self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg);
-
-                    budget.aiContext.chat.push({ role: 'assistant', content: response });
-                    if (typeof window.saveBudget === 'function') window.saveBudget();
-                    history.innerHTML = renderMessages();
-                    history.scrollTop = history.scrollHeight;
-                    if (count) count.textContent = 'Context: ' + budget.aiContext.chat.length + ' msgs';
+                    return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg).then(function (response) {
+                        budget.aiContext.chat.push({ role: 'assistant', content: response });
+                        if (typeof window.saveBudget === 'function') window.saveBudget();
+                        history.innerHTML = renderMessages();
+                        history.scrollTop = history.scrollHeight;
+                        if (count) count.textContent = 'Context: ' + budget.aiContext.chat.length + ' msgs';
+                    });
                 };
                 input.focus();
             }
@@ -337,6 +361,99 @@ window.mBTAIModule = {
     },
 
     /* ── Persona & Rules Modal (Phase 58.2) ─────────────────────────────── */
+    /* ── Phase 144: Sourcing Analysis — AI Interview Wizard ─────────────── */
+    /* Generates a Funding Strategy document via AI analysis of live budget funding
+       sources, then sends the result to the publisher iframe via SmartFill bridge. */
+    openSourcingAnalysis: function () {
+        var self             = this;
+        var budget           = window.budget;
+        var mBTME            = window.mBTME;
+        var displayCurrency  = window.displayCurrency || 'JMD';
+        var storageKeyPrefix = window.storageKeyPrefix || '';
+
+        if (!budget) { mBTME.alert('No Project', 'Load a project before running Sourcing Analysis.'); return; }
+
+        var provider = self.getSelectedProvider();
+        var apiKey   = self.getStoredApiKey(provider);
+        if (!apiKey) { mBTME.alert('Assistant Offline', 'Configure an API key in AI settings.'); return; }
+
+        /* Build funding context from live budget */
+        var sources     = (budget.fundingSources || []).filter(function (f) { return f.name; });
+        var totalFunding = sources.reduce(function (s, f) { return s + (parseFloat(f.amount) || 0); }, 0);
+        var totalBudget  = budget.grandTotal || budget.subtotal || 0;
+        var gap          = totalBudget - totalFunding;
+
+        var sourcesText = sources.length
+            ? sources.map(function (f) { return '- ' + f.name + ' | Status: ' + (f.status || 'Pending') + ' | Amount: ' + (parseFloat(f.amount) || 0) + ' ' + displayCurrency; }).join('\n')
+            : 'No funding sources defined yet.';
+
+        var prompt =
+            'PROJECT: ' + (budget.projectName || 'Untitled') + '\n' +
+            'FORMAT: ' + (budget.format || 'Feature Film') + '\n' +
+            'TOTAL BUDGET: ' + totalBudget + ' ' + displayCurrency + '\n' +
+            'SECURED FUNDING: ' + totalFunding + ' ' + displayCurrency + '\n' +
+            'FUNDING GAP: ' + (gap > 0 ? gap + ' ' + displayCurrency : 'None — fully covered') + '\n' +
+            'SOURCES:\n' + sourcesText + '\n\n' +
+            'Generate a concise Funding Strategy document. Output a raw JSON object with these exact keys:\n' +
+            '- execSummary: 1-2 paragraph project pitch and financing goals\n' +
+            '- sourcingApproach: how each funding source was identified and how to close them\n' +
+            '- investorProfile: ideal investor type and motivation for this project\n' +
+            '- fundingTimeline: key milestones to close the funding gap\n' +
+            '- askDetails: what is being offered to investors (equity %, licensing, co-production terms)\n' +
+            '- riskMitigation: how financing risks (gap, currency, timeline) are managed\n\n' +
+            'IMPORTANT: Output raw JSON only. No markdown fences, no preamble, no explanation.';
+
+        var systemMsg = 'ROLE: Film Finance Strategist specializing in Caribbean and independent productions. OUTPUT: Raw JSON object only. No code fences, no intro text. Keys: execSummary, sourcingApproach, investorProfile, fundingTimeline, askDetails, riskMitigation. Values: concise plain-text strings (1-2 paragraphs each).';
+
+        mBTME.close('aiToolsModal');
+        mBTME.alert('Sourcing Analysis Running', 'AI is generating your Funding Strategy. The publisher will update when ready.');
+
+        return self.callUnifiedAI(provider, apiKey, prompt, systemMsg).then(function (response) {
+            var editorData = {};
+            try {
+                editorData = JSON.parse(response.trim());
+            } catch (e) {
+                /* Fallback: extract JSON block if AI prefaced with text */
+                var jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try { editorData = JSON.parse(jsonMatch[0]); } catch (e2) {
+                        editorData = { execSummary: response };
+                    }
+                } else {
+                    editorData = { execSummary: response };
+                }
+            }
+
+            /* Merge project identity fields */
+            editorData.productionTitle = budget.projectName || '';
+            editorData.contactName     = budget.producerName  || '';
+            editorData.contactEmail    = budget.producerEmail || '';
+
+            /* Open publisher tool */
+            if (typeof window.openTool === 'function') {
+                window.openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget.projectName || '')) + '&currency=' + encodeURIComponent(displayCurrency) + '&embedded=true');
+            }
+
+            /* After iframe load delay, send SmartFill payload */
+            setTimeout(function () {
+                var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (toolIframe && toolIframe.contentWindow) {
+                    toolIframe.contentWindow.postMessage({
+                        type: 'SMARTFILL_DATA',
+                        templateId: 'fundingStrategy',
+                        payload: {
+                            templateId: 'fundingStrategy',
+                            label: 'Sourcing Analysis',
+                            editorData: editorData
+                        }
+                    }, '*');
+                }
+            }, 1500);
+        }).catch(function (err) {
+            mBTME.alert('Analysis Failed', err.message || 'AI request failed. Check your API key and connection.');
+        });
+    },
+
     openPersonaModal: function () {
         var self  = this;
         var mBTME = window.mBTME;
@@ -378,6 +495,10 @@ window.mBTAIModule = {
                 '<button onclick="mBTME.close(\'aiToolsModal\'); openTool(\'./src/tools/ai/index.html?projectKey=\' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : \'\')) + \'&mode=generate\');" class="col-span-2 p-4 bg-violet-50 border border-violet-200 rounded-2xl flex items-center gap-3 hover:bg-violet-100 transition-all group">' +
                     '<div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-violet-500 group-hover:scale-110 transition-all">' + (mBTAssets.wand || '') + '</div>' +
                     '<div class="text-left"><h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Generate Budget</h4><p class="text-[8px] text-slate-400 font-bold">Describe a production \u2014 AI builds the full structure</p></div>' +
+                '</button>' +
+                '<button onclick="mBT.features.ai.openSourcingAnalysis();" class="col-span-2 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 hover:bg-emerald-100 transition-all group">' +
+                    '<div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-all"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>' +
+                    '<div class="text-left"><h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Sourcing Analysis</h4><p class="text-[8px] text-slate-400 font-bold">AI generates a Funding Strategy document from your live budget data</p></div>' +
                 '</button>' +
             '</div>' +
             '<div class="px-4 pb-4 space-y-2">' +

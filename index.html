@@ -430,7 +430,8 @@
         logic: {},    // Tier 3
         ui: _preUI,
         features: _preFeatures,  // Tier 5 -- preserved across hoist for modular pre-registration
-        registry: _preRegistry   // Phase 137 Stabilization: global registry hoisted from IIFE scope
+        registry: _preRegistry,  // Phase 137 Stabilization: global registry hoisted from IIFE scope
+        state: { isDirty: false } // Task 13: Dirty-state guard for safe SW update activation
     };
     window.mBT.ui.render = window.mBT.ui.render || {};
     window.mBT.ui.render.esc = function (str) { var d = document.createElement('div'); d.textContent = String(str || ''); return d.innerHTML; };
@@ -736,7 +737,10 @@
                     }
 
                     target[prop] = value;
-                    if (!mBT.data.state._isInitialLoad) mBT.data.state.requestReconciliation();
+                    if (!mBT.data.state._isInitialLoad) {
+                        mBT.data.state.requestReconciliation();
+                        if (window.mBT && window.mBT.state && !isInternal) window.mBT.state.isDirty = true;
+                    }
                     return true;
                 }
             },
@@ -756,6 +760,7 @@
                 this._saveTimer = setTimeout(function () {
                     if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Field Edit');
                     mBT.data.save().then(function () {
+                        if (window.mBT && window.mBT.state) window.mBT.state.isDirty = false;
                         var statusMsg = document.getElementById('statusBarMessage');
                         if (statusMsg) {
                             var originalText = statusMsg.textContent;
@@ -10227,7 +10232,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=22.6', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=22.61', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -10250,10 +10255,11 @@
                                         window.mBT.features.settings.open('updates');
                                     }
                                 }
-                                mBTME.confirm("Update Available", "New production logic available! Synchronize environment now?", function () {
-                                    var pending = window.mBT.registry.pendingWorker;
+                                /* Task 13: Dirty-state guard — auto-activate when clean, confirm when unsaved work exists */
+                                var pending = window.mBT.registry.pendingWorker;
+                                if (!window.mBT.state || !window.mBT.state.isDirty) {
+                                    /* Clean state: activate silently without interrupting user */
                                     if (pending) {
-                                        /* SKIP_WAITING bridge: activate new SW, then reload on controllerchange */
                                         navigator.serviceWorker.addEventListener('controllerchange', function () {
                                             window.location.reload();
                                         });
@@ -10261,7 +10267,18 @@
                                     } else {
                                         window.location.reload();
                                     }
-                                });
+                                } else {
+                                    mBTME.confirm("Update Available", "New production logic available. You have unsaved changes — synchronize now?", function () {
+                                        if (pending) {
+                                            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                                                window.location.reload();
+                                            });
+                                            pending.postMessage({ type: 'SKIP_WAITING' });
+                                        } else {
+                                            window.location.reload();
+                                        }
+                                    });
+                                }
                             }
                         };
                     };

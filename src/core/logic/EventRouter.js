@@ -567,6 +567,15 @@ window.mBTRouter = (function () {
             if (window.mBTME) mBTME.close('tool-window');
             _ctx.setMBTActiveTool(null);
             if (window.mBTME) mBTME.alert('Sync Aborted', 'The pending sync was cancelled. Your local budget is unchanged.');
+
+        /* --- Phase 144: sync-funding-source — AI Funding Strategy data convergence --- */
+        /* Publisher iframe sends editorData back after SmartFill PDF generation.
+           Saved to budget.aiContext.fundingStrategy for cross-session persistence. */
+        } else if (action === 'sync-funding-source' && budget && payload.editorData) {
+            if (!budget.aiContext) budget.aiContext = { chat: [], analysis: '' };
+            budget.aiContext.fundingStrategy = payload.editorData;
+            _persistBudget(e.source, action, budget);
+            console.log('[mBT] Funding strategy synced from publisher.');
         }
     }
 

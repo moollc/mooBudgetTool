@@ -1,11 +1,12 @@
-/* ========= v1.0 SW: Offline Endurance Cache — full asset precache v2.3 ========= */
+/* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.6';
+var CACHE_NAME = 'mbt-monolith-cache-v22.61';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
     './index.html',
     './manifest.json',
+    './metadata.json',
 
     /* --- Vendored libraries --- */
     './src/lib/gridstack.min.css',
@@ -29,8 +30,10 @@ var PRECACHE_ASSETS = [
     './src/scripts/storage.js',
     './src/scripts/migration.js',
     './src/scripts/icons.js',
+    './src/scripts/self_analysis.js',
     './src/scripts/engine/mbtle.js',
     './src/scripts/engine/opengate.js',
+    './src/scripts/engine/opengate-api.js',
     './src/scripts/engine/opfs.js',
     './src/scripts/engine/publisher.js',
 
@@ -40,29 +43,58 @@ var PRECACHE_ASSETS = [
 
     /* --- App CSS --- */
     './public/css/mbt-core.css',
+    './public/globals.css',
 
     /* --- Core UI modules --- */
+    './src/core/blueprints.js',
     './src/core/mBT.assets.js',
+    './src/core/mBT.component.js',
+    './src/core/mBT.core.js',
     './src/core/mBT.templates.js',
     './src/core/ui.settings.js',
     './src/core/finance.engine.js',
+
+    /* --- Core services --- */
+    './src/core/services/Contacts.js',
+    './src/core/services/OpenGate.js',
+    './src/core/services/Preflight.js',
     './src/core/services/Security.js',
+
+    /* --- Core UI components --- */
+    './src/core/ui/Calendar.js',
+    './src/core/ui/CalendarBenchmark.js',
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
-    './src/core/ui/Calendar.js',
-    './src/core/components/EmbeddedMode.js',
 
-    /* --- WebAssembly modules (full offline support) --- */
+    /* --- Core structural components --- */
+    './src/core/components/EmbeddedMode.js',
+    './src/core/components/ToolHost.js',
+
+    /* --- WebAssembly modules (full offline support — all build targets) --- */
+    './src/core/wasm/mbt_wasm.js',
+    './src/core/wasm/mbt_wasm_bg.wasm',
+    './src/core/wasm_node/mbt_wasm.js',
+    './src/core/wasm_node/mbt_wasm_bg.wasm',
+    './src/core/wasm_node/mbt_wasm_node.js',
+    './src/core/wasm_node/mbt_wasm_node_bg.wasm',
     './src/core/wasm_node/pkg/mbt_wasm.js',
     './src/core/wasm_node/pkg/mbt_wasm_bg.wasm',
 
-    /* --- Supabase services --- */
+    /* --- Config --- */
+    './src/config/ai.js',
     './src/config/supabase.js',
+
+    /* --- AI & Supabase services --- */
+    './src/services/ai-context.js',
+    './src/services/ai-pattern-recognition.js',
+    './src/services/ai-reports.js',
     './src/services/supabase-sync.js',
     './src/services/supabase-realtime.js',
 
     /* --- Tool HTML files (dynamically loaded via openTool() iframes) --- */
+    './src/tools/tools-manifest.json',
     './src/tools/ai/index.html',
+    './src/tools/calendar/index.html',
     './src/tools/calendar_benchmark/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
@@ -71,6 +103,7 @@ var PRECACHE_ASSETS = [
     './src/tools/po/index.html',
     './src/tools/publisher/index.html',
     './src/tools/rsi/index.html',
+    './src/tools/rsi/DEBT.json',
     './src/tools/share/index.html',
     './src/tools/stages/index.html',
     './src/tools/supabase/index.html',
