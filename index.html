@@ -1366,7 +1366,8 @@
                         shootDate: '',
                         jurisdiction: { name: '', incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
                         ledgers: { poCounter: 1, pos: [], pettyCash: [] },
-                        actualsMode: false
+                        actualsMode: false,
+                        currency: displayCurrency
                     };
 
                     budget = mBT.data.state.wrap(newBudget);
@@ -2346,7 +2347,9 @@
 
                 // 1. Calculate Costs (Aggregation using Payable Days)
                 var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
-                Object.values(budget.sections || {}).forEach(function (sec) {
+                var _secKeys = Object.keys(budget.sections || {});
+                for (var _si = 0; _si < _secKeys.length; _si++) {
+                    var sec = budget.sections[_secKeys[_si]];
                     (sec.items || []).forEach(function (item) {
                         if (!item.stageData) return;
                         KEYS.forEach(function (k) {
@@ -2360,7 +2363,7 @@
                             }
                         });
                     });
-                });
+                }
 
                 // 2. Calculate Burn Logic
                 KEYS.forEach(function (k) {
@@ -2581,7 +2584,7 @@
         },
         /* Convert val from budget base currency to displayCurrency (display-only, non-destructive) */
         convert: function (val) {
-            var from = (budget && budget.currency) || displayCurrency || 'JMD';
+            var from = (budget && budget.currency) || 'JMD';
             var to = displayCurrency || 'JMD';
             if (from === to) return parseFloat(val) || 0;
             var rates = this._getRates();

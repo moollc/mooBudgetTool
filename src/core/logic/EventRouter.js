@@ -576,6 +576,43 @@ window.mBTRouter = (function () {
             budget.aiContext.fundingStrategy = payload.editorData;
             _persistBudget(e.source, action, budget);
             console.log('[mBT] Funding strategy synced from publisher.');
+
+        /* --- Funding Package Autofill AI cascade: fill remaining blanks (logline/genre/format) --- */
+        } else if (action === 'ai-funding-fill') {
+            var _rid = e.data.requestId;
+            var _src = e.source;
+            var _fields = (payload.fields || []).slice(0, 6);
+            var _ctxData = payload.context || {};
+            var _reply = function (obj) {
+                if (_src) _src.postMessage({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }, '*');
+            };
+            if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function') {
+                _reply({}); return;
+            }
+            var _provider = (window.mBTAIConfig && mBTAIConfig.PROVIDER && mBTAIConfig.PROVIDER.DEFAULT) || localStorage.getItem('mbt_ai_provider') || 'lmstudio';
+            var _apiKey   = localStorage.getItem('mbt_ai_api_key') || '';
+            var _sys = 'You are a concise film-production assistant. Return ONLY a JSON object with the requested keys, no prose. Use short, plain values.';
+            var _prompt = 'Fill these Funding Package fields for this project. Return JSON with keys: ' + _fields.join(', ') + '.\n\n' +
+                          'Context:\n' +
+                          'Title: ' + (_ctxData.projectName || '(unknown)') + '\n' +
+                          'Director: ' + (_ctxData.director || '') + '\n' +
+                          'Producer: ' + (_ctxData.producer || '') + '\n' +
+                          'Writer: ' + (_ctxData.writer || '') + '\n' +
+                          'Runtime (mins): ' + (_ctxData.runtime || '') + '\n' +
+                          'Location: ' + (_ctxData.location || '') + '\n\n' +
+                          'Rules: logline = one sentence (max 25 words). genre = short phrase (e.g., "Feature Documentary"). format = one of Feature Film / Short Film / Documentary / Series / Commercial.';
+            try {
+                mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
+                    .then(function (resp) {
+                        var out = {};
+                        if (typeof resp === 'string') {
+                            var m = resp.match(/\{[\s\S]*\}/);
+                            if (m) { try { out = JSON.parse(m[0]); } catch (je) { out = {}; } }
+                        }
+                        _reply(out);
+                    })
+                    .catch(function (err) { console.warn('[mBT] ai-funding-fill failed:', err); _reply({}); });
+            } catch (ex) { console.warn('[mBT] ai-funding-fill threw:', ex); _reply({}); }
         }
     }
 

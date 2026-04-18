@@ -483,7 +483,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.62';
+            var currentVersion = updateStatus.localVersion || 'v22.64';
 
             /* Status message bound to native SW updatefound state (Task 17) */
             var statusMsg = '';
