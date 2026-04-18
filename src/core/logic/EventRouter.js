@@ -591,6 +591,7 @@ window.mBTRouter = (function () {
             }
             var _provider = (window.mBTAIConfig && mBTAIConfig.PROVIDER && mBTAIConfig.PROVIDER.DEFAULT) || localStorage.getItem('mbt_ai_provider') || 'lmstudio';
             var _apiKey   = localStorage.getItem('mbt_ai_api_key') || '';
+            var _treatment = String(_ctxData.treatment || '').slice(0, 4000);
             var _sys = 'You are a concise film-production assistant. Return ONLY a JSON object with the requested keys, no prose. Use short, plain values.';
             var _prompt = 'Fill these Funding Package fields for this project. Return JSON with keys: ' + _fields.join(', ') + '.\n\n' +
                           'Context:\n' +
@@ -599,7 +600,8 @@ window.mBTRouter = (function () {
                           'Producer: ' + (_ctxData.producer || '') + '\n' +
                           'Writer: ' + (_ctxData.writer || '') + '\n' +
                           'Runtime (mins): ' + (_ctxData.runtime || '') + '\n' +
-                          'Location: ' + (_ctxData.location || '') + '\n\n' +
+                          'Location: ' + (_ctxData.location || '') + '\n' +
+                          (_treatment ? ('\nTreatment / Notes:\n' + _treatment + '\n') : '') + '\n' +
                           'Rules: logline = one sentence (max 25 words). genre = short phrase (e.g., "Feature Documentary"). format = one of Feature Film / Short Film / Documentary / Series / Commercial.';
             try {
                 mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)

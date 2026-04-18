@@ -1,6 +1,6 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.64';
+var CACHE_NAME = 'mbt-monolith-cache-v22.65';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
