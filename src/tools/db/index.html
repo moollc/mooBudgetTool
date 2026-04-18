@@ -2735,6 +2735,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (btn) { btn.disabled = true; btn.textContent = ' Thinking...'; }
 
     var requestId = 'fpAI_' + Date.now();
+    var _tx = '';
+    try { _tx = (localStorage.getItem('mbt_ai_treatment') || '').slice(0, 4000); } catch (_e) { _tx = ''; }
     var ctx = {
       projectName: editorData.productionTitle || budget.projectName || '',
       productionCompany: editorData.productionCompany || '',
@@ -2743,7 +2745,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       writer: editorData.writer || '',
       runtime: editorData.runtime || '',
       location: budget.projectLocation || '',
-      jurisdiction: (budget.jurisdiction && budget.jurisdiction.name) || ''
+      jurisdiction: (budget.jurisdiction && budget.jurisdiction.name) || '',
+      treatment: _tx
     };
 
     var timeout = setTimeout(function () {
