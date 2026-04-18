@@ -76,6 +76,10 @@
     @keyframes mbt-spin { to { transform: rotate(360deg); } }
     .spin { animation: mbt-spin 0.8s linear infinite; transform-origin: center; display: inline-block; }
     .toolbar-btn svg { flex-shrink: 0; }
+    /* Compact icon-only toolbar (mobile + user preference) */
+    body.compact #preview-toolbar .toolbar-btn .lbl { display: none; }
+    body.compact #preview-toolbar .toolbar-btn { padding: 6px 8px; gap: 0; }
+    body.compact #preview-toolbar .toolbar-btn svg { width: 14px; height: 14px; }
     #save-indicator { font-size: 10px; color: #22c55e; font-weight: 600; display: none; align-items: center; gap: 4px; }
     #unsaved-dot { width: 6px; height: 6px; border-radius: 50%; background: #f97316; flex-shrink: 0; display: none; }
     #reset-btn { margin: 0 10px 8px auto; display: block; padding: 4px 12px; font-size: 10px; font-weight: 600; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; color: var(--muted); }
@@ -282,53 +286,53 @@
         <span id="save-indicator"><span id="unsaved-dot"></span>Saved</span>
         <button class="toolbar-btn" id="btn-save-doc" title="Save document to history">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Save
+          <span class="lbl">Save</span>
         </button>
         <div id="overflow-btns">
           <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-            XLSX
+            <span class="lbl">XLSX</span>
           </button>
           <button class="toolbar-btn" id="btn-csv" title="Export CSV">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-            CSV
+            <span class="lbl">CSV</span>
           </button>
           <button class="toolbar-btn" id="btn-snapshot" title="Save budget snapshot for comparison">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Snapshot
+            <span class="lbl">Snapshot</span>
           </button>
           <button class="toolbar-btn" id="btn-package" title="Export full document package (Top Sheet + Detail + Cost Report)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Package
+            <span class="lbl">Package</span>
           </button>
           <button class="toolbar-btn" id="btn-all-financial" title="Export all 5 financial documents as one PDF (Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-            All Financial
+            <span class="lbl">All Financial</span>
           </button>
           <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout — no images required)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
-            PDF (Alt)
+            <span class="lbl">PDF (Alt)</span>
           </button>
           <button class="toolbar-btn" id="btn-html" title="Download HTML">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            HTML
+            <span class="lbl">HTML</span>
           </button>
         </div>
         <button class="toolbar-btn" id="btn-more-overflow" title="More export options" aria-label="More export options">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
-          More
+          <span class="lbl">More</span>
         </button>
         <button class="toolbar-btn" id="btn-print" title="Print">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-          Print
+          <span class="lbl">Print</span>
         </button>
         <button class="toolbar-btn" id="btn-share" title="Share document">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Share
+          <span class="lbl">Share</span>
         </button>
         <button class="toolbar-btn primary" id="btn-pdf" title="Export PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          PDF
+          <span class="lbl">PDF</span>
         </button>
       </div>
       <div id="options-bar">
@@ -401,6 +405,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* Mobile breakpoint helper */
   function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
+
+  /* Compact icon-only toolbar: on mobile, or when user enabled compactMode in settings */
+  function applyCompactMode() {
+    var prefer = !!(budget && budget.settings && budget.settings.compactMode);
+    var shouldCompact = prefer || isMobile();
+    document.body.classList.toggle('compact', shouldCompact);
+  }
+  window.addEventListener('resize', function () { applyCompactMode(); });
 
   /* Template categories for grouped picker */
   var TEMPLATE_CATEGORIES = [
@@ -1202,6 +1214,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       budget = data;
       var nameEl = dom.getElementById('topbar-project');
       if (nameEl) nameEl.textContent = data.projectName || 'Untitled';
+      applyCompactMode();
       /* Re-render active template now that budget is available */
       if (activeTemplateId && activeTab === 'preview') renderPreview();
     }).catch(function (err) {
@@ -1533,6 +1546,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (loadBtn) loadBtn.addEventListener('click', autoPopulateFromBudget);
     var weatherBtn = fresh.querySelector('#btn-fetch-weather');
     if (weatherBtn) weatherBtn.addEventListener('click', fetchWeatherAndHospitals);
+    /* Wire fundingPackage Autofill (budget -> AI cascade) */
+    var fpAutofillBtn = fresh.querySelector('#btn-fp-autofill');
+    if (fpAutofillBtn) fpAutofillBtn.addEventListener('click', autoPopulateFundingPackage);
     /* Phase 70: auto-fetch weather on open if location is set but forecasts not yet loaded */
     if (editorData && editorData.shootingLocations && editorData.shootingLocations.length &&
         editorData.shootingLocations[0].address && !editorData.locationForecasts) {
@@ -2003,9 +2019,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '</select></td>' +
         '<td><button class="ed-del" data-arr="sources" data-del="' + i + '">&times;</button></td></tr>';
     }).join('');
-    return '<div class="ed-section">Project Info</div>' +
-      '<div class="ed-2">' + fld('productionTitle', 'Production Title', 'text', true) + fld('logline', 'Logline', 'text', true) + '</div>' +
-      '<div class="ed-3">' + fld('format', 'Format') + fld('genre', 'Genre') + fld('runtime', 'Runtime (mins)', 'number') + '</div>' +
+    return '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Project Info' +
+      '<button class="smart-btn" id="btn-fp-autofill" type="button" title="Pull from budget, then AI-fill remaining blanks">' +
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>' +
+      ' Autofill</button></div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title', 'text', true) + fld('logline', 'Logline', 'text', true) + '</div>' +
+      '<div class="ed-row ed-3">' + fld('format', 'Format') + fld('genre', 'Genre') + fld('runtime', 'Runtime (mins)', 'number') + '</div>' +
+      '</div>' +
       '<div class="ed-section">Key Creative</div>' +
       '<div class="ed-2">' + fld('director', 'Director') + fld('producer', 'Producer') + fld('writer', 'Writer') + fld('dp', 'D.P.') + '</div>' +
       '<div class="ed-section">Contact</div>' +
@@ -2647,15 +2667,118 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (budget.projectLocation) locHydrated = true;
     }
     
-    if (changed) { 
-        saveEditorData(); 
-        buildEditor('callSheet'); 
+    if (changed) {
+        saveEditorData();
+        buildEditor('callSheet');
         if (locHydrated) {
             setTimeout(fetchWeatherAndHospitals, 300);
         }
     } else {
         alert("No additional crew contacts found to populate or fields already filled.");
     }
+  }
+
+  /* ======== Funding Package Autofill (budget -> AI cascade) ======== */
+  var _fpAIPending = false;
+  function autoPopulateFundingPackage() {
+    if (!budget) { alert('No project loaded.'); return; }
+    var changed = false;
+
+    /* --- Phase 1: budget-pull (deterministic) --- */
+    if (!editorData.productionTitle && budget.projectName) {
+      editorData.productionTitle = budget.projectName; changed = true;
+    }
+    if (!editorData.productionCompany && (budget.projectCompany || budget.company)) {
+      editorData.productionCompany = budget.projectCompany || budget.company; changed = true;
+    }
+    /* ATL crew scan (reuse same pattern as call sheet) */
+    var found = { director: '', producer: '', writer: '', dp: '' };
+    Object.keys(budget.sections || {}).forEach(function (k) {
+      var sec = budget.sections[k];
+      (sec.items || []).forEach(function (item) {
+        var d = (item.description || '').toLowerCase();
+        var person = (item.crew && item.crew.name) || '';
+        if (!person) return;
+        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) found.director = person;
+        else if (!found.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) found.producer = person;
+        else if (!found.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) found.writer = person;
+        else if (!found.dp && (d.indexOf('dp') === 0 || d.indexOf('cinematograph') > -1 || d.indexOf('director of photography') > -1)) found.dp = person;
+      });
+    });
+    ['director','producer','writer','dp'].forEach(function (k) {
+      if (found[k] && !editorData[k]) { editorData[k] = found[k]; changed = true; }
+    });
+
+    if (changed) { saveEditorData(); }
+
+    /* --- Phase 2: AI cascade for remaining blanks (logline, genre, format) --- */
+    var aiFields = [];
+    if (!editorData.logline) aiFields.push('logline');
+    if (!editorData.genre)   aiFields.push('genre');
+    if (!editorData.format)  aiFields.push('format');
+
+    if (aiFields.length === 0) {
+      buildEditor('fundingPackage');
+      if (!changed) alert('All Funding Package fields are already filled.');
+      return;
+    }
+
+    if (_fpAIPending) return;
+    if (window.parent === window) {
+      /* Standalone: no AI bridge — finish with budget results only */
+      buildEditor('fundingPackage');
+      return;
+    }
+
+    _fpAIPending = true;
+    var btn = dom.getElementById('btn-fp-autofill');
+    if (btn) { btn.disabled = true; btn.textContent = ' Thinking...'; }
+
+    var requestId = 'fpAI_' + Date.now();
+    var ctx = {
+      projectName: editorData.productionTitle || budget.projectName || '',
+      productionCompany: editorData.productionCompany || '',
+      director: editorData.director || '',
+      producer: editorData.producer || '',
+      writer: editorData.writer || '',
+      runtime: editorData.runtime || '',
+      location: budget.projectLocation || '',
+      jurisdiction: (budget.jurisdiction && budget.jurisdiction.name) || ''
+    };
+
+    var timeout = setTimeout(function () {
+      cleanup();
+      buildEditor('fundingPackage');
+      alert('AI fill timed out. Budget-pull values were saved.');
+    }, 30000);
+
+    function cleanup() {
+      _fpAIPending = false;
+      clearTimeout(timeout);
+      window.removeEventListener('message', onReply);
+    }
+
+    function onReply(e) {
+      if (!e.data || e.data.type !== 'mbt:tool-reply') return;
+      if (e.data.requestId !== requestId) return;
+      cleanup();
+      var r = e.data.payload || {};
+      var aiChanged = false;
+      aiFields.forEach(function (k) {
+        if (r[k] && !editorData[k]) { editorData[k] = String(r[k]); aiChanged = true; }
+      });
+      if (aiChanged) saveEditorData();
+      buildEditor('fundingPackage');
+      if (!aiChanged && !changed) alert('AI did not return usable values.');
+    }
+
+    window.addEventListener('message', onReply);
+    window.parent.postMessage({
+      type: 'mbt:tool-action',
+      action: 'ai-funding-fill',
+      requestId: requestId,
+      payload: { fields: aiFields, context: ctx }
+    }, '*');
   }
 
   /* Fetch weather (3-day, all shooting locations) + nearest hospitals (first location) */
@@ -2789,6 +2912,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Init ======== */
   /* Picker builds immediately (no budget needed). Budget loads async after. */
+  applyCompactMode();
   buildTemplatePicker();
   loadBudget();
 })();
