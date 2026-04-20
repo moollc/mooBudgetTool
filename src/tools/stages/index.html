@@ -144,7 +144,7 @@
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Total Cap Limit</label>
                     <div class="flex items-center gap-2 border-b-2 border-slate-700 pb-1">
                         <span class="text-slate-600 text-xl font-black">$</span>
-                        <input type="number" id="total-cap" aria-label="Total cap limit" placeholder="0.00" oninput="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-white outline-none placeholder-slate-800">
+                        <input type="number" id="total-cap" aria-label="Total cap limit" placeholder="0.00" onchange="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-slate-900 outline-none placeholder-slate-400">
                     </div>
                 </div>
                 <!-- Sliders -->
@@ -545,6 +545,21 @@
                 /* Phase 73B: receive undo/redo routing from parent monolith */
                 window.addEventListener('message', function(e) {
                     if (!e.data || e.data.type !== 'mbt:tool-action') return;
+                });
+
+                /* Live cap sync from main budget -- refresh totalCap + vitals without reopen */
+                window.addEventListener('message', function(e) {
+                    if (!e.data || e.data.type !== 'mbt:totalCap') return;
+                    if (!mBTStageStudio.state || !mBTStageStudio.state.project) return;
+                    var nextCap = parseFloat(e.data.totalCap) || 0;
+                    if (!mBTStageStudio.state.project.targetLock) {
+                        mBTStageStudio.state.project.targetLock = { enabled: false, totalCap: 0, stages: {} };
+                    }
+                    mBTStageStudio.state.project.targetLock.totalCap = nextCap;
+                    var capInput = document.getElementById('total-cap');
+                    if (capInput) capInput.value = nextCap || '';
+                    if (typeof mBTStageStudio.renderVitals    === 'function') mBTStageStudio.renderVitals();
+                    if (typeof mBTStageStudio.renderStageCards === 'function') mBTStageStudio.renderStageCards();
                 });
 
                 /* Back button */
@@ -982,7 +997,18 @@
             },
 
             updateCap: function(val) {
-                this.state.project.targetLock.totalCap = parseFloat(val) || 0;
+                var next = parseFloat(val) || 0;
+                var prev = this.state.project.targetLock.totalCap || 0;
+                /* Warn when replacing an existing cap -- change cascades to every stage segment cap in the main budget */
+                if (prev > 0 && next !== prev) {
+                    var ok = window.confirm('Changing the Budget Cap will update every stage cap in the main budget. Continue?');
+                    if (!ok) {
+                        var input = document.getElementById('total-cap');
+                        if (input) input.value = prev;
+                        return;
+                    }
+                }
+                this.state.project.targetLock.totalCap = next;
                 this.renderVitals();
                 this.save();
             },
@@ -1208,11 +1234,23 @@
                 var self = this;
                 if (!self.state.project) return;
                 var cleanProject = JSON.parse(JSON.stringify(self.state.project));
+                /* Stamp updated_at so the monolith's OPFS/localforage reconciliation picks the newer record */
+                cleanProject.updated_at = new Date().toISOString();
 
                 var savePromise;
                 if (self.state._projectKey && typeof localforage !== 'undefined') {
-                    /* Shell bridge: write back to localforage so the shell sees changes */
-                    savePromise = localforage.setItem(self.state._projectKey, cleanProject);
+                    /* Shell bridge: write back to localforage so the shell sees changes.
+                       Also mirror to OPFS when available -- the monolith's loader prefers whichever
+                       store has the newer updated_at, so both must stay in step. */
+                    var parentOPFS = null;
+                    try {
+                        if (window.parent && window.parent !== window && window.parent.mBTOPFS && window.parent.mBTOPFS.isReady && window.parent.mBTOPFS.isReady()) {
+                            parentOPFS = window.parent.mBTOPFS;
+                        }
+                    } catch (_) { /* cross-origin: ignore */ }
+                    var lfP = localforage.setItem(self.state._projectKey, cleanProject);
+                    var opfsP = parentOPFS ? parentOPFS.save(self.state._projectKey, cleanProject).catch(function () { return null; }) : Promise.resolve();
+                    savePromise = Promise.all([lfP, opfsP]);
                 } else if (window.mBT && window.mBT.storage) {
                     savePromise = window.mBT.storage.updateProject(cleanProject);
                 } else {

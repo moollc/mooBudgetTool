@@ -371,6 +371,9 @@
 <!-- Phase 60.A: AI Module -- AI engine extracted from monolith -->
 <script src="./src/core/logic/AIModule.js"></script>
 
+<!-- Phase 149.2: Context Ledger -- per-project artifact index for AI autofill -->
+<script src="./src/core/logic/ContextLedger.js"></script>
+
 <script>
     /* ================= v19.54 TIER 1: Environment Configuration ================= */
 
@@ -1644,9 +1647,30 @@
     window.mBTStorage = mBT.data.storage;
     window.saveBudget = function () {
         if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
-        return mBT.data.save.apply(mBT.data, arguments);
+        var result = mBT.data.save.apply(mBT.data, arguments);
+        /* Phase 149.2: Mirror save into Context Ledger (dedup by content hash, cheap when idle) */
+        try {
+            if (window.mBTContextLedger && typeof budget !== 'undefined' && budget && budget.projectName) {
+                mBTContextLedger.setActiveProject(budget.projectName).then(function () {
+                    mBTContextLedger.ingestBudget(budget);
+                });
+            }
+        } catch (lx) { /* ledger failure must never block saves */ }
+        return result;
     };
-    window.loadBudget = mBT.data.load.bind(mBT.data);
+    window.loadBudget = function () {
+        var r = mBT.data.load.apply(mBT.data, arguments);
+        /* Phase 149.2: Rehydrate Context Ledger on project load */
+        try {
+            if (window.mBTContextLedger && typeof budget !== 'undefined' && budget && budget.projectName) {
+                mBTContextLedger.setActiveProject(budget.projectName).then(function () {
+                    mBTContextLedger.ingestBudget(budget);
+                    mBTContextLedger.ingestSidebar();
+                });
+            }
+        } catch (lx) { /* ignore */ }
+        return r;
+    };
     window.handleNewProject = mBT.data.newProject.bind(mBT.data);
     window.handleDuplicateProject = mBT.data.duplicate.bind(mBT.data);
     window.deleteProject = mBT.data.deleteProject.bind(mBT.data);
@@ -6409,60 +6433,44 @@
             });
         },
 
-        /* Phase 116 -- The Universal Studio Hub: Unified AI & Blueprint Portal */
+        /* Phase 149.1B -- Studio Hub: single-bar blueprint strip + expanded modal */
         showStudioHub: function () {
             var self = this;
             var content = `
-                <div class="flex flex-col h-[75vh] bg-slate-900 text-white font-sans">
-                    <!-- Top Section: Quick Setup Tiles -->
-                    <div class="p-6 border-b border-white/5">
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 class="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                                    moo Budget Tool
-                                </h3>
-                                <p class="text-[10px] text-white/40 font-bold uppercase tracking-tight">Select a starting blueprint or use the AI Assistant below</p>
+                <div class="flex flex-col h-[88vh] bg-slate-900 text-white font-sans">
+                    <!-- Top Bar: Blueprint chips + Inject Rates inline (single row ~48px) -->
+                    <div class="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-slate-950/60 flex-wrap">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-white/40 mr-1 shrink-0">Start From</span>
+                        <button onclick="mBT.features.blueprints.applyFromHub('commercial')" class="sh-chip"><span class="sh-chip-tag text-blue-400">Std</span>TV Commercial</button>
+                        <button onclick="mBT.features.blueprints.applyFromHub('documentary')" class="sh-chip"><span class="sh-chip-tag text-emerald-400">R&amp;G</span>Documentary</button>
+                        <button onclick="mBT.features.blueprints.applyFromHub('live_stream')" class="sh-chip"><span class="sh-chip-tag text-amber-400">Tech</span>Live Broadcast</button>
+                        <button onclick="mBT.features.blueprints.applyFromHub('music_video')" class="sh-chip"><span class="sh-chip-tag text-rose-400">Crtv</span>Music Video</button>
+                        <label class="flex items-center gap-2 cursor-pointer group ml-auto shrink-0 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                            <input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">
+                            <div class="w-7 h-3.5 bg-slate-700 rounded-full relative transition-colors peer-checked:bg-blue-600">
+                                <div class="absolute left-0.5 top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform peer-checked:translate-x-3.5"></div>
                             </div>
-                            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
-                                <label class="flex items-center gap-2 cursor-pointer group">
-                                    <input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">
-                                    <div class="w-8 h-4 bg-slate-700 rounded-full relative transition-colors peer-checked:bg-blue-600">
-                                        <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
-                                    </div>
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Inject Rates</span>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                            <button onclick="mBT.features.blueprints.applyFromHub('commercial')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
-                                <span class="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Standard</span>
-                                <span class="block text-xs font-black text-white">TV Commercial</span>
-                            </button>
-                            <button onclick="mBT.features.blueprints.applyFromHub('documentary')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
-                                <span class="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Run & Gun</span>
-                                <span class="block text-xs font-black text-white">Documentary</span>
-                            </button>
-                            <button onclick="mBT.features.blueprints.applyFromHub('live_stream')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
-                                <span class="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1">Technical</span>
-                                <span class="block text-xs font-black text-white">Live Broadcast</span>
-                            </button>
-                            <button onclick="mBT.features.blueprints.applyFromHub('music_video')" class="group relative overflow-hidden bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 text-left transition-all hover:scale-[1.02] active:scale-95">
-                                <span class="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Creative</span>
-                                <span class="block text-xs font-black text-white">Music Video</span>
-                            </button>
-                        </div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Inject Rates</span>
+                        </label>
                     </div>
 
-                    <!-- Bottom Section: AI Assistant Iframe -->
-                    <div class="flex-1 relative bg-black/20">
-                        <iframe id="mbtHubAiIframe" src="./src/tools/ai/index.html?embedded=true" class="w-full h-full border-none"></iframe>
+                    <!-- Main: Assistant Iframe -->
+                    <div class="flex-1 relative bg-black/20 min-h-0">
+                        <iframe id="mbtHubAiIframe" src="./src/tools/ai/index.html?embedded=true" class="w-full h-full border-none block"></iframe>
                     </div>
                 </div>
+                <style id="sh-chips-css">
+                    .sh-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:11px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:all .15s;min-height:32px}
+                    .sh-chip:hover{background:rgba(255,255,255,0.12);transform:translateY(-1px)}
+                    .sh-chip:active{transform:translateY(0) scale(.97)}
+                    .sh-chip-tag{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.9}
+                    @media (max-width:640px){
+                        .sh-chip{padding:5px 9px;font-size:10px}
+                    }
+                </style>
             `;
 
-            mBTME.open('studio-hub', 'Studio Center', content, 'max-w-4xl', { hideHeader: true, noPadding: true });
+            mBTME.open('studio-hub', 'Studio Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
         },
 
         /* Phase 116: Hub tile trigger -- maps lowercase hub key to BUDGET_TEMPLATES title-case key */
@@ -8502,7 +8510,16 @@
         setTotalCap: function (rawVal) {
             if (!budget) return;
             if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
-            var val = parseFloat(rawVal) || 0;
+            var val  = parseFloat(rawVal) || 0;
+            var prev = budget.targetLock.totalCap || 0;
+            /* Warn when replacing an existing cap -- change cascades to Stages and every stage segment cap */
+            if (prev > 0 && val !== prev) {
+                var ok = window.confirm('Changing the Budget Cap will update every stage cap in Stages and throughout the budget. Continue?');
+                if (!ok) {
+                    mBT.features.funding.updateCard();
+                    return;
+                }
+            }
             budget.targetLock.totalCap = val;
             saveBudget();
             if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -11203,6 +11220,24 @@
 
 
         // Phase 16: Hybrid Tool Loader -- opens sub-PWAs in internal modal or new tab
+        /* Cross-iframe reconcile: tools (Stages, etc.) persist to localforage and post
+           { type:'mbt:tool-action', action:'reconcile' }. Reload in-memory budget + recompute. */
+        window.addEventListener('message', function (evt) {
+            if (!evt.data || evt.data.type !== 'mbt:tool-action') return;
+            if (evt.data.action !== 'reconcile') return;
+            if (typeof budget === 'undefined' || !budget || !budget.projectName) return;
+            if (typeof window.loadBudget === 'function') {
+                var p = window.loadBudget(budget.projectName);
+                if (p && typeof p.then === 'function') {
+                    p.then(function () {
+                        if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                        if (mBT.features && mBT.features.funding && mBT.features.funding.updateCard) mBT.features.funding.updateCard();
+                        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+                    });
+                }
+            }
+        });
+
         window.openTool = function (url) {
             /* Lifecycle sync: push local changes before handing off to a tool.
                Sub-Phase 51.2 Task 8: Skip REST push when realtime is live -- it

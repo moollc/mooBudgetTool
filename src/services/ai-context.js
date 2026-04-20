@@ -4,40 +4,73 @@
 
     /* --- 1. PROJECT CONTEXT --- */
 
-    async function getCurrentProjectContext() {
-        var s = window.mBT.storage;
-        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: null, schedule: null };
+    function getCurrentProjectContext() {
+        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: { entries: [], total: 0 }, schedule: null };
 
-        var projects = await s.getAllProjects();
-        if (projects.length > 0) {
-            var active = projects[0];
-            context.projectId   = active.id;
-            context.projectName = active.name || active.projectName || active.title || 'Untitled';
-            context.budget      = parseFloat(active.budget || 0);
-        }
-
-        if (context.projectId) {
-            context.stages      = await s.getStagesByProject(context.projectId);
-            context.allocations = await s.getExecutionsByProject(context.projectId);
-        }
-
-        context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
-        context.timeline = buildTimeline(context.allocations);
-
-        /* --- Phase 50C.6: Inject schedule summary from Budget Editor localforage --- */
-        if (typeof localforage !== 'undefined' && context.projectName) {
+        /* --- Primary path: Shell storage (IndexedDB via mBT.storage) --- */
+        var shellPromise = (function () {
             try {
-                var budgetKey = 'prodBudget_v5_' + context.projectName;
-                var budgetData = await localforage.getItem(budgetKey);
-                if (budgetData) {
-                    context.schedule = buildScheduleSummary(budgetData);
-                }
-            } catch (e) {
-                /* localforage unavailable or key not found — schedule summary skipped */
-            }
-        }
+                var s = window.mBT && window.mBT.storage;
+                if (!s || typeof s.getAllProjects !== 'function') return Promise.resolve(null);
+                return s.getAllProjects().then(function (projects) {
+                    if (!projects || !projects.length) return null;
+                    var active = projects[0];
+                    context.projectId   = active.id;
+                    context.projectName = active.name || active.projectName || active.title || 'Untitled';
+                    context.budget      = parseFloat(active.budget || 0);
+                    if (!context.projectId) return null;
+                    return Promise.all([
+                        s.getStagesByProject(context.projectId).catch(function () { return []; }),
+                        s.getExecutionsByProject(context.projectId).catch(function () { return []; })
+                    ]).then(function (results) {
+                        context.stages      = results[0] || [];
+                        context.allocations = results[1] || [];
+                        return context;
+                    });
+                }).catch(function () { return null; });
+            } catch (e) { return Promise.resolve(null); }
+        }());
 
-        return context;
+        return shellPromise.then(function (shellCtx) {
+            /* --- Fallback path: read active budget from Budget Editor localforage --- */
+            var lf = window.localforage;
+            if (!lf) {
+                /* Neither source available — return empty context, no error */
+                context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
+                context.timeline = buildTimeline(context.allocations);
+                return context;
+            }
+
+            /* Find the most-recently-modified prodBudget_v5_* key */
+            return lf.keys().then(function (keys) {
+                var budgetKeys = (keys || []).filter(function (k) { return k.indexOf('prodBudget_v5_') === 0; });
+                if (!budgetKeys.length) return null;
+                /* Read all, pick the one with most recent updatedAt */
+                var reads = budgetKeys.map(function (k) { return lf.getItem(k).catch(function () { return null; }); });
+                return Promise.all(reads).then(function (docs) {
+                    var best = null;
+                    for (var i = 0; i < docs.length; i++) {
+                        if (!docs[i]) continue;
+                        if (!best || (docs[i].updatedAt || '') > (best.updatedAt || '')) best = docs[i];
+                    }
+                    return best;
+                });
+            }).then(function (doc) {
+                if (doc) {
+                    if (!context.projectName) context.projectName = doc.projectName || doc.name || 'Untitled';
+                    if (!context.budget)      context.budget      = parseFloat(doc.grandTotal || doc.budgetLimit || 0);
+                    context._budgetDoc = doc; /* cache for Budget State panel */
+                }
+                context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
+                context.timeline = buildTimeline(context.allocations);
+                if (doc) context.schedule = buildScheduleSummary(doc);
+                return context;
+            }).catch(function () {
+                context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
+                context.timeline = buildTimeline(context.allocations);
+                return context;
+            });
+        });
     }
 
     /* --- 2. BUDGET PATTERN ANALYSIS --- */

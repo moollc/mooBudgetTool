@@ -1,6 +1,6 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.65';
+var CACHE_NAME = 'mbt-monolith-cache-v22.67';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -40,6 +40,7 @@ var PRECACHE_ASSETS = [
     /* --- Event routing & AI bridge (loaded at L369/L372) --- */
     './src/core/logic/EventRouter.js',
     './src/core/logic/AIModule.js',
+    './src/core/logic/ContextLedger.js',
 
     /* --- App CSS --- */
     './public/css/mbt-core.css',
