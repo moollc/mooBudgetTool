@@ -577,44 +577,147 @@ window.mBTRouter = (function () {
             _persistBudget(e.source, action, budget);
             console.log('[mBT] Funding strategy synced from publisher.');
 
-        /* --- Funding Package Autofill AI cascade: fill remaining blanks (logline/genre/format) --- */
-        } else if (action === 'ai-funding-fill') {
+        /* --- Phase 149.3: Context Ledger rescan / purge from Assistant iframe --- */
+        } else if (action === 'ledger-rescan') {
+            try {
+                if (window.mBTContextLedger && typeof budget !== 'undefined' && budget && budget.projectName) {
+                    mBTContextLedger.setActiveProject(budget.projectName).then(function () {
+                        mBTContextLedger.ingestBudget(budget);
+                        mBTContextLedger.ingestSidebar();
+                    });
+                }
+            } catch (lx) { /* ignore */ }
+
+        } else if (action === 'ledger-purge') {
+            try {
+                if (window.mBTContextLedger) {
+                    var days = (payload && payload.olderThanDays) || 90;
+                    mBTContextLedger.purge(days);
+                }
+            } catch (lx) { /* ignore */ }
+
+        /* --- Phase 149.2: Generic document autofill via Context Ledger ---
+           Accepts { templateId, fields[], context{}, maxTokens? } and returns a JSON
+           object with one key per requested field. Falls back to an empty object on
+           any failure so callers never crash. Back-compat: ai-funding-fill rewrites
+           to templateId='fundingPackage'. */
+        } else if (action === 'ai-funding-fill' || action === 'ai-doc-fill') {
             var _rid = e.data.requestId;
             var _src = e.source;
-            var _fields = (payload.fields || []).slice(0, 6);
+            var _fields = (payload.fields || []).slice(0, 12);
             var _ctxData = payload.context || {};
+            var _templateId = (action === 'ai-funding-fill') ? 'fundingPackage' : (payload.templateId || 'generic');
+            var _maxTokens = payload.maxTokens || 6000;
             var _reply = function (obj) {
                 if (_src) _src.postMessage({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }, '*');
             };
-            if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function') {
+            if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function' || !_fields.length) {
                 _reply({}); return;
             }
-            var _provider = (window.mBTAIConfig && mBTAIConfig.PROVIDER && mBTAIConfig.PROVIDER.DEFAULT) || localStorage.getItem('mbt_ai_provider') || 'lmstudio';
-            var _apiKey   = localStorage.getItem('mbt_ai_api_key') || '';
-            var _treatment = String(_ctxData.treatment || '').slice(0, 4000);
-            var _sys = 'You are a concise film-production assistant. Return ONLY a JSON object with the requested keys, no prose. Use short, plain values.';
-            var _prompt = 'Fill these Funding Package fields for this project. Return JSON with keys: ' + _fields.join(', ') + '.\n\n' +
-                          'Context:\n' +
-                          'Title: ' + (_ctxData.projectName || '(unknown)') + '\n' +
-                          'Director: ' + (_ctxData.director || '') + '\n' +
-                          'Producer: ' + (_ctxData.producer || '') + '\n' +
-                          'Writer: ' + (_ctxData.writer || '') + '\n' +
-                          'Runtime (mins): ' + (_ctxData.runtime || '') + '\n' +
-                          'Location: ' + (_ctxData.location || '') + '\n' +
-                          (_treatment ? ('\nTreatment / Notes:\n' + _treatment + '\n') : '') + '\n' +
-                          'Rules: logline = one sentence (max 25 words). genre = short phrase (e.g., "Feature Documentary"). format = one of Feature Film / Short Film / Documentary / Series / Commercial.';
+            var _provider = mBTAIModule.getSelectedProvider();
+            var _apiKey   = mBTAIModule.getStoredApiKey(_provider);
+
+            /* Per-template field rules registry — tightly bounds AI output for each known field */
+            var TPL_RULES = {
+                fundingPackage: {
+                    logline:     'one sentence, max 25 words, hooks emotionally',
+                    genre:       'short phrase (e.g., "Feature Documentary", "TV Commercial")',
+                    format:      'one of: Feature Film | Short Film | Documentary | Series | Commercial | Music Video',
+                    synopsis:    '2-3 paragraph plain text, no headings',
+                    director:    'full name or empty string',
+                    producer:    'full name or empty string',
+                    writer:      'full name or empty string'
+                },
+                callSheet: {
+                    weather:     'short phrase e.g. "Partly cloudy, 82F, 30% rain"',
+                    notes:       'one or two concise bullet points',
+                    safetyNote:  'one sentence hazard/safety call-out based on location'
+                },
+                crewList: {
+                    notes:       'optional one-line commentary'
+                },
+                pitchDeck: {
+                    logline:     'one sentence, max 25 words',
+                    synopsis:    '2-3 paragraphs plain text',
+                    marketAngle: 'one paragraph on target audience and positioning',
+                    comparables: 'short list of 2-3 comparable titles',
+                    ask:         'one-line funding ask in project currency'
+                }
+            };
+
+            var rules = TPL_RULES[_templateId] || {};
+            var ruleLines = [];
+            _fields.forEach(function (f) {
+                if (rules[f]) ruleLines.push('- ' + f + ': ' + rules[f]);
+                else          ruleLines.push('- ' + f + ': short plain value');
+            });
+
+            /* Pull relevant slices from Context Ledger (treatment + script + snapshot + recent receipts) */
+            var ctxFragment = '';
+            var usedEntries = [];
+            if (window.mBTContextLedger) {
+                try {
+                    var want = ['treatment', 'script', 'budget-snapshot', 'attachment'];
+                    /* Receipts only matter for receipt-aware templates */
+                    if (_templateId === 'purchaseOrder' || _templateId === 'pettyCash' || _templateId === 'topSheet' || _templateId === 'costReport') {
+                        want.push('receipt');
+                    }
+                    var frag = mBTContextLedger.asPromptFragment({ types: want, maxTokens: _maxTokens });
+                    ctxFragment = frag.text || '';
+                    usedEntries = frag.usedEntries || [];
+                } catch (lex) { /* ledger failed → continue with inline ctx only */ }
+            }
+
+            /* Inline quick-context overrides ledger when provided (direct field values known from caller) */
+            var inlineCtx = [];
+            Object.keys(_ctxData).forEach(function (k) {
+                if (k === 'treatment') return; /* treatment is in ledger */
+                var v = _ctxData[k];
+                if (v == null || v === '') return;
+                inlineCtx.push(k + ': ' + String(v).slice(0, 200));
+            });
+
+            var _sys = 'You are a concise film-production assistant. You help fill document fields from project context. ' +
+                       'Return ONLY a valid JSON object with the requested keys — no prose, no markdown fences, no commentary. ' +
+                       'If you have insufficient context to fill a field confidently, omit that key rather than guess.';
+
+            var _prompt = 'Fill the following ' + _templateId + ' template fields. Return JSON with these keys ONLY: ' +
+                          _fields.join(', ') + '.\n\n' +
+                          (inlineCtx.length ? '--- DIRECT FIELDS ---\n' + inlineCtx.join('\n') + '\n\n' : '') +
+                          (ctxFragment ? ctxFragment + '\n' : '') +
+                          '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\n' +
+                          'Return only the JSON object.';
+
             try {
                 mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
                     .then(function (resp) {
                         var out = {};
                         if (typeof resp === 'string') {
-                            var m = resp.match(/\{[\s\S]*\}/);
+                            /* Strip any markdown fences, then extract the first {...} block */
+                            var cleaned = resp.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+                            var m = cleaned.match(/\{[\s\S]*\}/);
                             if (m) { try { out = JSON.parse(m[0]); } catch (je) { out = {}; } }
                         }
-                        _reply(out);
+                        /* Drop any non-requested keys and empty string values */
+                        var cleanOut = {};
+                        _fields.forEach(function (f) {
+                            if (out[f] != null && String(out[f]).trim() !== '') cleanOut[f] = out[f];
+                        });
+                        /* Record the fill in the Context Ledger so future calls learn from it */
+                        if (window.mBTContextLedger && Object.keys(cleanOut).length) {
+                            try {
+                                mBTContextLedger.add({
+                                    type: 'template-fill',
+                                    name: _templateId + ' autofill',
+                                    text: JSON.stringify(cleanOut, null, 2),
+                                    meta: { templateId: _templateId, fields: _fields, provider: _provider, usedEntries: usedEntries }
+                                });
+                            } catch (lx) { /* ignore */ }
+                        }
+                        _reply(cleanOut);
                     })
-                    .catch(function (err) { console.warn('[mBT] ai-funding-fill failed:', err); _reply({}); });
-            } catch (ex) { console.warn('[mBT] ai-funding-fill threw:', ex); _reply({}); }
+                    .catch(function (err) { console.warn('[mBT] ai-doc-fill failed:', err); _reply({}); });
+            } catch (ex) { console.warn('[mBT] ai-doc-fill threw:', ex); _reply({}); }
         }
     }
 

@@ -6,57 +6,230 @@
   <title>mBT AI Assistant</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
-  <style>.ai-glow{animation:glow 2s ease-in-out infinite}@keyframes glow{0%,100%{box-shadow:0 0 5px rgba(99,102,241,.5)}50%{box-shadow:0 0 20px rgba(99,102,241,.8)}}body.embedded .max-w-4xl{max-width:100%}body.embedded .p-6{padding:12px}body.embedded h1{font-size:1.1rem}body.embedded p.text-indigo-100{display:none}@media (max-width:480px){.max-w-4xl{padding-left:8px!important;padding-right:8px!important}.p-6{padding:12px!important}#aiInput,#llmInput{font-size:16px}#tab-analytics,#tab-chat,#tab-generate{font-size:12px;padding:8px 6px}}button,a{min-height:44px}.tab-active{background:#4f46e5;color:#fff}.tab-inactive{background:transparent;color:#6b7280}.tab-inactive:hover{background:#f3f4f6}#section-chat{display:none}#section-generate{display:none}#offline-banner{display:none}#offline-banner.visible{display:flex}#treatment-body{display:none}#treatment-body.open{display:block}</style>
+  <style>
+    .ai-glow{animation:glow 2s ease-in-out infinite}
+    @keyframes glow{0%,100%{box-shadow:0 0 5px rgba(99,102,241,.5)}50%{box-shadow:0 0 20px rgba(99,102,241,.8)}}
+    body.embedded .asst-header{padding:12px 16px}
+    body.embedded .asst-header h1{font-size:1.1rem}
+    body.embedded .asst-header p.asst-tagline{display:none}
+    button,a{min-height:44px}
+    .tab-active{background:#4f46e5;color:#fff}
+    .tab-inactive{background:transparent;color:#6b7280}
+    .tab-inactive:hover{background:#f3f4f6}
+    #section-chat{display:none}
+    #section-generate{display:none}
+    #offline-banner{display:none}
+    #offline-banner.visible{display:flex}
+
+    /* ---------- Treatment fields ---------- */
+    .tr-field-header{display:flex;align-items:center;margin-bottom:5px}
+    .tr-field-label{font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}
+    .tr-dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin-top:6px;padding:12px 10px;border:2px dashed #c7d2fe;border-radius:10px;background:#f5f7ff;cursor:pointer;transition:border-color .15s,background .15s;text-align:center;color:#6b7280;font-size:.8rem}
+    .tr-dropzone:hover,.tr-dropzone.dz-over{border-color:#4f46e5;background:#eef2ff;color:#4f46e5}
+    .tr-dropzone svg{color:#a5b4fc;transition:color .15s}
+    .tr-dropzone:hover svg,.tr-dropzone.dz-over svg{color:#4f46e5}
+    .tr-dz-hint{font-size:.68rem;color:#9ca3af}
+    .tr-file-tag{font-size:.72rem;color:#4f46e5;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:4px 10px;margin-top:5px;display:flex;align-items:center;gap:6px}
+    .tr-file-tag .tr-file-remove{cursor:pointer;color:#9ca3af;font-weight:700;margin-left:auto;line-height:1}
+    .tr-file-tag .tr-file-remove:hover{color:#ef4444}
+
+    /* ---------- Budget State cards ---------- */
+    .bs-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px}
+    .bs-card-label{font-size:.7rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+    .bs-card-value{font-size:1.1rem;font-weight:700;color:#111827;font-variant-numeric:tabular-nums;line-height:1.2}
+    .bs-card-sub{font-size:.72rem;color:#6b7280;margin-top:2px}
+    .bs-card--good .bs-card-value{color:#059669}
+    .bs-card--warn .bs-card-value{color:#d97706}
+    .bs-card--bad  .bs-card-value{color:#dc2626}
+    .bs-card--loading{color:#9ca3af;font-size:.8rem}
+
+    /* ---------- Dual-Pane Shell ---------- */
+    .asst-shell{display:flex;flex-direction:column;gap:12px;max-width:1280px;margin:0 auto;padding:16px;box-sizing:border-box}
+    .asst-body{display:flex;gap:16px;align-items:flex-start}
+    #asst-sidebar{flex:0 0 320px;display:flex;flex-direction:column;gap:12px}
+    #asst-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:12px}
+    .asst-section{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+    .asst-section > header{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+    .asst-section > header .chev{margin-left:auto;transition:transform .15s}
+    .asst-section.collapsed > header .chev{transform:rotate(-90deg)}
+    .asst-section > .body{padding:12px 14px}
+    .asst-section.collapsed > .body{display:none}
+    .pk-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed #f1f5f9;font-size:.85rem}
+    .pk-row:last-child{border-bottom:0}
+    .pk-label{color:#6b7280;font-weight:500}
+    .pk-value{font-weight:600;color:#111827;font-variant-numeric:tabular-nums}
+
+    /* ---------- Responsive: sidebar -> top strip <768px ---------- */
+    @media (max-width:767px){
+      .asst-body{flex-direction:column}
+      #asst-sidebar{flex:0 0 auto;width:100%}
+      #asst-sidebar .asst-section{border-radius:10px}
+      /* Collapse non-critical sidebar sections by default on mobile — state set in JS */
+    }
+    @media (max-width:480px){
+      .asst-shell{padding:8px}
+      #aiInput,#llmInput{font-size:16px}
+      #tab-analytics,#tab-chat,#tab-generate{font-size:12px;padding:8px 6px}
+    }
+
+    /* ---------- Embedded compact mode ---------- */
+    body.embedded{background:transparent}
+    body.embedded .asst-shell{padding:6px;gap:6px;max-width:100%}
+    body.embedded .asst-header{padding:5px 12px !important;border-radius:8px}
+    body.embedded .asst-header h1{font-size:.85rem !important;font-weight:700}
+    body.embedded .asst-header p.asst-tagline{display:none}
+    body.embedded .asst-body{gap:10px;align-items:stretch}
+    body.embedded #asst-sidebar{flex:0 0 240px;gap:8px}
+    body.embedded #asst-main{gap:8px}
+    body.embedded .asst-section > header{padding:6px 11px;font-size:.68rem}
+    body.embedded .asst-section > .body{padding:8px 11px}
+    body.embedded .pk-row{padding:3px 0;font-size:.78rem}
+    body.embedded .pk-value{font-size:.8rem}
+    body.embedded .tr-field-label{font-size:.68rem}
+    body.embedded .tr-dropzone{padding:7px 6px;font-size:.72rem}
+    body.embedded .tr-dz-hint{font-size:.62rem}
+    body.embedded #treatmentInput,body.embedded #scriptInput{min-height:52px !important;font-size:.78rem}
+    /* Budget State as a single horizontal strip of 8 slim chips */
+    body.embedded #bsCards{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+    body.embedded .bs-card{padding:5px 8px}
+    body.embedded .bs-card-label{font-size:.6rem;margin-bottom:1px;letter-spacing:.02em}
+    body.embedded .bs-card-value{font-size:.82rem;line-height:1.15}
+    body.embedded .bs-card-sub{font-size:.62rem;margin-top:0}
+    body.embedded #tabsBar{padding:2px}
+    body.embedded #tab-analytics,body.embedded #tab-chat,body.embedded #tab-generate{padding:6px 10px !important;font-size:.75rem !important}
+    body.embedded button,body.embedded a{min-height:30px}
+    /* Token meter slot */
+    body.embedded .asst-tokmeter{font-size:.65rem;color:#e0e7ff;background:rgba(255,255,255,0.12);padding:2px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
+
+    /* Mobile: stack sidebar above main when embedded, collapse both auto-sections */
+    @media (max-width:640px){
+        body.embedded .asst-body{flex-direction:column}
+        body.embedded #asst-sidebar{flex:0 0 auto;width:100%}
+        body.embedded #bsCards{grid-template-columns:repeat(2,minmax(0,1fr))}
+        body.embedded #asst-sidebar .asst-section{border-radius:8px}
+    }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
-  <div class="max-w-4xl mx-auto p-6">
+  <div class="asst-shell">
 
     <!-- Header -->
-    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 mb-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-white">AI Assistant</h1>
-          <p class="text-indigo-100 mt-1">Budget analytics + LLM chat</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="w-3 h-3 bg-green-400 rounded-full ai-glow"></div>
-          <span class="text-white text-sm" id="aiStatus">Loading...</span>
+    <div class="asst-header bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-5">
+      <div class="flex flex-col items-center text-center gap-1 relative">
+        <h1 class="text-2xl font-bold text-white">Assistant</h1>
+        <p class="asst-tagline text-indigo-200 text-sm">(Collaborative workspace — context + chat + proposals)</p>
+        <div class="absolute right-0 top-0 flex items-center gap-2">
+          <span class="asst-tokmeter" id="tokMeter" title="Estimated context token usage">~0 tokens</span>
+          <div class="w-2.5 h-2.5 bg-green-400 rounded-full ai-glow"></div>
+          <span class="text-white text-xs" id="aiStatus">Loading...</span>
         </div>
       </div>
     </div>
 
     <!-- Offline Banner -->
-    <div id="offline-banner" class="items-center gap-3 bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-sm text-amber-800">
+    <div id="offline-banner" class="items-center gap-3 bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm text-amber-800">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
       <span><strong>You're offline</strong> — LLM Chat unavailable. Local Analytics still work.</span>
     </div>
 
-    <!-- Context Banner -->
-    <div class="bg-white rounded-lg shadow-sm border mb-4 text-sm">
-      <div class="p-3 flex items-center gap-4">
-        <span class="font-medium text-gray-700">Project:</span>
-        <span id="activeProject" class="text-gray-500">None</span>
-        <span class="ml-auto font-medium text-gray-700">Budget:</span>
-        <span id="activeBudget" class="text-gray-500">—</span>
-        <button onclick="toggleTreatment()" id="treatment-toggle-btn"
-          aria-label="Toggle production treatment notes"
-          class="ml-2 text-xs px-2 py-1 border rounded text-gray-500 hover:bg-gray-50 transition-colors" title="Production treatment / context notes">
-          Treatment
-        </button>
-      </div>
-      <div id="treatment-body" class="px-3 pb-3 border-t border-gray-100">
-        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-2 mb-1">Production Treatment / Context Notes</label>
-          <textarea id="treatmentInput" rows="4"
-          aria-label="Production treatment / context notes"
-          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
-          placeholder="Paste your treatment, script notes, production brief, or any context the AI should know about this project"
-          oninput="saveTreatment()"></textarea>
-        <p class="text-xs text-gray-400 mt-1">Saved automatically. Injected into LLM system prompt when "Inject budget context" is enabled.</p>
-      </div>
-    </div>
+    <!-- Dual-Pane Body: Sidebar + Main -->
+    <div class="asst-body">
 
-    <!-- Mode Toggle -->
-    <div class="bg-white rounded-lg border shadow-sm p-1 mb-4 flex gap-1">
+      <!-- ===== SIDEBAR ===== -->
+      <aside id="asst-sidebar" aria-label="Assistant context sidebar">
+
+        <!-- Project Knowledge (read-only readouts) -->
+        <section class="asst-section" id="pk-section">
+          <header onclick="toggleSection('pk-section')" role="button" tabindex="0" aria-expanded="true">
+            <span>Project Knowledge</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </header>
+          <div class="body">
+            <div class="pk-row"><span class="pk-label">Project</span><span class="pk-value" id="pk-project">None</span></div>
+            <div class="pk-row"><span class="pk-label">Budget Limit</span><span class="pk-value" id="pk-budget">—</span></div>
+            <div class="pk-row"><span class="pk-label">Shoot Days</span><span class="pk-value" id="pk-shootdays">—</span></div>
+            <div class="pk-row"><span class="pk-label">Currency</span><span class="pk-value" id="pk-currency">—</span></div>
+            <p class="text-xs text-gray-400 mt-2">Read-only. Edit in the Budget Editor.</p>
+          </div>
+        </section>
+
+        <!-- Context Ledger (live summary of injected artifacts) -->
+        <section class="asst-section" id="ctx-section">
+          <header onclick="toggleSection('ctx-section')" role="button" tabindex="0" aria-expanded="true">
+            <span>Context <span id="ctx-count-badge" class="text-indigo-500" style="font-weight:600">(0)</span></span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </header>
+          <div class="body">
+            <div id="ctx-meter-wrap" style="margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;font-size:.7rem;color:#6b7280;margin-bottom:3px">
+                <span>Token usage</span>
+                <span id="ctx-meter-val" style="font-variant-numeric:tabular-nums;font-weight:600">0 / 100k</span>
+              </div>
+              <div style="height:6px;background:#f1f5f9;border-radius:999px;overflow:hidden">
+                <div id="ctx-meter-bar" style="height:100%;width:0%;background:#10b981;transition:width .3s,background .3s"></div>
+              </div>
+            </div>
+            <div id="ctx-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;font-size:.72rem"></div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              <button onclick="refreshContextLedger()" class="px-2 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50">Rescan</button>
+              <button onclick="purgeOldReceipts()" class="px-2 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50" title="Drop receipts older than 90 days">Purge 90d+</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Treatment & Script -->
+        <section class="asst-section" id="tr-section">
+          <div class="body" style="display:flex;flex-direction:column;gap:16px">
+
+            <!-- Treatment -->
+            <div>
+              <div class="tr-field-header">
+                <span class="tr-field-label">Treatment</span>
+              </div>
+              <textarea id="treatmentInput" rows="4"
+                aria-label="Production treatment"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                placeholder="Paste your treatment here…"
+                oninput="saveTreatment()"></textarea>
+              <label id="treatmentDropZone" class="tr-dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'treatment')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Drop file or <u>browse</u></span>
+                <span class="tr-dz-hint">.txt .md .pdf .doc .docx</span>
+                <input type="file" id="treatmentFile" accept=".txt,.doc,.docx,.pdf,.md" style="display:none" onchange="attachFile('treatment',this)">
+              </label>
+              <div id="treatmentFileTag" class="tr-file-tag" style="display:none"></div>
+            </div>
+
+            <!-- Script -->
+            <div>
+              <div class="tr-field-header">
+                <span class="tr-field-label">Script</span>
+              </div>
+              <textarea id="scriptInput" rows="4"
+                aria-label="Script notes"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                placeholder="Paste your script here…"
+                oninput="saveScript()"></textarea>
+              <label id="scriptDropZone" class="tr-dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'script')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Drop file or <u>browse</u></span>
+                <span class="tr-dz-hint">.txt .md .pdf .doc .docx .fdx .fountain</span>
+                <input type="file" id="scriptFile" accept=".txt,.doc,.docx,.pdf,.md,.fdx,.fountain" style="display:none" onchange="attachFile('script',this)">
+              </label>
+              <div id="scriptFileTag" class="tr-file-tag" style="display:none"></div>
+            </div>
+
+            <p class="text-xs text-gray-400">Saved automatically. Injected into LLM context when enabled.</p>
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- ===== MAIN PANE ===== -->
+      <div id="asst-main">
+
+        <!-- Mode Toggle -->
+        <div class="bg-white rounded-lg border shadow-sm p-1 flex gap-1">
       <button id="tab-analytics" onclick="setMode('analytics')"
         class="flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors tab-active">
         Analytics
@@ -71,32 +244,36 @@
       </button>
     </div>
 
-    <!-- ===== ANALYTICS SECTION ===== -->
+    <!-- ===== BUDGET STATE SECTION ===== -->
     <div id="section-analytics">
-      <div class="bg-white rounded-lg shadow-sm border p-6 mb-4">
-        <div id="chatMessages" class="overflow-y-auto p-3 space-y-3 bg-gray-50 rounded-lg mb-4" style="min-height:180px;max-height:clamp(180px,40vh,360px);"></div>
-        <div class="flex gap-3">
-          <input type="text" id="aiInput"
-            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            placeholder="budget · forecast · risk · suggest · patterns · executive">
-          <button onclick="handleCommand()"
-            aria-label="Run AI command"
-            class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
-            Run
+
+      <!-- Budget State header + refresh -->
+      <div class="bg-white rounded-lg shadow-sm border p-4 mb-3">
+        <div class="flex items-center gap-3 mb-3">
+          <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide flex-1">Budget State</h2>
+          <button id="bsRefreshBtn" onclick="refreshBudgetState()"
+            class="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 font-medium">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh
           </button>
+        </div>
+        <div id="bsCards" class="grid grid-cols-2 gap-2">
+          <div class="bs-card bs-card--loading col-span-2 text-center text-xs text-gray-400 py-4">Loading budget state&hellip;</div>
         </div>
       </div>
 
-      <!-- Quick Commands -->
+      <!-- Free-form query -->
       <div class="bg-white rounded-lg shadow-sm border p-4">
-        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Commands</h2>
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-          <button onclick="runCommand('budget')"    class="px-3 py-2 bg-blue-50   text-blue-700   rounded-lg hover:bg-blue-100   text-sm font-medium">Budget</button>
-          <button onclick="runCommand('forecast')"  class="px-3 py-2 bg-green-50  text-green-700  rounded-lg hover:bg-green-100  text-sm font-medium">Forecast</button>
-          <button onclick="runCommand('risk')"      class="px-3 py-2 bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 text-sm font-medium">Risk</button>
-          <button onclick="runCommand('suggest')"   class="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium">Suggest</button>
-          <button onclick="runCommand('patterns')"  class="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm font-medium">Patterns</button>
-          <button onclick="runCommand('executive')" class="px-3 py-2 bg-pink-50   text-pink-700   rounded-lg hover:bg-pink-100   text-sm font-medium">Executive</button>
+        <div id="chatMessages" class="overflow-y-auto p-3 space-y-3 bg-gray-50 rounded-lg mb-3" style="min-height:120px;max-height:clamp(120px,30vh,280px);"></div>
+        <div class="flex gap-2">
+          <input type="text" id="aiInput"
+            class="flex-1 px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            placeholder="Ask about budget, forecast, risk, patterns…">
+          <button onclick="handleCommand()"
+            aria-label="Run AI command"
+            class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm">
+            Ask
+          </button>
         </div>
       </div>
     </div>
@@ -195,7 +372,10 @@
       </div>
     </div>
 
-  </div>
+      </div><!-- /#asst-main -->
+    </div><!-- /.asst-body -->
+
+  </div><!-- /.asst-shell -->
 
   <!-- Core scripts -->
   <script src="../../scripts/storage.js"></script>
@@ -220,6 +400,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     var LLM_HISTORY_KEY = 'mbt_ai_llm_history';
     var TREATMENT_KEY   = 'mbt_ai_treatment';
+    var SCRIPT_KEY      = 'mbt_ai_script';
+    var ATTACH_KEY      = 'mbt_ai_attachments'; /* {treatment:{name,text}, script:{name,text}} */
 
     /* --- XSS-safe helper --- */
     function esc(str) {
@@ -243,25 +425,328 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     window.addEventListener('offline', updateOfflineBanner);
 
     /* =========================================
-       TREATMENT NOTES
+       SIDEBAR SECTION TOGGLE
     ========================================= */
-    function toggleTreatment() {
-        var body = dom.getElementById('treatment-body');
-        body.classList.toggle('open');
+    function toggleSection(id) {
+        var sec = dom.getElementById(id);
+        if (!sec) return;
+        sec.classList.toggle('collapsed');
+        var hdr = sec.querySelector('header');
+        if (hdr) hdr.setAttribute('aria-expanded', sec.classList.contains('collapsed') ? 'false' : 'true');
     }
+    window.toggleSection = toggleSection;
 
+    /* =========================================
+       TREATMENT & SCRIPT NOTES
+    ========================================= */
     function saveTreatment() {
         var text = dom.getElementById('treatmentInput').value;
         localStorage.setItem(TREATMENT_KEY, text);
     }
 
+    function saveScript() {
+        var text = dom.getElementById('scriptInput').value;
+        localStorage.setItem(SCRIPT_KEY, text);
+    }
+
     function loadTreatment() {
-        var saved = localStorage.getItem(TREATMENT_KEY) || '';
-        dom.getElementById('treatmentInput').value = saved;
-        if (saved.trim()) {
-            dom.getElementById('treatment-toggle-btn').textContent = 'Treatment ●';
+        var ta = dom.getElementById('treatmentInput');
+        if (ta) ta.value = localStorage.getItem(TREATMENT_KEY) || '';
+        var si = dom.getElementById('scriptInput');
+        if (si) si.value = localStorage.getItem(SCRIPT_KEY) || '';
+        /* Restore attachment tags */
+        try {
+            var att = JSON.parse(localStorage.getItem(ATTACH_KEY) || '{}');
+            if (att.treatment && att.treatment.name) showFileTag('treatment', att.treatment.name);
+            if (att.script    && att.script.name)    showFileTag('script',    att.script.name);
+        } catch (e) { /* corrupt — ignore */ }
+    }
+
+    function showFileTag(field, name) {
+        var tag = dom.getElementById(field + 'FileTag');
+        if (!tag) return;
+        tag.style.display = 'flex';
+        tag.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
+            '<span>' + esc(name) + '</span>' +
+            '<span class="tr-file-remove" onclick="removeAttachment(\'' + field + '\')" title="Remove">&#x2715;</span>';
+    }
+
+    function attachFile(field, input) {
+        var file = input && input.files && input.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            var text = e.target.result || '';
+            /* Persist attachment text + name */
+            var att = {};
+            try { att = JSON.parse(localStorage.getItem(ATTACH_KEY) || '{}'); } catch (x) { att = {}; }
+            att[field] = { name: file.name, text: text.substring(0, 20000) };
+            localStorage.setItem(ATTACH_KEY, JSON.stringify(att));
+            /* If textarea is empty, fill it with extracted text */
+            var ta = dom.getElementById(field === 'treatment' ? 'treatmentInput' : 'scriptInput');
+            if (ta && !ta.value.trim()) {
+                ta.value = text.substring(0, 8000);
+                if (field === 'treatment') saveTreatment(); else saveScript();
+            }
+            showFileTag(field, file.name);
+        };
+        reader.readAsText(file);
+        input.value = '';
+    }
+
+    function removeAttachment(field) {
+        var att = {};
+        try { att = JSON.parse(localStorage.getItem(ATTACH_KEY) || '{}'); } catch (x) { att = {}; }
+        delete att[field];
+        localStorage.setItem(ATTACH_KEY, JSON.stringify(att));
+        var tag = dom.getElementById(field + 'FileTag');
+        if (tag) { tag.style.display = 'none'; tag.innerHTML = ''; }
+    }
+
+    function dzOver(e) {
+        e.preventDefault();
+        var dz = e.currentTarget;
+        if (dz) dz.classList.add('dz-over');
+    }
+    function dzLeave(e) {
+        var dz = e.currentTarget;
+        if (dz) dz.classList.remove('dz-over');
+    }
+    function dzDrop(e, field) {
+        e.preventDefault();
+        var dz = e.currentTarget;
+        if (dz) dz.classList.remove('dz-over');
+        var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        attachFile(field, { files: [file] });
+    }
+
+    window.attachFile       = attachFile;
+    window.removeAttachment = removeAttachment;
+    window.saveTreatment    = saveTreatment;
+    window.saveScript       = saveScript;
+    window.dzOver           = dzOver;
+    window.dzLeave          = dzLeave;
+    window.dzDrop           = dzDrop;
+
+    /* =========================================
+       PROJECT KNOWLEDGE READOUTS
+       Read-only: populated from context + active budget in localforage.
+    ========================================= */
+    function formatMoney(n, currency) {
+        var sym = currency === 'USD' ? '$' : (currency === 'JMD' ? 'J$' : (currency ? currency + ' ' : '$'));
+        var v = parseFloat(n) || 0;
+        return sym + v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    }
+
+    function paintProjectKnowledge(ctx, budgetDoc) {
+        var pkProject  = dom.getElementById('pk-project');
+        var pkBudget   = dom.getElementById('pk-budget');
+        var pkShoot    = dom.getElementById('pk-shootdays');
+        var pkCurrency = dom.getElementById('pk-currency');
+        var currency = (budgetDoc && budgetDoc.currency) ||
+                       (budgetDoc && budgetDoc.settings && budgetDoc.settings.displayCurrency) ||
+                       'JMD';
+        if (pkProject)  pkProject.textContent  = (ctx && ctx.projectName) || 'None';
+        if (pkCurrency) pkCurrency.textContent = currency;
+        var limit = (budgetDoc && (budgetDoc.grandTotal || budgetDoc.budgetLimit)) ||
+                    (ctx && ctx.budget) || 0;
+        if (pkBudget) pkBudget.textContent = limit ? formatMoney(limit, currency) : '—';
+        var shoot = (budgetDoc && budgetDoc.targetLock && budgetDoc.targetLock.stages) || 0;
+        if (pkShoot) pkShoot.textContent = shoot ? String(shoot) : '—';
+    }
+
+    function loadActiveBudgetDoc(projectName, cached) {
+        if (cached) return Promise.resolve(cached);
+        if (!projectName || typeof localforage === 'undefined') return Promise.resolve(null);
+        try {
+            return localforage.getItem('prodBudget_v5_' + projectName).catch(function () { return null; });
+        } catch (e) { return Promise.resolve(null); }
+    }
+
+    /* =========================================
+       BUDGET STATE — auto-refresh panel
+    ========================================= */
+    function refreshBudgetState() {
+        var btn = dom.getElementById('bsRefreshBtn');
+        var cards = dom.getElementById('bsCards');
+        if (!cards) return;
+        if (btn) btn.disabled = true;
+        cards.innerHTML = '<div class="bs-card bs-card--loading col-span-2 text-center text-xs text-gray-400 py-4">Refreshing&hellip;</div>';
+
+        window.mBTAIContext.getCurrentProjectContext()
+            .then(function (ctx) {
+                context = ctx;
+                var doc = (ctx && ctx._budgetDoc) || null;
+                return loadActiveBudgetDoc(ctx && ctx.projectName, doc).then(function (resolvedDoc) {
+                    paintProjectKnowledge(ctx, resolvedDoc);
+                    renderBudgetStateCards(ctx, resolvedDoc);
+                    if (btn) btn.disabled = false;
+                });
+            })
+            .catch(function (e) {
+                cards.innerHTML = '<div class="bs-card col-span-2 text-xs text-red-500 py-2">Could not load budget state: ' + esc(e.message) + '</div>';
+                if (btn) btn.disabled = false;
+            });
+    }
+
+    function renderBudgetStateCards(ctx, doc) {
+        var cards = dom.getElementById('bsCards');
+        if (!cards) return;
+
+        var currency = (doc && doc.currency) || 'JMD';
+        var total    = (doc && (doc.grandTotal || doc.budgetLimit)) || (ctx && ctx.budget) || 0;
+        var shootDays = (doc && doc.targetLock && doc.targetLock.stages) || 0;
+        var project  = (ctx && ctx.projectName) || 'None';
+
+        /* Spend: sum allocations */
+        var allocs   = (ctx && ctx.allocations) || [];
+        var spent    = 0;
+        for (var i = 0; i < allocs.length; i++) spent += parseFloat(allocs[i].amount) || 0;
+        var remaining = total - spent;
+        var utilPct   = total > 0 ? (spent / total * 100) : 0;
+        var utilClass = utilPct > 90 ? 'bs-card--bad' : utilPct > 70 ? 'bs-card--warn' : 'bs-card--good';
+
+        /* Sections count */
+        var secCount = 0;
+        if (doc && doc.sections) {
+            var skeys = Object.keys(doc.sections);
+            secCount = skeys.length;
+        }
+
+        /* Risk count */
+        var risks = (ctx && ctx.risks) || [];
+        var critCount = 0;
+        for (var r = 0; r < risks.length; r++) { if (risks[r].severity === 'critical') critCount++; }
+        var riskClass = critCount > 0 ? 'bs-card--bad' : risks.length > 0 ? 'bs-card--warn' : 'bs-card--good';
+
+        cards.innerHTML =
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Project</div>' +
+                '<div class="bs-card-value" style="font-size:.9rem">' + esc(project) + '</div>' +
+            '</div>' +
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Currency</div>' +
+                '<div class="bs-card-value">' + esc(currency) + '</div>' +
+            '</div>' +
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Total Budget</div>' +
+                '<div class="bs-card-value">' + (total ? formatMoney(total, currency) : '—') + '</div>' +
+            '</div>' +
+            '<div class="bs-card ' + utilClass + '">' +
+                '<div class="bs-card-label">Spent</div>' +
+                '<div class="bs-card-value">' + (spent ? formatMoney(spent, currency) : '—') + '</div>' +
+                '<div class="bs-card-sub">' + utilPct.toFixed(1) + '% utilised</div>' +
+            '</div>' +
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Remaining</div>' +
+                '<div class="bs-card-value">' + (total ? formatMoney(remaining, currency) : '—') + '</div>' +
+            '</div>' +
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Shoot Days</div>' +
+                '<div class="bs-card-value">' + (shootDays || '—') + '</div>' +
+            '</div>' +
+            '<div class="bs-card">' +
+                '<div class="bs-card-label">Sections</div>' +
+                '<div class="bs-card-value">' + (secCount || '—') + '</div>' +
+            '</div>' +
+            '<div class="bs-card ' + riskClass + '">' +
+                '<div class="bs-card-label">Risks</div>' +
+                '<div class="bs-card-value">' + (risks.length || '0') + '</div>' +
+                (critCount ? '<div class="bs-card-sub">' + critCount + ' critical</div>' : '') +
+            '</div>';
+    }
+
+    window.refreshBudgetState = refreshBudgetState;
+
+    /* =========================================
+       CONTEXT LEDGER PANEL (Phase 149.3)
+       Listens for 'ledger-sync' from parent + renders live summary chips + token meter.
+    ========================================= */
+    var TOK_HARD_BUDGET = 100000; /* 100k — near the ceiling of most modern chat models */
+
+    function formatTokens(n) {
+        if (!n) return '0';
+        if (n < 1000) return String(n);
+        if (n < 10000) return (n / 1000).toFixed(1) + 'k';
+        return Math.round(n / 1000) + 'k';
+    }
+
+    function renderLedgerPanel(sum) {
+        if (!sum) return;
+        var total = sum.totalTokens || 0;
+        var pct   = Math.min(100, (total / TOK_HARD_BUDGET) * 100);
+        var color = pct < 20 ? '#10b981' : pct < 50 ? '#f59e0b' : '#ef4444';
+
+        var meterBar = dom.getElementById('ctx-meter-bar');
+        var meterVal = dom.getElementById('ctx-meter-val');
+        if (meterBar) { meterBar.style.width = pct + '%'; meterBar.style.background = color; }
+        if (meterVal) meterVal.textContent = formatTokens(total) + ' / ' + formatTokens(TOK_HARD_BUDGET);
+
+        var headerTok = dom.getElementById('tokMeter');
+        if (headerTok) {
+            headerTok.textContent = '~' + formatTokens(total) + ' tok';
+            headerTok.style.background = pct < 20 ? 'rgba(16,185,129,.25)' :
+                                         pct < 50 ? 'rgba(245,158,11,.25)' : 'rgba(239,68,68,.3)';
+        }
+
+        var badge = dom.getElementById('ctx-count-badge');
+        if (badge) badge.textContent = '(' + (sum.entryCount || 0) + ')';
+
+        var chips = dom.getElementById('ctx-chips');
+        if (chips) {
+            var labels = {
+                'treatment':       'Treatment',
+                'script':          'Script',
+                'budget-snapshot': 'Snapshot',
+                'template-fill':   'Doc Fills',
+                'attachment':      'Attachments',
+                'receipt':         'Receipts'
+            };
+            var html = '';
+            var types = Object.keys(sum.byType || {});
+            if (!types.length) {
+                html = '<span style="color:#9ca3af;font-size:.72rem">No indexed artifacts yet.</span>';
+            } else {
+                types.sort();
+                for (var i = 0; i < types.length; i++) {
+                    var t = types[i], b = sum.byType[t];
+                    html += '<span style="display:inline-flex;gap:4px;align-items:center;background:#eef2ff;color:#4338ca;padding:2px 8px;border-radius:999px;border:1px solid #c7d2fe">' +
+                            '<strong>' + b.count + '</strong> ' + esc(labels[t] || t) +
+                            ' <span style="color:#6366f1;font-size:.65rem">(' + formatTokens(b.tokens) + ')</span>' +
+                            '</span>';
+                }
+            }
+            chips.innerHTML = html;
         }
     }
+
+    function refreshContextLedger() {
+        /* Ask parent to rescan (budget + sidebar) then rebroadcast */
+        if (window.parent === window) return;
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, '*');
+    }
+
+    function purgeOldReceipts() {
+        if (window.parent === window) return;
+        if (!confirm('Drop receipts older than 90 days from the Context Ledger?')) return;
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-purge', payload: { olderThanDays: 90 } }, '*');
+    }
+
+    window.refreshContextLedger = refreshContextLedger;
+    window.purgeOldReceipts     = purgeOldReceipts;
+
+    window.addEventListener('message', function (e) {
+        if (!e.data || e.data.type !== 'ledger-sync') return;
+        renderLedgerPanel(e.data.payload || {});
+    });
+
+    /* --- Refresh Project Knowledge chips whenever parent fires budget-sync --- */
+    window.addEventListener('message', function (e) {
+        if (!e.data || e.data.type !== 'budget-sync') return;
+        var payload = e.data.payload || e.data;
+        paintProjectKnowledge(payload.context || context, payload.budgetDoc || null);
+    });
 
     /* =========================================
        LLM HISTORY PERSISTENCE
@@ -312,9 +797,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        MODE TOGGLE
     ========================================= */
     function setMode(mode) {
-        dom.getElementById('section-analytics').style.display = (mode === 'analytics') ? '' : 'none';
-        dom.getElementById('section-chat').style.display      = (mode === 'chat')      ? '' : 'none';
-        dom.getElementById('section-generate').style.display  = (mode === 'generate')  ? '' : 'none';
+        dom.getElementById('section-analytics').style.display = (mode === 'analytics') ? 'block' : 'none';
+        dom.getElementById('section-chat').style.display      = (mode === 'chat')      ? 'block' : 'none';
+        dom.getElementById('section-generate').style.display  = (mode === 'generate')  ? 'block' : 'none';
         dom.getElementById('tab-analytics').className = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'analytics' ? 'tab-active' : 'tab-inactive');
         dom.getElementById('tab-chat').className      = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'chat'      ? 'tab-active' : 'tab-inactive');
         dom.getElementById('tab-generate').className  = 'flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors ' + (mode === 'generate'  ? 'tab-active' : 'tab-inactive');
@@ -357,7 +842,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (el) el.remove();
     }
 
-    async function handleCommand() {
+    function handleCommand() {
         var input = inputEl.value.trim();
         if (!input) return;
 
@@ -365,26 +850,28 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         inputEl.value = '';
         var typingId = addTypingIndicator();
 
-        try {
-            var lower   = input.toLowerCase();
-            var command = lower.startsWith('fore')  ? 'forecast'  :
-                          lower.startsWith('risk')  ? 'risk'      :
-                          lower.startsWith('sugg')  ? 'suggest'   :
-                          lower.startsWith('pat')   ? 'patterns'  :
-                          lower.startsWith('exec')  ? 'executive' :
-                          lower.startsWith('help')  ? 'help'      : 'budget';
+        var lower   = input.toLowerCase();
+        var command = lower.indexOf('fore') === 0  ? 'forecast'  :
+                      lower.indexOf('risk') === 0  ? 'risk'      :
+                      lower.indexOf('sugg') === 0  ? 'suggest'   :
+                      lower.indexOf('pat')  === 0  ? 'patterns'  :
+                      lower.indexOf('exec') === 0  ? 'executive' :
+                      lower.indexOf('help') === 0  ? 'help'      : 'budget';
 
-            context = await window.mBTAIContext.getCurrentProjectContext();
-            var response = await dispatchCommand(command, context);
-            removeTyping(typingId);
-            addMessage(response, 'ai');
-        } catch (err) {
-            removeTyping(typingId);
-            addMessage('Error: ' + err.message, 'ai');
-        }
+        window.mBTAIContext.getCurrentProjectContext()
+            .then(function (ctx) {
+                context = ctx;
+                var response = dispatchCommand(command, ctx);
+                removeTyping(typingId);
+                addMessage(response, 'ai');
+            })
+            .catch(function (err) {
+                removeTyping(typingId);
+                addMessage('Error: ' + err.message, 'ai');
+            });
     }
 
-    async function dispatchCommand(command, ctx) {
+    function dispatchCommand(command, ctx) {
         var R = window.mBTReports;
         var P = window.mBTPatterns;
 
@@ -749,16 +1236,44 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             'You help producers, line producers, and production managers with budgeting, scheduling, crew, and cost management.',
             'Always ground your responses in film production context. When asked an out-of-scope question, answer briefly then connect it back to production budget implications if relevant.',
             'Use figures from the project context when available. Be concise and specific.',
+            '',
+            '--- PROPOSAL PROTOCOL ---',
+            'When you recommend a concrete change the user can apply, emit a proposal block AFTER your prose explanation, using exactly this format:',
+            '[[PROPOSAL]]{"title":"short label","rationale":"one or two sentences","mutations":[{"intent":"update-budget-field","payload":{"field":"contingencyPercentage","value":10}}]}[[/PROPOSAL]]',
+            'Valid intents: update-budget-field, add-line-item, adjust-section-total. Only emit proposals for changes the user explicitly asked to evaluate. Keep rationale short. One proposal per recommendation. No markdown fences around the block.',
             ''
         ];
 
-        /* Treatment / production notes */
+        /* Treatment */
         var treatment = (localStorage.getItem(TREATMENT_KEY) || '').trim();
         if (treatment) {
-            lines.push('--- PRODUCTION TREATMENT / BRIEF ---');
+            lines.push('--- PRODUCTION TREATMENT ---');
             lines.push(treatment);
             lines.push('');
         }
+
+        /* Script */
+        var script = (localStorage.getItem(SCRIPT_KEY) || '').trim();
+        if (script) {
+            lines.push('--- SCRIPT ---');
+            lines.push(script.substring(0, 6000));
+            lines.push('');
+        }
+
+        /* Attached file overrides */
+        try {
+            var att = JSON.parse(localStorage.getItem(ATTACH_KEY) || '{}');
+            if (att.treatment && att.treatment.text && !treatment) {
+                lines.push('--- TREATMENT (attached: ' + att.treatment.name + ') ---');
+                lines.push(att.treatment.text.substring(0, 6000));
+                lines.push('');
+            }
+            if (att.script && att.script.text && !script) {
+                lines.push('--- SCRIPT (attached: ' + att.script.name + ') ---');
+                lines.push(att.script.text.substring(0, 6000));
+                lines.push('');
+            }
+        } catch (x) { /* ignore */ }
 
         /* Budget context */
         if (ctx) {
@@ -780,19 +1295,130 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         return lines.join('\n');
     }
 
+    /* =========================================
+       PROPOSAL PROTOCOL
+       AI may emit blocks of the form:
+           [[PROPOSAL]]{"id":"p_123","title":"...","rationale":"...","mutations":[{"intent":"...","payload":{...}}]}[[/PROPOSAL]]
+       Each proposal renders inline with Approve / Why buttons.
+       Approve dispatches each mutation through window.mBTBridge.send() as a typed intent,
+       which the parent (Budget Editor / Shell) routes via EventRouter + mBTLE.reconcile().
+    ========================================= */
+    var PROPOSAL_RE = /\[\[PROPOSAL\]\]([\s\S]*?)\[\[\/PROPOSAL\]\]/g;
+
+    function parseProposals(text) {
+        var out = { clean: text, proposals: [] };
+        var clean = String(text).replace(PROPOSAL_RE, function (_m, body) {
+            try {
+                var p = JSON.parse(body.trim());
+                if (p && p.mutations && p.mutations.length) {
+                    if (!p.id) p.id = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+                    out.proposals.push(p);
+                    return '';
+                }
+            } catch (e) { /* malformed proposal — leave it in stream as plain text */ }
+            return '[[PROPOSAL]]' + body + '[[/PROPOSAL]]';
+        });
+        out.clean = clean.trim();
+        return out;
+    }
+
+    function renderProposalCard(proposal) {
+        var card = document.createElement('div');
+        card.className = 'border-2 border-indigo-200 bg-indigo-50 rounded-lg p-3 text-sm';
+        card.setAttribute('data-proposal-id', proposal.id);
+        var mutCount = (proposal.mutations || []).length;
+        card.innerHTML =
+            '<div class="flex items-start gap-2 mb-2">' +
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>' +
+                '<div class="min-w-0"><div class="font-semibold text-indigo-900">' + esc(proposal.title || 'Proposal') + '</div>' +
+                '<div class="text-xs text-indigo-600">' + mutCount + ' change' + (mutCount === 1 ? '' : 's') + ' pending</div></div>' +
+            '</div>' +
+            '<div class="prop-rationale text-xs text-gray-600 mb-2" style="display:none">' + esc(proposal.rationale || 'No rationale provided.') + '</div>' +
+            '<div class="flex gap-2">' +
+                '<button data-act="approve" class="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700">Approve</button>' +
+                '<button data-act="why" class="px-3 py-2 border border-indigo-300 text-indigo-700 rounded-md text-xs font-semibold hover:bg-indigo-100">Why?</button>' +
+                '<button data-act="decline" class="px-3 py-2 border border-gray-300 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-50">Decline</button>' +
+            '</div>' +
+            '<div class="prop-status text-xs mt-2" style="display:none"></div>';
+
+        card.querySelector('[data-act="why"]').addEventListener('click', function () {
+            var r = card.querySelector('.prop-rationale');
+            r.style.display = r.style.display === 'none' ? '' : 'none';
+        });
+        card.querySelector('[data-act="approve"]').addEventListener('click', function () {
+            dispatchProposal(proposal, card, 'approved');
+        });
+        card.querySelector('[data-act="decline"]').addEventListener('click', function () {
+            markProposalStatus(proposal, card, 'declined');
+        });
+        return card;
+    }
+
+    function setCardDisabled(card, done) {
+        var btns = card.querySelectorAll('button[data-act]');
+        for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+        if (done) card.style.opacity = '0.7';
+    }
+
+    function markProposalStatus(proposal, card, status, note) {
+        proposal.status = status;
+        proposal.statusAt = new Date().toISOString();
+        var statusEl = card.querySelector('.prop-status');
+        if (statusEl) {
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1) + (note ? ' — ' + note : '');
+            statusEl.style.display = '';
+            statusEl.className = 'prop-status text-xs mt-2 ' +
+                (status === 'approved' ? 'text-green-700' :
+                 status === 'declined' ? 'text-gray-500' : 'text-red-600');
+        }
+        setCardDisabled(card, true);
+        /* Persist proposal record through the bridge — parent writes to budget.aiContext.proposals[] */
+        if (window.mBTBridge) {
+            window.mBTBridge.send('proposal-log', { proposal: proposal });
+        }
+    }
+
+    function dispatchProposal(proposal, card, status) {
+        if (!window.mBTBridge) {
+            markProposalStatus(proposal, card, 'declined', 'no bridge to Budget Editor');
+            return;
+        }
+        /* Fire each mutation as a typed intent through the existing bridge.
+           Parent's EventRouter validates + routes through mBTLE.reconcile(). */
+        var muts = proposal.mutations || [];
+        for (var i = 0; i < muts.length; i++) {
+            var m = muts[i];
+            if (!m || !m.intent) continue;
+            var payload = { proposalId: proposal.id };
+            var src = m.payload || {};
+            for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) payload[k] = src[k]; }
+            window.mBTBridge.send(m.intent, payload);
+        }
+        markProposalStatus(proposal, card, status);
+    }
+
     function addLLMMessage(role, text) {
         var el = document.createElement('div');
         if (role === 'user') {
             el.className = 'bg-indigo-100 rounded-lg p-3 text-gray-900 text-sm';
             el.innerHTML = '<div class="font-semibold text-xs mb-1 text-gray-400">You</div>' + esc(text);
+            llmMsgEl.appendChild(el);
         } else if (role === 'system') {
             el.className = 'text-center text-xs text-gray-400 italic py-1';
             el.textContent = text;
+            llmMsgEl.appendChild(el);
         } else {
-            el.className = 'bg-white border rounded-lg p-3 text-gray-800 text-sm whitespace-pre-wrap';
-            el.innerHTML = '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>' + esc(text);
+            /* Assistant: strip proposal blocks, render text + inline proposal cards */
+            var parsed = parseProposals(text);
+            if (parsed.clean) {
+                el.className = 'bg-white border rounded-lg p-3 text-gray-800 text-sm whitespace-pre-wrap';
+                el.innerHTML = '<div class="font-semibold text-xs mb-1 text-indigo-600">mBT AI</div>' + esc(parsed.clean);
+                llmMsgEl.appendChild(el);
+            }
+            for (var i = 0; i < parsed.proposals.length; i++) {
+                llmMsgEl.appendChild(renderProposalCard(parsed.proposals[i]));
+            }
         }
-        llmMsgEl.appendChild(el);
         llmMsgEl.scrollTop = llmMsgEl.scrollHeight;
     }
 
@@ -824,51 +1450,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             localStorage.removeItem(LLM_HISTORY_KEY);
             addLLMMessage('system', 'Chat cleared.');
         }
-    }
-
-    function callLLM(userMessage, systemPrompt) {
-        var provider = dom.getElementById('llmProvider').value;
-        var endpoint = localStorage.getItem('mbt_ai_endpoint') ||
-                       (PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.lmstudio).url;
-        var apiKey   = localStorage.getItem('mbt_ai_api_key') || '';
-        var model    = localStorage.getItem('mbt_ai_model') ||
-                       (PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.lmstudio).model;
-
-        /* Build messages array */
-        var messages = [];
-        if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-        llmHistory.forEach(function (m) { messages.push(m); });
-        messages.push({ role: 'user', content: userMessage });
-
-        var headers = { 'Content-Type': 'application/json' };
-        if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
-
-        /* Claude API uses a different request shape */
-        var body;
-        if (provider === 'claude') {
-            body = JSON.stringify({
-                model: model,
-                max_tokens: 1024,
-                system: systemPrompt || '',
-                messages: messages.filter(function (m) { return m.role !== 'system'; })
-            });
-            headers['x-api-key'] = apiKey;
-            headers['anthropic-version'] = '2023-06-01';
-            delete headers['Authorization'];
-        } else {
-            body = JSON.stringify({ model: model, messages: messages, temperature: 0.7 });
-        }
-
-        return fetch(endpoint, { method: 'POST', headers: headers, body: body })
-            .then(function (res) {
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json();
-            })
-            .then(function (data) {
-                /* Claude API: data.content[0].text  |  OpenAI-compatible: data.choices[0].message.content */
-                if (data.content && data.content[0]) return data.content[0].text;
-                return data.choices[0].message.content;
-            });
     }
 
     function sendLLMMessage() {
@@ -908,7 +1489,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* =========================================
        INIT
     ========================================= */
-    async function init() {
+    function init() {
         updateOfflineBanner();
         loadTreatment();
 
@@ -920,34 +1501,37 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var genLbl = dom.getElementById('genProviderLabel');
         if (genLbl) genLbl.textContent = provLabel;
 
-        /* Handle ?mode= URL param — used when opened via openTool() from Budget Editor */
+        /* Handle ?mode= URL param */
         var urlParams = new URLSearchParams(window.location.search);
         var startMode = urlParams.get('mode') || 'analytics';
         setMode(startMode);
 
-        try {
-            context = await window.mBTAIContext.getCurrentProjectContext();
-            dom.getElementById('activeProject').textContent = context.projectName || 'None';
-            dom.getElementById('activeBudget').textContent  = context.budget ? '$' + context.budget.toLocaleString() : '—';
-            dom.getElementById('aiStatus').textContent      = 'Ready';
-
-            /* Preflight hints */
-            var hints = [];
-            if (!context.projectName) hints.push('No active project loaded.');
-            if (context.budget === 0)  hints.push('Budget is $0 — set a project budget to enable forecasting.');
-            if (!context.allocations || !context.allocations.length) hints.push('No stage allocations found.');
-
-            var greeting = 'Ready. Project: ' + (context.projectName || 'none loaded') + '.';
-            if (hints.length) greeting += '\n\nPreflight:\n' + hints.map(function (h) { return '- ' + h; }).join('\n');
-            else greeting += ' Type a command or use the Quick Commands below.';
-
-            addMessage(greeting, 'ai');
-            restoreLLMHistory();
-            if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Provider: ' + provLabel + '. Change provider in Settings > AI tab.');
-        } catch (e) {
-            dom.getElementById('aiStatus').textContent = 'Error';
-            addMessage('Could not load project context: ' + e.message, 'ai');
+        /* Mobile default: collapse Treatment to reduce top-strip height */
+        if (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) {
+            var tr = dom.getElementById('tr-section');
+            if (tr) tr.classList.add('collapsed');
         }
+
+        /* Auto-refresh Budget State on open */
+        refreshBudgetState();
+
+        /* Ask parent to push a ledger-sync so our Context panel populates immediately */
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, '*');
+        }
+
+        window.mBTAIContext.getCurrentProjectContext()
+            .then(function (ctx) {
+                context = ctx;
+                paintProjectKnowledge(ctx, ctx._budgetDoc || null);
+                dom.getElementById('aiStatus').textContent = 'Ready';
+                restoreLLMHistory();
+                if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Provider: ' + provLabel + '. Change provider in Settings > AI tab.');
+            })
+            .catch(function (e) {
+                dom.getElementById('aiStatus').textContent = 'Error';
+                addMessage('Could not load project context: ' + e.message, 'ai');
+            });
     }
 
     init();
