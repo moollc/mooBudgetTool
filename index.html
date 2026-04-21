@@ -37,7 +37,7 @@
         window.mBT = window.mBT || {};
         window.mBT.registry = {
             tools: [
-                { id: 'tool_stages', type: 'tool', label: 'Stage Studio', desc: 'Timeline phase budgeting and burn tracking' },
+                { id: 'tool_stages', type: 'tool', label: 'Stages', desc: 'Timeline phase budgeting and burn tracking' },
                 { id: 'tool_po', type: 'tool', label: 'Payment Orders', desc: 'Purchase order lifecycle and approvals' },
                 { id: 'tool_db', type: 'tool', label: 'Document Builder', desc: 'Generate production documents and PDFs' },
                 { id: 'tool_contacts', type: 'tool', label: 'Contacts', desc: 'Crew and vendor directory' },
@@ -6587,7 +6587,7 @@
                 </style>
             `;
 
-            mBTME.open('studio-hub', 'Studio Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
+            mBTME.open('studio-hub', 'Assistant Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
         },
 
         /* Phase 116: Hub tile trigger -- maps lowercase hub key to BUDGET_TEMPLATES title-case key */
@@ -8711,47 +8711,18 @@
         var includeContacts = document.getElementById('exp-include-contacts') ? document.getElementById('exp-include-contacts').checked : true;
         mBTME.close('export-dialogModal');
 
-        window.mBT.storage.exportAllData().then(function (json) {
-            var snapshot = JSON.parse(json);
+        /* Build base snapshot — use Shell storage if available, otherwise start empty */
+        var basePromise = (window.mBT && window.mBT.storage && typeof window.mBT.storage.exportAllData === 'function')
+            ? window.mBT.storage.exportAllData().then(function (json) { return JSON.parse(json); })
+            : Promise.resolve({ version: 1, exportedAt: new Date().toISOString(), stores: {}, localforage: {} });
 
-            /* Strip documents (base64 attachments in funding sources) if not requested */
-            if (!includeDocs && snapshot.stores) {
-                Object.keys(snapshot.stores).forEach(function (storeName) {
-                    (snapshot.stores[storeName] || []).forEach(function (record) {
-                        if (record && record.data && record.data.fundingSources) {
-                            record.data.fundingSources.forEach(function (src) {
-                                if (src && src.attachments) src.attachments = [];
-                            });
-                        }
-                    });
-                });
-                /* Also strip localforage budget attachments */
-                if (snapshot.localforage) {
-                    Object.keys(snapshot.localforage).forEach(function (k) {
-                        var doc = snapshot.localforage[k];
-                        if (doc && doc.fundingSources) {
-                            doc.fundingSources.forEach(function (src) {
-                                if (src && src.attachments) src.attachments = [];
-                            });
-                        }
-                    });
-                }
-            }
-
-            /* Strip contacts store if not requested */
-            if (!includeContacts && snapshot.stores && snapshot.stores.contacts) {
-                snapshot.stores.contacts = [];
-            }
-
-            /* Append active localforage budgets to snapshot */
-            var lfKeys = [];
-            var appendLF = typeof localforage !== 'undefined'
-                ? localforage.keys().then(function (keys) { lfKeys = keys || []; return Promise.resolve(); })
-                : Promise.resolve();
-
-            return appendLF.then(function () {
+        basePromise.then(function (snapshot) {
+            /* Enumerate and attach active localforage budgets (Budget Editor layer) */
+            return localforage.keys().then(function (keys) {
+                keys = keys || [];
                 var prefix = 'prodBudget_v5_';
-                var reads = lfKeys.filter(function (k) { return k.indexOf(prefix) === 0; }).map(function (k) {
+                var budgetKeys = keys.filter(function (k) { return k.indexOf(prefix) === 0; });
+                var reads = budgetKeys.map(function (k) {
                     return localforage.getItem(k).then(function (val) { return { key: k, val: val }; }).catch(function () { return null; });
                 });
                 return Promise.all(reads);
@@ -8759,12 +8730,39 @@
                 snapshot.localforage = snapshot.localforage || {};
                 lfItems.forEach(function (item) {
                     if (!item || !item.val) return;
-                    var doc = item.val;
-                    if (!includeDocs && doc.fundingSources) {
-                        doc.fundingSources.forEach(function (src) { if (src && src.attachments) src.attachments = []; });
-                    }
-                    snapshot.localforage[item.key] = doc;
+                    snapshot.localforage[item.key] = item.val;
                 });
+
+                /* Also pull contacts from mBTOG if available (Budget Editor contact layer) */
+                if (includeContacts && window.mBTOG && Array.isArray(mBTOG.contacts) && mBTOG.contacts.length) {
+                    snapshot.contacts = mBTOG.contacts;
+                }
+
+                /* Strip documents if not requested */
+                if (!includeDocs) {
+                    Object.keys(snapshot.localforage).forEach(function (k) {
+                        var doc = snapshot.localforage[k];
+                        if (doc && doc.fundingSources) {
+                            doc.fundingSources.forEach(function (src) { if (src && src.attachments) src.attachments = []; });
+                        }
+                    });
+                    if (snapshot.stores) {
+                        Object.keys(snapshot.stores).forEach(function (storeName) {
+                            (snapshot.stores[storeName] || []).forEach(function (record) {
+                                if (record && record.data && record.data.fundingSources) {
+                                    record.data.fundingSources.forEach(function (src) { if (src && src.attachments) src.attachments = []; });
+                                }
+                            });
+                        });
+                    }
+                }
+
+                /* Strip contacts store if not requested */
+                if (!includeContacts) {
+                    if (snapshot.stores && snapshot.stores.contacts) snapshot.stores.contacts = [];
+                    delete snapshot.contacts;
+                }
+
                 return JSON.stringify(snapshot, null, 2);
             });
         }).then(function (finalJson) {
@@ -10645,7 +10643,7 @@
 
         mBT.core.action('backup-env', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
         mBT.core.action('export-all-data', function () {
-            if (!window.mBT || !window.mBT.storage) { mBTME.alert('Error', 'Storage not available.'); return; }
+            if (typeof localforage === 'undefined') { mBTME.alert('Error', 'Storage not available.'); return; }
             _showExportDialog();
         });
         mBT.core.action('print-pdf', function () { window.print(); });
