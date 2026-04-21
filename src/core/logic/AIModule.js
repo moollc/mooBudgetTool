@@ -24,9 +24,26 @@ window.mBTAIModule = {
     },
 
     /* ── Storage Accessors ──────────────────────────────────────────────── */
-    getStoredApiKey:    function (provider) { return localStorage.getItem((window.storageKeyPrefix || '') + provider + 'ApiKey') || ''; },
-    saveStoredApiKey:   function (provider, key) { localStorage.setItem((window.storageKeyPrefix || '') + provider + 'ApiKey', key); },
-    getSelectedProvider: function () { return localStorage.getItem((window.storageKeyPrefix || '') + 'selectedAiProvider') || 'gemini'; },
+    /* Keys use unprefixed mbt_ namespace to avoid being parsed as budget data */
+    getStoredApiKey: function (provider) {
+        return localStorage.getItem('mbt_' + provider + '_api_key')
+            || localStorage.getItem('mbt_ai_api_key')
+            || '';
+    },
+    saveStoredApiKey: function (provider, key) {
+        localStorage.setItem('mbt_' + provider + '_api_key', key);
+    },
+    getSelectedProvider: function () {
+        var stored = localStorage.getItem('mbt_selected_ai_provider');
+        if (stored) return stored;
+        /* Infer from endpoint: localhost = lmstudio */
+        var endpoint = localStorage.getItem('mbt_ai_endpoint') || '';
+        if (endpoint && endpoint.indexOf('localhost') > -1) return 'lmstudio';
+        return 'gemini';
+    },
+    saveSelectedProvider: function (provider) {
+        localStorage.setItem('mbt_selected_ai_provider', provider);
+    },
     getSystemPrompt:    function () { return localStorage.getItem((window.storageKeyPrefix || '') + 'aiSystemPrompt') || ''; },
     saveSystemPrompt:   function (val) { localStorage.setItem((window.storageKeyPrefix || '') + 'aiSystemPrompt', val); },
 
@@ -77,8 +94,11 @@ window.mBTAIModule = {
             else if (provider === 'deepseek') { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
             else if (provider === 'grok')     { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
             else if (provider === 'lmstudio') {
-                oUrl   = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioEndpoint') || self.config.lmstudioEndpoint;
-                oModel = localStorage.getItem((window.storageKeyPrefix || '') + 'lmstudioModel')    || self.config.lmstudioModel;
+                oUrl   = localStorage.getItem('mbt_lmstudio_endpoint')
+                      || localStorage.getItem('mbt_ai_endpoint')
+                      || self.config.lmstudioEndpoint;
+                oUrl   = oUrl.replace(/\/chat\/completions$/, '').replace(/\/$/, '') + '/chat/completions';
+                oModel = localStorage.getItem('mbt_lmstudio_model') || self.config.lmstudioModel;
             }
 
             if (!oUrl) {

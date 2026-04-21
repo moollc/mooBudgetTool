@@ -347,7 +347,7 @@ window.mBTRouter = (function () {
 
         /* --- close-tool: dismiss tool modal and lifecycle sync --- */
         } else if (action === 'close-tool') {
-            if (window.mBTME && mBTME.close) mBTME.close('tool-window');
+            if (window.mBTME && mBTME.close) mBTME.close('tool-windowModal');
             _ctx.setMBTActiveTool(null);
             if (window.mBTRealtime && mBTRealtime.isConnected()) mBTRealtime.broadcastFocus('Budget Editor');
             var _rtLiveClose = window.mBTRealtime && mBTRealtime.isConnected();
@@ -614,8 +614,19 @@ window.mBTRouter = (function () {
             if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function' || !_fields.length) {
                 _reply({}); return;
             }
+            /* Rescan sidebar first so treatment is in ledger before we build the prompt */
+            var _sidebarP = (window.mBTContextLedger)
+                ? mBTContextLedger.ingestSidebar().catch(function () {})
+                : Promise.resolve();
+            _sidebarP.then(function () {
+
             var _provider = mBTAIModule.getSelectedProvider();
             var _apiKey   = mBTAIModule.getStoredApiKey(_provider);
+            /* lmstudio does not require a key — allow empty key through */
+            if (!_apiKey && _provider !== 'lmstudio') {
+                if (_src) _src.postMessage({ type: 'mbt:tool-reply', requestId: _rid, payload: { _error: 'no-api-key' } }, '*');
+                return;
+            }
 
             /* Per-template field rules registry — tightly bounds AI output for each known field */
             var TPL_RULES = {
@@ -677,33 +688,35 @@ window.mBTRouter = (function () {
                 inlineCtx.push(k + ': ' + String(v).slice(0, 200));
             });
 
-            var _sys = 'You are a concise film-production assistant. You help fill document fields from project context. ' +
-                       'Return ONLY a valid JSON object with the requested keys — no prose, no markdown fences, no commentary. ' +
-                       'If you have insufficient context to fill a field confidently, omit that key rather than guess.';
+            /* If ledger has no treatment fragment, fall back to direct localStorage read */
+            if (!ctxFragment) {
+                try {
+                    var _rawTreatment = localStorage.getItem('mbt_ai_treatment') || '';
+                    if (_rawTreatment.trim()) ctxFragment = '--- TREATMENT ---\n' + _rawTreatment.slice(0, 3000);
+                } catch (_le) { /* ignore */ }
+            }
 
-            var _prompt = 'Fill the following ' + _templateId + ' template fields. Return JSON with these keys ONLY: ' +
-                          _fields.join(', ') + '.\n\n' +
-                          (inlineCtx.length ? '--- DIRECT FIELDS ---\n' + inlineCtx.join('\n') + '\n\n' : '') +
-                          (ctxFragment ? ctxFragment + '\n' : '') +
-                          '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\n' +
-                          'Return only the JSON object.';
+            var _sys = 'You are a film production assistant. Use ONLY the project context provided below. Return ONLY a valid JSON object. No prose, no markdown, no explanation.';
+
+            var _prompt = 'Fill these ' + _templateId + ' fields using the project context provided.\n' +
+                          'Return ONLY a JSON object with keys: ' + _fields.join(', ') + '.\n\n' +
+                          (inlineCtx.length ? '--- PROJECT INFO ---\n' + inlineCtx.join('\n') + '\n\n' : '') +
+                          (ctxFragment ? ctxFragment.slice(0, 3000) + '\n\n' : 'No treatment provided — use only project name and budget context.\n\n') +
+                          '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\nJSON:';
 
             try {
                 mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
                     .then(function (resp) {
                         var out = {};
                         if (typeof resp === 'string') {
-                            /* Strip any markdown fences, then extract the first {...} block */
                             var cleaned = resp.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```\s*$/i, '').trim();
                             var m = cleaned.match(/\{[\s\S]*\}/);
                             if (m) { try { out = JSON.parse(m[0]); } catch (je) { out = {}; } }
                         }
-                        /* Drop any non-requested keys and empty string values */
                         var cleanOut = {};
                         _fields.forEach(function (f) {
                             if (out[f] != null && String(out[f]).trim() !== '') cleanOut[f] = out[f];
                         });
-                        /* Record the fill in the Context Ledger so future calls learn from it */
                         if (window.mBTContextLedger && Object.keys(cleanOut).length) {
                             try {
                                 mBTContextLedger.add({
@@ -716,8 +729,10 @@ window.mBTRouter = (function () {
                         }
                         _reply(cleanOut);
                     })
-                    .catch(function (err) { console.warn('[mBT] ai-doc-fill failed:', err); _reply({}); });
+                    .catch(function (err) { console.warn('[mBT] ai-doc-fill failed:', err); _reply({ _error: err.message || 'ai-failed' }); });
             } catch (ex) { console.warn('[mBT] ai-doc-fill threw:', ex); _reply({}); }
+
+            }); /* end _sidebarP.then */
         }
     }
 

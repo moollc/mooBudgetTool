@@ -362,7 +362,8 @@
                         if (sd) {
                             var grossDays = parseFloat(sd.days) || 0;
                             var payable = stageStarts[k] ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts) : grossDays;
-                            result.stageTotals[k] += payable * (parseFloat(sd.rate || item.rate) || 0);
+                            var _m = (sd.multiplier === undefined || sd.multiplier === null || sd.multiplier === '') ? 1 : (parseFloat(sd.multiplier) || 0);
+                            result.stageTotals[k] += payable * (parseFloat(sd.rate || item.rate) || 0) * _m;
                         }
                     });
                 });
@@ -873,7 +874,9 @@
                     var payableDays = _starts[stageKey]
                         ? computeWorkingDays(grossDays, _starts[stageKey], _workWeek, _blackouts)
                         : grossDays;
-                    var cost = payableDays * (parseFloat(sd.rate || item.rate) || 0);
+                    var _sdMult = (sd.multiplier === undefined || sd.multiplier === null || sd.multiplier === '') ? 1 : (parseFloat(sd.multiplier) || 0);
+                    var _multActive = Math.abs(_sdMult - 1) > 0.0001;
+                    var cost = payableDays * (parseFloat(sd.rate || item.rate) || 0) * _sdMult;
                     return '<div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm stage-item group cursor-grab active:cursor-grabbing" data-id="' + esc(item.id) + '">' +
                         '<div class="flex justify-between items-start mb-2">' +
                             '<div class="min-w-0 flex-grow pr-2">' +
@@ -891,7 +894,11 @@
                             '</div>' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Rate</label>' +
-                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStageStudio.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-20 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
+                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStageStudio.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-16 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
+                            '</div>' +
+                            '<div>' +
+                                '<label class="block text-[7px] font-black ' + (_multActive ? 'text-indigo-500' : 'text-slate-400') + ' uppercase mb-0.5" title="Rate multiplier (1=full, 0.5=half)">x</label>' +
+                                '<input type="number" step="0.1" min="0" value="' + _sdMult + '" oninput="mBTStageStudio.updateItemMultiplier(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 ' + (_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold') + ' rounded text-center text-[10px] outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div class="ml-auto text-right">' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Cost</label>' +
@@ -980,6 +987,17 @@
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
                     item.stageData[stageKey].rate = parseFloat(val) || 0;
+                    this.renderVitals();
+                    this.renderStageCards();
+                    this.save();
+                }
+            },
+
+            updateItemMultiplier: function(itemId, stageKey, val) {
+                var item = this._findItem(itemId);
+                if (item && item.stageData && item.stageData[stageKey]) {
+                    var _raw = (val === '' || val === null || val === undefined) ? 1 : parseFloat(val);
+                    item.stageData[stageKey].multiplier = isNaN(_raw) ? 1 : _raw;
                     this.renderVitals();
                     this.renderStageCards();
                     this.save();

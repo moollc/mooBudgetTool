@@ -105,11 +105,13 @@ window.mBT_Finance = (function () {
                         var d = item.stageData[stageKey];
                         var grossDays = parseFloat(d.days) || 0;
                         var dRate = parseFloat(d.rate) || 0;
+                        /* Per-stage rate multiplier: default 1, allows fractional rates (e.g. 0.5 = half rate) without mutating the preset/industry rate source of truth */
+                        var dMult = (d.multiplier === undefined || d.multiplier === null || d.multiplier === '') ? 1 : (parseFloat(d.multiplier) || 0);
                         /* Apply work-week and blackout calendar if temporal utilities are available */
                         var payableDays = (_le && _le.computeWorkingDays && stageStarts[stageKey])
                             ? _le.computeWorkingDays(grossDays, stageStarts[stageKey], workWeek, blackouts)
                             : grossDays;
-                        stageSumCost += (payableDays * dRate);
+                        stageSumCost += (payableDays * dRate * dMult);
                         stageSumDays += payableDays;
                     });
                     item.quantity = stageSumDays;
