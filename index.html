@@ -19,7 +19,7 @@
     <title>mooBudgetTool v19.55</title>
     <script>
         (function () {
-            var theme = localStorage.getItem('mbt_active_theme') || 'dark';
+            var theme = localStorage.getItem('mbt_active_theme') || 'light';
             document.documentElement.className = 'mbt-theme-' + theme;
         })();
     </script>
@@ -285,7 +285,7 @@
 <body class="pb-16 text-slate-900 transition-colors duration-300">
     <script>
         (function () {
-            var theme = localStorage.getItem('mbt_active_theme') || 'dark';
+            var theme = localStorage.getItem('mbt_active_theme') || 'light';
             document.body.classList.add('mbt-theme-' + theme);
             document.body.classList.add(theme === 'dark' ? 'bg-slate-950' : 'bg-gray-100');
         })();
@@ -577,7 +577,11 @@
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
 
-                var projectToLoad = localStorage.getItem(storageKeyPrefix + 'lastLoaded');
+                var projectToLoad = (function() {
+                    var raw = localStorage.getItem(storageKeyPrefix + 'lastLoaded');
+                    if (!raw) return null;
+                    try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch(e) { return raw; }
+                })();
 
                 /* Resolve project list -- supports both Promise and Array returns */
                 var listP = (typeof getProjectList === 'function')
@@ -1276,13 +1280,15 @@
                                 for (var ri = 0; ri < rateDb.length; ri++) {
                                     if (rateDb[ri] && rateDb[ri].description && desc && rateDb[ri].description.toLowerCase() === desc.toLowerCase()) { match = rateDb[ri]; break; }
                                 }
-                                var regionMult = (typeof mBT.opengate !== 'undefined') ? mBT.opengate.settings.regionMultiplier : 1;
+                                var _baseR = match ? (parseFloat(match.rate) || 0) : 0;
+                                var currentRegionMult = (typeof mBT.rates !== 'undefined' && mBT.rates.resolve) ? mBT.rates.resolve({description: desc}) : 1;
                                 return {
                                     id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
                                     description: desc,
                                     quantity: 1,
                                     unit: match ? match.unit : 'Day',
-                                    rate: match ? Math.round(match.rate * regionMult) : 0,
+                                    baseRate: _baseR,
+                                    rate: match ? Math.round(_baseR * currentRegionMult) : 0,
                                     multiplier: 1,
                                     actual: 0,
                                     rateType: 'negotiable',
@@ -1660,6 +1666,16 @@
     };
     window.loadBudget = function () {
         var r = mBT.data.load.apply(mBT.data, arguments);
+        /* Backfill baseRate on legacy items (pre-regional-rescale budgets). One-time per item:
+         * derive the anchor from the currently-displayed rate and the prevailing region scalar. */
+        try {
+            if (typeof budget !== 'undefined' && budget && budget.sections && mBT.rates && mBT.rates.ensureBase) {
+                Object.keys(budget.sections).forEach(function (sk) {
+                    var items = (budget.sections[sk] && budget.sections[sk].items) || [];
+                    for (var i = 0; i < items.length; i++) mBT.rates.ensureBase(items[i]);
+                });
+            }
+        } catch (bx) { /* ignore */ }
         /* Phase 149.2: Rehydrate Context Ledger on project load */
         try {
             if (window.mBTContextLedger && typeof budget !== 'undefined' && budget && budget.projectName) {
@@ -2234,6 +2250,71 @@
     window.esc = esc;
     window.fmt = (typeof mBTLE !== 'undefined' && mBTLE.format) ? mBTLE.format.currency : function (x) { return x; };
 
+    /* ========= mBT.rates: Regional Rate Resolver =========
+     * Single authority for region-aware rate scaling across the budget.
+     * Resolve returns the scalar to apply to an item's baseRate for a given region.
+     * Today: flat region scalar from mBTOG.RATE_REGIONS.
+     * Extension slot (role-level accuracy): when mBTOG.ROLE_MULTIPLIERS[region][role]
+     * is populated, resolve prefers it over the flat region scalar. See RegionalRateAccuracy.md.
+     */
+    mBT.rates = (function () {
+        function _region() {
+            return (window.mBTOG && mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+        }
+        function _regionMult(region) {
+            var map = (window.mBTOG && mBTOG.RATE_REGIONS) || { Jamaica: 1 };
+            return map[region] || 1;
+        }
+        function resolve(item, region) {
+            var r = region || _region();
+            var roleMap = (window.mBTOG && mBTOG.ROLE_MULTIPLIERS) ? mBTOG.ROLE_MULTIPLIERS[r] : null;
+            if (roleMap && item && item.description) {
+                var key = String(item.description).toLowerCase().trim();
+                if (roleMap[key]) return roleMap[key];
+            }
+            return _regionMult(r);
+        }
+        /* Ensure item has a baseRate anchor. If missing, derive from current rate and the
+         * prevailing region scalar. Called lazily on load and whenever we read baseRate. */
+        function ensureBase(item, region) {
+            if (!item) return;
+            if (item.baseRate === undefined || item.baseRate === null) {
+                var mult = resolve(item, region || _region());
+                var cur = parseFloat(item.rate) || 0;
+                item.baseRate = mult ? (cur / mult) : cur;
+            }
+        }
+        /* Recompute every item's rate from its baseRate using the new region.
+         * Preserves user intent: baseRate is the anchor; rate is the displayed regional figure. */
+        function applyRegion(newRegion) {
+            if (typeof budget === 'undefined' || !budget || !budget.sections) return;
+            var secs = budget.sections;
+            Object.keys(secs).forEach(function (sk) {
+                var items = (secs[sk] && secs[sk].items) || [];
+                for (var i = 0; i < items.length; i++) {
+                    ensureBase(items[i], newRegion);
+                    var mult = resolve(items[i], newRegion);
+                    items[i].rate = Math.round((parseFloat(items[i].baseRate) || 0) * mult * 100) / 100;
+                }
+            });
+        }
+        /* Called when the user types a rate manually. Re-anchor baseRate so the override
+         * survives future region switches. */
+        function reanchorFromRate(item, region) {
+            if (!item) return;
+            var mult = resolve(item, region || _region());
+            var cur = parseFloat(item.rate) || 0;
+            item.baseRate = mult ? (cur / mult) : cur;
+        }
+        return {
+            resolve: resolve,
+            ensureBase: ensureBase,
+            applyRegion: applyRegion,
+            reanchorFromRate: reanchorFromRate,
+            currentRegion: _region
+        };
+    })();
+
     /* --- Payment Services Registry (Phase 88) --- */
     /* Single source for payment method definitions used by paymentModal and Contacts Wallet. */
     var PAYMENT_SERVICES = [
@@ -2668,7 +2749,12 @@
 
         if (field === 'description') item.description = value;
         else if (field === 'quantity') item.quantity = parseFloat(value) || 0;
-        else if (field === 'rate') item.rate = parseFloat(value) || 0;
+        else if (field === 'rate') {
+            item.rate = parseFloat(value) || 0;
+            /* Manual rate override re-anchors the regional baseRate so future region
+             * switches scale from this user-intended value. */
+            if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
+        }
         else if (field === 'unit') item.unit = value;
         else if (field === 'actual') item.actual = parseFloat(value) || 0;
         /* Phase 77: actuarial fields */
@@ -3403,7 +3489,7 @@
             var safeName = this.esc(name);
             var rawId = name.replace(/"/g, '&quot;'); // Attribute-safe raw key for dataset lookups
             return `
-                <div class="mb-3 bg-white rounded-2xl shadow-sm border border-slate-100">
+                <div class="mb-3 bg-white shadow-sm border border-slate-100">
                     <div class="sticky-section-header relative min-h-[40px] bg-slate-50 border-b border-slate-100 select-none group z-30">
                         <div class="px-4 py-2.5 flex justify-between items-center cursor-pointer z-40 active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="${rawId}">
                             <div class="flex items-center gap-3 pointer-events-none">
@@ -3447,6 +3533,26 @@
 
             /* --- compact mode: tighter rows, variance column hidden --- */
             var rowPad = isCompact ? 'py-1' : 'py-2';
+
+            /* --- Rate multiplier indicator: reflects any non-1 multiplier set in Stages so the main budget shows the line is not at full rate. */
+            var _multChip = '';
+            if (item.stageData) {
+                var _mKeys = Object.keys(item.stageData);
+                var _mFirst = null;
+                var _mMixed = false;
+                var _mAnyNon1 = false;
+                for (var _mi = 0; _mi < _mKeys.length; _mi++) {
+                    var _mv = item.stageData[_mKeys[_mi]].multiplier;
+                    var _mn = (_mv === undefined || _mv === null || _mv === '') ? 1 : (parseFloat(_mv) || 0);
+                    if (Math.abs(_mn - 1) > 0.0001) _mAnyNon1 = true;
+                    if (_mFirst === null) _mFirst = _mn;
+                    else if (Math.abs(_mn - _mFirst) > 0.0001) _mMixed = true;
+                }
+                if (_mAnyNon1) {
+                    var _mLabel = _mMixed ? 'x mix' : ('x' + (_mFirst % 1 === 0 ? _mFirst.toFixed(0) : _mFirst.toString()));
+                    _multChip = '<span title="Stage rate multiplier (not full rate)" style="display:inline-block;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#4338ca;background:#eef2ff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">' + _mLabel + '</span>';
+                }
+            }
             var hideVar = isCompact ? 'hidden' : '';
             // Replaced fixed widths with w-px + whitespace-nowrap for numeric columns.
             // Reduced horizontal padding from p-2 to px-1 py-2 to improve proximity.
@@ -3454,7 +3560,7 @@
                 <tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="${safeId}" data-section="${safeSection}"${item.memoStatus === 'Pending' ? ' style="background-color:rgba(234,179,8,0.12);"' : ''}>
                     <td class="px-1 ${rowPad} text-center relative w-12 md:w-14 overflow-visible">
                         <div class="crew-wrapper inline-block">
-                            <button data-action="crew-toggle" class="crew-avatar rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
+                            <button data-action="crew-toggle" class="crew-avatar rounded border border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ${crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white'} relative z-20">
                                 <span class="text-[12px] font-black pointer-events-none">${initials}</span>
                             </button>
 
@@ -3479,6 +3585,7 @@
                         <input type="text" data-id="${safeId}" data-section="${safeSection}" data-field="description" value="${this.esc(item.description)}"
                                class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item..." ${item.memoStatus === 'Pending' ? 'readonly' : ''}>
                         ${item.memoStatus === 'Pending' ? '<span style="display:inline-block;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:rgba(120,53,15,0.85);background:rgba(234,179,8,0.25);border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">MEMO</span>' : ''}
+                        ${_multChip}
                     </td>
 
                     <td class="px-1 ${rowPad} w-px whitespace-nowrap">
@@ -3561,7 +3668,9 @@
         // --- Stage Visualization: Production phase card generation ---
         // Logic Resolution: Renders specialized cards for the Production Stages view with burn-rate telemetry.
         stageCard: function (item, stageKey) {
-            var cost = (item._sDays || 0) * (item._sRate || 0);
+            var _mult = (item._sMult === undefined || item._sMult === null || item._sMult === '') ? 1 : (parseFloat(item._sMult) || 0);
+            var cost = (item._sDays || 0) * (item._sRate || 0) * _mult;
+            var _multActive = Math.abs(_mult - 1) > 0.0001;
 
             // TIER 4 VISUALS: Smart Days Conflict Detection
             var limit = (budget.targetLock && budget.targetLock.stages[stageKey]) ? (parseFloat(budget.targetLock.stages[stageKey].days) || 0) : 0;
@@ -3593,9 +3702,16 @@
                         </div>
                         <div class="w-20">
                             <label class="block text-[7px] font-black text-slate-400 uppercase">Rate</label>
-                            <input type="number" value="${item._sRate}" 
-                                   data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}" 
+                            <input type="number" value="${item._sRate}"
+                                   data-action="stage-update" data-field="rate" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}"
                                    class="w-full bg-slate-50 border-none rounded p-1 text-[10px] font-mono font-bold text-slate-600 no-spinner">
+                        </div>
+                        <div class="w-12">
+                            <label class="block text-[7px] font-black text-slate-400 uppercase" title="Rate multiplier (e.g. 0.5 = half rate)">x</label>
+                            <input type="number" step="0.1" min="0" value="${_mult}"
+                                   data-action="stage-update" data-field="multiplier" data-id="${item.id}" data-section="${this.esc(item._sec)}" data-stage="${stageKey}"
+                                   class="w-full ${_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold'} border-none rounded p-1 text-[10px] font-mono no-spinner transition-colors"
+                                   title="Rate multiplier (1 = full, 0.5 = half)">
                         </div>
                     </div>
 
@@ -3749,12 +3865,15 @@
             // SNAPSHOT TRIGGER: Capture state before addition
             if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added Line Item");
 
+            var _manualRate = parseFloat(rate) || 0;
+            var _manualMult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc || 'New Item' }) : 1;
             var newItem = {
                 id: 'item_' + Date.now(),
                 description: desc || 'New Item',
                 quantity: 1,
                 unit: unit || 'Day',
-                rate: parseFloat(rate) || 0,
+                baseRate: _manualMult ? (_manualRate / _manualMult) : _manualRate,
+                rate: _manualRate,
                 multiplier: 1,
                 actual: 0,
                 crew: { name: '', phone: '', email: '' },
@@ -3983,7 +4102,7 @@
         /* Show modal immediately with loading skeleton, then swap content once blueprints load */
         var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
             '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Blueprints\u2026</div></div>';
-        mBTME.open('newProject', '', skeleton, 'max-w-5xl', { hideHeader: true, noPadding: true });
+        mBTME.open('newProject', '', skeleton, 'max-w-xl', { hideHeader: true, noPadding: true });
 
         /* Load IndexedDB custom blueprint registry then swap skeleton content */
         mBT.data.templates.load().catch(function () { return {}; }).then(function (customRegistry) {
@@ -3991,12 +4110,12 @@
             var standardsHtml = Object.keys(BUDGET_TEMPLATES).map(function (key) {
                 var t = BUDGET_TEMPLATES[key];
                 return '<button onclick="mBT.data.newProject(false,\'' + key + '\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');"' +
-                    ' class="group relative flex flex-row sm:flex-col items-center sm:items-start gap-3 sm:gap-0 p-4 sm:p-5 bg-white border border-slate-100 rounded-xl sm:rounded-2xl hover:border-blue-400 hover:shadow-lg hover:-translate-y-0.5 sm:hover:-translate-y-1 transition-all duration-150 text-left w-full h-full">' +
-                    '<div class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center sm:mb-3 flex-shrink-0 transition-colors">' +
+                    ' class="group relative flex flex-row items-center gap-2 p-2.5 bg-white border border-slate-100 rounded-xl hover:border-blue-400 hover:shadow-md transition-all duration-150 text-left w-full">' +
+                    '<div class="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center flex-shrink-0 transition-colors scale-75">' +
                     (mBTAssets[t.icon] || mBTAssets.file) + '</div>' +
                     '<div class="flex-1 min-w-0">' +
-                    '<h3 class="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">' + t.label + '</h3>' +
-                    '<p class="text-[9px] sm:text-[10px] text-slate-400 font-medium leading-snug line-clamp-1 sm:line-clamp-2 mt-0.5">' + t.desc + '</p>' +
+                    '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">' + t.label + '</h3>' +
+                    '<p class="text-[9px] text-slate-400 font-medium leading-snug line-clamp-1 mt-0.5">' + t.desc + '</p>' +
                     '</div></button>';
             }).join('');
 
@@ -4034,18 +4153,18 @@
             var _syncLabel = _ogSync ? 'Rates synced' : 'Local rates';
             var _injectDefault = localStorage.getItem('mbt_inject_rates_default') !== 'false';
             var toggleHtml =
-                '<div class="mb-5 shrink-0">' +
-                '<label class="flex items-center justify-between cursor-pointer bg-gradient-to-r from-slate-50 to-white rounded-xl px-5 py-3 border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all">' +
-                '<div class="flex items-center gap-3">' +
-                '<div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' +
+                '<div class="mb-3 shrink-0">' +
+                '<label class="flex items-center justify-between cursor-pointer bg-white rounded-lg px-3 py-2 border border-slate-200 hover:border-blue-300 transition-all">' +
+                '<div class="flex items-center gap-2">' +
+                '<div class="w-6 h-6 rounded-md bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">' +
+                '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>' +
                 '</div>' +
                 '<div>' +
-                '<span class="text-[10px] font-black uppercase tracking-widest text-slate-700 block leading-tight">Inject Live Community Rates</span>' +
+                '<span class="text-[9px] font-black uppercase tracking-widest text-slate-700 block leading-tight">Inject Live Community Rates</span>' +
                 '<span class="text-[8px] text-slate-400 font-bold">Pull OpenGate industry-standard rates into your blueprint</span>' +
                 '</div>' +
                 '</div>' +
-                '<div class="flex items-center gap-3 shrink-0">' +
+                '<div class="flex items-center gap-2 shrink-0">' +
                 '<div class="relative inline-flex">' +
                 '<input type="checkbox" id="mbt-inject-rates" class="sr-only peer" ' + (_injectDefault ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_inject_rates_default\',this.checked)">' +
                 '<div class="w-10 h-5 rounded-full bg-slate-200 peer-checked:bg-blue-600 after:content-[\'\'] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-5 shadow-inner"></div>' +
@@ -4056,29 +4175,27 @@
                 '</label></div>';
 
             var content =
-                '<div class="p-5 sm:p-8 bg-gradient-to-b from-slate-50 to-white min-h-[500px] flex flex-col">' +
-                '<div class="text-center mb-5 shrink-0">' +
-                '<div class="inline-flex items-center gap-2 mb-1">' +
-                '<div class="w-6 h-6 rounded-lg bg-slate-900 flex items-center justify-center">' +
-                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/></svg>' +
+                '<div class="p-4 bg-gradient-to-b from-slate-50 to-white flex flex-col">' +
+                '<div class="text-center mb-3 shrink-0">' +
+                '<div class="inline-flex items-center gap-2 mb-0.5">' +
+                '<img src="./assets/cow-192.png" class="w-6 h-6 object-contain" alt="mBT">' +
+                '<h2 class="text-base font-black uppercase tracking-tighter text-slate-900">mBT</h2>' +
                 '</div>' +
-                '<h2 class="text-lg font-black uppercase tracking-tighter text-slate-900">moo Budget Tool</h2>' +
-                '</div>' +
-                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
+                '<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
                 toggleHtml +
-                '<div class="flex-grow overflow-y-auto pr-2">' +
-                '<div class="mb-3 flex items-center gap-3">' +
+                '<div class="overflow-y-auto pr-1">' +
+                '<div class="mb-2 flex items-center gap-3">' +
                 '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>' +
                 '<div class="h-px bg-slate-200 flex-grow"></div></div>' +
-                '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-5 sm:mb-8">' + standardsHtml + '</div>' +
+                '<div class="grid grid-cols-2 gap-1.5 mb-3">' + standardsHtml + '</div>' +
                 (customHtml ?
-                    '<div class="mb-3 flex items-center gap-3">' +
+                    '<div class="mb-2 flex items-center gap-3">' +
                     '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">My Blueprints</span>' +
                     '<div class="h-px bg-slate-200 flex-grow"></div>' +
                     '</div>' +
-                    '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">' + customHtml + '</div>' : '') +
+                    '<div class="grid grid-cols-2 gap-1.5 mb-3">' + customHtml + '</div>' : '') +
                 '</div>' +
-                '<div class="mt-4 text-center shrink-0 border-t border-slate-200/50 pt-4 flex items-center justify-center gap-4">' +
+                '<div class="mt-2 text-center shrink-0 border-t border-slate-200/50 pt-2 flex items-center justify-center gap-4">' +
                 '<button onclick="mBT.data.newProject(false,\'Blank\',(document.getElementById(\'mbt-inject-rates\')||{checked:true}).checked); mBTME.close(\'newProject\');" class="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors hover:bg-slate-200/50 px-4 py-2 rounded-lg">Skip &amp; Create Blank</button>' +
                 (budget ? '<button onclick="mBT_saveAsBlueprint();" class="text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors hover:bg-indigo-50 px-4 py-2 rounded-lg">Save Current as Blueprint</button>' : '') +
                 '</div></div>';
@@ -4086,7 +4203,7 @@
             /* Swap skeleton content */
             var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
             if (modalBody) modalBody.innerHTML = content;
-            else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-5xl', { hideHeader: true, noPadding: true }); }
+            else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-xl', { hideHeader: true, noPadding: true }); }
         });
     };
 
@@ -7934,6 +8051,11 @@
         setRateRegion: function (region) {
             mBTOG.settings.location = region;
             localStorage.setItem('moo_og_loc', region);
+            /* Rescale every budget line from its baseRate anchor, persist, repaint. */
+            if (mBT.rates && mBT.rates.applyRegion) mBT.rates.applyRegion(region);
+            if (typeof saveBudget === 'function') saveBudget();
+            if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
+            if (typeof render === 'function') render();
             /* Re-render the lineItems tab to reflect updated multiplier */
             mBT.features.settings.renderSubTab('database', 'lineItems');
         },
@@ -9439,7 +9561,9 @@
     };
 
     window.addStageItemToBudget = function (desc, rate, unit, stageKey, targetSectionName) {
-        var newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit, multiplier: 1, rate, actual: 0, rateType: 'negotiable', stageData: {} };
+        var _stgMult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc }) : 1;
+        var _stgBase = _stgMult ? ((parseFloat(rate) || 0) / _stgMult) : (parseFloat(rate) || 0);
+        var newItem = { id: crypto.randomUUID(), description: desc, quantity: 1, unit, multiplier: 1, baseRate: _stgBase, rate, actual: 0, rateType: 'negotiable', stageData: {} };
         newItem.stageData[stageKey] = { days: 1, rate };
         if (budget.sections[targetSectionName]) {
             budget.sections[targetSectionName].items.push(newItem);
@@ -9474,14 +9598,51 @@
     window.updateStageItem = function (itemId, sectionName, stageKey, field, value, isRealTime = false) {
         var item = (budget.sections[sectionName] && budget.sections[sectionName].items.find(function (i) { return i.id === itemId; }));
         if (item && item.stageData && item.stageData[stageKey]) {
-            item.stageData[stageKey][field] = parseFloat(value) || 0;
+            /* Multiplier defaults to 1 when cleared so an empty field does not collapse cost to zero */
+            if (field === 'multiplier') {
+                var _raw = (value === '' || value === null || value === undefined) ? 1 : parseFloat(value);
+                item.stageData[stageKey].multiplier = isNaN(_raw) ? 1 : _raw;
+            } else {
+                item.stageData[stageKey][field] = parseFloat(value) || 0;
+            }
 
             // Surgical Paint: Update Card Cost Immediately
             var days = item.stageData[stageKey].days || 0;
             var rate = item.stageData[stageKey].rate || 0;
-            var cost = days * rate;
+            var rawMult = item.stageData[stageKey].multiplier;
+            var mult = (rawMult === undefined || rawMult === null || rawMult === '') ? 1 : (parseFloat(rawMult) || 0);
+            var cost = days * rate * mult;
             var costEl = document.getElementById(`cost-${itemId}-${stageKey}`);
             if (costEl) costEl.innerText = mBTLE.format.currency(cost);
+
+            /* Surgical chip update: multiplier change updates the row indicator without a full DOM rebuild */
+            if (field === 'multiplier') {
+                var _budgetRow = document.querySelector('tr[data-item-id="' + itemId + '"]');
+                if (_budgetRow) {
+                    var _existingChip = _budgetRow.querySelector('span[title*="multiplier"]');
+                    var _mKeys2 = Object.keys(item.stageData);
+                    var _mFirst2 = null, _mMixed2 = false, _mAnyNon12 = false;
+                    for (var _mi2 = 0; _mi2 < _mKeys2.length; _mi2++) {
+                        var _mv2 = item.stageData[_mKeys2[_mi2]].multiplier;
+                        var _mn2 = (_mv2 === undefined || _mv2 === null || _mv2 === '') ? 1 : (parseFloat(_mv2) || 0);
+                        if (Math.abs(_mn2 - 1) > 0.0001) _mAnyNon12 = true;
+                        if (_mFirst2 === null) _mFirst2 = _mn2;
+                        else if (Math.abs(_mn2 - _mFirst2) > 0.0001) _mMixed2 = true;
+                    }
+                    if (_mAnyNon12) {
+                        var _mLabel2 = _mMixed2 ? 'x mix' : ('x' + (_mFirst2 % 1 === 0 ? _mFirst2.toFixed(0) : _mFirst2.toString()));
+                        var _chipHtml = '<span title="Stage rate multiplier (not full rate)" style="display:inline-block;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#4338ca;background:#eef2ff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">' + _mLabel2 + '</span>';
+                        if (_existingChip) {
+                            _existingChip.outerHTML = _chipHtml;
+                        } else {
+                            var _descInput = _budgetRow.querySelector('input[data-field="description"]');
+                            if (_descInput && _descInput.parentNode) _descInput.parentNode.insertAdjacentHTML('beforeend', _chipHtml);
+                        }
+                    } else if (_existingChip) {
+                        _existingChip.remove();
+                    }
+                }
+            }
 
             // Update Headers & Main Budget
             if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
@@ -9589,18 +9750,22 @@
             if (!budget.sections[targetSec]) return mBTME.alert("Error", "Target section not found.");
 
             missing.forEach(function (dbItem) {
+                var _dbBase = parseFloat(dbItem.rate) || 0;
+                var _dbMult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: dbItem.description }) : 1;
+                var _dbRate = Math.round(_dbBase * _dbMult * 100) / 100;
                 var newItem = {
                     id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
                     description: dbItem.description,
                     quantity: 1,
                     unit: dbItem.unit,
-                    rate: dbItem.rate,
+                    baseRate: _dbBase,
+                    rate: _dbRate,
                     multiplier: 1,
                     actual: 0,
                     rateType: 'negotiable',
                     stageData: {}
                 };
-                newItem.stageData[stageKey] = { days: 1, rate: dbItem.rate };
+                newItem.stageData[stageKey] = { days: 1, rate: _dbRate };
                 budget.sections[targetSec].items.push(newItem);
                 count++;
             });
@@ -9953,6 +10118,7 @@
             }
             cardData._sDays = entry.item.stageData[stageKey].days;
             cardData._sRate = entry.item.stageData[stageKey].rate;
+            cardData._sMult = entry.item.stageData[stageKey].multiplier;
             cardData._sec = entry.secName;
             return RenderEngine.stageCard(cardData, stageKey);
         }).join('');
@@ -11273,7 +11439,7 @@
                 if (!btn) return;
                 // Phase 16: Footer Nav uses hybrid openTool() loader
                 if (btn.id === 'stagesFooterBtn') openTool('./src/tools/stages/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
-                else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
+                else if (btn.id === 'docsFooterBtn') openTool('./src/tools/db/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true' + ((budget && budget.settings && budget.settings.compactMode) ? '&compact=1' : ''));
                 else if (btn.id === 'contactsFooterBtn') openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD'));
                 else if (btn.id === 'calendarFooterBtn') openTool('./src/tools/calendar_benchmark/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
                 else if (btn.id === 'toolsDrawerBtn') { var _td = document.getElementById('toolsDrawer'); if (_td) _td.classList.toggle('hidden'); }
