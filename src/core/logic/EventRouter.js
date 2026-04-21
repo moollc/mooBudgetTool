@@ -49,7 +49,7 @@ window.mBTRouter = (function () {
                         : (isOnline
                             ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
                             : 'border-rose-400 bg-rose-50 text-rose-600')));
-            btn.title     = isUpdateAvailable && isSignedIn ? 'Update Available' : (isSignedIn ? 'Signed In' : (isOnline ? 'Studio Online' : 'Studio Offline'));
+            btn.title     = isUpdateAvailable && isSignedIn ? 'Update Available' : (isSignedIn ? 'Signed In' : (isOnline ? 'mBT Online' : 'mBT Offline'));
             btn.innerHTML = isUpdateAvailable && isSignedIn ? updateIcon : (window.mBTAssets ? window.mBTAssets.user : '');
             btn.onclick = function() {
                 if (isUpdateAvailable && isSignedIn) {

@@ -1386,7 +1386,7 @@ window.mBTDB = {
         });
     },
 
-    neuralFill: async function (widgetId, docId) {
+    assistantFill: async function (widgetId, docId) {
         const doc = budget.documents.find(d => d.id === docId);
         if (!doc) return;
 
@@ -1396,7 +1396,7 @@ window.mBTDB = {
         const provider = mBT.features.ai.getSelectedProvider();
         const apiKey = mBT.features.ai.getStoredApiKey(provider);
 
-        if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Neural Fill.");
+        if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Assistant Fill.");
 
         // --- HYBRID ROUTER (Batch 3.1) ---
         const currentVal = doc.content.data.additional?.[widgetId] || "";
@@ -1619,8 +1619,8 @@ window.mBTDB = {
             </div>
         `;
 
-        container.innerHTML = RenderEngine.layouts.studioPanel({
-            title: `Studio: ${doc.label}`,
+        container.innerHTML = RenderEngine.layouts.assistantPanel({
+            title: `Assistant: ${doc.label}`,
             searchId: 'mBTDB_Search',
             searchPlaceholder: 'SEARCH DOCUMENT...',
             contentId: 'mBTDB_Workspace',
@@ -1672,9 +1672,9 @@ window.mBTDB = {
         if (widget.type !== 'image') {
             // Logic Resolution: Enable AI Wand for text-heavy or structural widgets (Hybrid Router)
             // Added 'footer' to enable Safety Logic and 'script' awareness for the Parser
-            const isNeural = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script', 'screenplay'].some(s => (widget.label || '').toLowerCase().includes(s));
-            const action = isNeural ? 'widget-neural-fill' : 'widget-autofill';
-            const title = isNeural ? 'AI Generate / Parse' : 'Auto-Fill';
+            const isAssistantEnabled = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script', 'screenplay'].some(s => (widget.label || '').toLowerCase().includes(s));
+            const action = isAssistantEnabled ? 'widget-assistant-fill' : 'widget-autofill';
+            const title = isAssistantEnabled ? 'AI Generate / Parse' : 'Auto-Fill';
             tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1 rounded transition-all" title="${title}">${this.icons.wand}</button>`;
         }
 
@@ -4132,7 +4132,7 @@ mBT.features.settings = {
                             <div class="flex justify-between items-start mb-4">
                                 <div>
                                     <h3 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Intelligence</h3>
-                                    <p class="text-[9px] text-slate-500 font-bold mt-0.5">Neural Provider Access</p>
+                                    <p class="text-[9px] text-slate-500 font-bold mt-0.5">Assistant Provider Access</p>
                                 </div>
                                 <div class="text-slate-700">${mBTAssets.sparkle}</div>
                             </div>
@@ -6468,7 +6468,7 @@ function registerCoreActions() {
     mBT.core.action('studio-toggle-edit', () => mBTDB.toggleEditMode());
 
     mBT.core.action('widget-toggle-view', (e, el) => mBTDB.toggleVertical(el.dataset.id));
-    mBT.core.action('widget-neural-fill', (e, el) => mBTDB.neuralFill(el.dataset.id, el.dataset.docId));
+    mBT.core.action('widget-assistant-fill', (e, el) => mBTDB.assistantFill(el.dataset.id, el.dataset.docId));
     mBT.core.action('widget-autofill', (e, el) => mBTDB.autoFillWidget(el.dataset.type, el.dataset.docId));
     mBT.core.action('widget-delete', (e, el) => mBTDB.deleteWidget(el.dataset.id));
 

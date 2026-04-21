@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MooBudget — Stages Studio</title>
+    <title>MooBudget — Stages</title>
     <script src="../../lib/tailwind.min.js"></script>
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
@@ -22,11 +22,11 @@
         
         /* Theme Bridge: Bilateral Architecture */
         .mbt-theme-dark { background-color: #020617; color: white; }
-        .mbt-theme-dark .studio-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(24px); border-color: rgba(255, 255, 255, 0.1); }
+        .mbt-theme-dark .stage-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(24px); border-color: rgba(255, 255, 255, 0.1); }
         .mbt-theme-dark .mbt-header { background-color: #0f172a; border-bottom-color: #1e293b; }
         .mbt-theme-dark #panel-setup { background-color: rgba(15, 23, 42, 0.95); backdrop-filter: blur(24px); }
         
-        .studio-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; position: relative; z-index: 1; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-radius: 16px; }
+        .stage-card { background: #fff; border-right: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; position: relative; z-index: 1; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-radius: 16px; }
         .burn-ring { transition: stroke-dashoffset 1s ease-out, stroke 0.5s ease; }
         .conflict-glow { box-shadow: 0 0 20px rgba(245,158,11,0.2); border-color: #f59e0b !important; animation: pulse-amber 2s infinite; }
         @keyframes pulse-amber {
@@ -76,7 +76,7 @@
         <div class="flex items-center gap-3">
             <div class="flex flex-col items-end">
                 <span id="active-project-name" class="text-white text-[10px] font-black uppercase tracking-tight opacity-90">—</span>
-                <span class="text-slate-500 text-[8px] font-bold uppercase tracking-widest">Stages Studio</span>
+                <span class="text-slate-500 text-[8px] font-bold uppercase tracking-widest">mBT Stages</span>
             </div>
         </div>
     </div>
@@ -116,13 +116,13 @@
     </div>
 
     <!-- Main Layout -->
-    <div id="studio-layout" class="hidden flex-grow flex overflow-x-auto no-scrollbar bg-slate-100 snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none">
+    <div id="stages-layout" class="hidden flex-grow flex overflow-x-auto no-scrollbar bg-slate-100 snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none">
 
         <!-- Setup Panel -->
-        <div id="panel-setup" class="studio-card min-w-[320px] w-[320px] snap-start shrink-0">
+        <div id="panel-setup" class="stage-card min-w-[320px] w-[320px] snap-start shrink-0">
             <div class="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Configuration</span>
-                <button onclick="mBTStageStudio.syncFromDb()" aria-label="Sync from budget database" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">
+                <button onclick="mBTStages.syncFromDb()" aria-label="Sync from budget database" class="text-slate-500 hover:text-blue-400 transition-colors uppercase text-[8px] font-black tracking-widest flex items-center gap-1.5">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     Sync
                 </button>
@@ -132,11 +132,11 @@
                 <div class="space-y-4">
                     <div>
                         <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Start Date</label>
-                        <input type="date" id="start-date" aria-label="Project start date" onchange="mBTStageStudio.updateDate('start', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors">
+                        <input type="date" id="start-date" aria-label="Project start date" onchange="mBTStages.updateDate('start', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors">
                     </div>
                     <div>
                         <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Target</label>
-                        <input type="date" id="delivery-date" aria-label="Project delivery target date" onchange="mBTStageStudio.updateDate('delivery', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors" id="delivery-date-input">
+                        <input type="date" id="delivery-date" aria-label="Project delivery target date" onchange="mBTStages.updateDate('delivery', this.value)" class="w-full bg-slate-800 text-white text-[11px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 transition-colors" id="delivery-date-input">
                     </div>
                 </div>
                 <!-- Cap -->
@@ -144,7 +144,7 @@
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Total Cap Limit</label>
                     <div class="flex items-center gap-2 border-b-2 border-slate-700 pb-1">
                         <span class="text-slate-600 text-xl font-black">$</span>
-                        <input type="number" id="total-cap" aria-label="Total cap limit" placeholder="0.00" onchange="mBTStageStudio.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-slate-900 outline-none placeholder-slate-400">
+                        <input type="number" id="total-cap" aria-label="Total cap limit" placeholder="0.00" onchange="mBTStages.updateCap(this.value)" class="w-full bg-transparent text-2xl font-black text-slate-900 outline-none placeholder-slate-400">
                     </div>
                 </div>
                 <!-- Sliders -->
@@ -152,7 +152,7 @@
                 <!-- Industry Preset -->
                 <div class="pt-4 border-t border-slate-800">
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Distribution Model</label>
-                    <select aria-label="Distribution model preset" onchange="mBTStageStudio.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
+                    <select aria-label="Distribution model preset" onchange="mBTStages.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
                         <option value="" disabled selected>Load Industry Preset...</option>
                         <option value="TVC">TVC</option>
                         <option value="Music Video">Music Video</option>
@@ -164,22 +164,22 @@
                 <div class="pt-4 border-t border-slate-800">
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Bulk Operations</label>
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick="mBTStageStudio.bulkAction('lockAll')" aria-label="Lock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Lock All</button>
-                        <button onclick="mBTStageStudio.bulkAction('unlockAll')" aria-label="Unlock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Unlock All</button>
-                        <button onclick="mBTStageStudio.bulkAction('syncDays')" aria-label="Sync stage days to max item days" class="bg-slate-800 hover:bg-amber-600 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Sync Days</button>
-                        <button onclick="mBTStageStudio.bulkAction('dedupe')" aria-label="Remove duplicate items across stages" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Dedupe</button>
-                        <button onclick="mBTStageStudio.autoFillAll()" aria-label="Neural fill stage assignments" class="col-span-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+                        <button onclick="mBTStages.bulkAction('lockAll')" aria-label="Lock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Lock All</button>
+                        <button onclick="mBTStages.bulkAction('unlockAll')" aria-label="Unlock all stage sliders" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Unlock All</button>
+                        <button onclick="mBTStages.bulkAction('syncDays')" aria-label="Sync stage days to max item days" class="bg-slate-800 hover:bg-amber-600 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Sync Days</button>
+                        <button onclick="mBTStages.bulkAction('dedupe')" aria-label="Remove duplicate items across stages" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Dedupe</button>
+                        <button onclick="mBTStages.autoFillAll()" aria-label="Auto fill stage assignments" class="col-span-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                            Neural Fill
+                            Auto Fill
                         </button>
-                        <button onclick="mBTStageStudio.clearAll()" aria-label="Clear all stage assignments" class="col-span-2 bg-slate-800 hover:bg-rose-800 text-slate-400 hover:text-rose-300 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear All Stages</button>
+                        <button onclick="mBTStages.clearAll()" aria-label="Clear all stage assignments" class="col-span-2 bg-slate-800 hover:bg-rose-800 text-slate-400 hover:text-rose-300 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Clear All Stages</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Vitals Panel -->
-        <div id="panel-vitals" class="studio-card min-w-[340px] w-[340px] snap-center shrink-0">
+        <div id="panel-vitals" class="stage-card min-w-[340px] w-[340px] snap-center shrink-0">
             <div class="p-4 border-b border-slate-100 shrink-0">
                 <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Project Vital Signs</span>
             </div>
@@ -236,17 +236,17 @@
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col" style="max-height:85vh">
             <div class="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
                 <span id="modal-title" class="text-[10px] font-black uppercase tracking-widest text-slate-800">Add to Stage</span>
-                <button onclick="mBTStageStudio.closeAddModal()" aria-label="Close add item modal" class="text-slate-300 hover:text-slate-600 transition-colors">
+                <button onclick="mBTStages.closeAddModal()" aria-label="Close add item modal" class="text-slate-300 hover:text-slate-600 transition-colors">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
             <div class="p-4 border-b border-slate-50 shrink-0">
-                <input type="text" id="modal-search" aria-label="Search items" placeholder="Search items..." oninput="mBTStageStudio.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
+                <input type="text" id="modal-search" aria-label="Search items" placeholder="Search items..." oninput="mBTStages.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
             </div>
             <div id="modal-list" class="flex-grow overflow-y-auto"></div>
             <!-- Custom Item Form -->
             <div class="p-4 border-t border-slate-100 shrink-0">
-                <button onclick="mBTStageStudio.toggleCustomForm()" class="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline mb-3 block">+ Create Custom Item</button>
+                <button onclick="mBTStages.toggleCustomForm()" class="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline mb-3 block">+ Create Custom Item</button>
                 <div id="custom-form" class="hidden space-y-3">
                     <input type="text" id="custom-desc" placeholder="Item name" class="w-full p-2 border border-slate-200 rounded-lg text-[11px] font-bold outline-none">
                     <div class="flex gap-2">
@@ -257,14 +257,14 @@
                             <option>Week</option>
                         </select>
                     </div>
-                    <button onclick="mBTStageStudio.addCustomItem()" class="w-full py-2 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-colors">Add Item</button>
+                    <button onclick="mBTStages.addCustomItem()" class="w-full py-2 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-colors">Add Item</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        /* ========= Stages Studio v24 ========= */
+        /* ========= mBT Stages v24 ========= */
         var dom = document.currentScript ? document.currentScript.getRootNode() : document;
         if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
@@ -277,7 +277,7 @@
 
         /* --- Currency Format (reads currency from URL param passed by parent budget) --- */
         function fmt(n) {
-            var code = (mBTStageStudio && mBTStageStudio.state && mBTStageStudio.state._currency) ? mBTStageStudio.state._currency : 'JMD';
+            var code = (mBTStages && mBTStages.state && mBTStages.state._currency) ? mBTStages.state._currency : 'JMD';
             try {
                 return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
             } catch(e) {
@@ -507,8 +507,8 @@
             };
         }
 
-        /* ========= Studio Controller ========= */
-        var mBTStageStudio = {
+        /* ========= Controller ========= */
+        var mBTStages = {
 
             state: {
                 KEYS:   ['dev', 'pre', 'prod', 'post', 'dist'],
@@ -551,16 +551,16 @@
                 /* Live cap sync from main budget -- refresh totalCap + vitals without reopen */
                 window.addEventListener('message', function(e) {
                     if (!e.data || e.data.type !== 'mbt:totalCap') return;
-                    if (!mBTStageStudio.state || !mBTStageStudio.state.project) return;
+                    if (!mBTStages.state || !mBTStages.state.project) return;
                     var nextCap = parseFloat(e.data.totalCap) || 0;
-                    if (!mBTStageStudio.state.project.targetLock) {
-                        mBTStageStudio.state.project.targetLock = { enabled: false, totalCap: 0, stages: {} };
+                    if (!mBTStages.state.project.targetLock) {
+                        mBTStages.state.project.targetLock = { enabled: false, totalCap: 0, stages: {} };
                     }
-                    mBTStageStudio.state.project.targetLock.totalCap = nextCap;
+                    mBTStages.state.project.targetLock.totalCap = nextCap;
                     var capInput = document.getElementById('total-cap');
                     if (capInput) capInput.value = nextCap || '';
-                    if (typeof mBTStageStudio.renderVitals    === 'function') mBTStageStudio.renderVitals();
-                    if (typeof mBTStageStudio.renderStageCards === 'function') mBTStageStudio.renderStageCards();
+                    if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
+                    if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
                 });
 
                 /* Back button */
@@ -639,7 +639,7 @@
                 if (!b) return;
                 /* Dismiss skeleton, reveal layout */
                 var sk = dom.getElementById('stages-skeleton');
-                var sl = dom.getElementById('studio-layout');
+                var sl = dom.getElementById('stages-layout');
                 if (sk) sk.classList.add('hidden');
                 if (sl) sl.classList.remove('hidden');
 
@@ -670,8 +670,8 @@
                         '<div class="h-2 bg-slate-800 rounded-full relative overflow-hidden">' +
                             '<div class="absolute top-0 left-0 h-full bg-blue-500 rounded-full pointer-events-none" style="width:' + s.ratio + '%"></div>' +
                             '<input type="range" min="0" max="100" step="0.5" value="' + s.ratio + '" ' +
-                                'oninput="mBTStageStudio.balanceSliders(\'' + k + '\', this.value)" ' +
-                                'onchange="mBTStageStudio.save()" ' +
+                                'oninput="mBTStages.balanceSliders(\'' + k + '\', this.value)" ' +
+                                'onchange="mBTStages.save()" ' +
                                 (s.locked ? 'disabled ' : '') +
                                 'class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">' +
                         '</div>' +
@@ -784,7 +784,7 @@
 
                     /* Sync Days button — amber bounce when items exceed stage duration */
                     var syncBtn = (val.maxNeeded > val.current)
-                        ? '<button onclick="mBTStageStudio.syncDays(\'' + k + '\')" title="Sync to ' + val.maxNeeded + ' days" class="absolute -right-2 -top-2 bg-amber-500 hover:bg-amber-600 text-white w-6 h-6 rounded-full shadow-lg z-50 flex items-center justify-center sync-bounce">' +
+                        ? '<button onclick="mBTStages.syncDays(\'' + k + '\')" title="Sync to ' + val.maxNeeded + ' days" class="absolute -right-2 -top-2 bg-amber-500 hover:bg-amber-600 text-white w-6 h-6 rounded-full shadow-lg z-50 flex items-center justify-center sync-bounce">' +
                           '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>' +
                           '</button>'
                         : '';
@@ -794,11 +794,11 @@
                         ? '<span class="text-[8px] font-black text-rose-600 animate-pulse">TIME BANKRUPTCY</span>'
                         : '<span class="text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight">' + dateLabel + '</span>';
 
-                    return '<div id="' + k + '" class="studio-card min-w-[340px] w-[340px] snap-center shrink-0' + (conflict ? ' conflict-glow' : '') + '">' +
+                    return '<div id="' + k + '" class="stage-card min-w-[340px] w-[340px] snap-center shrink-0' + (conflict ? ' conflict-glow' : '') + '">' +
                         '<div class="p-4 border-b border-slate-100 bg-white sticky top-0 z-20 shrink-0">' +
                             '<div class="flex items-center justify-between mb-1 relative">' +
                                 /* Lock button */
-                                '<button onclick="mBTStageStudio.toggleLock(\'' + k + '\')" class="w-6 h-6 flex items-center justify-center rounded-lg ' + (s.locked ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-300 hover:bg-slate-100') + ' transition-colors">' +
+                                '<button onclick="mBTStages.toggleLock(\'' + k + '\')" class="w-6 h-6 flex items-center justify-center rounded-lg ' + (s.locked ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-300 hover:bg-slate-100') + ' transition-colors">' +
                                     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' +
                                         (s.locked ? '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' : '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>') +
                                     '</svg>' +
@@ -811,7 +811,7 @@
                                 /* Days input + sync button */
                                 '<div class="relative flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100">' +
                                     syncBtn +
-                                    '<input type="number" value="' + s.days + '" oninput="mBTStageStudio.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
+                                    '<input type="number" value="' + s.days + '" oninput="mBTStages.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
                                     '<span class="text-[7px] font-black text-slate-400 uppercase tracking-widest mr-1">Days</span>' +
                                 '</div>' +
                             '</div>' +
@@ -827,7 +827,7 @@
                             self.renderItems(k) +
                         '</div>' +
                         '<div class="p-4 border-t border-slate-100 bg-white shrink-0">' +
-                            '<button onclick="mBTStageStudio.openAddModal(\'' + k + '\')" class="w-full py-2 rounded-xl bg-slate-50 border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-white transition-all">+ Add Item</button>' +
+                            '<button onclick="mBTStages.openAddModal(\'' + k + '\')" class="w-full py-2 rounded-xl bg-slate-50 border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-white transition-all">+ Add Item</button>' +
                         '</div>' +
                     '</div>';
                 }).join('');
@@ -883,22 +883,22 @@
                                 '<p class="text-[10px] font-black text-slate-800 leading-tight truncate uppercase tracking-tight">' + esc(item.description || 'UNTITLED') + '</p>' +
                                 '<p class="text-[7px] font-black text-slate-400 uppercase tracking-widest truncate">' + esc(entry.secName) + '</p>' +
                             '</div>' +
-                            '<button onclick="mBTStageStudio.removeItem(\'' + esc(item.id) + '\', \'' + stageKey + '\')" class="stage-remove-btn text-slate-300 active:text-rose-500 transition-all shrink-0">' +
+                            '<button onclick="mBTStages.removeItem(\'' + esc(item.id) + '\', \'' + stageKey + '\')" class="stage-remove-btn text-slate-300 active:text-rose-500 transition-all shrink-0">' +
                                 '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
                             '</button>' +
                         '</div>' +
                         '<div class="flex items-center gap-2">' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Days</label>' +
-                                '<input type="number" value="' + (sd.days || 0) + '" oninput="mBTStageStudio.updateItemDays(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 bg-slate-50 rounded text-center text-[10px] text-blue-600 font-bold outline-none no-spinner border border-slate-100">' +
+                                '<input type="number" value="' + (sd.days || 0) + '" oninput="mBTStages.updateItemDays(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 bg-slate-50 rounded text-center text-[10px] text-blue-600 font-bold outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Rate</label>' +
-                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStageStudio.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-16 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
+                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStages.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-16 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black ' + (_multActive ? 'text-indigo-500' : 'text-slate-400') + ' uppercase mb-0.5" title="Rate multiplier (1=full, 0.5=half)">x</label>' +
-                                '<input type="number" step="0.1" min="0" value="' + _sdMult + '" oninput="mBTStageStudio.updateItemMultiplier(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 ' + (_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold') + ' rounded text-center text-[10px] outline-none no-spinner border border-slate-100">' +
+                                '<input type="number" step="0.1" min="0" value="' + _sdMult + '" oninput="mBTStages.updateItemMultiplier(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 ' + (_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold') + ' rounded text-center text-[10px] outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div class="ml-auto text-right">' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Cost</label>' +
@@ -1162,8 +1162,8 @@
                         ? '<span class="text-[7px] font-black text-emerald-600 uppercase tracking-widest">From Budget · ' + esc(item.secName) + '</span>'
                         : '<span class="text-[7px] font-black text-blue-400 uppercase tracking-widest">Rate DB</span>';
                     var action = item.isExisting
-                        ? 'mBTStageStudio._assignExisting(\'' + esc(item.id) + '\')'
-                        : 'mBTStageStudio._assignFromOG(\'' + esc(item.id) + '\')';
+                        ? 'mBTStages._assignExisting(\'' + esc(item.id) + '\')'
+                        : 'mBTStages._assignFromOG(\'' + esc(item.id) + '\')';
                     return '<div onclick="' + action + '" class="p-3 border-b border-slate-50 bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors">' +
                         '<div>' +
                             '<div class="text-[11px] font-bold text-slate-700">' + esc(item.description) + '</div>' +
@@ -1346,7 +1346,7 @@
             /* ========= Carousel Grab-Scroll ========= */
 
             _initCarouselScroll: function() {
-                var slider = dom.getElementById('studio-layout');
+                var slider = dom.getElementById('stages-layout');
                 var isDown = false, startX, scrollLeft;
                 slider.addEventListener('mousedown', function(e) {
                     if (['INPUT', 'BUTTON', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
@@ -1395,7 +1395,7 @@
                         if (tab) tab.classList.add('active');
                     });
                 }, {
-                    root: dom.getElementById('studio-layout'),
+                    root: dom.getElementById('stages-layout'),
                     rootMargin: '0px',
                     threshold: 0.4
                 });
@@ -1427,7 +1427,7 @@
             },
 
             _showError: function(msg) {
-                dom.getElementById('studio-layout').innerHTML =
+                dom.getElementById('stages-layout').innerHTML =
                     '<div class="flex-grow flex items-center justify-center">' +
                         '<div class="text-center">' +
                             '<p class="text-4xl font-black text-slate-200 uppercase tracking-tighter mb-2">Not Connected</p>' +
@@ -1437,7 +1437,7 @@
             }
         };
 
-        window.onload = function() { mBTStageStudio.init(); };
+        window.onload = function() { mBTStages.init(); };
     </script>
 </body>
 </html>

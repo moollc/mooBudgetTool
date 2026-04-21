@@ -650,7 +650,7 @@
                 if (mBT.ui && typeof mBT.ui.updateViewport === 'function') mBT.ui.updateViewport();
 
                 mBT.core.events.emit('budget:updated');
-                console.log('Studio Core v' + APP_VERSION + ' Synchronized via mBTCore.');
+                console.log('Assistant Core v' + APP_VERSION + ' Synchronized via mBTCore.');
             });
         }
     };
@@ -1596,12 +1596,52 @@
                     });
                 });
             }).catch(function (zipErr) {
-                /* PATH B: Legacy Text Import (JSON) — only runs if file is not a valid ZIP */
+                /* PATH B: Raw JSON — handles both legacy single-budget .moo and new Data Package format */
                 var reader = new FileReader();
                 reader.onload = function (e) {
                     mBTME.hideLoader();
                     try {
                         var json = JSON.parse(e.target.result);
+
+                        /* PATH B2: Data Package (.moo with localforage key map + optional contacts) */
+                        if (json && json.localforage && typeof json.localforage === 'object') {
+                            var budgetKeys = Object.keys(json.localforage);
+                            if (!budgetKeys.length) { mBTME.alert('Import Failed', 'Package contains no budget data.'); return; }
+
+                            /* Show package summary before restoring */
+                            var hasContacts = Array.isArray(json.contacts) && json.contacts.length > 0;
+                            var summary = budgetKeys.length + ' budget(s) found in this package.' + (hasContacts ? '\n' + json.contacts.length + ' contact(s) found.' : '');
+
+                            mBTME.confirm('Import Package', summary + '\n\nRestore all budgets' + (hasContacts ? ' and contacts' : '') + '?', function () {
+                                /* Restore each budget into localforage */
+                                var writes = budgetKeys.map(function (k) {
+                                    return localforage.setItem(k, json.localforage[k]).catch(function (err) {
+                                        console.warn('Package import: failed to write ' + k, err);
+                                    });
+                                });
+
+                                /* Restore contacts into mBTOG if available */
+                                if (hasContacts && window.mBTOG && typeof mBTOG.saveContacts === 'function') {
+                                    mBTOG.contacts = json.contacts;
+                                    writes.push(mBTOG.saveContacts().catch(function () {}));
+                                }
+
+                                Promise.all(writes).then(function () {
+                                    /* Load the first budget to bring it into view */
+                                    var firstKey = budgetKeys[0];
+                                    var firstName = firstKey.indexOf(storageKeyPrefix) === 0 ? firstKey.slice(storageKeyPrefix.length) : firstKey;
+                                    return mBT.data.load(firstName).then(function () {
+                                        if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
+                                        mBTME.alert('Import Complete', budgetKeys.length + ' budget(s) restored.' + (hasContacts ? ' Contacts restored.' : ''));
+                                    });
+                                }).catch(function (err) {
+                                    mBTME.alert('Import Failed', err.message || 'Unknown error.');
+                                });
+                            });
+                            return;
+                        }
+
+                        /* PATH B1: Legacy single-budget JSON */
                         askUserIntent(json);
                     } catch (_) {
                         mBTME.alert('Import Error', 'File format not recognized. Expected a .moo bundle or legacy JSON file. (' + (zipErr && zipErr.message ? zipErr.message : 'Unknown error') + ')');
@@ -2383,7 +2423,7 @@
                 console.error('[mBT] Finance Engine not loaded -- reconcile skipped.');
             },
 
-            /* Phase 9: AI Simulation Engine (Neural Risk Mitigation) */
+            /* Phase 9: AI Simulation Engine (Assistant Risk Analysis) */
             simulate: function (modifications) {
                 if (!budget) return null;
                 var shadow = JSON.parse(JSON.stringify(budget));
@@ -3421,10 +3461,10 @@
 
         /* --- v19.54 LAYOUT ENGINES: High-level Container Abstractions --- */
         layouts: {
-            // Logic Resolution: Modular Studio Layout with Dedicated Title Bar and Expanded Control Header
-            studioPanel: function ({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
+            // Logic Resolution: Modular Assistant Layout with Dedicated Title Bar and Expanded Control Header
+            assistantPanel: function ({ title, searchId, searchPlaceholder, contentId, contentHtml, actions = [], toolbarId = '', footerHtml = '', containerClasses = 'p-6 space-y-3' }) {
                 // Logic Resolution: Strip structural prefixes for the clean centered title
-                var cleanTitle = title.replace(/^(Studio|Budget|Document):\s*/i, '');
+                var cleanTitle = title.replace(/^(Assistant|Budget|Document):\s*/i, '');
 
                 // Isolate System Close (isolated on right) from other actions
                 var closeAction = actions.find(function (a) { return a.title === 'Close'; });
@@ -3447,7 +3487,7 @@
                         <h3 class="font-black text-slate-400 text-[9px] uppercase tracking-[0.2em] truncate px-4">${mBT.ui.render.esc(cleanTitle)}</h3>
                     </div>
 
-                    <!-- Main Studio Header (2-Column Control Grid) - Conditionally Rendered -->
+                    <!-- Main Assistant Header (2-Column Control Grid) - Conditionally Rendered -->
                     ${showHeader ? `
                     <header class="bg-slate-900 p-3 flex-shrink-0 z-20 shadow-lg grid grid-cols-[1fr_auto] items-center gap-4">
                         <!-- Left: Integrated Toolbar & Operations (Occupies remaining space) -->
@@ -4097,7 +4137,7 @@
     }
 
     /* --- Phase 94.2: ES5 .then() conversion of showNewProjectModal --- */
-    /* Phase 116: Studio Hub styling -- 4-col grid, premium dark branding, rates toggle polish */
+    /* Phase 116: Assistant Hub styling -- 4-col grid, premium dark branding, rates toggle polish */
     window.showNewProjectModal = function () {
         /* Show modal immediately with loading skeleton, then swap content once blueprints load */
         var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
@@ -4491,7 +4531,7 @@
     window.mBTME = mBT.ui.modal;
 
     /* mBTPublisher engine loaded from src/scripts/engine/publisher.js */
-    /* ========= v19.54 mBTDB: STUDIO BUILDER ENGINE ========= */
+    /* ========= v19.54 mBTDB: ASSISTANT BUILDER ENGINE ========= */
     window.mBTDB = {
         config: {
             paperSizes: {
@@ -4936,7 +4976,7 @@
             });
         },
 
-        neuralFill: function (widgetId, docId) {
+        assistantFill: function (widgetId, docId) {
             var doc = budget.documents.find(function (d) { return d.id === docId; });
             if (!doc) return;
 
@@ -4947,7 +4987,7 @@
             var apiKey = mBT.features.ai.getStoredApiKey(provider);
             var self = this;
 
-            if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Neural Fill.");
+            if (!apiKey) return mBTME.alert("Assistant Offline", "Please configure API Key in settings to use Assistant Fill.");
 
             // --- HYBRID ROUTER (Batch 3.1) ---
             var currentVal = (doc.content.data.additional && doc.content.data.additional[widgetId]) || "";
@@ -5147,7 +5187,7 @@
             var container = document.getElementById('mBTDB_Container');
             if (!container) return;
 
-            // Standardized Studio Actions
+            // Standardized Assistant Actions
             var actions = [
                 { icon: mBTAssets.sync, title: "Sync Budget", onClick: "mBTDB.syncFromBudget()", color: "emerald" },
                 { icon: mBTAssets.refresh, title: "Sync Previous", onClick: "mBTDB.syncFromPrevious()", color: "blue" },
@@ -5172,8 +5212,8 @@
             </div>
         `;
 
-            container.innerHTML = RenderEngine.layouts.studioPanel({
-                title: `Studio: ${doc.label}`,
+            container.innerHTML = RenderEngine.layouts.assistantPanel({
+                title: `Assistant: ${doc.label}`,
                 searchId: 'mBTDB_Search',
                 searchPlaceholder: 'SEARCH DOCUMENT...',
                 contentId: 'mBTDB_Workspace',
@@ -5223,11 +5263,11 @@
                 tools += `<button type="button" aria-label="Toggle View" data-action="widget-toggle-view" data-id="${widget.id}" class="p-1 rounded transition-colors">${widget.vertical ? this.icons.grid : this.icons.list}</button>`;
             }
             if (widget.type !== 'image') {
-                // Logic Resolution: Enable AI Wand for text-heavy or structural widgets (Hybrid Router)
+                // Logic Resolution: Enable Assistant Wand for text-heavy or structural widgets (Hybrid Router)
                 // Added 'footer' to enable Safety Logic and 'script' awareness for the Parser
-                var isNeural = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script', 'screenplay'].some(function (s) { return (widget.label || '').toLowerCase().includes(s); });
-                var action = isNeural ? 'widget-neural-fill' : 'widget-autofill';
-                var title = isNeural ? 'AI Generate / Parse' : 'Auto-Fill';
+                var isAssistantEnabled = ['richText', 'treatment', 'breakdown', 'footer', 'script'].includes(widget.type) || ['script', 'screenplay'].some(function (s) { return (widget.label || '').toLowerCase().includes(s); });
+                var action = isAssistantEnabled ? 'widget-assistant-fill' : 'widget-autofill';
+                var title = isAssistantEnabled ? 'AI Generate / Parse' : 'Auto-Fill';
                 tools += `<button type="button" aria-label="${title}" data-action="${action}" data-type="${widget.type}" data-doc-id="${doc.id}" data-id="${widget.id}" class="p-1 rounded transition-all" title="${title}">${this.icons.wand}</button>`;
             }
 
@@ -6550,8 +6590,8 @@
             });
         },
 
-        /* Phase 149.1B -- Studio Hub: single-bar blueprint strip + expanded modal */
-        showStudioHub: function () {
+        /* Phase 149.1B -- Assistant Hub: single-bar blueprint strip + expanded modal */
+        showAssistantHub: function () {
             var self = this;
             var content = `
                 <div class="flex flex-col h-[88vh] bg-slate-900 text-white font-sans">
@@ -6587,7 +6627,7 @@
                 </style>
             `;
 
-            mBTME.open('studio-hub', 'Assistant Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
+            mBTME.open('assistant-hub', 'Assistant Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
         },
 
         /* Phase 116: Hub tile trigger -- maps lowercase hub key to BUDGET_TEMPLATES title-case key */
@@ -6638,7 +6678,7 @@
                 if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
                 if (typeof render === 'function') render();
                 if (typeof mBTME !== 'undefined') {
-                    mBTME.close('studio-hub');
+                    mBTME.close('assistant-hub');
                     mBTME.alert('Blueprint Applied', '"' + label + '" structure loaded' + (withRates ? ' with industry rates.' : '.'));
                 }
             }
@@ -6650,7 +6690,7 @@
         },
 
         openTool: function () {
-            this.showStudioHub();
+            this.showAssistantHub();
         }
     };
 
@@ -6756,8 +6796,8 @@
         }
     };
 
-    /* ========= v19.54 ANALYTICS CORTEX (mBT.features.cortex) ========= */
-    mBT.features.cortex = {
+    /* ========= v19.54 ANALYTICS ENGINE (mBT.features.analytics) ========= */
+    mBT.features.analytics = {
         // --- 1. Logic Engine (The Brain) ---
         logic: {
             analyze: function () {
@@ -6904,7 +6944,7 @@
         // --- 2. UI Engine (The Dashboard) ---
         ui: {
             openHub: function () {
-                var analysis = mBT.features.cortex.logic.analyze();
+                var analysis = mBT.features.analytics.logic.analyze();
                 var fmt = mBTLE.format.currency;
 
                 // --- Widget 1: Burn Rate KPI (Compact) ---
@@ -8770,7 +8810,7 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.json';
+            a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.moo';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -10852,7 +10892,7 @@
         mBT.core.action('studio-toggle-edit', function () { return mBTDB.toggleEditMode(); });
 
         mBT.core.action('widget-toggle-view', function (e, el) { return mBTDB.toggleVertical(el.dataset.id); });
-        mBT.core.action('widget-neural-fill', function (e, el) { return mBTDB.neuralFill(el.dataset.id, el.dataset.docId); });
+        mBT.core.action('widget-assistant-fill', function (e, el) { return mBTDB.assistantFill(el.dataset.id, el.dataset.docId); });
         mBT.core.action('widget-autofill', function (e, el) { return mBTDB.autoFillWidget(el.dataset.type, el.dataset.docId); });
         mBT.core.action('widget-delete', function (e, el) { return mBTDB.deleteWidget(el.dataset.id); });
 
