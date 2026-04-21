@@ -35,8 +35,12 @@
 
     /* ---- Top Bar ---- */
     #topbar { height: var(--header-h); background: #0f172a; color: #fff; display: flex; align-items: center; gap: 10px; padding: 0 12px; flex-shrink: 0; }
-    /* --- Tap targets: 44px minimum for all buttons and links --- */
+    /* --- Tap targets: 44px minimum for interactive elements --- */
     button, a { min-height: 44px; }
+    /* Compact mode: tight toolbar when opened from compact budget view */
+    body.compact #preview-toolbar .toolbar-btn,
+    body.compact #preview-toolbar .tab-btn { min-height: unset; }
+    body.compact #preview-toolbar .tab-bar { min-height: unset; }
     #topbar button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
     #topbar button:hover { background: rgba(255,255,255,0.2); }
     #topbar-title { font-size: 12px; font-weight: 700; color: #94a3b8; }
@@ -63,12 +67,12 @@
     #preview-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     /* ---- Toolbar ---- */
-    #preview-toolbar { min-height: 42px; height: auto; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex-shrink: 0; flex-wrap: wrap; }
-    #preview-toolbar-title { font-weight: 700; font-size: 12px; margin-right: 8px; }
-    .tab-bar { display: inline-flex; background: #f1f5f9; border-radius: 5px; padding: 2px; margin-right: auto; }
-    .tab-btn { padding: 3px 12px; font-size: 11px; font-weight: 600; border: none; background: transparent; cursor: pointer; border-radius: 4px; color: var(--muted); }
+    #preview-toolbar { min-height: 28px; height: auto; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 3px; padding: 3px 8px; flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; }
+    #preview-toolbar-title { font-weight: 700; font-size: 11px; margin-right: 6px; }
+    .tab-bar { display: inline-flex; background: #f1f5f9; border-radius: 4px; padding: 2px; margin-right: 4px; flex-shrink: 0; }
+    .tab-btn { padding: 2px 8px; font-size: 10px; font-weight: 700; border: none; background: transparent; cursor: pointer; border-radius: 3px; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
     .tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
-    .toolbar-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text); }
+    .toolbar-btn { display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--border); background: var(--surface); font-size: 10px; font-weight: 700; cursor: pointer; color: var(--text); white-space: nowrap; flex-shrink: 0; }
     .toolbar-btn:hover { background: #f1f5f9; }
     .toolbar-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
     .toolbar-btn.primary:hover { background: var(--primary-h); }
@@ -86,9 +90,9 @@
     #reset-btn:hover { background: #fef2f2; border-color: #fca5a5; color: #dc2626; }
 
     /* ---- Options Bar ---- */
-    #options-bar { min-height: 34px; height: auto; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; padding: 6px 12px; flex-shrink: 0; flex-wrap: wrap; }
-    #options-bar label { font-size: 10px; color: var(--muted); font-weight: 600; }
-    #options-bar select { font-size: 11px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+    #options-bar { min-height: 28px; height: auto; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; padding: 3px 10px; flex-shrink: 0; flex-wrap: wrap; }
+    #options-bar label { font-size: 9px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    #options-bar select { font-size: 10px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; background: #fff; }
 
     /* ---- Preview Frame ---- */
     #preview-frame-wrap { flex: 1; overflow: auto; background: #94a3b8; padding: 14px; display: flex; justify-content: center; }
@@ -100,8 +104,8 @@
     /* ---- Editor Panel ---- */
     #editor-panel { flex: 1; overflow-y: auto; padding: 12px; background: var(--bg); display: none; }
     .ed-section { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
-    .ed-section-hdr { padding: 7px 10px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); border-bottom: 1px solid var(--border); background: #f8fafc; border-radius: 6px 6px 0 0; }
-    .ed-row { display: grid; gap: 6px; padding: 7px 10px; }
+    .ed-section-hdr { padding: 3px 10px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); border-bottom: 1px solid var(--border); background: #f8fafc; border-radius: 6px 6px 0 0; }
+    .ed-row { display: grid; gap: 6px; padding: 4px 10px; }
     .ed-2 { grid-template-columns: 1fr 1fr; }
     .ed-3 { grid-template-columns: 1fr 1fr 1fr; }
     .ed-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
@@ -117,6 +121,7 @@
     .ed-add-btn { margin: 0 10px 8px; padding: 3px 12px; font-size: 10px; font-weight: 600; border: 1px dashed var(--border); background: none; cursor: pointer; border-radius: 4px; color: var(--primary); }
     .ed-add-btn:hover { background: #eff6ff; }
     .ed-del { padding: 0 4px; border: none; background: none; cursor: pointer; color: #cbd5e1; font-size: 13px; line-height: 1; }
+    .ed-computed { padding: 4px 7px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; font-weight: 700; color: #334155; min-height: 26px; }
     .ed-del:hover { color: #ef4444; }
 
     /* ---- Rate / Currency ---- */
@@ -220,11 +225,10 @@
       .ed-2, .ed-3, .ed-4, .ed-5 { grid-template-columns: 1fr; }
       .ed-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
       #options-bar { flex-wrap: wrap; gap: 4px; }
-      /* Toolbar: primary actions only; overflow menu for the rest */
-      #preview-toolbar { overflow-x: visible; flex-wrap: wrap; }
-      #overflow-btns { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 2px solid var(--border); padding: 10px; flex-wrap: wrap; gap: 6px; z-index: 200; box-shadow: 0 -4px 12px rgba(0,0,0,0.10); }
-      #overflow-btns.open { display: flex; }
-      #btn-more-overflow { display: inline-flex; }
+      /* Toolbar: scrollable single row on mobile, no wrapping */
+      #preview-toolbar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+      #overflow-btns { display: contents; }
+      #btn-more-overflow { display: none; }
       /* Touch-sized table inputs — 16px font prevents iOS auto-zoom on focus */
       .ed-tbl-wrap input,
       .ed-tbl-wrap select,
@@ -293,14 +297,6 @@
           <span class="lbl">AI Fill</span>
         </button>
         <div id="overflow-btns">
-          <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-            <span class="lbl">XLSX</span>
-          </button>
-          <button class="toolbar-btn" id="btn-csv" title="Export CSV">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-            <span class="lbl">CSV</span>
-          </button>
           <button class="toolbar-btn" id="btn-snapshot" title="Save budget snapshot for comparison">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span class="lbl">Snapshot</span>
@@ -309,11 +305,11 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span class="lbl">Package</span>
           </button>
-          <button class="toolbar-btn" id="btn-all-financial" title="Export all 5 financial documents as one PDF (Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash)">
+          <button class="toolbar-btn" id="btn-all-financial" title="Export all 5 financial documents as one PDF">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
             <span class="lbl">All Financial</span>
           </button>
-          <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout — no images required)">
+          <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
             <span class="lbl">PDF (Alt)</span>
           </button>
@@ -321,18 +317,26 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             <span class="lbl">HTML</span>
           </button>
+          <button class="toolbar-btn" id="btn-print" title="Print">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            <span class="lbl">Print</span>
+          </button>
+          <button class="toolbar-btn" id="btn-share" title="Share document">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span class="lbl">Share</span>
+          </button>
+          <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+            <span class="lbl">XLSX</span>
+          </button>
+          <button class="toolbar-btn" id="btn-csv" title="Export CSV">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+            <span class="lbl">CSV</span>
+          </button>
         </div>
         <button class="toolbar-btn" id="btn-more-overflow" title="More export options" aria-label="More export options">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
           <span class="lbl">More</span>
-        </button>
-        <button class="toolbar-btn" id="btn-print" title="Print">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-          <span class="lbl">Print</span>
-        </button>
-        <button class="toolbar-btn" id="btn-share" title="Share document">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          <span class="lbl">Share</span>
         </button>
         <button class="toolbar-btn primary" id="btn-pdf" title="Export PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -410,10 +414,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Mobile breakpoint helper */
   function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
 
-  /* Compact icon-only toolbar: on mobile, or when user enabled compactMode in settings */
+  /* Compact icon-only toolbar: on mobile, URL param, or when user enabled compactMode in settings */
+  var _urlCompact = new URLSearchParams(window.location.search).get('compact') === '1';
   function applyCompactMode() {
-    var prefer = !!(budget && budget.settings && budget.settings.compactMode);
-    var shouldCompact = prefer || isMobile();
+    /* Compact only from explicit setting — not from mobile detection.
+       Mobile uses scrollable toolbar instead, labels must remain visible. */
+    var shouldCompact = _urlCompact || !!(budget && budget.settings && budget.settings.compactMode);
     document.body.classList.toggle('compact', shouldCompact);
   }
   window.addEventListener('resize', function () { applyCompactMode(); });
@@ -455,10 +461,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Phase 149.2: Templates supporting generic AI Fill + list of AI-eligible fields per template.
      Only fields listed here will be sent for AI completion (others are budget-pull / user-entered). */
   var AI_FILL_TEMPLATES = {
-    fundingPackage: ['logline', 'genre', 'format', 'synopsis', 'director', 'producer', 'writer'],
-    callSheet:      ['weather', 'notes', 'safetyNote'],
-    crewList:       ['notes'],
-    pitchDeck:      ['logline', 'synopsis', 'targetMarket', 'comparables', 'directorStatement', 'directorBio', 'useOfFunds']
+    fundingPackage:    ['logline', 'genre', 'format', 'synopsis', 'director', 'producer', 'writer'],
+    callSheet:         ['weather', 'notes', 'safetyNote'],
+    crewList:          ['notes'],
+    pitchDeck:         ['logline', 'synopsis', 'targetMarket', 'comparables', 'directorStatement', 'directorBio', 'useOfFunds'],
+    crewDealMemo:      ['role', 'department', 'terms', 'creditName', 'creditBilling'],
+    talentAgreement:   ['roleDescription', 'territory', 'media', 'rightsDuration', 'exclusivityPeriod', 'terms'],
+    locationAgreement: ['propertyDescription', 'accessInstructions', 'terms'],
+    appearanceRelease: ['sceneDescription', 'terms'],
+    nda:               ['projectDescription', 'governingLaw', 'terms']
   };
 
   /* Templates that support XLSX export */
@@ -1434,6 +1445,94 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   });
 
   /* ======== Editor Data Persistence ======== */
+  /* Universal budget-pull: silently fills standard fields from budget on every template load.
+     Only fills blank fields — never overwrites user-entered data. */
+  function applyBudgetDefaults(templateId) {
+    if (!budget || !editorData) return;
+    var d = editorData;
+    var changed = false;
+    function _set(k, v) { if (v && (!d[k] || d[k] === '')) { d[k] = v; changed = true; } }
+
+    /* Universal fields present on almost every template */
+    _set('productionTitle',   budget.projectName);
+    _set('productionCompany', budget.projectCompany || budget.company);
+    _set('production',        budget.projectName);   /* alias used by some templates */
+    _set('projectTitle',      budget.projectName);   /* pitchDeck */
+    _set('currency',          budget.displayCurrency || 'JMD');
+
+    /* ATL crew scan */
+    var _crew = { director: '', producer: '', writer: '', dp: '', firstAd: '', upm: '' };
+    Object.keys(budget.sections || {}).forEach(function(sk) {
+      (budget.sections[sk].items || []).forEach(function(item) {
+        var desc = (item.description || '').toLowerCase();
+        var name = (item.crew && item.crew.name) || '';
+        if (!name) return;
+        if (!_crew.director  && desc.indexOf('director') > -1 && desc.indexOf('art') < 0 && desc.indexOf('photography') < 0) _crew.director = name;
+        else if (!_crew.producer && desc.indexOf('producer') > -1 && desc.indexOf('line') < 0) _crew.producer = name;
+        else if (!_crew.writer   && (desc.indexOf('writer') > -1 || desc.indexOf('screenplay') > -1)) _crew.writer = name;
+        else if (!_crew.dp       && (desc.indexOf('dp') === 0 || desc.indexOf('director of photography') > -1 || desc.indexOf('cinematograph') > -1)) _crew.dp = name;
+        else if (!_crew.firstAd  && (desc.indexOf('1st ad') > -1 || desc.indexOf('first ad') > -1)) _crew.firstAd = name;
+        else if (!_crew.upm      && (desc.indexOf('upm') > -1 || desc.indexOf('unit production') > -1 || desc.indexOf('line producer') > -1)) _crew.upm = name;
+      });
+    });
+    var _placeholders = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'copywriter', '1st ad', 'upm'];
+    function _crewSet(k, v) {
+      if (!v) return;
+      var cur = (d[k] || '').trim().toLowerCase();
+      if (!cur || _placeholders.indexOf(cur) > -1) { d[k] = v; changed = true; }
+    }
+    _crewSet('director',  _crew.director);
+    _crewSet('producer',  _crew.producer);
+    _crewSet('producers', _crew.producer);  /* callSheet uses 'producers' */
+    _crewSet('writer',    _crew.writer);
+    _crewSet('dp',        _crew.dp);
+    _crewSet('firstAd',   _crew.firstAd);
+    _crewSet('upm',       _crew.upm);
+    /* Producer name for signature fields */
+    _crewSet('producerName', _crew.producer);
+
+    /* Financial totals */
+    var grandTotal = budget.grandTotal || 0;
+    var grandActual = budget.grandTotalActual || 0;
+    _set('totalBudget',   grandTotal  ? String(grandTotal)  : '');
+    _set('budgetedTotal', grandTotal  ? String(grandTotal)  : '');
+    _set('actualTotal',   grandActual ? String(grandActual) : '');
+    _set('fundingToDate', grandActual ? String(grandActual) : '');
+
+    /* Petty cash float from ledger */
+    if (budget.ledgers && budget.ledgers.pettyCash) _set('floatAmount', String(budget.ledgers.pettyCash));
+
+    /* Wrap report: section breakdown */
+    if (templateId === 'wrapReport' && grandTotal && (!d.sections || !d.sections.length)) {
+      d.sections = Object.keys(budget.sections || {}).map(function(k) {
+        var sec = budget.sections[k];
+        return { section: k, budgeted: String(sec.total || 0), actual: '0', variance: String(-(sec.total || 0)) };
+      });
+      if (d.sections.length) changed = true;
+    }
+
+    /* Crew list: populate from budget if empty */
+    if (templateId === 'crewList' && (!d.crew || !d.crew.length)) {
+      var crewRows = [];
+      Object.keys(budget.sections || {}).forEach(function(sk) {
+        (budget.sections[sk].items || []).forEach(function(item) {
+          var name = (item.crew && item.crew.name) || '';
+          if (!name) return;
+          crewRows.push({
+            department: sk, name: name, role: item.description || '',
+            rate: String(item.rate || ''), rateUnit: item.unit || 'Day',
+            phone: (item.crew && item.crew.phone) || '',
+            email: (item.crew && item.crew.email) || '',
+            union: '', emergencyContact: '', emergencyPhone: ''
+          });
+        });
+      });
+      if (crewRows.length) { d.crew = crewRows; changed = true; }
+    }
+
+    if (changed) saveEditorData();
+  }
+
   function loadEditorData(templateId, cb) {
     var key = storageKey(templateId);
     localforage.getItem(key).then(function (saved) {
@@ -1443,10 +1542,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var tmpl = pub.templates[templateId];
         editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
       }
+      applyBudgetDefaults(templateId);
       cb();
     }).catch(function () {
       var tmpl = pub.templates[templateId];
       editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
+      applyBudgetDefaults(templateId);
       cb();
     });
   }
@@ -1717,7 +1818,28 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '<td><button class="ed-del" data-arr="background" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="background">+ Add Background</button></div>';
-    /* Section 7: Department Notes */
+    /* Section 7: Vehicle Assignments */
+    html += '<div class="ed-section"><div class="ed-section-hdr">Vehicle Assignments</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-vehicles"><thead><tr>' +
+      '<th>Vehicle / Driver</th><th style="width:80px;">Type</th><th>Passengers / Cargo</th>' +
+      '<th style="width:100px;">Pickup Location</th><th style="width:70px;">Pickup Time</th>' +
+      '<th style="width:100px;">Destination</th><th style="width:70px;">ETA</th><th></th>' +
+      '</tr></thead><tbody>';
+    (d.vehicles || []).forEach(function (v, i) {
+      html += '<tr>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="driver" value="' + esc(v.driver) + '" placeholder="Driver name"></td>' +
+        '<td><select data-arr="vehicles" data-i="' + i + '" data-f="type" style="font-size:10px;padding:2px;">' +
+        ['Van','Car','Truck','Minibus','Bike','Other'].map(function(t){ return '<option value="' + t + '"' + (v.type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+        '</select></td>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="passengers" value="' + esc(v.passengers) + '"></td>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="pickupLocation" value="' + esc(v.pickupLocation) + '"></td>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="pickupTime" type="time" value="' + esc(v.pickupTime) + '"></td>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="destination" value="' + esc(v.destination) + '"></td>' +
+        '<td><input data-arr="vehicles" data-i="' + i + '" data-f="eta" type="time" value="' + esc(v.eta) + '"></td>' +
+        '<td><button class="ed-del" data-arr="vehicles" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="vehicles">+ Add Vehicle</button></div>';
+    /* Section 8: Department Notes */
     html += '<div class="ed-section"><div class="ed-section-hdr">Department Notes</div>' +
       '<div class="ed-row ed-2">' + fld('deptNotes.camera', 'Camera') + fld('deptNotes.ge', 'G&E') + '</div>' +
       '<div class="ed-row ed-2">' + fld('deptNotes.artProps', 'Art / Props') + fld('deptNotes.wardrobeFx', 'Wardrobe / FX') + '</div>' +
@@ -1764,24 +1886,45 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   function buildPettyCashHtml(d) {
+    var float = parseFloat(d.floatAmount) || 0;
+    var running = float;
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Log Header</div>' +
       '<div class="ed-row">' + fld('productionTitle', 'Production Title', null, true) + '</div>' +
-      '<div class="ed-row ed-3">' + fld('department', 'Department') + fld('custodian', 'Custodian') + fld('floatAmount', 'Float Amount') + '</div>' +
-      '<div class="ed-row">' + fld('dateRange', 'Date Range', null, true) + '</div>' +
+      '<div class="ed-row ed-4">' + fld('department', 'Department') + fld('custodian', 'Custodian') + fld('floatAmount', 'Float Amount') + fld('currency', 'Currency') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('periodStart', 'Period Start', 'date') + fld('periodEnd', 'Period End', 'date') + '</div>' +
       '</div>';
+    var totalSpent = (d.entries || []).reduce(function(s, e) { return s + (parseFloat(e.amount) || 0); }, 0);
+    var balance = float - totalSpent;
+    html += '<div class="ed-section"><div class="ed-section-hdr">Summary</div>' +
+      '<div class="ed-row ed-3">' +
+      '<div class="ed-field"><label>Float</label><div class="ed-computed">' + (float ? float.toFixed(2) : '—') + '</div></div>' +
+      '<div class="ed-field"><label>Total Spent</label><div class="ed-computed" style="color:var(--rose);">' + totalSpent.toFixed(2) + '</div></div>' +
+      '<div class="ed-field"><label>Balance</label><div class="ed-computed" style="color:' + (balance < 0 ? 'var(--rose)' : 'var(--emerald)') + ';">' + balance.toFixed(2) + '</div></div>' +
+      '</div></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Entries</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th style="width:105px;">Date</th><th>Description</th><th style="width:100px;">Category</th><th style="width:100px;">Amount</th><th style="width:80px;">Receipt #</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr>' +
+      '<th style="width:105px;">Date</th><th>Description</th><th style="width:100px;">Category</th>' +
+      '<th style="width:90px;">Amount</th><th style="width:90px;">Balance</th><th style="width:75px;">Receipt #</th>' +
+      '<th style="width:70px;">Approved</th><th></th>' +
+      '</tr></thead><tbody>';
     (d.entries || []).forEach(function (e, i) {
+      running -= (parseFloat(e.amount) || 0);
       html += '<tr>' +
         '<td><input data-arr="entries" data-i="' + i + '" data-f="date" type="date" value="' + esc(e.date) + '"></td>' +
         '<td><input data-arr="entries" data-i="' + i + '" data-f="description" value="' + esc(e.description) + '"></td>' +
         '<td><input data-arr="entries" data-i="' + i + '" data-f="category" value="' + esc(e.category) + '"></td>' +
-        '<td><input data-arr="entries" data-i="' + i + '" data-f="amount" value="' + esc(e.amount) + '"></td>' +
-        '<td><input data-arr="entries" data-i="' + i + '" data-f="receiptNum" value="' + esc(e.receiptNum) + '" style="width:60px;"></td>' +
+        '<td><input data-arr="entries" data-i="' + i + '" data-f="amount" value="' + esc(e.amount) + '" style="text-align:right;"></td>' +
+        '<td style="text-align:right;font-weight:700;color:' + (running < 0 ? '#ef4444' : '#059669') + ';">' + running.toFixed(2) + '</td>' +
+        '<td><input data-arr="entries" data-i="' + i + '" data-f="receiptNum" value="' + esc(e.receiptNum) + '"></td>' +
+        '<td><input data-arr="entries" data-i="' + i + '" data-f="approvedBy" value="' + esc(e.approvedBy) + '"></td>' +
         '<td><button class="ed-del" data-arr="entries" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="entries">+ Add Entry</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Reconciliation</div>' +
+      '<div class="ed-row ed-3">' + fld('cashOnHand', 'Cash on Hand') + fld('reconciliationDate', 'Reconciliation Date', 'date') + fld('reconciledBy', 'Reconciled By') + '</div>' +
+      '<div class="ed-row">' + fld('reconciliationNotes', 'Notes', 'textarea') + '</div>' +
+      '</div>';
     return html;
   }
 
@@ -1819,22 +1962,44 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function buildCrewListHtml(d) {
     var html = '';
-    html += '<div class="ed-section"><div class="ed-section-hdr">List Header</div>' +
-      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('date', 'Date', 'date') + '</div>' +
+    html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
+      '<div class="ed-row ed-3">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + fld('date', 'Date', 'date') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('director', 'Director') + fld('producer', 'Producer') + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Crew</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th style="width:130px;">Department</th><th>Name</th><th style="width:130px;">Role</th><th style="width:110px;">Phone</th><th>Email</th><th style="width:70px;">Notes</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr>' +
+      '<th style="width:120px;">Department</th>' +
+      '<th>Name</th>' +
+      '<th style="width:120px;">Role</th>' +
+      '<th style="width:80px;">Rate</th>' +
+      '<th style="width:60px;">Unit</th>' +
+      '<th style="width:80px;">Union</th>' +
+      '<th style="width:110px;">Phone</th>' +
+      '<th>Email</th>' +
+      '<th style="width:110px;">Emergency Contact</th>' +
+      '<th style="width:110px;">Emergency Phone</th>' +
+      '<th></th>' +
+      '</tr></thead><tbody>';
     (d.crew || []).forEach(function (m, i) {
       html += '<tr>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="department" value="' + esc(m.department) + '"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="name" value="' + esc(m.name) + '"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="role" value="' + esc(m.role) + '"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="rate" value="' + esc(m.rate) + '" style="width:70px;text-align:right;"></td>' +
+        '<td><select data-arr="crew" data-i="' + i + '" data-f="rateUnit" style="font-size:10px;padding:2px;">' +
+        ['Day','Week','Flat','Hour'].map(function(u){ return '<option value="' + u + '"' + (m.rateUnit === u ? ' selected' : '') + '>' + u + '</option>'; }).join('') +
+        '</select></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="union" value="' + esc(m.union) + '" style="width:70px;" placeholder="N/A"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="phone" value="' + esc(m.phone) + '"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="email" value="' + esc(m.email) + '"></td>' +
-        '<td><input data-arr="crew" data-i="' + i + '" data-f="notes" value="' + esc(m.notes) + '" style="width:60px;"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="emergencyContact" value="' + esc(m.emergencyContact) + '"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="emergencyPhone" value="' + esc(m.emergencyPhone) + '"></td>' +
         '<td><button class="ed-del" data-arr="crew" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="crew">+ Add Crew Member</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Notes</div>' +
+      '<div class="ed-row">' + fld('notes', 'General Notes', 'textarea') + '</div>' +
+      '</div>';
     return html;
   }
 
@@ -2220,20 +2385,36 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('date', 'Date', 'date') + fld('shootLocation', 'Shoot Location') + '</div></div>';
-    html += '<div class="ed-section"><div class="ed-section-hdr">Releasor</div>' +
-      '<div class="ed-row">' + fld('releasorName', 'Full Name', null, true) + '</div>' +
+      '<div class="ed-row ed-3">' + fld('date', 'Date', 'date') + fld('shootLocation', 'Shoot Location') + fld('director', 'Director') + '</div>' +
+      '</div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Releasor / Talent</div>' +
+      '<div class="ed-row ed-2">' + fld('releasorName', 'Full Name', null, true) + fld('releasorId', 'ID / Passport #') + '</div>' +
       '<div class="ed-row">' + fld('releasorAddress', 'Address', null, true) + '</div>' +
-      '<div class="ed-row ed-2">' + fld('releasorPhone', 'Phone') + fld('sceneDescription', 'Scene Description') + '</div></div>';
+      '<div class="ed-row ed-3">' + fld('releasorPhone', 'Phone') + fld('releasorEmail', 'Email') + fld('releasorDob', 'Date of Birth', 'date') + '</div>' +
+      '<div class="ed-row">' + fld('sceneDescription', 'Scene / Role Description', 'textarea') + '</div>' +
+      '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Compensation</div>' +
-      '<div class="ed-row ed-2">' +
+      '<div class="ed-row ed-3">' +
       '<div class="ed-field"><label>Type</label><select data-key="compensationType">' +
-      ['Gratis', 'Flat Fee', 'Day Rate'].map(function(v) { return '<option value="' + v + '"' + (d.compensationType === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      ['Gratis', 'Flat Fee', 'Day Rate', 'Deferred'].map(function(v) { return '<option value="' + v + '"' + (d.compensationType === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
       '</select></div>' +
-      fld('compensationAmount', 'Amount') + '</div></div>';
+      fld('compensationAmount', 'Amount') + fld('paymentDate', 'Payment Date', 'date') + '</div>' +
+      '</div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Rights Granted</div>' +
+      '<div class="ed-row ed-3">' +
+      '<div class="ed-field"><label>Media</label><select data-key="media">' +
+      ['All Media', 'Film / TV', 'Online / Social', 'Print', 'Out of Home'].map(function(v) { return '<option value="' + v + '"' + (d.media === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="ed-field"><label>Territory</label><select data-key="territory">' +
+      ['Worldwide', 'Caribbean', 'Jamaica Only', 'North America'].map(function(v) { return '<option value="' + v + '"' + (d.territory === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      fld('rightsDuration', 'Duration (e.g. 2 years)') + '</div>' +
+      '<div class="ed-row">' + fld('usageNotes', 'Specific Usage Notes', 'textarea') + '</div>' +
+      '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Release Terms</div>' +
       '<div class="ed-row">' + fld('terms', 'Terms & Consent', 'textarea', true) + '</div>' +
-      '<div class="ed-row">' + fld('witnessName', 'Witness Name') + '</div></div>';
+      '<div class="ed-row ed-2">' + fld('witnessName', 'Witness Name') + fld('witnessPhone', 'Witness Phone') + '</div>' +
+      '</div>';
     return html;
   }
 
@@ -2314,17 +2495,31 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function buildNdaHtml(d) {
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Disclosing Party (Production)</div>' +
-      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Company Name') + '</div>' +
-      '<div class="ed-row">' + fld('productionCompanyAddress', 'Company Address', null, true) + '</div></div>';
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production / Project Title') + fld('productionCompany', 'Company Name') + '</div>' +
+      '<div class="ed-row">' + fld('productionCompanyAddress', 'Company Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('disclosingRepName', 'Authorized Representative') + fld('disclosingRepTitle', 'Title') + '</div>' +
+      '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Receiving Party</div>' +
-      '<div class="ed-row">' + fld('recipientName', 'Full Name', null, true) + '</div>' +
-      '<div class="ed-row ed-2">' + fld('recipientTitle', 'Title / Role') + fld('recipientAddress', 'Address') + '</div></div>';
+      '<div class="ed-row ed-2">' + fld('recipientName', 'Full Name', null, true) + fld('recipientCompany', 'Company (if applicable)') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('recipientTitle', 'Title / Role') + fld('recipientPhone', 'Phone') + '</div>' +
+      '<div class="ed-row">' + fld('recipientAddress', 'Address') + '</div>' +
+      '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Agreement Details</div>' +
-      '<div class="ed-row ed-3">' + fld('effectiveDate', 'Effective Date', 'date') + fld('expirationDate', 'Expiration Date', 'date') + fld('governingLaw', 'Governing Law') + '</div>' +
-      '<div class="ed-row">' + fld('projectDescription', 'Project Description', 'textarea', true) + '</div></div>';
-    html += '<div class="ed-section"><div class="ed-section-hdr">Terms</div>' +
+      '<div class="ed-row ed-3">' + fld('effectiveDate', 'Effective Date', 'date') + fld('expirationDate', 'Expiration Date', 'date') + fld('governingLaw', 'Governing Law / Jurisdiction') + '</div>' +
+      '<div class="ed-row">' + fld('projectDescription', 'Project Description & Confidential Information', 'textarea', true) + '</div>' +
+      '<div class="ed-row ed-2">' +
+      '<div class="ed-field"><label>Disclosure Purpose</label><select data-key="disclosurePurpose">' +
+      ['Funding / Investment', 'Co-Production', 'Distribution', 'Crew / Vendor Engagement', 'General Development'].map(function(v) { return '<option value="' + v + '"' + (d.disclosurePurpose === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="ed-field"><label>Return of Materials</label><select data-key="returnMaterials">' +
+      ['Upon Request', 'Upon Expiry', 'Destroy on Request', 'Not Applicable'].map(function(v) { return '<option value="' + v + '"' + (d.returnMaterials === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') +
+      '</select></div>' +
+      '</div>' +
+      '</div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Terms & Signatures</div>' +
       '<div class="ed-row">' + fld('terms', 'Terms & Conditions', 'textarea', true) + '</div>' +
-      '<div class="ed-row">' + fld('witnessName', 'Witness Name') + '</div></div>';
+      '<div class="ed-row ed-2">' + fld('witnessName', 'Witness Name') + fld('witnessPhone', 'Witness Phone') + '</div>' +
+      '</div>';
     return html;
   }
 
@@ -2531,8 +2726,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       background: { quantity: '', description: '', callTime: '' },
       shootingLocations: { address: '', notes: '' },
       items: { description: '', quantity: '1', unitPrice: '', total: '' },
-      entries: { date: new Date().toISOString().split('T')[0], description: '', category: '', amount: '', receiptNum: '' },
-      crew: { department: '', name: '', role: '', phone: '', email: '', notes: '' },
+      entries: { date: new Date().toISOString().split('T')[0], description: '', category: '', amount: '', receiptNum: '', approvedBy: '' },
+      crew: { department: '', name: '', role: '', rate: '', rateUnit: 'Day', union: '', phone: '', email: '', emergencyContact: '', emergencyPhone: '' },
+      vehicles: { driver: '', type: 'Van', passengers: '', pickupLocation: '', pickupTime: '', destination: '', eta: '' },
       delays: { duration: '', reason: '' },
       equipment: { description: '', serialNum: '', replacementValue: '', rentalRate: '', rateType: 'Daily' },
       sources: { name: '', committed: '', pending: '', status: 'Pending' },
@@ -2709,11 +2905,37 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!activeTemplateId || !AI_FILL_TEMPLATES[activeTemplateId]) return;
     if (_aiFillPending) return;
 
-    /* Back-compat: fundingPackage uses the richer autoPopulateFundingPackage flow
-       (budget-pull for ATL crew + AI cascade for narrative fields) */
+    /* Back-compat: fundingPackage uses the richer autoPopulateFundingPackage flow */
     if (activeTemplateId === 'fundingPackage') { autoPopulateFundingPackage(); return; }
 
-    /* Find blank eligible fields on current editorData */
+    /* --- Budget-pull: always fill crew/project fields directly from budget (no AI needed) --- */
+    var _jobTitlePlaceholders = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'copywriter'];
+    function _isPlaceholder(v) { return !v || _jobTitlePlaceholders.indexOf(v.trim().toLowerCase()) > -1; }
+
+    if (budget && budget.sections) {
+      var _crewFound = { director: '', producer: '', writer: '', dp: '' };
+      Object.keys(budget.sections).forEach(function(sk) {
+        (budget.sections[sk].items || []).forEach(function(item) {
+          var d = (item.description || '').toLowerCase();
+          var crew = item.crew || {};
+          var name = crew.name || (crew.firstName ? (crew.firstName + ' ' + (crew.lastName || '')).trim() : '') || '';
+          if (!name) return;
+          if (!_crewFound.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) _crewFound.director = name;
+          else if (!_crewFound.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) _crewFound.producer = name;
+          else if (!_crewFound.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) _crewFound.writer = name;
+          else if (!_crewFound.dp && (d.indexOf('dp') === 0 || d.indexOf('director of photography') > -1 || d.indexOf('cinematograph') > -1)) _crewFound.dp = name;
+        });
+      });
+      var _budgetChanged = false;
+      ['director','producer','writer','dp'].forEach(function(k) {
+        if (_crewFound[k] && _isPlaceholder(editorData[k])) { editorData[k] = _crewFound[k]; _budgetChanged = true; }
+      });
+      if (!editorData.productionTitle && budget.projectName) { editorData.productionTitle = budget.projectName; _budgetChanged = true; }
+      if (!editorData.productionCompany && (budget.projectCompany || budget.company)) { editorData.productionCompany = budget.projectCompany || budget.company; _budgetChanged = true; }
+      if (_budgetChanged) { saveEditorData(); buildEditor(activeTemplateId); }
+    }
+
+    /* Find blank eligible fields — crew fields already filled above are excluded */
     var eligible = AI_FILL_TEMPLATES[activeTemplateId];
     var blanks = [];
     for (var i = 0; i < eligible.length; i++) {
@@ -2744,17 +2966,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Inline context gives the AI the typed-in fields it already has (even if blank for target
        fields, these hint at other known values like director, location, etc.) */
+    /* Scrub placeholder job titles from context so AI doesn't use them as real names */
+    function _scrub(v) { return (v && _jobTitlePlaceholders.indexOf(v.trim().toLowerCase()) === -1) ? v : ''; }
     var ctx = {
       projectName:       editorData && editorData.productionTitle,
       productionCompany: editorData && editorData.productionCompany,
-      director:          editorData && editorData.director,
-      producer:          editorData && (editorData.producer || editorData.producers),
-      writer:            editorData && editorData.writer,
+      director:          _scrub(editorData && editorData.director),
+      producer:          _scrub(editorData && (editorData.producer || editorData.producers)),
+      writer:            _scrub(editorData && editorData.writer),
       location:          budget.projectLocation || '',
       jurisdiction:      (budget.jurisdiction && budget.jurisdiction.name) || ''
     };
 
-    var timeout = setTimeout(function () { cleanup(); alert('AI Fill timed out.'); }, 30000);
+    var timeout = setTimeout(function () { cleanup(); alert('AI Fill timed out. If using a local model, it may need more time — try again.'); }, 120000);
 
     function cleanup() {
       _aiFillPending = false;
@@ -2769,6 +2993,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (e.data.requestId !== requestId) return;
       cleanup();
       var r = e.data.payload || {};
+      if (r._error === 'no-api-key') {
+        alert('AI Fill requires an API key. Go to Settings \u2192 AI Provider to configure one.');
+        return;
+      }
+      if (r._error) {
+        alert('AI Fill failed: ' + r._error);
+        return;
+      }
       var changed = false;
       blanks.forEach(function (k) {
         if (r[k] != null && String(r[k]).trim() !== '' && (!editorData[k] || String(editorData[k]).trim() === '')) {
@@ -2806,22 +3038,32 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!editorData.productionCompany && (budget.projectCompany || budget.company)) {
       editorData.productionCompany = budget.projectCompany || budget.company; changed = true;
     }
-    /* ATL crew scan (reuse same pattern as call sheet) */
+    /* ATL crew scan — prefer assigned crew name, fall back to contact fields */
     var found = { director: '', producer: '', writer: '', dp: '' };
     Object.keys(budget.sections || {}).forEach(function (k) {
       var sec = budget.sections[k];
       (sec.items || []).forEach(function (item) {
         var d = (item.description || '').toLowerCase();
-        var person = (item.crew && item.crew.name) || '';
-        if (!person) return;
-        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) found.director = person;
-        else if (!found.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) found.producer = person;
-        else if (!found.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) found.writer = person;
-        else if (!found.dp && (d.indexOf('dp') === 0 || d.indexOf('cinematograph') > -1 || d.indexOf('director of photography') > -1)) found.dp = person;
+        /* Crew name from assigned contact, or contact.name, or contact.firstName + lastName */
+        var crew = item.crew || {};
+        var person = crew.name || (crew.firstName ? (crew.firstName + ' ' + (crew.lastName || '')).trim() : '') || crew.email || '';
+        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) {
+          if (person) found.director = person;
+        } else if (!found.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) {
+          if (person) found.producer = person;
+        } else if (!found.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) {
+          if (person) found.writer = person;
+        } else if (!found.dp && (d.indexOf('dp') === 0 || d.indexOf('cinematograph') > -1 || d.indexOf('director of photography') > -1)) {
+          if (person) found.dp = person;
+        }
       });
     });
+    /* Overwrite if blank OR if value looks like a placeholder job title (not a real name) */
+    var jobTitles = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'director of photography'];
     ['director','producer','writer','dp'].forEach(function (k) {
-      if (found[k] && !editorData[k]) { editorData[k] = found[k]; changed = true; }
+      var existing = (editorData[k] || '').trim().toLowerCase();
+      var isPlaceholder = !existing || jobTitles.indexOf(existing) > -1;
+      if (found[k] && isPlaceholder) { editorData[k] = found[k]; changed = true; }
     });
 
     if (changed) { saveEditorData(); }
