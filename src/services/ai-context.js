@@ -75,50 +75,59 @@
 
     /* --- 2. BUDGET PATTERN ANALYSIS --- */
 
-    async function analyzeBudgetPatterns() {
-        var s = window.mBT.storage;
-        var projects = await s.getAllProjects();
-        var allocations = [];
-        for (var i = 0; i < projects.length; i++) {
-            var execs = await s.getExecutionsByProject(projects[i].id);
-            allocations = allocations.concat(execs);
+    function analyzeBudgetPatterns() {
+        var s = window.mBT && window.mBT.storage;
+        if (!s || typeof s.getAllProjects !== 'function') {
+            return Promise.resolve({ categoryDistribution: {}, outliers: [], recommendations: [] });
         }
-
-        if (allocations.length === 0) {
-            return { categoryDistribution: {}, outliers: [], recommendations: [] };
-        }
-
-        var categoryTotals = {};
-        var totalSpent = 0;
-        allocations.forEach(function (alloc) {
-            var cat = alloc.category || 'misc';
-            var amt = parseFloat(alloc.amount || 0);
-            categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
-            totalSpent += amt;
-        });
-
-        var categoryDistribution = {};
-        Object.keys(categoryTotals).forEach(function (cat) {
-            categoryDistribution[cat] = {
-                amount: categoryTotals[cat],
-                percentage: totalSpent > 0 ? ((categoryTotals[cat] / totalSpent) * 100).toFixed(1) : '0.0'
-            };
-        });
-
-        var values = Object.values(categoryTotals);
-        var mean = values.reduce(function (a, b) { return a + b; }, 0) / (values.length || 1);
-        var variance = values.reduce(function (sum, v) { return sum + Math.pow(v - mean, 2); }, 0) / (values.length || 1);
-        var stdDev = Math.sqrt(variance);
-        var outliers = Object.keys(categoryTotals).filter(function (c) { return Math.abs(categoryTotals[c] - mean) > 3 * stdDev; });
-
-        var recommendations = [];
-        Object.keys(categoryDistribution).forEach(function (cat) {
-            if (parseFloat(categoryDistribution[cat].percentage) > 30) {
-                recommendations.push({ category: cat, recommendation: cat + ' is ' + categoryDistribution[cat].percentage + '% of budget — review allocation' });
+        return s.getAllProjects().then(function (projects) {
+            projects = projects || [];
+            var execReads = projects.map(function (p) {
+                return s.getExecutionsByProject(p.id).catch(function () { return []; });
+            });
+            return Promise.all(execReads);
+        }).then(function (execGroups) {
+            var allocations = [];
+            for (var i = 0; i < execGroups.length; i++) {
+                allocations = allocations.concat(execGroups[i] || []);
             }
-        });
 
-        return { categoryDistribution: categoryDistribution, outliers: outliers, recommendations: recommendations };
+            if (allocations.length === 0) {
+                return { categoryDistribution: {}, outliers: [], recommendations: [] };
+            }
+
+            var categoryTotals = {};
+            var totalSpent = 0;
+            allocations.forEach(function (alloc) {
+                var cat = alloc.category || 'misc';
+                var amt = parseFloat(alloc.amount || 0);
+                categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
+                totalSpent += amt;
+            });
+
+            var categoryDistribution = {};
+            Object.keys(categoryTotals).forEach(function (cat) {
+                categoryDistribution[cat] = {
+                    amount: categoryTotals[cat],
+                    percentage: totalSpent > 0 ? ((categoryTotals[cat] / totalSpent) * 100).toFixed(1) : '0.0'
+                };
+            });
+
+            var values = Object.keys(categoryTotals).map(function (k) { return categoryTotals[k]; });
+            var mean = values.reduce(function (a, b) { return a + b; }, 0) / (values.length || 1);
+            var variance = values.reduce(function (sum, v) { return sum + Math.pow(v - mean, 2); }, 0) / (values.length || 1);
+            var stdDev = Math.sqrt(variance);
+            var outliers = Object.keys(categoryTotals).filter(function (c) { return Math.abs(categoryTotals[c] - mean) > 3 * stdDev; });
+
+            var recommendations = [];
+            Object.keys(categoryDistribution).forEach(function (cat) {
+                if (parseFloat(categoryDistribution[cat].percentage) > 30) {
+                    recommendations.push({ category: cat, recommendation: cat + ' is ' + categoryDistribution[cat].percentage + '% of budget — review allocation' });
+                }
+            });
+
+            return { categoryDistribution: categoryDistribution, outliers: outliers, recommendations: recommendations };
+        });
     }
 
     /* --- 3. RISK ASSESSMENT --- */

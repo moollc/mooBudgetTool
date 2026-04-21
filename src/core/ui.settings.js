@@ -206,8 +206,8 @@
                 'anthropic': 'https://console.anthropic.com/settings/keys',
                 'lmstudio': '#'
             };
-            var storedLmEndpoint = localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1/chat/completions';
-            var storedLmModel = localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || 'local-model';
+            var storedLmEndpoint = localStorage.getItem('mbt_lmstudio_endpoint') || localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1';
+            var storedLmModel = localStorage.getItem('mbt_lmstudio_model') || localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || '';
 
             return `
                     <div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">
@@ -270,12 +270,12 @@
                                     var s=document.getElementById('aiSystemPromptInput').value;
                                     saveStoredApiKey(p,k);
                                     mBT.features.ai.saveSystemPrompt(s);
-                                    localStorage.setItem('${storageKeyPrefix}selectedAiProvider', p);
+                                    mBT.features.ai.saveSelectedProvider(p);
                                     if(p==='lmstudio'){
                                         var ep=document.getElementById('lmEndpointInput').value.trim();
                                         var md=document.getElementById('lmModelInput').value.trim();
-                                        if(ep) localStorage.setItem('${storageKeyPrefix}lmstudioEndpoint', ep);
-                                        if(md) localStorage.setItem('${storageKeyPrefix}lmstudioModel', md);
+                                        if(ep) localStorage.setItem('mbt_lmstudio_endpoint', ep);
+                                        if(md) localStorage.setItem('mbt_lmstudio_model', md);
                                     }
                                     mBTME.alert('Success', 'Assistant Linked');
                                 " class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>
@@ -483,7 +483,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.67';
+            var currentVersion = updateStatus.localVersion || 'v22.71';
 
             /* Status message bound to native SW updatefound state (Task 17) */
             var statusMsg = '';
