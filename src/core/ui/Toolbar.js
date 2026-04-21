@@ -313,6 +313,7 @@
                     { label: 'Sync Rates', icon: mBTAssets.cloud, color: 'text-sky-600', bg: 'hover:bg-sky-50', action: 'project-sync' },
                     { label: 'Import Budget', icon: mBTAssets.cloud, color: 'text-purple-600', bg: 'hover:bg-purple-50', action: 'project-import-trigger' },
                     { label: 'Export Budget (.moo)', icon: mBTAssets.save, color: 'text-teal-600', bg: 'hover:bg-teal-50', action: 'project-export' },
+                    { label: 'Export Data Package', icon: mBTAssets.cloud, color: 'text-indigo-600', bg: 'hover:bg-indigo-50', action: 'export-all-data' },
                     { label: 'Payments / Ledger', icon: mBTAssets.wallet, color: 'text-amber-600', bg: 'hover:bg-amber-50', action: 'open-payments-ledger' },
                     { label: 'Recycle Bin', icon: mBTAssets.trash, color: 'text-slate-500', bg: 'hover:bg-slate-50', action: 'project-recycle' },
                     { divider: true },
