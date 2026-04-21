@@ -8699,7 +8699,7 @@
 
             '</div>' +
             '<div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">' +
-            '<button onclick="mBTME.close()" style="padding:8px 18px;font-size:.82rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">Cancel</button>' +
+            '<button onclick="mBTME.close(\'export-dialogModal\')" style="padding:8px 18px;font-size:.82rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">Cancel</button>' +
             '<button onclick="_runExport()" style="padding:8px 18px;font-size:.82rem;background:#4f46e5;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700">Download</button>' +
             '</div></div>';
 
@@ -8709,7 +8709,7 @@
     window._runExport = function () {
         var includeDocs     = document.getElementById('exp-include-docs')     ? document.getElementById('exp-include-docs').checked     : true;
         var includeContacts = document.getElementById('exp-include-contacts') ? document.getElementById('exp-include-contacts').checked : true;
-        mBTME.close();
+        mBTME.close('export-dialogModal');
 
         window.mBT.storage.exportAllData().then(function (json) {
             var snapshot = JSON.parse(json);
