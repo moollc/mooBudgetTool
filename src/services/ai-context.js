@@ -146,9 +146,11 @@
             });
         }
 
-        var categories = new Set(allocations.map(function (a) { return a.category; }).filter(Boolean));
+        var categoriesMap = {};
+        allocations.forEach(function (a) { if (a.category) categoriesMap[a.category] = true; });
+
         ['labor', 'equipment', 'location', 'transport', 'insurance'].forEach(function (cat) {
-            if (!categories.has(cat)) {
+            if (!categoriesMap[cat]) {
                 risks.push({ type: 'missing_category', severity: 'warning', message: 'No allocation for: ' + cat, category: cat });
             }
         });
