@@ -1177,6 +1177,11 @@
                 if (data) {
                     budget = mBT.data.state.wrap(data);
                     currentProjectName = budget.projectName;
+                    /* Backfill budget.currency for old budgets that predate the field.
+                       Use the persisted displayCurrency for this project as the source of truth. */
+                    if (!budget.currency) {
+                        budget.currency = localStorage.getItem(storageKeyPrefix + 'currency') || 'JMD';
+                    }
                     if (typeof render === 'function') render();
                     if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
                     /* Sub-Phase 51.2: Subscribe to realtime when project loads */
@@ -2346,9 +2351,22 @@
             var cur = parseFloat(item.rate) || 0;
             item.baseRate = mult ? (cur / mult) : cur;
         }
+        /* Stamp baseRate on every unanchored item using the CURRENT region.
+           Call this before changing location so ensureBase reads the right scalar. */
+        function stampBaselines() {
+            if (typeof budget === 'undefined' || !budget || !budget.sections) return;
+            var cur = _region();
+            Object.keys(budget.sections).forEach(function (sk) {
+                var items = (budget.sections[sk] && budget.sections[sk].items) || [];
+                for (var i = 0; i < items.length; i++) {
+                    ensureBase(items[i], cur);
+                }
+            });
+        }
         return {
             resolve: resolve,
             ensureBase: ensureBase,
+            stampBaselines: stampBaselines,
             applyRegion: applyRegion,
             reanchorFromRate: reanchorFromRate,
             currentRegion: _region
@@ -4306,6 +4324,45 @@
         mBTME.open('renameBlueprintModal', 'Rename Blueprint', content, 'max-w-sm');
     };
 
+
+    /* --- mBT.ui.showLegalDoc: Markdown document viewer for User Agreement & Privacy Policy --- */
+    mBT.ui.showLegalDoc = function (fileName) {
+        var title = fileName.replace('.md', '').replace(/([A-Z])/g, ' $1').trim();
+        mBT.ui.modal.open('legalDoc', title, '<div id="legalDocContent" class="p-8 max-w-none text-xs font-bold leading-relaxed text-slate-700 h-[65vh] overflow-y-auto no-scrollbar selection:bg-indigo-100"><p class="animate-pulse">Acquiring document protocol...</p></div>', 'max-w-3xl');
+
+        fetch(fileName).then(function (r) {
+            if (!r.ok) throw new Error('Protocol not found');
+            return r.text();
+        }).then(function (md) {
+            var el = document.getElementById('legalDocContent');
+            if (el && typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+                /* Logic Resolution: Use Marked.js for premium formatting if available */
+                el.innerHTML = marked.parse(md);
+                el.classList.remove('animate-pulse');
+                /* Apply Tailwind prose-like styling manually for vanilla compatibility */
+                el.querySelectorAll('h1').forEach(function (h) { h.className = 'text-base font-black uppercase tracking-widest text-slate-900 mt-6 mb-4'; });
+                el.querySelectorAll('h2').forEach(function (h) { h.className = 'text-sm font-black uppercase tracking-widest text-slate-800 mt-5 mb-3'; });
+                el.querySelectorAll('h3').forEach(function (h) { h.className = 'text-xs font-black uppercase tracking-widest text-slate-700 mt-4 mb-2'; });
+                el.querySelectorAll('p').forEach(function (p) { p.className = 'mb-3 leading-relaxed'; });
+                el.querySelectorAll('li').forEach(function (li) { li.className = 'ml-4 mb-1 list-disc'; });
+                el.querySelectorAll('strong').forEach(function (s) { s.className = 'text-slate-900 font-black'; });
+            } else if (el) {
+                el.style.whiteSpace = 'pre-wrap';
+                el.innerText = md;
+                el.classList.remove('animate-pulse');
+            }
+        }).catch(function (e) {
+            var el = document.getElementById('legalDocContent');
+            if (el) {
+                el.classList.remove('animate-pulse');
+                el.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center">' +
+                    '<div class="w-12 h-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4 font-black">!</div>' +
+                    '<div class="text-rose-500 font-black uppercase text-[10px] tracking-widest">Protocol Error</div>' +
+                    '<div class="text-[9px] text-slate-400 font-bold mt-1">Could not load ' + fileName + '. Ensure file exists in root.</div>' +
+                    '</div>';
+            }
+        });
+    };
 
     /* ================= TIER 5: MODULE CONTROLLERS & SMART FEATURES ================= */
     /* ========= v19.54 mBT.ui.modal: MODAL ENGINE (Window orchestration) ========= */
@@ -7876,7 +7933,7 @@
                         id: r.id || r.description,
                         icon: mBTAssets.money,
                         title: r.description,
-                        subtitle: mBTLE.format.currency(r.rate * mult) + ' / ' + r.unit + regionLabel,
+                        subtitle: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(r.rate * mult) : r.rate * mult) + ' / ' + r.unit + regionLabel,
                         classes: 'border-b border-slate-50',
                         actions: isCommunity ? [
                             { icon: mBTAssets.check, title: 'Approve', color: 'emerald', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'approve')" },
@@ -8089,6 +8146,10 @@
         },
 
         setRateRegion: function (region) {
+            /* Anchor baseRate against the current (old) region BEFORE updating the location.
+               ensureBase uses _region() internally when no region arg is given, so the
+               previous location must still be active when we stamp missing baseRates. */
+            if (mBT.rates && mBT.rates.stampBaselines) mBT.rates.stampBaselines();
             mBTOG.settings.location = region;
             localStorage.setItem('moo_og_loc', region);
             /* Rescale every budget line from its baseRate anchor, persist, repaint. */

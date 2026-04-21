@@ -8,6 +8,21 @@
         window.dispatchEvent(new CustomEvent('mbt:sync-status', { detail: { status: status } }));
     }
 
+    /* --- ES5 Utility: Shallow object merge (Phase 148 Cleanup) --- */
+    function _assign(target) {
+        for (var i = 1; i < arguments.length; i++) {
+            var source = arguments[i];
+            if (source) {
+                for (var key in source) {
+                    if (Object.prototype.hasOwnProperty.call(source, key)) {
+                        target[key] = source[key];
+                    }
+                }
+            }
+        }
+        return target;
+    }
+
     /* --- 1. SUPABASE REST API PRIMITIVES --- */
 
     function getHeaders() {
@@ -171,7 +186,7 @@
             console.warn('[mBTSync] Token expired, attempting refresh...');
             return refreshAccessToken().then(function () {
                 /* Rebuild headers because access token changed */
-                opts.headers = Object.assign({}, opts.headers, getHeaders());
+                opts.headers = _assign({}, opts.headers, getHeaders());
                 return fetch(url, opts);
             });
         });
@@ -375,7 +390,7 @@
     function sbUpsert(table, record) {
         return fetchWithRetry(getBaseUrl(table), {
             method: 'POST',
-            headers: Object.assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+            headers: _assign({}, getHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
             body: JSON.stringify(record)
         }).then(function (res) {
             if (!res.ok) throw new Error('Supabase upsert failed for ' + table + ': ' + res.statusText);
@@ -391,7 +406,7 @@
         var url = baseUrl + '/rest/v1/mbt_pending_edits';
         return fetchWithRetry(url, {
             method: 'POST',
-            headers: Object.assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
+            headers: _assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
             body: JSON.stringify(payload)
         }).then(function (res) {
             if (res.ok) return res.json();
@@ -408,7 +423,7 @@
         var url = baseUrl + '/rest/v1/mbt_pending_edits?id=eq.' + encodeURIComponent(editId);
         return fetchWithRetry(url, {
             method: 'PATCH',
-            headers: Object.assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
+            headers: _assign({}, getHeaders(), { 'Prefer': 'return=representation' }),
             body: JSON.stringify(updates)
         }).then(function (res) {
             if (res.ok) return res.json();

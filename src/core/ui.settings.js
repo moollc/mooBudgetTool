@@ -192,6 +192,10 @@
                              <button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 py-2 ${_btnRose} rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">${mBTAssets.zap} Fix Bugs</button>
                              <button onclick="mBTME.close('settingsModal'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 py-2 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] uppercase tracking-widest hover:opacity-90 transition-opacity">${mBTAssets.coffee} Support</button>
                         </div>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <button onclick="mBT.ui.showLegalDoc('UserAgreement.md')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">User Agreement</button>
+                            <button onclick="mBT.ui.showLegalDoc('PrivacyPolicy.md')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">Privacy Policy</button>
+                        </div>
                     </div>`;
         }
         if (tabName === 'ai') {
@@ -483,7 +487,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.73';
+            var currentVersion = updateStatus.localVersion || 'v22.74';
 
             /* Status message bound to native SW updatefound state (Task 17) */
             var statusMsg = '';
