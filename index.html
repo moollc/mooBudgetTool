@@ -8673,6 +8673,116 @@
         }
     };
 
+    /* --- Export Dialog: pre-flight bundle selector before JSON download --- */
+    window._showExportDialog = function () {
+        var content = '<div style="padding:8px 4px 4px">' +
+            '<p style="font-size:.82rem;color:#6b7280;margin-bottom:16px">Choose what to include in the export package.</p>' +
+            '<div style="display:flex;flex-direction:column;gap:10px">' +
+
+            '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;cursor:not-allowed;opacity:.7">' +
+            '<input type="checkbox" checked disabled style="margin-top:2px;accent-color:#4f46e5">' +
+            '<div><div style="font-size:.82rem;font-weight:700;color:#111827">Budget Data</div>' +
+            '<div style="font-size:.75rem;color:#6b7280">All budget lines, sections, funding sources and project settings.</div></div>' +
+            '</label>' +
+
+            '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer" id="exp-doc-row">' +
+            '<input type="checkbox" id="exp-include-docs" checked style="margin-top:2px;accent-color:#4f46e5">' +
+            '<div><div style="font-size:.82rem;font-weight:700;color:#111827">Documents</div>' +
+            '<div style="font-size:.75rem;color:#6b7280">Attached files and funding source documents bundled in the export.</div></div>' +
+            '</label>' +
+
+            '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer" id="exp-con-row">' +
+            '<input type="checkbox" id="exp-include-contacts" checked style="margin-top:2px;accent-color:#4f46e5">' +
+            '<div><div style="font-size:.82rem;font-weight:700;color:#111827">Contacts</div>' +
+            '<div style="font-size:.75rem;color:#6b7280">All saved contacts from the OpenGate database.</div></div>' +
+            '</label>' +
+
+            '</div>' +
+            '<div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">' +
+            '<button onclick="mBTME.close()" style="padding:8px 18px;font-size:.82rem;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-weight:600">Cancel</button>' +
+            '<button onclick="_runExport()" style="padding:8px 18px;font-size:.82rem;background:#4f46e5;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700">Download</button>' +
+            '</div></div>';
+
+        mBTME.open('export-dialog', 'Export Budget Package', content, 'max-w-sm');
+    };
+
+    window._runExport = function () {
+        var includeDocs     = document.getElementById('exp-include-docs')     ? document.getElementById('exp-include-docs').checked     : true;
+        var includeContacts = document.getElementById('exp-include-contacts') ? document.getElementById('exp-include-contacts').checked : true;
+        mBTME.close();
+
+        window.mBT.storage.exportAllData().then(function (json) {
+            var snapshot = JSON.parse(json);
+
+            /* Strip documents (base64 attachments in funding sources) if not requested */
+            if (!includeDocs && snapshot.stores) {
+                Object.keys(snapshot.stores).forEach(function (storeName) {
+                    (snapshot.stores[storeName] || []).forEach(function (record) {
+                        if (record && record.data && record.data.fundingSources) {
+                            record.data.fundingSources.forEach(function (src) {
+                                if (src && src.attachments) src.attachments = [];
+                            });
+                        }
+                    });
+                });
+                /* Also strip localforage budget attachments */
+                if (snapshot.localforage) {
+                    Object.keys(snapshot.localforage).forEach(function (k) {
+                        var doc = snapshot.localforage[k];
+                        if (doc && doc.fundingSources) {
+                            doc.fundingSources.forEach(function (src) {
+                                if (src && src.attachments) src.attachments = [];
+                            });
+                        }
+                    });
+                }
+            }
+
+            /* Strip contacts store if not requested */
+            if (!includeContacts && snapshot.stores && snapshot.stores.contacts) {
+                snapshot.stores.contacts = [];
+            }
+
+            /* Append active localforage budgets to snapshot */
+            var lfKeys = [];
+            var appendLF = typeof localforage !== 'undefined'
+                ? localforage.keys().then(function (keys) { lfKeys = keys || []; return Promise.resolve(); })
+                : Promise.resolve();
+
+            return appendLF.then(function () {
+                var prefix = 'prodBudget_v5_';
+                var reads = lfKeys.filter(function (k) { return k.indexOf(prefix) === 0; }).map(function (k) {
+                    return localforage.getItem(k).then(function (val) { return { key: k, val: val }; }).catch(function () { return null; });
+                });
+                return Promise.all(reads);
+            }).then(function (lfItems) {
+                snapshot.localforage = snapshot.localforage || {};
+                lfItems.forEach(function (item) {
+                    if (!item || !item.val) return;
+                    var doc = item.val;
+                    if (!includeDocs && doc.fundingSources) {
+                        doc.fundingSources.forEach(function (src) { if (src && src.attachments) src.attachments = []; });
+                    }
+                    snapshot.localforage[item.key] = doc;
+                });
+                return JSON.stringify(snapshot, null, 2);
+            });
+        }).then(function (finalJson) {
+            var blob = new Blob([finalJson], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            mBTME.alert('Export Complete', 'Budget package downloaded successfully.');
+        }).catch(function (e) {
+            mBTME.alert('Export Failed', e.message);
+        });
+    };
+
     /* --- v19.54 PUBLISH BRIDGE --- */
     window.showPublishModal = function () {
         var content = `
@@ -10536,21 +10646,7 @@
         mBT.core.action('backup-env', function () { if (typeof mBTPublisher !== 'undefined') mBTPublisher.io.saveMoo(budget); });
         mBT.core.action('export-all-data', function () {
             if (!window.mBT || !window.mBT.storage) { mBTME.alert('Error', 'Storage not available.'); return; }
-            try {
-                var json = window.mBT.storage.exportAllData();
-                var blob = new Blob([json], { type: 'application/json' });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = 'mBT-export-' + new Date().toISOString().split('T')[0] + '.json';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                mBTME.alert('Export Complete', 'All project data downloaded as JSON backup.');
-            } catch (e) {
-                mBTME.alert('Export Failed', e.message);
-            }
+            _showExportDialog();
         });
         mBT.core.action('print-pdf', function () { window.print(); });
         mBT.core.action('export-xlsx', function () { mBTME.alert("Coming Soon", "Excel export is currently being built. All features will be free to use."); });
