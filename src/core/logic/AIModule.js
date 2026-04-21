@@ -1,4 +1,4 @@
-/* mBT Phase 60.A/60.B: AI Module — Neural Link Bridge + Action Triggering
+/* mBT Phase 60.A/60.B: AI Module — Assistant Bridge + Action Triggering
    Extracted from index.html monolith (L2652-3037) to restore structural hygiene.
    Phase 60.B adds: applySuggestion(jsonDiff), action-block parsing, [Preview & Apply] UI.
 
@@ -225,7 +225,7 @@ window.mBTAIModule = {
 
         var prompt = 'Analyze this budget data: ' + JSON.stringify(context) + '. Review financials, logistics (documents), and staffing. Identify 3 risks and 3 savings opportunities. Be concise.';
 
-        if (mBTME.showLoader) mBTME.showLoader('Neural Analysis in progress...');
+        if (mBTME.showLoader) mBTME.showLoader('Assistant Analysis in progress...');
         return self.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
             if (mBTME.hideLoader) mBTME.hideLoader();
 

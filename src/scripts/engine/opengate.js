@@ -413,7 +413,7 @@
         },
 
         /* --- TEMPLATE REGISTRY --- */
-        /* Document layout definitions for the Studio Builder (GridStack). */
+        /* Document layout definitions for the Assistant Builder (GridStack). */
         /* This is the single source of truth for document schemas across both apps. */
 
         loadTemplates: function () {

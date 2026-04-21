@@ -300,7 +300,7 @@
                                 <div>
                                     <label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Webhook Endpoint</label>
                                     <div class="flex gap-2">
-                                        <input type="text" id="cloudWebhookInput" value="${esc(webhookUrl)}" onchange="localStorage.setItem('${storageKeyPrefix}cloudWebhook', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.studio.com/ingest...">
+                                        <input type="text" id="cloudWebhookInput" value="${esc(webhookUrl)}" onchange="localStorage.setItem('${storageKeyPrefix}cloudWebhook', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.mbt-assistant.com/ingest...">
                                         <button onclick="var url=document.getElementById('cloudWebhookInput').value; if(!url) return mBTME.alert('Error', 'No URL'); mBTME.showLoader('Pinging...'); fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({test:true, source:'MooBudget', project:budget.projectName, ts:new Date().toISOString()})}).then(function(r){ mBTME.hideLoader(); if(r.ok) mBTME.alert('Success','Endpoint Reachable'); else mBTME.alert('Error', 'Status: '+r.status); }).catch(function(e){ mBTME.hideLoader(); mBTME.alert('Connection Failed', e.message); })" class="px-3 bg-emerald-900/50 text-emerald-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-900 border border-emerald-800 transition-colors">Test</button>
                                     </div>
                                     <p class="text-[8px] text-slate-600 mt-2">Destination for "Cloud Dispatch". Accepts JSON payloads containing Ledger and Budget totals.</p>
@@ -483,7 +483,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.72';
+            var currentVersion = updateStatus.localVersion || 'v22.73';
 
             /* Status message bound to native SW updatefound state (Task 17) */
             var statusMsg = '';
