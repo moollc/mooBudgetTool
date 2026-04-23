@@ -754,19 +754,32 @@ window.mBTRouter = (function () {
                 } catch (_le) { /* ignore */ }
             }
 
-            var _sys = 'You are a professional film production assistant. Use ONLY the project context provided below. \n' +
-                       'CRITICAL: Return ONLY a valid JSON object. No conversational filler, no prose, no explanation. \n' +
+            var _sys = 'You are a professional film production assistant. Use ONLY the project context provided below. ' +
+                       'CRITICAL: Return ONLY a valid JSON object. No conversational filler, no prose, no explanation. ' +
                        'If a value is unknown, use an empty string. Ensure valid JSON escaping.';
 
+            /* Cap context at 1500 chars for doc fill — keeps prompt small, avoids 503 on Gemini */
             var _prompt = 'Populate these ' + _templateId + ' fields using the project context provided.\n' +
                           'JSON keys to return: ' + _fields.join(', ') + '.\n\n' +
                           (inlineCtx.length ? '--- PROJECT INFO ---\n' + inlineCtx.join('\n') + '\n\n' : '') +
-                          (ctxFragment ? ctxFragment.slice(0, 3000) + '\n\n' : 'No treatment provided — use only project name and budget context.\n\n') +
+                          (ctxFragment ? ctxFragment.slice(0, 1500) + '\n\n' : 'No treatment provided — use only project name and budget context.\n\n') +
                           '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\n' +
                           'Final Answer as JSON Object:';
 
+            /* Single retry on 503 (Gemini high-demand) with 4s backoff */
+            function _callWithRetry() {
+                return mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
+                    .then(function (resp) {
+                        if (typeof resp === 'string' && resp.indexOf('503') > -1 && resp.indexOf('Analysis Failed:') === 0) {
+                            return new Promise(function (resolve) { setTimeout(resolve, 4000); })
+                                .then(function () { return mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys); });
+                        }
+                        return resp;
+                    });
+            }
+
             try {
-                mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
+                _callWithRetry()
                     .then(function (resp) {
                         var out = {};
                         if (typeof resp === 'string') {
