@@ -56,7 +56,8 @@ window.mBTAIModule = {
         var promise;
 
         if (provider === 'gemini') {
-            var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + self.config.geminiModel + ':generateContent?key=' + apiKey;
+            var _geminiModel = localStorage.getItem('mbt_gemini_model') || self.config.geminiModel;
+            var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + _geminiModel + ':generateContent?key=' + apiKey;
             promise = fetch(gUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -479,6 +480,26 @@ window.mBTAIModule = {
     },
 
     /* ── OpenRouter: Fetch available models ────────────────────────────── */
+    fetchGeminiModels: function (apiKey) {
+        return fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey)
+            .then(function (res) {
+                if (!res.ok) throw new Error('Gemini models fetch failed: ' + res.status);
+                return res.json();
+            }).then(function (data) {
+                var models = [];
+                var items = data.models || [];
+                for (var i = 0; i < items.length; i++) {
+                    var m = items[i];
+                    if (!m.supportedGenerationMethods || m.supportedGenerationMethods.indexOf('generateContent') === -1) continue;
+                    var id = (m.name || '').replace('models/', '');
+                    if (!id) continue;
+                    models.push({ id: id, name: m.displayName || id });
+                }
+                models.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+                return models;
+            });
+    },
+
     fetchOpenRouterModels: function (apiKey) {
         return fetch('https://openrouter.ai/api/v1/models', {
             headers: { 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.origin, 'X-Title': 'mBT' }
