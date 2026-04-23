@@ -539,6 +539,54 @@ window.mBTRouter = (function () {
             _ctx.setMBTActiveTool(null);
             if (window.mBTME) mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
 
+        /* --- Phase 150: push-funding — AI tool pushes funding source proposals into the active budget --- */
+        } else if (action === 'push-funding' && Array.isArray(payload.sources) && payload.sources.length) {
+            if (!budget) {
+                if (window.mBTME) mBTME.alert('No Budget Open', 'Open a budget before pushing funding sources.');
+                return;
+            }
+            if (!budget.fundingSources) budget.fundingSources = [];
+            var pfAdded = 0;
+            for (var pfI = 0; pfI < payload.sources.length; pfI++) {
+                var pfSrc = payload.sources[pfI];
+                if (!pfSrc || typeof pfSrc.name !== 'string' || !pfSrc.name.trim()) continue;
+                /* Deduplicate by name (case-insensitive) — skip if already present */
+                var pfName = pfSrc.name.trim();
+                var pfExists = false;
+                for (var pfJ = 0; pfJ < budget.fundingSources.length; pfJ++) {
+                    if ((budget.fundingSources[pfJ].name || '').toLowerCase() === pfName.toLowerCase()) {
+                        pfExists = true;
+                        break;
+                    }
+                }
+                if (pfExists) continue;
+                budget.fundingSources.push({
+                    name:         pfName,
+                    amount:       parseFloat(pfSrc.amount)  || 0,
+                    currency:     pfSrc.currency            || (budget.currency || 'JMD'),
+                    cashInBank:   parseFloat(pfSrc.cashInBank) || 0,
+                    status:       pfSrc.status              || 'Pending',
+                    contactName:  pfSrc.contactName         || '',
+                    contactEmail: pfSrc.contactEmail        || '',
+                    contactPhone: pfSrc.contactPhone        || '',
+                    contractUrl:  pfSrc.contractUrl         || '',
+                    notes:        pfSrc.notes               || '',
+                    attachments:  []
+                });
+                pfAdded++;
+            }
+            if (pfAdded === 0) {
+                if (window.mBTME) mBTME.alert('No New Sources', 'All proposed sources already exist in this budget.');
+                return;
+            }
+            mBT.data.save().then(function () {
+                if (window.mBTLE) mBTLE.reconcile();
+                if (mBT.features && mBT.features.funding && mBT.features.funding.updateCard) {
+                    mBT.features.funding.updateCard();
+                }
+            });
+            if (window.mBTME) mBTME.alert('Funding Sources Added', pfAdded + ' source' + (pfAdded === 1 ? '' : 's') + ' pushed to \u201c' + budget.projectName + '\u201d.');
+
         /* --- Phase 63: resolve-diff --- */
         } else if (action === 'resolve-diff' && payload.mergedSections) {
             _ctx.setDiffActive(false);
@@ -709,7 +757,7 @@ window.mBTRouter = (function () {
                     .then(function (resp) {
                         var out = {};
                         if (typeof resp === 'string') {
-                            var cleaned = resp.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+                            var cleaned = resp.replace(/^\x60\x60\x60json\s*/i, '').replace(/^\x60\x60\x60\s*/i, '').replace(/\s*\x60\x60\x60\s*$/i, '').trim();
                             var m = cleaned.match(/\{[\s\S]*\}/);
                             if (m) { try { out = JSON.parse(m[0]); } catch (je) { out = {}; } }
                         }

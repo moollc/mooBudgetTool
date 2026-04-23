@@ -183,7 +183,7 @@
     function fetchWithRetry(url, opts) {
         return fetch(url, opts).then(function (res) {
             if (res.status !== 401) return res;
-            console.warn('[mBTSync] Token expired, attempting refresh...');
+            console.warn('[mBTSync] Token expired, attempting refresh..');
             return refreshAccessToken().then(function () {
                 /* Rebuild headers because access token changed */
                 opts.headers = _assign({}, opts.headers, getHeaders());

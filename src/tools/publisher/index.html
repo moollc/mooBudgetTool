@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>MooBudget Publisher</title>
+  <title>mooBudgetTool Publisher</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
   <script src="../../lib/localforage.min.js"></script>
@@ -85,7 +85,7 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h1 class="text-2xl font-black uppercase tracking-tight text-slate-900" id="pub-project-title">Publisher</h1>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">MooBudget Export &amp; Distribution</p>
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">mooBudgetTool Export &amp; Distribution</p>
         </div>
         <div class="text-right">
           <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Grand Total</div>
@@ -592,7 +592,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var safeName = String(projectName).replace(/</g, '&lt;');
       var html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>' + safeName + ' \u2014 Budget Export</title>\n' +
         '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f3f4f6;padding:20px;color:#1e293b}.container{max-width:900px;margin:0 auto}.page-header{text-align:center;margin-bottom:32px}.page-header h1{font-size:28px;font-weight:900;text-transform:uppercase;letter-spacing:-0.03em;color:#0f172a}.page-header p{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#94a3b8;margin-top:6px}.card{background:white;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:24px}.card-header{background:#0f172a;color:white;padding:10px 16px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.12em}.card-body{padding:16px}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.summary-item{background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:12px}.summary-item .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;margin-bottom:4px}.summary-item .value{font-size:14px;font-weight:700;font-family:monospace;color:#1e293b}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:white;padding:10px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}th:first-child{text-align:left}.footer{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#cbd5e1;margin-top:40px;padding:20px 0;border-top:1px solid #e2e8f0}.grand-total-row td{background:#0f172a;color:white;padding:10px 14px;font-family:monospace;font-weight:900;font-size:14px}@media(max-width:600px){body{padding:10px}}@media print{body{background:white}}</style>\n</head>\n<body>\n<div class="container">\n' +
-        '<div class="page-header"><h1>' + safeName + '</h1><p>MooBudget Digital Export &mdash; Generated ' + new Date().toLocaleDateString() + '</p></div>\n' +
+        '<div class="page-header"><h1>' + safeName + '</h1><p>mooBudgetTool Digital Export &mdash; Generated ' + new Date().toLocaleDateString() + '</p></div>\n' +
         '<div class="card"><div class="card-header">Financial Summary</div><div class="card-body"><div class="summary-grid">' +
         '<div class="summary-item"><div class="label">Company</div><div class="value">' + String(b.company || 'Independent').replace(/</g, '&lt;') + '</div></div>' +
         '<div class="summary-item"><div class="label">Currency</div><div class="value">' + String(cur).replace(/</g, '&lt;') + '</div></div>' +

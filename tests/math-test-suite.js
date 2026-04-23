@@ -292,7 +292,7 @@
     // RUN ALL TESTS
     // =========================================
     window.mBT.tests.math.runAll = function () {
-        console.log('[mBT Math Test] Running all tests...\n');
+        console.log('[mBT Math Test] Running all tests..\n');
 
         var tests = [
             window.mBT.tests.math.formatCurrency,

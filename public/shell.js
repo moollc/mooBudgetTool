@@ -2,10 +2,10 @@
 // This file provides basic initialization when running from file:// protocol
 // Full app loads via Vite when using npm run dev or npm run build
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function () {
   // Check if we're running from file:// protocol (local portability)
-  const isFileProtocol = window.location.protocol === 'file:';
-  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  var isFileProtocol = window.location.protocol === 'file:';
+  var isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   // Initialize minimal shell for file:// access
   if (isFileProtocol) {
@@ -34,5 +34,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Log build info
-  console.log(`[mBT] Monolith PWA - Moo Budget Tool`);
+  console.log('[mBT] Monolith PWA - Moo Budget Tool');
 });

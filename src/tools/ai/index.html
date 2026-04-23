@@ -118,11 +118,11 @@
       <div class="flex flex-col items-center text-center gap-1 relative">
         <h1 class="text-2xl font-bold text-white">Assistant</h1>
         <p class="asst-tagline text-indigo-200 text-sm">(Collaborative workspace — context + chat + proposals)</p>
-        <span class="absolute left-0 top-0 text-indigo-300 text-xs font-mono opacity-70">v22.66</span>
+        <span class="absolute left-0 top-0 text-indigo-300 text-xs font-mono opacity-70">v22.77</span>
         <div class="absolute right-0 top-0 flex items-center gap-2">
           <span class="asst-tokmeter" id="tokMeter" title="Estimated context token usage">~0 tokens</span>
           <div class="w-2.5 h-2.5 bg-green-400 rounded-full ai-glow"></div>
-          <span class="text-white text-xs" id="aiStatus">Loading...</span>
+          <span class="text-white text-xs" id="aiStatus">Loading..</span>
         </div>
       </div>
     </div>
@@ -338,7 +338,7 @@
           <div>
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Production Brief</label>
             <textarea id="genPromptInput" rows="4"
-              placeholder="e.g. 3-day TVC shoot in Kingston, $80k budget, 10-person crew, heavy post-production with VFX..."
+              placeholder="e.g. 3-day TVC shoot in Kingston, $80k budget, 10-person crew, heavy post-production with VFX.."
               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"></textarea>
           </div>
           <div>
@@ -370,6 +370,29 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- ===== FUNDING SOURCE PUSHER (Phase 150) ===== -->
+      <div class="bg-white rounded-lg shadow-sm border p-5">
+        <div class="mb-4">
+          <h2 class="text-sm font-bold text-gray-800 mb-1">Push Funding Sources</h2>
+          <p class="text-xs text-gray-500">Add funding sources directly to the active budget. Duplicates (matched by name) are skipped automatically.</p>
+        </div>
+
+        <div id="pfSourceList" class="space-y-3 mb-3"></div>
+
+        <button onclick="pfAddRow()"
+          class="w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-semibold text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors mb-3">
+          + Add Source
+        </button>
+
+        <div id="pfError" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3"></div>
+
+        <button onclick="pfPush()"
+          id="pfBtn"
+          class="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-colors">
+          Push to Budget
+        </button>
       </div>
     </div>
 
@@ -1198,7 +1221,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         callMonolithAI('Generate a production budget for: ' + userPrompt, schemaGuide)
             .then(function(result) {
                 /* Strip markdown fences and parse */
-                var text = result.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+                var text = result.replace(/^[\x60]{3}json\s*/i, '').replace(/^[\x60]{3}\s*/i, '').replace(/\s*[\x60]{3}$/i, '').trim();
                 var raw;
                 try {
                     raw = JSON.parse(text);
@@ -1299,7 +1322,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* =========================================
        PROPOSAL PROTOCOL
        AI may emit blocks of the form:
-           [[PROPOSAL]]{"id":"p_123","title":"...","rationale":"...","mutations":[{"intent":"...","payload":{...}}]}[[/PROPOSAL]]
+           [[PROPOSAL]]{"id":"p_123","title":"..","rationale":"..","mutations":[{"intent":"..","payload":{}}]}[[/PROPOSAL]]
        Each proposal renders inline with Approve / Why buttons.
        Approve dispatches each mutation through window.mBTBridge.send() as a typed intent,
        which the parent (Budget Editor / Shell) routes via EventRouter + mBTLE.reconcile().
@@ -1536,6 +1559,126 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
 
     init();
+
+    /* =========================================
+       PHASE 150: FUNDING SOURCE PUSHER
+    ========================================= */
+    var PF_CURRENCIES = ['JMD', 'USD', 'GBP', 'EUR', 'CAD', 'TTD', 'BBD'];
+    var PF_STATUSES   = ['Pending', 'Confirmed', 'Received', 'Partial', 'Declined'];
+    var pfRowCount    = 0;
+
+    function pfMakeRow(idx) {
+        var cidx = String(idx);
+        return '<div id="pfRow' + cidx + '" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;position:relative">' +
+            '<button onclick="pfRemoveRow(' + cidx + ')" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;line-height:1;padding:2px 5px" title="Remove">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+            '</button>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' +
+                '<div>' +
+                    '<label style="display:block;font-size:.68rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Source Name *</label>' +
+                    '<input id="pfName' + cidx + '" type="text" placeholder="e.g. Film Office Grant" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:.82rem;box-sizing:border-box" />' +
+                '</div>' +
+                '<div>' +
+                    '<label style="display:block;font-size:.68rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Amount</label>' +
+                    '<input id="pfAmount' + cidx + '" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:.82rem;box-sizing:border-box" />' +
+                '</div>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+                '<div>' +
+                    '<label style="display:block;font-size:.68rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Currency</label>' +
+                    '<select id="pfCurrency' + cidx + '" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:.82rem;background:#fff;box-sizing:border-box">' +
+                        PF_CURRENCIES.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+                    '</select>' +
+                '</div>' +
+                '<div>' +
+                    '<label style="display:block;font-size:.68rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Status</label>' +
+                    '<select id="pfStatus' + cidx + '" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:.82rem;background:#fff;box-sizing:border-box">' +
+                        PF_STATUSES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
+                    '</select>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }
+
+    function pfAddRow() {
+        var list = dom.getElementById('pfSourceList');
+        if (!list) return;
+        var idx = pfRowCount++;
+        var wrap = document.createElement('div');
+        wrap.setAttribute('id', 'pfRowWrap' + idx);
+        wrap.innerHTML = pfMakeRow(idx);
+        list.appendChild(wrap);
+    }
+
+    function pfRemoveRow(idx) {
+        var wrap = dom.getElementById('pfRowWrap' + idx);
+        if (wrap) wrap.parentNode.removeChild(wrap);
+    }
+
+    function pfPush() {
+        var errEl = dom.getElementById('pfError');
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+
+        /* Collect all visible rows */
+        var sources = [];
+        var list = dom.getElementById('pfSourceList');
+        if (!list) return;
+        var wraps = list.querySelectorAll('[id^="pfRowWrap"]');
+        for (var wi = 0; wi < wraps.length; wi++) {
+            var wrap = wraps[wi];
+            /* Extract row index from the wrap id */
+            var widxStr = wrap.id.replace('pfRowWrap', '');
+            var nameEl     = wrap.querySelector('#pfName'     + widxStr);
+            var amountEl   = wrap.querySelector('#pfAmount'   + widxStr);
+            var currencyEl = wrap.querySelector('#pfCurrency' + widxStr);
+            var statusEl   = wrap.querySelector('#pfStatus'   + widxStr);
+            if (!nameEl) continue;
+            var nameVal = (nameEl.value || '').trim();
+            if (!nameVal) continue;
+            sources.push({
+                name:     nameVal,
+                amount:   parseFloat(amountEl   ? amountEl.value   : '0') || 0,
+                currency: currencyEl ? currencyEl.value : 'JMD',
+                status:   statusEl   ? statusEl.value   : 'Pending'
+            });
+        }
+
+        if (!sources.length) {
+            errEl.textContent = 'Add at least one source with a name before pushing.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+
+        if (!window.mBTBridge) {
+            errEl.textContent = 'Bridge unavailable — open this tool from within the Budget Editor.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+
+        window.mBTBridge.send('push-funding', { sources: sources });
+
+        /* Reset form */
+        list.innerHTML = '';
+        pfRowCount = 0;
+    }
+
+    window.pfAddRow    = pfAddRow;
+    window.pfRemoveRow = pfRemoveRow;
+    window.pfPush      = pfPush;
+
+    /* Pre-populate one empty row when Generate tab opens */
+    (function () {
+        var origSetMode = window.setMode;
+        window.setMode = function (mode) {
+            origSetMode(mode);
+            if (mode === 'generate') {
+                var list = dom.getElementById('pfSourceList');
+                if (list && list.children.length === 0) pfAddRow();
+            }
+        };
+    })();
+
   </script>
 </body>
 </html>

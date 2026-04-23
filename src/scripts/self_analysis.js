@@ -22,7 +22,7 @@
         run: function () {
             console.groupCollapsed('%c[mBT Auditor] System Health Report', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
 
-            console.log("Running Phase 7.1 RSI Diagnostics...");
+            console.log("Running Phase 7.1 RSI Diagnostics..");
             this.checkNamespaceHealth();
             this.detectDeadCode();
             this.analyzeBundle();

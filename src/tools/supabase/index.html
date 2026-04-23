@@ -171,7 +171,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             addLog('Configuration required — set URL and Key first.');
             return;
         }
-        addLog('Pushing local data to Supabase...');
+        addLog('Pushing local data to Supabase..');
         try {
             var result = await window.mBTSync.pushAll();
             syncCount++;
@@ -190,7 +190,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             addLog('Configuration required — set URL and Key first.');
             return;
         }
-        addLog('Pulling data from Supabase...');
+        addLog('Pulling data from Supabase..');
         try {
             var result = await window.mBTSync.pullAll();
             dom.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
@@ -203,7 +203,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
 
     async function exportData() {
-        addLog('Preparing JSON export...');
+        addLog('Preparing JSON export..');
         try {
             var jsonStr = await window.mBTSync.exportData();
             var blob    = new Blob([jsonStr], { type: 'application/json' });

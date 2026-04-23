@@ -567,7 +567,7 @@
                         { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
                         { id: 'terms', x: 0, w: 12, h: 14, type: 'richText', label: "Contract Terms & Conditions", autoPosition: true }
                     ],
-                    defaults: { additional: { terms: "STANDARD AGREEMENT\n\n1. Services...\n2. Compensation..." } }
+                    defaults: { additional: { terms: "STANDARD AGREEMENT\n\n1. Services..\n2. Compensation.." } }
                 },
                 {
                     id: 'dealMemo', cat: 'Legal', label: 'Crew Deal Memo', icon: 'file', default: false,

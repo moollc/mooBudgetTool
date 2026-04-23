@@ -156,7 +156,7 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <textarea id="new-debt-description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded"
-            placeholder="Describe the issue..."></textarea>
+            placeholder="Describe the issue.."></textarea>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>
@@ -220,11 +220,11 @@
 
       // Load from storage
       function loadDebtFromStorage() {
-        STORAGE.getItem(DEBT_STORE).then(debt => {
+        STORAGE.getItem(DEBT_STORE).then(function (debt) {
           allDebtData = debt || [];
           renderDebt(allDebtData, currentFilter);
           updateStats(allDebtData);
-        }).catch(err => {
+        }).catch(function (err) {
           console.error('[RSI] Load error:', err);
           renderDebt([], '');
         });
@@ -238,7 +238,7 @@
 
         var filtered = debt || [];
         if (filter) {
-          filtered = filtered.filter(d => d.category === filter || d.priority === filter);
+          filtered = filtered.filter(function (d) { return d.category === filter || d.priority === filter; });
         }
 
         if (filtered.length === 0) {
@@ -247,39 +247,38 @@
         }
         empty.classList.add('hidden');
 
-        filtered.forEach(item => {
+        filtered.forEach(function (item) {
           var el = document.createElement('div');
           el.className = 'debt-item ' + (item.priority === 'critical' ? 'critical ' : '') + (item.category === 'performance' ? 'performance ' : '') + (item.category === 'security' ? 'security ' : '');
 
-          el.innerHTML = `
-        <div class="flex items-start justify-between">
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-semibold text-gray-800">${escapeHtml(item.title)}</span>
-              <span class="priority-badge text-xs px-2 py-0.5 rounded-full 
-                ${item.priority === 'critical' ? 'bg-red-100 text-red-800' :
-              item.priority === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">
-                ${item.priority}
-              </span>
-              <span class="category-badge text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                ${item.category}
-              </span>
-            </div>
-            <p class="text-sm text-gray-600">${escapeHtml(item.description || '')}</p>
-            ${item.estimatedHours ? `<p class="text-xs text-gray-500 mt-1">Est. ${item.estimatedHours} hours</p>` : ''}
-            <p class="text-xs text-gray-400 mt-1">${item.created || new Date(item.createdAt).toLocaleDateString()}</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button class="btn-resolve px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded" data-id="${item.id}">Resolve</button>
-            <button class="btn-edit px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded" data-id="${item.id}">Edit</button>
-            <button class="btn-delete px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded" data-id="${item.id}">Delete</button>
-          </div>
-        </div>
-      `;
+          el.innerHTML = 
+            '<div class="flex items-start justify-between">' +
+            '  <div class="flex-1 min-w-0">' +
+            '    <div class="flex items-center gap-2 mb-1">' +
+            '      <span class="text-sm font-semibold text-gray-800">' + escapeHtml(item.title) + '</span>' +
+            '      <span class="priority-badge text-xs px-2 py-0.5 rounded-full ' +
+            (item.priority === 'critical' ? 'bg-red-100 text-red-800' :
+              item.priority === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800') + '">' +
+            '        ' + item.priority +
+            '      </span>' +
+            '      <span class="category-badge text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">' +
+            '        ' + item.category +
+            '      </span>' +
+            '    </div>' +
+            '    <p class="text-sm text-gray-600">' + escapeHtml(item.description || '') + '</p>' +
+            (item.estimatedHours ? '<p class="text-xs text-gray-500 mt-1">Est. ' + item.estimatedHours + ' hours</p>' : '') +
+            '    <p class="text-xs text-gray-400 mt-1">' + (item.created || new Date(item.createdAt).toLocaleDateString()) + '</p>' +
+            '  </div>' +
+            '  <div class="flex items-center gap-2">' +
+            '    <button class="btn-resolve px-3 py-1.5 text-sm bg-green-50 hover:bg-green-100 text-green-700 rounded" data-id="' + item.id + '">Resolve</button>' +
+            '    <button class="btn-edit px-3 py-1.5 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 rounded" data-id="' + item.id + '">Edit</button>' +
+            '    <button class="btn-delete px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded" data-id="' + item.id + '">Delete</button>' +
+            '  </div>' +
+            '</div>';
 
-          el.querySelector('.btn-resolve').addEventListener('click', () => confirmResolve(item.id));
-          el.querySelector('.btn-edit').addEventListener('click', () => openEditor(item));
-          el.querySelector('.btn-delete').addEventListener('click', () => confirmDelete(item.id));
+          el.querySelector('.btn-resolve').addEventListener('click', function () { confirmResolve(item.id); });
+          el.querySelector('.btn-edit').addEventListener('click', function () { openEditor(item); });
+          el.querySelector('.btn-delete').addEventListener('click', function () { confirmDelete(item.id); });
           list.appendChild(el);
         });
 
@@ -289,9 +288,9 @@
       // Update stats
       function updateStats(debtList) {
         var total = debtList || [];
-        var critical = total.filter(d => d.priority === 'critical').length;
-        var warning = total.filter(d => d.priority === 'warning').length;
-        var resolved = total.filter(d => d.status === 'resolved').length;
+        var critical = total.filter(function (d) { return d.priority === 'critical'; }).length;
+        var warning = total.filter(function (d) { return d.priority === 'warning'; }).length;
+        var resolved = total.filter(function (d) { return d.status === 'resolved'; }).length;
 
         dom.getElementById('total-debt').textContent = total.length;
         dom.getElementById('critical-debt').textContent = critical;
@@ -300,9 +299,9 @@
       }
 
       // Filter tabs
-      dom.querySelectorAll('.dept-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          dom.querySelectorAll('.dept-tab').forEach(t => {
+      dom.querySelectorAll('.dept-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          dom.querySelectorAll('.dept-tab').forEach(function (t) {
             t.classList.remove('bg-blue-600', 'text-white');
             t.classList.add('bg-gray-200', 'text-gray-700');
           });
@@ -315,16 +314,16 @@
       });
 
       // Add debt button
-      dom.getElementById('btn-new-debt').addEventListener('click', () => {
+      dom.getElementById('btn-new-debt').addEventListener('click', function () {
         dom.getElementById('new-debt-modal').classList.remove('hidden');
       });
 
       // Close modal
-      dom.querySelector('#new-debt-modal button.close').addEventListener('click', () => {
+      dom.querySelector('#new-debt-modal button.close').addEventListener('click', function () {
         dom.getElementById('new-debt-modal').classList.add('hidden');
       });
 
-      dom.querySelector('#new-debt-modal .px-4.py-2.bg-gray-200').addEventListener('click', () => {
+      dom.querySelector('#new-debt-modal .px-4.py-2.bg-gray-200').addEventListener('click', function () {
         dom.getElementById('new-debt-modal').classList.add('hidden');
       });
 
@@ -376,50 +375,49 @@
         var modal = document.createElement('div');
         modal.id = 'edit-debt-modal';
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-        modal.innerHTML = `
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 class="text-lg font-semibold">Edit Debt Item</h2>
-          <button class="close text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
-        </div>
-        <div class="p-6 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-            <input type="text" id="edit-debt-title" class="w-full px-3 py-2 border border-gray-300 rounded" value="${escapeHtml(currentDebt.title || '')}">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <select id="edit-debt-category" class="w-full px-3 py-2 border border-gray-300 rounded">
-              <option value="performance" ${currentDebt.category === 'performance' ? 'selected' : ''}>Performance</option>
-              <option value="security" ${currentDebt.category === 'security' ? 'selected' : ''}>Security</option>
-              <option value="code-quality" ${currentDebt.category === 'code-quality' ? 'selected' : ''}>Code Quality</option>
-              <option value="architecture" ${currentDebt.category === 'architecture' ? 'selected' : ''}>Architecture</option>
-              <option value="docs" ${currentDebt.category === 'docs' ? 'selected' : ''}>Documentation</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-            <select id="edit-debt-priority" class="w-full px-3 py-2 border border-gray-300 rounded">
-              <option value="critical" ${currentDebt.priority === 'critical' ? 'selected' : ''}>Critical</option>
-              <option value="warning" ${currentDebt.priority === 'warning' ? 'selected' : ''}>Warning</option>
-              <option value="info" ${currentDebt.priority === 'info' ? 'selected' : ''}>Info</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea id="edit-debt-description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded">${escapeHtml(currentDebt.description || '')}</textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>
-            <input type="number" step="0.5" id="edit-debt-hours" class="w-full px-3 py-2 border border-gray-300 rounded" value="${currentDebt.estimatedHours || ''}">
-          </div>
-        </div>
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button id="cancel" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>
-          <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded" id="edit-save-btn">Save</button>
-        </div>
-      </div>
-    `;
+        modal.innerHTML = 
+          '<div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">' +
+          '  <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">' +
+          '    <h2 class="text-lg font-semibold">Edit Debt Item</h2>' +
+          '    <button class="close text-gray-500 hover:text-gray-700 text-2xl">&times;</button>' +
+          '  </div>' +
+          '  <div class="p-6 space-y-4">' +
+          '    <div>' +
+          '      <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>' +
+          '      <input type="text" id="edit-debt-title" class="w-full px-3 py-2 border border-gray-300 rounded" value="' + escapeHtml(currentDebt.title || '') + '">' +
+          '    </div>' +
+          '    <div>' +
+          '      <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>' +
+          '      <select id="edit-debt-category" class="w-full px-3 py-2 border border-gray-300 rounded">' +
+          '        <option value="performance" ' + (currentDebt.category === 'performance' ? 'selected' : '') + '>Performance</option>' +
+          '        <option value="security" ' + (currentDebt.category === 'security' ? 'selected' : '') + '>Security</option>' +
+          '        <option value="code-quality" ' + (currentDebt.category === 'code-quality' ? 'selected' : '') + '>Code Quality</option>' +
+          '        <option value="architecture" ' + (currentDebt.category === 'architecture' ? 'selected' : '') + '>Architecture</option>' +
+          '        <option value="docs" ' + (currentDebt.category === 'docs' ? 'selected' : '') + '>Documentation</option>' +
+          '      </select>' +
+          '    </div>' +
+          '    <div>' +
+          '      <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>' +
+          '      <select id="edit-debt-priority" class="w-full px-3 py-2 border border-gray-300 rounded">' +
+          '        <option value="critical" ' + (currentDebt.priority === 'critical' ? 'selected' : '') + '>Critical</option>' +
+          '        <option value="warning" ' + (currentDebt.priority === 'warning' ? 'selected' : '') + '>Warning</option>' +
+          '        <option value="info" ' + (currentDebt.priority === 'info' ? 'selected' : '') + '>Info</option>' +
+          '      </select>' +
+          '    </div>' +
+          '    <div>' +
+          '      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>' +
+          '      <textarea id="edit-debt-description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded">' + escapeHtml(currentDebt.description || '') + '</textarea>' +
+          '    </div>' +
+          '    <div>' +
+          '      <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>' +
+          '      <input type="number" step="0.5" id="edit-debt-hours" class="w-full px-3 py-2 border border-gray-300 rounded" value="' + (currentDebt.estimatedHours || '') + '">' +
+          '    </div>' +
+          '  </div>' +
+          '  <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">' +
+          '    <button id="cancel" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">Cancel</button>' +
+          '    <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded" id="edit-save-btn">Save</button>' +
+          '  </div>' +
+          '</div>';
 
         document.body.appendChild(modal);
 
@@ -445,15 +443,14 @@
         var description = dom.getElementById('edit-debt-description').value;
         var estimatedHours = dom.getElementById('edit-debt-hours').value;
 
-        var updated = {
-          ...currentDebt,
-          title,
-          category,
-          priority,
-          description,
-          estimatedHours,
+        var updated = Object.assign({}, currentDebt, {
+          title: title,
+          category: category,
+          priority: priority,
+          description: description,
+          estimatedHours: estimatedHours,
           lastModified: new Date().toISOString()
-        };
+        });
 
         STORAGE.getItem(DEBT_STORE).then(function (debt) {
           var updatedDebt = (debt || []).map(function (d) {
@@ -489,8 +486,8 @@
       function confirmDelete(id) {
         if (!confirm('Delete this debt item?')) return;
 
-        STORAGE.getItem(DEBT_STORE).then(debt => {
-          var filtered = debt.filter(d => d.id !== id);
+        STORAGE.getItem(DEBT_STORE).then(function (debt) {
+          var filtered = debt.filter(function (d) { return d.id !== id; });
           STORAGE.setItem(DEBT_STORE, filtered).then(function () {
             allDebtData = filtered;
             renderDebt(filtered, currentFilter);

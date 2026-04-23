@@ -10,15 +10,15 @@
     </div>
     <script>
         (function() {
-            console.log('mBTBudget.html: Initializing...');
-            const container = document.getElementById('budget-viewport');
+            console.log('mBTBudget.html: Initializing..');
+            var container = document.getElementById('budget-viewport');
             
-            const render = () => {
+            var render = function () {
                 if (window.mBT && window.mBT.ui && window.budget && typeof window.mBT.ui.refresh === 'function') {
                     console.log('mBTBudget.html: Refreshing UI');
                     window.mBT.ui.refresh(container);
                 } else {
-                    console.warn('mBT UI or Budget not ready, retrying...');
+                    console.warn('mBT UI or Budget not ready, retrying..');
                     setTimeout(render, 100);
                 }
             };
