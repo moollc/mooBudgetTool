@@ -630,8 +630,12 @@ window.mBTRouter = (function () {
             try {
                 if (window.mBTContextLedger && typeof budget !== 'undefined' && budget && budget.projectName) {
                     mBTContextLedger.setActiveProject(budget.projectName).then(function () {
-                        mBTContextLedger.ingestBudget(budget);
-                        mBTContextLedger.ingestSidebar();
+                        return Promise.all([
+                            mBTContextLedger.ingestBudget(budget),
+                            mBTContextLedger.ingestSidebar()
+                        ]);
+                    }).catch(function (err) {
+                        console.warn('[EventRouter] Ledger sync failed:', err);
                     });
                 }
             } catch (lx) { /* ignore */ }
@@ -662,11 +666,15 @@ window.mBTRouter = (function () {
             if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function' || !_fields.length) {
                 _reply({}); return;
             }
-            /* Rescan sidebar first so treatment is in ledger before we build the prompt */
-            var _sidebarP = (window.mBTContextLedger)
-                ? mBTContextLedger.ingestSidebar().catch(function () {})
+
+            /* Rescan sidebar and budget first so ledger is fresh before we build the prompt */
+            var _syncP = (window.mBTContextLedger && typeof budget !== 'undefined' && budget)
+                ? mBTContextLedger.setActiveProject(budget.projectName).then(function() {
+                    return Promise.all([mBTContextLedger.ingestBudget(budget), mBTContextLedger.ingestSidebar()]);
+                  })
                 : Promise.resolve();
-            _sidebarP.then(function () {
+
+            _syncP.catch(function() { return Promise.resolve(); }).then(function () {
 
             var _provider = mBTAIModule.getSelectedProvider();
             var _apiKey   = mBTAIModule.getStoredApiKey(_provider);
@@ -744,22 +752,38 @@ window.mBTRouter = (function () {
                 } catch (_le) { /* ignore */ }
             }
 
-            var _sys = 'You are a film production assistant. Use ONLY the project context provided below. Return ONLY a valid JSON object. No prose, no markdown, no explanation.';
+            var _sys = 'You are a professional film production assistant. Use ONLY the project context provided below. \n' +
+                       'CRITICAL: Return ONLY a valid JSON object. No conversational filler, no prose, no explanation. \n' +
+                       'If a value is unknown, use an empty string. Ensure valid JSON escaping.';
 
-            var _prompt = 'Fill these ' + _templateId + ' fields using the project context provided.\n' +
-                          'Return ONLY a JSON object with keys: ' + _fields.join(', ') + '.\n\n' +
+            var _prompt = 'Populate these ' + _templateId + ' fields using the project context provided.\n' +
+                          'JSON keys to return: ' + _fields.join(', ') + '.\n\n' +
                           (inlineCtx.length ? '--- PROJECT INFO ---\n' + inlineCtx.join('\n') + '\n\n' : '') +
                           (ctxFragment ? ctxFragment.slice(0, 3000) + '\n\n' : 'No treatment provided — use only project name and budget context.\n\n') +
-                          '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\nJSON:';
+                          '--- FIELD RULES ---\n' + ruleLines.join('\n') + '\n\n' +
+                          'Final Answer as JSON Object:';
 
             try {
                 mBTAIModule.callUnifiedAI(_provider, _apiKey, _prompt, _sys)
                     .then(function (resp) {
                         var out = {};
                         if (typeof resp === 'string') {
+                            /* Robust JSON extraction: look for the outermost { } pair */
                             var cleaned = resp.replace(/^\x60\x60\x60json\s*/i, '').replace(/^\x60\x60\x60\s*/i, '').replace(/\s*\x60\x60\x60\s*$/i, '').trim();
-                            var m = cleaned.match(/\{[\s\S]*\}/);
-                            if (m) { try { out = JSON.parse(m[0]); } catch (je) { out = {}; } }
+                            var startIdx = cleaned.indexOf('{');
+                            var endIdx = cleaned.lastIndexOf('}');
+                            if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                                var jsonStr = cleaned.substring(startIdx, endIdx + 1);
+                                try { 
+                                    out = JSON.parse(jsonStr); 
+                                } catch (je) { 
+                                    /* Last ditch repair for Gemma: remove trailing commas or common small errors */
+                                    try {
+                                        var repaired = jsonStr.replace(/,\s*\}/g, '}').replace(/,\s*\]/g, ']');
+                                        out = JSON.parse(repaired);
+                                    } catch (je2) { out = {}; }
+                                }
+                            }
                         }
                         var cleanOut = {};
                         _fields.forEach(function (f) {

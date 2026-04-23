@@ -1690,9 +1690,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     html += '<button id="reset-btn" type="button">Reset to Defaults</button>';
 
     /* Replace panel node to strip accumulated event listeners from previous buildEditor calls */
+    var lastScroll = panel.scrollTop;
     var fresh = panel.cloneNode(false);
     fresh.innerHTML = html;
     panel.parentNode.replaceChild(fresh, panel);
+    fresh.scrollTop = lastScroll;
     wireEditor(fresh);
 
     /* Wire callSheet-specific smart buttons */
@@ -2451,7 +2453,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
          try {
              if (window.parent && window.parent.mBTAIModule) {
                  var p = window.parent.mBTAIModule.getSelectedProvider();
-                 if (p === 'openai' || p === 'openrouter') {
+                 if (p === 'openai' || p === 'openrouter' || p === 'gemini') {
                      provider = p;
                      apiKey = window.parent.mBTAIModule.getStoredApiKey(p);
                  }
@@ -2461,29 +2463,59 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
          var cell = document.getElementById('sb-img-cell-' + index);
          if (cell) cell.innerHTML = '<span style="font-size:8px;color:#94a3b8;">Gen...</span>';
          
-         if ((provider === 'openai' || provider === 'openrouter') && apiKey) {
-             var apiUrl = (provider === 'openai') ? 'https://api.openai.com/v1/images/generations' : 'https://openrouter.ai/api/v1/images/generations';
-             var apiModel = (provider === 'openai') ? 'dall-e-3' : 'openai/dall-e-3';
-             fetch(apiUrl, {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-                 body: JSON.stringify({ model: apiModel, prompt: promptText, n: 1, size: '1024x1024', response_format: 'b64_json' })
-             }).then(function(r) { return r.json(); }).then(function(res) {
-                 if (res.data && res.data[0] && res.data[0].b64_json) {
-                     downscaleImage('data:image/png;base64,' + res.data[0].b64_json, 512, 288, 0.8, function(scaled) {
-                         f.image = scaled;
-                         saveEditorData();
+         if ((provider === 'openai' || provider === 'openrouter' || provider === 'gemini') && apiKey) {
+             if (provider === 'gemini') {
+                 fetch('https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=' + apiKey, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ instances: [{ prompt: promptText }], parameters: { sampleCount: 1, aspectRatio: "16:9" } })
+                 }).then(function(r) { return r.json(); }).then(function(res) {
+                     if (res.predictions && res.predictions[0] && res.predictions[0].bytesBase64Encoded) {
+                         var b64 = res.predictions[0].bytesBase64Encoded;
+                         var mime = res.predictions[0].mimeType || 'image/jpeg';
+                         downscaleImage('data:' + mime + ';base64,' + b64, 512, 288, 0.8, function(scaled) {
+                             f.image = scaled;
+                             saveEditorData();
+                             buildEditor(activeTemplateId);
+                             if (activeTab === 'preview') renderPreview();
+                         });
+                     } else {
+                         alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
                          buildEditor(activeTemplateId);
-                         if (activeTab === 'preview') renderPreview();
-                     });
-                 } else {
-                     alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
+                     }
+                 }).catch(function(err) {
+                     alert("AI Generation error: " + err.message);
                      buildEditor(activeTemplateId);
+                 });
+             } else {
+                 var apiUrl = (provider === 'openai') ? 'https://api.openai.com/v1/images/generations' : 'https://openrouter.ai/api/v1/images/generations';
+                 var apiModel = (provider === 'openai') ? 'dall-e-3' : (localStorage.getItem('mbt_openrouter_model') || 'openai/dall-e-3');
+                 var headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey };
+                 if (provider === 'openrouter') {
+                     headers['HTTP-Referer'] = window.location.origin;
+                     headers['X-Title'] = 'mBT';
                  }
-             }).catch(function(err) {
-                 alert("AI Generation error: " + err.message);
-                 buildEditor(activeTemplateId);
-             });
+                 fetch(apiUrl, {
+                     method: 'POST',
+                     headers: headers,
+                     body: JSON.stringify({ model: apiModel, prompt: promptText, n: 1, size: '1024x1024', response_format: 'b64_json' })
+                 }).then(function(r) { return r.json(); }).then(function(res) {
+                     if (res.data && res.data[0] && res.data[0].b64_json) {
+                         downscaleImage('data:image/png;base64,' + res.data[0].b64_json, 512, 288, 0.8, function(scaled) {
+                             f.image = scaled;
+                             saveEditorData();
+                             buildEditor(activeTemplateId);
+                             if (activeTab === 'preview') renderPreview();
+                         });
+                     } else {
+                         alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
+                         buildEditor(activeTemplateId);
+                     }
+                 }).catch(function(err) {
+                     alert("AI Generation error: " + err.message);
+                     buildEditor(activeTemplateId);
+                 });
+             }
          } else {
              /* Fallback: Pollinations — fetch and convert to base64 so it survives offline */
              var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=512&height=288&nologo=true&seed=' + Date.now();
@@ -2499,11 +2531,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                  };
                  reader.readAsDataURL(blob);
              }).catch(function() {
-                 /* If fetch fails (CORS / offline), fall back to storing the URL */
-                 f.image = imgUrl;
-                 saveEditorData();
+                 /* Network/CORS failure — do NOT store a raw remote URL; it breaks offline rendering.
+                    Show a user-friendly error and leave the frame image unchanged. */
+                 if (cell) cell.innerHTML = '<span style="font-size:8px;color:#f87171;">Network Error</span>';
+                 alert('Image generation failed: network or CORS error. Ensure you are online and try again.');
                  buildEditor(activeTemplateId);
-                 if (activeTab === 'preview') renderPreview();
              });
          }
       }

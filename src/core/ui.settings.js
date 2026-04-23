@@ -195,10 +195,20 @@
                             '<button onclick="mBT.ui.showLegalDoc(\'UserAgreement.md\')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">User Agreement</button>' +
                             '<button onclick="mBT.ui.showLegalDoc(\'PrivacyPolicy.md\')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">Privacy Policy</button>' +
                         '</div>' +
+                        '<div id="storageHealthCard" class="settings-card mt-1">' +
+                            '<div class="flex justify-between items-center mb-1.5">' +
+                                '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Storage Health</h4>' +
+                                '<span id="storageHealthPct" class="text-[9px] font-black text-slate-400">Checking...</span>' +
+                            '</div>' +
+                            '<div class="w-full bg-slate-200 rounded-full h-1.5 mb-1.5">' +
+                                '<div id="storageHealthBar" class="h-1.5 rounded-full bg-emerald-500 transition-all" style="width:0%"></div>' +
+                            '</div>' +
+                            '<p id="storageHealthDetail" class="text-[8px] text-slate-400 font-bold">Calculating local storage usage...</p>' +
+                        '</div>' +
                     '</div>';
         }
         if (tabName === 'ai') {
-            var provider = getSelectedProvider();
+            var provider = mBT.features.ai.getSelectedProvider();
             var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
             var storedPrompt = mBT.features.ai.getSystemPrompt();
             var keyLinks = {
@@ -263,23 +273,8 @@
                                 '<div id="openrouterFields" style="display:' + (provider === 'openrouter' ? 'block' : 'none') + '">' +
                                     '<div class="flex justify-between items-center mb-1.5">' +
                                         '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
-                                        '<button onclick="' +
-                                            'var k=document.getElementById(\'apiKeyInput\').value.trim();' +
-                                            'if(!k){mBTME.alert(\'Error\',\'Enter your OpenRouter API key first.\');return;}' +
-                                            'var sel=document.getElementById(\'orModelSelect\');' +
-                                            'sel.innerHTML=\'<option disabled selected>Loading...</option>\';' +
-                                            'mBT.features.ai.fetchOpenRouterModels(k).then(function(models){' +
-                                                'var saved=localStorage.getItem(\'mbt_openrouter_model\')||\'openai/gpt-4o-mini\';' +
-                                                'var free=models.filter(function(m){return m.free;});' +
-                                                'var paid=models.filter(function(m){return !m.free;});' +
-                                                'var html=\'<optgroup label=\\"Free Models\\">\';' +
-                                                'free.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+( m.name||m.id)+\'</option>\';});' +
-                                                'html+=\'</optgroup><optgroup label=\\"Paid Models\\">\';' +
-                                                'paid.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+( m.name||m.id)+\'</option>\';});' +
-                                                'html+=\'</optgroup>\';' +
-                                                'sel.innerHTML=html;' +
-                                            '}).catch(function(e){mBTME.alert(\'Error\',e.message);sel.innerHTML=\'<option value=\\"openai/gpt-4o-mini\\" selected>openai/gpt-4o-mini</option>\';});' +
-                                        '" class="text-[9px] font-bold text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
+                                        '<button onclick="mBT_fetchORModels()" class="text-[9px] font-bold text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
+
                                     '</div>' +
                                     '<select id="orModelSelect" onchange="localStorage.setItem(\'mbt_openrouter_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer">' +
                                         '<option value="' + storedOrModel + '" selected>' + storedOrModel + '</option>' +
@@ -390,7 +385,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.77';
+            var currentVersion = updateStatus.localVersion || 'v22.79';
 
             var statusMsg = '';
             if (isChecking) {
@@ -434,6 +429,37 @@
             document.body.classList.remove('bg-slate-950');
         }
         window.dispatchEvent(new CustomEvent('mbt:theme-changed', { detail: { theme: themeName } }));
+    };
+
+
+    /* --- OpenRouter Model Fetch Helper (avoids inline-onclick quote contamination) --- */
+    window.mBT_fetchORModels = function () {
+        var keyEl = document.getElementById('apiKeyInput');
+        var sel   = document.getElementById('orModelSelect');
+        if (!keyEl || !sel) return;
+        var k = keyEl.value.trim();
+        if (!k) { if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Enter your OpenRouter API key first.'); return; }
+        sel.innerHTML = '<option disabled selected>Loading...</option>';
+        mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
+            var saved = localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini';
+            var i, free = [], paid = [];
+            for (i = 0; i < models.length; i++) {
+                if (models[i].free) { free.push(models[i]); } else { paid.push(models[i]); }
+            }
+            var html = '<optgroup label="Free Models">';
+            for (i = 0; i < free.length; i++) {
+                html += '<option value="' + free[i].id + '"' + (free[i].id === saved ? ' selected' : '') + '>' + (free[i].name || free[i].id) + '</option>';
+            }
+            html += '</optgroup><optgroup label="Paid Models">';
+            for (i = 0; i < paid.length; i++) {
+                html += '<option value="' + paid[i].id + '"' + (paid[i].id === saved ? ' selected' : '') + '>' + (paid[i].name || paid[i].id) + '</option>';
+            }
+            html += '</optgroup>';
+            sel.innerHTML = html;
+        }).catch(function (e) {
+            if (typeof mBTME !== 'undefined') mBTME.alert('Error', e.message);
+            sel.innerHTML = '<option value="openai/gpt-4o-mini" selected>openai/gpt-4o-mini</option>';
+        });
     };
 
 })(window);
