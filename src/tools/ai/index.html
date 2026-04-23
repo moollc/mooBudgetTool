@@ -118,7 +118,7 @@
       <div class="flex flex-col items-center text-center gap-1 relative">
         <h1 class="text-2xl font-bold text-white">Assistant</h1>
         <p class="asst-tagline text-indigo-200 text-sm">(Collaborative workspace — context + chat + proposals)</p>
-        <span class="absolute left-0 top-0 text-indigo-300 text-xs font-mono opacity-70" id="aiToolVersion">v22.87</span>
+        <span class="absolute left-0 top-0 text-indigo-300 text-xs font-mono opacity-70" id="aiToolVersion">v22.88</span>
         <div class="absolute right-0 top-0 flex items-center gap-2">
           <span class="asst-tokmeter" id="tokMeter" title="Estimated context token usage">~0 tokens</span>
           <div class="w-2.5 h-2.5 bg-green-400 rounded-full ai-glow"></div>
@@ -1002,12 +1002,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var MONOLITH_PREFIX = 'prodBudget_v5_';
 
     var PROVIDER_ENDPOINTS = {
-        gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/models/', model: 'gemini-2.5-flash',          label: 'Google Gemini' },
-        openai:    { url: 'https://api.openai.com/v1/chat/completions',               model: 'gpt-4o-mini',               label: 'OpenAI' },
-        deepseek:  { url: 'https://api.deepseek.com/chat/completions',                model: 'deepseek-chat',             label: 'DeepSeek' },
-        grok:      { url: 'https://api.x.ai/v1/chat/completions',                     model: 'grok-beta',                 label: 'Grok (xAI)' },
-        anthropic: { url: 'https://api.anthropic.com/v1/messages',                    model: 'claude-sonnet-4-6',         label: 'Anthropic (Claude)' },
-        lmstudio:  { url: 'http://localhost:1234/v1/chat/completions',                 model: 'local-model',               label: 'LM Studio (Local)' }
+        gemini:      { url: 'https://generativelanguage.googleapis.com/v1beta/models/', model: 'gemini-2.5-flash',          label: 'Google Gemini' },
+        openai:      { url: 'https://api.openai.com/v1/chat/completions',               model: 'gpt-4o-mini',               label: 'OpenAI' },
+        deepseek:    { url: 'https://api.deepseek.com/chat/completions',                model: 'deepseek-chat',             label: 'DeepSeek' },
+        grok:        { url: 'https://api.x.ai/v1/chat/completions',                     model: 'grok-beta',                 label: 'Grok (xAI)' },
+        anthropic:   { url: 'https://api.anthropic.com/v1/messages',                    model: 'claude-sonnet-4-6',         label: 'Anthropic (Claude)' },
+        openrouter:  { url: 'https://openrouter.ai/api/v1/chat/completions',            model: 'openai/gpt-4o-mini',        label: 'OpenRouter' },
+        lmstudio:    { url: 'http://localhost:1234/v1/chat/completions',                 model: 'local-model',               label: 'LM Studio (Local)' }
     };
 
     function getMonolithProvider() {
@@ -1038,6 +1039,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                 url:   localStorage.getItem(MONOLITH_PREFIX + 'lmstudioEndpoint') || cfg.url,
                 model: localStorage.getItem(MONOLITH_PREFIX + 'lmstudioModel')    || cfg.model,
                 label: 'LM Studio (Local)'
+            };
+        }
+
+        /* OpenRouter: read saved model selection */
+        if (provider === 'openrouter') {
+            cfg = {
+                url:   'https://openrouter.ai/api/v1/chat/completions',
+                model: localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini',
+                label: 'OpenRouter'
             };
         }
 
@@ -1089,13 +1099,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             });
         }
 
-        /* OpenAI-compatible: OpenAI, DeepSeek, Grok, LM Studio */
+        /* OpenAI-compatible: OpenAI, DeepSeek, Grok, OpenRouter, LM Studio */
         var messages = [];
         if (sysInstruction) messages.push({ role: 'system', content: sysInstruction });
         messages.push({ role: 'user', content: userMessage });
 
         var headers = { 'Content-Type': 'application/json' };
         if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = window.location.origin;
+            headers['X-Title'] = 'mBT';
+        }
 
         return fetch(cfg.url, {
             method: 'POST',
@@ -1122,6 +1136,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                 url:   localStorage.getItem(MONOLITH_PREFIX + 'lmstudioEndpoint') || cfg.url,
                 model: localStorage.getItem(MONOLITH_PREFIX + 'lmstudioModel')    || cfg.model,
                 label: 'LM Studio (Local)'
+            };
+        }
+
+        if (provider === 'openrouter') {
+            cfg = {
+                url:   'https://openrouter.ai/api/v1/chat/completions',
+                model: localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini',
+                label: 'OpenRouter'
             };
         }
 
@@ -1162,6 +1184,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
         var headers = { 'Content-Type': 'application/json' };
         if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = window.location.origin;
+            headers['X-Title'] = 'mBT';
+        }
 
         return fetch(cfg.url, {
             method: 'POST',
