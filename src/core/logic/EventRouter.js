@@ -704,11 +704,13 @@ window.mBTRouter = (function () {
                     notes:       'optional one-line commentary'
                 },
                 pitchDeck: {
-                    logline:     'one sentence, max 25 words',
-                    synopsis:    '2-3 paragraphs plain text',
-                    marketAngle: 'one paragraph on target audience and positioning',
-                    comparables: 'short list of 2-3 comparable titles',
-                    ask:         'one-line funding ask in project currency'
+                    logline:          'one sentence, max 25 words, emotionally hooks the reader',
+                    synopsis:         '2-3 paragraphs plain text, no headings',
+                    targetMarket:     'one paragraph on target audience and market positioning',
+                    comparables:      'short list of 2-3 comparable titles with brief reason each',
+                    directorStatement:'one paragraph, first-person voice, why this story matters to the director',
+                    directorBio:      'two to three sentences, third-person, key credits and background',
+                    useOfFunds:       'one paragraph explaining how the requested funding will be allocated'
                 }
             };
 
@@ -784,6 +786,11 @@ window.mBTRouter = (function () {
                                     } catch (je2) { out = {}; }
                                 }
                             }
+                        }
+                        /* Surface API-level failures so the caller can show the real error */
+                        if (typeof resp === 'string' && resp.indexOf('Analysis Failed:') === 0) {
+                            _reply({ _error: resp.replace('Analysis Failed: ', '') });
+                            return;
                         }
                         var cleanOut = {};
                         _fields.forEach(function (f) {
