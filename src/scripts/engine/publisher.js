@@ -1195,6 +1195,7 @@
                         (d.basecampParking ? ' <i style="color:#64748b;">(' + esc(d.basecampParking) + ')</i>' : '') +
                         ((d.shootingLocations || []).map(function (loc) {
                             return '<br><b style="font-size:7pt;">SHOOTING:</b> ' + or(loc.address) +
+                                (loc.eta ? ' <b style="font-size:7pt;color:#475569;">ETA ' + esc(loc.eta) + '</b>' : '') +
                                 (loc.notes ? ' <i style="color:#64748b;">(' + esc(loc.notes) + ')</i>' : '');
                         }).join('')) +
                         '</div></div>';

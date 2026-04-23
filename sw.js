@@ -36,6 +36,7 @@ var PRECACHE_ASSETS = [
     './src/scripts/engine/opengate-api.js',
     './src/scripts/engine/opfs.js',
     './src/scripts/engine/publisher.js',
+    './src/scripts/engine/totalizer.js',
 
     /* --- Event routing & AI bridge (loaded at L369/L372) --- */
     './src/core/logic/EventRouter.js',

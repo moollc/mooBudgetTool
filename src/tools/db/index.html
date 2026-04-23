@@ -635,9 +635,32 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (cb) cb();
     }).catch(function () { if (cb) cb(); });
   }
+  /* ======== Logo (stored in localforage — can be large base64) ======== */
+  function logoKey() { return 'mbtdb_logo_' + (projectKey || 'default'); }
+
+  function downscaleImage(dataUrl, maxW, maxH, quality, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var canvas = document.createElement('canvas');
+      var w = img.width;
+      var h = img.height;
+      if (w > maxW) { h *= maxW / w; w = maxW; }
+      if (h > maxH) { w *= maxH / h; h = maxH; }
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL('image/jpeg', quality || 0.8));
+    };
+    img.onerror = function () { cb(dataUrl); };
+    img.src = dataUrl;
+  }
+
   function saveLogo(dataUrl, cb) {
-    logoData = dataUrl;
-    localforage.setItem(logoKey(), dataUrl).then(function () { if (cb) cb(); }).catch(function () { if (cb) cb(); });
+    downscaleImage(dataUrl, 512, 512, 0.8, function (scaled) {
+      logoData = scaled;
+      localforage.setItem(logoKey(), scaled).then(function () { if (cb) cb(); }).catch(function () { if (cb) cb(); });
+    });
   }
   function clearLogo(cb) {
     logoData = null;
@@ -667,12 +690,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function getSnapshotNames() {
     try { return JSON.parse(localStorage.getItem(snapshotIndexKey()) || '[]'); } catch (e) { return []; }
   }
+
   function saveSnapshot(name) {
     if (!budget) return;
     var key = 'mbtdb_snap_' + (projectKey || 'default') + '_' + name;
     localforage.setItem(key, JSON.parse(JSON.stringify(budget))).then(function () {
       var names = getSnapshotNames().filter(function (n) { return n !== name; });
       names.unshift(name);
+      /* Prune to last 10 snapshots */
+      if (names.length > 10) {
+        var toDelete = names.splice(10);
+        toDelete.forEach(function (dn) {
+          localforage.removeItem('mbtdb_snap_' + (projectKey || 'default') + '_' + dn);
+        });
+      }
       try { localStorage.setItem(snapshotIndexKey(), JSON.stringify(names)); } catch (e) {}
     });
   }
@@ -1669,6 +1700,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (loadBtn) loadBtn.addEventListener('click', autoPopulateFromBudget);
     var weatherBtn = fresh.querySelector('#btn-fetch-weather');
     if (weatherBtn) weatherBtn.addEventListener('click', fetchWeatherAndHospitals);
+    var weatherLocBtn = fresh.querySelector('#btn-fetch-weather-loc');
+    if (weatherLocBtn) weatherLocBtn.addEventListener('click', fetchWeatherAndHospitals);
     /* Wire fundingPackage Autofill (budget -> AI cascade) */
     var fpAutofillBtn = fresh.querySelector('#btn-fp-autofill');
     if (fpAutofillBtn) fpAutofillBtn.addEventListener('click', autoPopulateFundingPackage);
@@ -1695,12 +1728,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                            var idx = parseInt(input.getAttribute('data-i'), 10);
                            var reader = new FileReader();
                            reader.onload = function(evt) {
-                               if (editorData.frames && editorData.frames[idx]) {
-                                   editorData.frames[idx].image = evt.target.result;
-                                   saveEditorData();
-                                   buildEditor('storyboard');
-                                   if (activeTab === 'preview') renderPreview();
-                               }
+                               downscaleImage(evt.target.result, 512, 288, 0.8, function(scaled) {
+                                   if (editorData.frames && editorData.frames[idx]) {
+                                       editorData.frames[idx].image = scaled;
+                                       saveEditorData();
+                                       buildEditor('storyboard');
+                                       if (activeTab === 'preview') renderPreview();
+                                   }
+                               });
                            };
                            reader.readAsDataURL(blob);
                        }
@@ -1820,11 +1855,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       html += '</div>';
     }
     /* Shooting Locations (dynamic) */
-    html += '<div class="ed-section"><div class="ed-section-hdr">Shooting Locations</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th>Notes</th><th></th></tr></thead><tbody>';
+    html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Shooting Locations' +
+      '<button class="smart-btn" id="btn-fetch-weather-loc" type="button">' +
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
+      ' Fetch All Forecasts</button></div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th style="width:90px;">ETA</th><th>Notes</th><th></th></tr></thead><tbody>';
     (d.shootingLocations || []).forEach(function (loc, i) {
-      html += '<tr><td><input data-arr="shootingLocations" data-i="' + i + '" data-f="address" value="' + esc(loc.address) + '"></td>' +
-        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="notes" value="' + esc(loc.notes) + '"></td>' +
+      html += '<tr><td><input data-arr="shootingLocations" data-i="' + i + '" data-f="address" value="' + esc(loc.address || '') + '" placeholder="Street, City, Country"></td>' +
+        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="eta" type="time" value="' + esc(loc.eta || '') + '" style="width:80px;"></td>' +
+        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="notes" value="' + esc(loc.notes || '') + '"></td>' +
         '<td><button class="ed-del" data-arr="shootingLocations" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="shootingLocations">+ Add Location</button></div>';
@@ -2396,11 +2435,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     
     if (choice === '1') {
       var url = prompt("Paste Image URL or Base64 data URI:", f.image || "");
-      if (url !== null) {
-        f.image = url;
-        saveEditorData();
-        buildEditor(activeTemplateId);
-        if (activeTab === 'preview') renderPreview();
+      if (url !== null && url !== "") {
+        downscaleImage(url, 512, 288, 0.8, function(scaled) {
+          f.image = scaled;
+          saveEditorData();
+          buildEditor(activeTemplateId);
+          if (activeTab === 'preview') renderPreview();
+        });
       }
     } else if (choice === '2') {
       var promptText = prompt("Enter AI Image Prompt:", f.description || "");
@@ -2429,10 +2470,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                  body: JSON.stringify({ model: apiModel, prompt: promptText, n: 1, size: '1024x1024', response_format: 'b64_json' })
              }).then(function(r) { return r.json(); }).then(function(res) {
                  if (res.data && res.data[0] && res.data[0].b64_json) {
-                     f.image = 'data:image/png;base64,' + res.data[0].b64_json;
-                     saveEditorData();
-                     buildEditor(activeTemplateId);
-                     if (activeTab === 'preview') renderPreview();
+                     downscaleImage('data:image/png;base64,' + res.data[0].b64_json, 512, 288, 0.8, function(scaled) {
+                         f.image = scaled;
+                         saveEditorData();
+                         buildEditor(activeTemplateId);
+                         if (activeTab === 'preview') renderPreview();
+                     });
                  } else {
                      alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
                      buildEditor(activeTemplateId);
@@ -2447,10 +2490,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
              fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
                  var reader = new FileReader();
                  reader.onload = function(evt) {
-                     f.image = evt.target.result;
-                     saveEditorData();
-                     buildEditor(activeTemplateId);
-                     if (activeTab === 'preview') renderPreview();
+                     downscaleImage(evt.target.result, 512, 288, 0.8, function(scaled) {
+                         f.image = scaled;
+                         saveEditorData();
+                         buildEditor(activeTemplateId);
+                         if (activeTab === 'preview') renderPreview();
+                     });
                  };
                  reader.readAsDataURL(blob);
              }).catch(function() {
@@ -2825,7 +2870,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!editorData[arrName]) editorData[arrName] = [];
         editorData[arrName].push(newItem);
         saveEditorData();
+        var scrollY = panel.scrollTop;
         buildEditor(activeTemplateId);
+        var freshPanel = dom.getElementById('editor-panel');
+        if (freshPanel) freshPanel.scrollTop = scrollY;
         return;
       }
 
@@ -2835,7 +2883,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (editorData[arrN]) {
           editorData[arrN].splice(delIdx, 1);
           saveEditorData();
+          var scrollYDel = panel.scrollTop;
           buildEditor(activeTemplateId);
+          var freshPanelDel = dom.getElementById('editor-panel');
+          if (freshPanelDel) freshPanelDel.scrollTop = scrollYDel;
         }
       }
     });
@@ -2849,7 +2900,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       scenes: { sceneNum: '', intExt: 'INT', dayNight: 'DAY', description: '', cast: '', pages: '', location: '' },
       cast: { id: '', character: '', actor: '', status: 'W', pickup: '', call: '', blockRehearsal: '', wardrobeMakeup: '', onSet: '' },
       background: { quantity: '', description: '', callTime: '' },
-      shootingLocations: { address: '', notes: '' },
+      shootingLocations: { address: '', eta: '', notes: '' },
       items: { description: '', quantity: '1', unitPrice: '', total: '' },
       entries: { date: new Date().toISOString().split('T')[0], description: '', category: '', amount: '', receiptNum: '', approvedBy: '' },
       crew: { department: '', name: '', role: '', rate: '', rateUnit: 'Day', union: '', phone: '', email: '', emergencyContact: '', emergencyPhone: '' },
@@ -3287,37 +3338,67 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     weatherFetchController = new AbortController();
     var signal = weatherFetchController.signal;
 
-    /* Geocode all locations in parallel */
+    /* Geocode all locations in parallel — failures return null instead of crashing chain */
     Promise.all(locations.map(function (address) {
-      return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address), {
-        headers: { 'Accept': 'application/json' }, signal: signal
-      }).then(function (r) { return r.json(); }).then(function (geo) {
+      return fetch(
+        'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address),
+        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal }
+      ).then(function (r) {
+        if (!r.ok) throw new Error('Nominatim HTTP ' + r.status);
+        return r.json();
+      }).then(function (geo) {
         if (!geo || geo.length === 0) return null;
         return { address: address, lat: parseFloat(geo[0].lat), lon: parseFloat(geo[0].lon) };
+      }).catch(function (err) {
+        if (err.name === 'AbortError') throw err; /* re-throw abort so outer chain can bail */
+        console.warn('[mBTDB geocode] Could not locate: ' + address, err);
+        return null; /* continue with other locations */
       });
     })).then(function (geoResults) {
       var validGeo = geoResults.filter(Boolean);
-      if (validGeo.length === 0) { statusEl.textContent = 'Location not found.'; return; }
+      if (validGeo.length === 0) {
+        statusEl.textContent = 'Could not find any of the entered locations. Check addresses and try again.';
+        return;
+      }
+      if (validGeo.length < locations.length) {
+        statusEl.textContent = 'Fetching weather (' + validGeo.length + ' of ' + locations.length + ' found)\u2026';
+      } else {
+        statusEl.textContent = 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
+      }
 
-      statusEl.textContent = 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
-
-      /* Fetch 3-day forecast for each location */
+      /* Fetch 3-day forecast for each geocoded location — isolate failures per-location */
       var weatherFetches = validGeo.map(function (g) {
         var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + g.lat + '&longitude=' + g.lon +
           '&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto&forecast_days=3';
-        return fetch(url, { signal: signal }).then(function (r) { return r.json(); })
-          .then(function (w) { return { geo: g, weather: w }; });
+        return fetch(url, { signal: signal })
+          .then(function (r) { return r.json(); })
+          .then(function (w) { return { geo: g, weather: w }; })
+          .catch(function (err) {
+            if (err.name === 'AbortError') throw err;
+            console.warn('[mBTDB weather] Forecast failed for: ' + g.address, err);
+            return null;
+          });
       });
 
-      /* Hospitals for the first location only */
+      /* Hospitals for the first valid location only */
       var firstGeo = validGeo[0];
       var overpassQuery = '[out:json][timeout:25];(node["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + ');way["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + '););out center 5;';
       var overpassFetch = fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery), { signal: signal })
-        .then(function (r) { return r.json(); });
+        .then(function (r) { return r.json(); })
+        .catch(function (err) {
+          if (err.name === 'AbortError') throw err;
+          console.warn('[mBTDB hospitals] Overpass fetch failed', err);
+          return { elements: [] }; /* return empty on failure so forecast still displays */
+        });
 
       Promise.all(weatherFetches.concat([overpassFetch])).then(function (results) {
-        var hospitalData = results[results.length - 1];
-        var weatherResults = results.slice(0, -1);
+        var hospitalData = results[results.length - 1] || { elements: [] };
+        var weatherResults = results.slice(0, -1).filter(Boolean);
+
+        if (weatherResults.length === 0) {
+          statusEl.textContent = 'Weather fetch failed. Try again or enter data manually.';
+          return;
+        }
 
         /* Build locationForecasts: [{address, days:[{date,high,low,conditions,sunrise,sunset}]}] */
         editorData.locationForecasts = weatherResults.map(function (wr) {
@@ -3346,17 +3427,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
 
         /* Hospital picker (first location) */
-        var hosps = (hospitalData.elements || []).filter(function (el) {
+        var hosps = ((hospitalData.elements || []).filter(function (el) {
           return el.tags && el.tags.name;
-        }).slice(0, 5);
+        })).slice(0, 5);
         if (hosps.length > 0) {
           var pickerHtml = '<p>Select nearest hospital:</p>';
-          hosps.forEach(function (h, i) {
+          hosps.forEach(function (h, hi) {
             var name  = h.tags.name || 'Hospital';
             var phone = h.tags.phone || h.tags['contact:phone'] || '';
             var addrParts = [h.tags['addr:street'], h.tags['addr:city'] || h.tags['addr:town']].filter(Boolean);
             var addr = addrParts.join(', ');
-            pickerHtml += '<div class="hosp-item" data-hi="' + i + '" data-name="' + esc(name) + '" data-addr="' + esc(addr) + '" data-phone="' + esc(phone) + '">' +
+            pickerHtml += '<div class="hosp-item" data-hi="' + hi + '" data-name="' + esc(name) + '" data-addr="' + esc(addr) + '" data-phone="' + esc(phone) + '">' +
               '<div><div class="hosp-item-name">' + esc(name) + '</div>' +
               (addr ? '<div style="font-size:9px;color:#64748b;">' + esc(addr) + '</div>' : '') + '</div>' +
               '<div class="hosp-item-phone">' + esc(phone) + '</div></div>';
@@ -3381,16 +3462,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         saveEditorData();
         buildEditor('callSheet');
         statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' +
-          (hosps.length > 0 ? ' — select a hospital above.' : '.');
+          (hosps.length > 0 ? ' \u2014 select a hospital above.' : '.');
         setTimeout(function () { if (statusEl.textContent.indexOf('select') < 0) statusEl.textContent = ''; }, 3000);
       }).catch(function (err) {
         if (err.name === 'AbortError') return;
-        statusEl.textContent = 'Network error — check connection.';
+        statusEl.textContent = 'Network error \u2014 check connection.';
         console.error('[mBTDB weather]', err);
       });
     }).catch(function (err) {
       if (err.name === 'AbortError') return;
-      statusEl.textContent = 'Geocoding failed — check connection.';
+      statusEl.textContent = 'Geocoding failed \u2014 check connection.';
       console.error('[mBTDB geocode]', err);
     });
   }
