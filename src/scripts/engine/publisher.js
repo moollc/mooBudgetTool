@@ -2695,7 +2695,8 @@
                         return '<div class="sb-frame">' +
                             '<div class="sb-image">' +
                                 '<span class="sb-num">' + esc(f.num || '') + '</span>' +
-                                '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                                (f.image ? '<img src="' + esc(f.image) + '" style="width:100%;height:100%;object-fit:cover;" />' :
+                                '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>') +
                             '</div>' +
                             '<div class="sb-meta">' +
                                 (f.shotType ? '<span class="sb-label">Shot</span> ' + esc(f.shotType) + '<br>' : '') +
