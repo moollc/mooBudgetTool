@@ -233,7 +233,7 @@
                                         'var link=document.getElementById(\'apiKeyLink\');' +
                                         'link.href=map[p]||\'#\';' +
                                         'link.style.visibility=(p===\'lmstudio\')?\'hidden\':\'visible\';' +
-                                        'document.getElementById(\'apiKeyInput\').value=getStoredApiKey(p);' +
+                                        'document.getElementById(\'apiKeyInput\').value=mBT.features.ai.getStoredApiKey(p);' +
                                         'document.getElementById(\'lmstudioFields\').style.display=(p===\'lmstudio\')?\'block\':\'none\';' +
                                         'document.getElementById(\'openrouterFields\').style.display=(p===\'openrouter\')?\'block\':\'none\';' +
                                         'document.getElementById(\'apiCredRow\').style.display=(p===\'lmstudio\')?\'none\':\'block\';' +
@@ -270,12 +270,12 @@
                                             'sel.innerHTML=\'<option disabled selected>Loading...</option>\';' +
                                             'mBT.features.ai.fetchOpenRouterModels(k).then(function(models){' +
                                                 'var saved=localStorage.getItem(\'mbt_openrouter_model\')||\'openai/gpt-4o-mini\';' +
-                                                'var free=models.filter(function(m){return m.pricing&&m.pricing.prompt===\'0\';});' +
-                                                'var paid=models.filter(function(m){return !m.pricing||m.pricing.prompt!==\'0\';});' +
+                                                'var free=models.filter(function(m){return m.free;});' +
+                                                'var paid=models.filter(function(m){return !m.free;});' +
                                                 'var html=\'<optgroup label=\\"Free Models\\">\';' +
-                                                'free.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+m.id+\'</option>\';});' +
+                                                'free.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+( m.name||m.id)+\'</option>\';});' +
                                                 'html+=\'</optgroup><optgroup label=\\"Paid Models\\">\';' +
-                                                'paid.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+m.id+\'</option>\';});' +
+                                                'paid.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+( m.name||m.id)+\'</option>\';});' +
                                                 'html+=\'</optgroup>\';' +
                                                 'sel.innerHTML=html;' +
                                             '}).catch(function(e){mBTME.alert(\'Error\',e.message);sel.innerHTML=\'<option value=\\"openai/gpt-4o-mini\\" selected>openai/gpt-4o-mini</option>\';});' +
@@ -301,7 +301,7 @@
                                     'var p=document.getElementById(\'aiProviderSelect\').value;' +
                                     'var k=document.getElementById(\'apiKeyInput\') ? document.getElementById(\'apiKeyInput\').value : \'\';' +
                                     'var s=document.getElementById(\'aiSystemPromptInput\').value;' +
-                                    'saveStoredApiKey(p,k);' +
+                                    'mBT.features.ai.saveStoredApiKey(p,k);' +
                                     'mBT.features.ai.saveSystemPrompt(s);' +
                                     'mBT.features.ai.saveSelectedProvider(p);' +
                                     'if(p===\'lmstudio\'){' +

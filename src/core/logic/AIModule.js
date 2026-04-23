@@ -28,9 +28,7 @@ window.mBTAIModule = {
     /* ── Storage Accessors ──────────────────────────────────────────────── */
     /* Keys use unprefixed mbt_ namespace to avoid being parsed as budget data */
     getStoredApiKey: function (provider) {
-        return localStorage.getItem('mbt_' + provider + '_api_key')
-            || localStorage.getItem('mbt_ai_api_key')
-            || '';
+        return localStorage.getItem('mbt_' + provider + '_api_key') || '';
     },
     saveStoredApiKey: function (provider, key) {
         localStorage.setItem('mbt_' + provider + '_api_key', key);
@@ -483,18 +481,21 @@ window.mBTAIModule = {
     /* ── OpenRouter: Fetch available models ────────────────────────────── */
     fetchOpenRouterModels: function (apiKey) {
         return fetch('https://openrouter.ai/api/v1/models', {
-            headers: { 'Authorization': 'Bearer ' + apiKey }
+            headers: { 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.origin, 'X-Title': 'mBT' }
         }).then(function (res) {
             if (!res.ok) throw new Error('OpenRouter models fetch failed: ' + res.status);
             return res.json();
         }).then(function (data) {
-            return (data.data || []).sort(function (a, b) {
-                /* Free models first (pricing.prompt === '0'), then alphabetical */
-                var aFree = (a.pricing && a.pricing.prompt === '0') ? 0 : 1;
-                var bFree = (b.pricing && b.pricing.prompt === '0') ? 0 : 1;
-                if (aFree !== bFree) return aFree - bFree;
+            var models = (data.data || []).map(function (m) {
+                var promptPrice = parseFloat((m.pricing && m.pricing.prompt) || '0');
+                return { id: m.id, name: m.name || m.id, free: promptPrice === 0 };
+            });
+            models.sort(function (a, b) {
+                /* Free models first, then alphabetical by id */
+                if (a.free !== b.free) return a.free ? -1 : 1;
                 return (a.id || '').localeCompare(b.id || '');
             });
+            return models;
         });
     },
 

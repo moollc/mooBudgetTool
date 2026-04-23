@@ -144,115 +144,121 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
 
     /* --- Count all local records across stores --- */
-    async function countLocalRecords() {
+    /* --- Count all local records across stores --- */
+    function countLocalRecords() {
         var s = window.mBT.storage;
-        var projects   = (await s.getAllProjects()).length;
-        var stages     = (await s.getAllStages()).length;
-        var ogItems    = (await s.getAllOGItems()).length;
-        var db         = await s.getDb();
+        var results = { projects: 0, stages: 0, ogItems: 0, db: null, contacts: 0, sessions: 0 };
 
-        function countStore(storeName) {
-            return new Promise(function (resolve) {
-                var st  = db.transaction(storeName, 'readonly').objectStore(storeName);
-                var req = st.count();
-                req.onsuccess = function () { resolve(req.result || 0); };
-                req.onerror   = function () { resolve(0); };
+        return s.getAllProjects()
+            .then(function (p) { results.projects = p.length; return s.getAllStages(); })
+            .then(function (st) { results.stages = st.length; return s.getAllOGItems(); })
+            .then(function (og) { results.ogItems = og.length; return s.getDb(); })
+            .then(function (db) {
+                results.db = db;
+                function countStore(storeName) {
+                    return new Promise(function (resolve) {
+                        try {
+                            var tx = results.db.transaction(storeName, 'readonly');
+                            var st = tx.objectStore(storeName);
+                            var req = st.count();
+                            req.onsuccess = function () { resolve(req.result || 0); };
+                            req.onerror = function () { resolve(0); };
+                        } catch (e) { resolve(0); }
+                    });
+                }
+                return Promise.all([countStore('contacts'), countStore('sessions')]);
+            })
+            .then(function (counts) {
+                return results.projects + results.stages + results.ogItems + counts[0] + counts[1];
             });
-        }
-
-        var contacts = await countStore('contacts');
-        var sessions = await countStore('sessions');
-
-        return projects + stages + ogItems + contacts + sessions;
     }
 
-    async function syncPush() {
+    function syncPush() {
         if (!window.mBTSupabaseConfig.isConfigured()) {
             addLog('Configuration required — set URL and Key first.');
             return;
         }
         addLog('Pushing local data to Supabase..');
-        try {
-            var result = await window.mBTSync.pushAll();
+        window.mBTSync.pushAll().then(function (result) {
             syncCount++;
             localStorage.setItem('mbt_sync_count', syncCount);
             dom.getElementById('syncCount').textContent = syncCount;
-            dom.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
+            dom.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
             dom.getElementById('cloudStatus').textContent = 'Synced';
             addLog('Push complete: ' + result.synced + ' records, ' + result.errors + ' errors.');
-        } catch (e) {
+        }).catch(function (e) {
             addLog('Push failed: ' + e.message);
-        }
+        });
     }
 
-    async function syncPull() {
+    function syncPull() {
         if (!window.mBTSupabaseConfig.isConfigured()) {
             addLog('Configuration required — set URL and Key first.');
             return;
         }
         addLog('Pulling data from Supabase..');
-        try {
-            var result = await window.mBTSync.pullAll();
-            dom.getElementById('lastSync').textContent  = new Date().toLocaleTimeString();
+        window.mBTSync.pullAll().then(function (result) {
+            dom.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
             dom.getElementById('cloudStatus').textContent = 'Pulled';
             addLog('Pull complete: ' + result.pulled + ' new records, ' + result.errors + ' errors.');
-            await refreshLocalCount();
-        } catch (e) {
+            return refreshLocalCount();
+        }).catch(function (e) {
             addLog('Pull failed: ' + e.message);
-        }
+        });
     }
 
-    async function exportData() {
+    function exportData() {
         addLog('Preparing JSON export..');
-        try {
-            var jsonStr = await window.mBTSync.exportData();
-            var blob    = new Blob([jsonStr], { type: 'application/json' });
-            var url     = URL.createObjectURL(blob);
-            var a       = document.createElement('a');
-            a.href      = url;
-            a.download  = 'mBT-backup-' + new Date().toISOString().split('T')[0] + '.json';
+        window.mBTSync.exportData().then(function (jsonStr) {
+            var blob = new Blob([jsonStr], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'mBT-backup-' + new Date().toISOString().split('T')[0] + '.json';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             addLog('Export downloaded successfully.');
-        } catch (e) {
+        }).catch(function (e) {
             addLog('Export failed: ' + e.message);
-        }
+        });
     }
 
-    async function refreshLocalCount() {
-        var count = await countLocalRecords();
-        dom.getElementById('localRecords').textContent = count.toLocaleString();
+    function refreshLocalCount() {
+        return countLocalRecords().then(function (count) {
+            dom.getElementById('localRecords').textContent = count.toLocaleString();
+        });
     }
 
     function addLog(message) {
-        var el        = dom.getElementById('logs');
+        var el = dom.getElementById('logs');
         var timestamp = new Date().toLocaleTimeString();
-        var line      = document.createElement('div');
+        var line = document.createElement('div');
         line.textContent = '[' + timestamp + '] ' + message;
-        line.className   = message.startsWith('Push') || message.startsWith('Pull') || message.startsWith('Export') || message.startsWith('Config') ? 'text-green-400' :
-                           message.toLowerCase().includes('fail') || message.toLowerCase().includes('error') ? 'text-red-400' : 'text-yellow-300';
+        line.className = message.startsWith('Push') || message.startsWith('Pull') || message.startsWith('Export') || message.startsWith('Config') ? 'text-green-400' :
+            message.toLowerCase().includes('fail') || message.toLowerCase().includes('error') ? 'text-red-400' : 'text-yellow-300';
         el.appendChild(line);
         if (el.children.length > 50) el.removeChild(el.firstChild);
         el.scrollTop = el.scrollHeight;
     }
 
     /* --- Init --- */
-    async function init() {
+    function init() {
         /* --- Restore saved credentials to inputs --- */
         var savedUrl = localStorage.getItem('mbt_supabase_url') || '';
         var savedKey = localStorage.getItem('mbt_supabase_key') || '';
         var savedSync = localStorage.getItem('mbt_supabase_sync_enabled') !== 'false';
 
-        dom.getElementById('supabaseUrl').value   = savedUrl;
-        dom.getElementById('supabaseKey').value   = savedKey;
+        dom.getElementById('supabaseUrl').value = savedUrl;
+        dom.getElementById('supabaseKey').value = savedKey;
         dom.getElementById('syncEnabled').checked = savedSync;
         dom.getElementById('syncCount').textContent = syncCount;
 
         updateSyncStatus();
-        await refreshLocalCount();
-        addLog('Cloud Backup initialized.');
+        refreshLocalCount().then(function () {
+            addLog('Cloud Backup initialized.');
+        });
     }
 
     init();
