@@ -262,7 +262,7 @@
                                         '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Credentials</label>' +
                                         '<a id="apiKeyLink" href="' + (keyLinks[provider] || '#') + '" target="_blank" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest flex items-center gap-1 transition-colors">Get API Key <span>&rarr;</span></a>' +
                                     '</div>' +
-                                    '<input type="password" id="apiKeyInput" value="' + getStoredApiKey(provider) + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="sk-..">' +
+                                    '<input type="password" id="apiKeyInput" value="' + mBT.features.ai.getStoredApiKey(provider) + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="sk-..">' +
                                 '</div>' +
                                 '<div id="lmstudioFields" style="display:' + (provider === 'lmstudio' ? 'block' : 'none') + '">' +
                                     '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Local Endpoint URL</label>' +
@@ -294,7 +294,7 @@
                                 '</div>' +
                                 '<button id="saveApiKeyBtn" onclick="' +
                                     'var p=document.getElementById(\'aiProviderSelect\').value;' +
-                                    'var k=document.getElementById(\'apiKeyInput\') ? document.getElementById(\'apiKeyInput\').value : \'\';' +
+                                    'var k=document.getElementById(\'apiKeyInput\') ? document.getElementById(\'apiKeyInput\').value.trim() : \'\';' +
                                     'var s=document.getElementById(\'aiSystemPromptInput\').value;' +
                                     'mBT.features.ai.saveStoredApiKey(p,k);' +
                                     'mBT.features.ai.saveSystemPrompt(s);' +
@@ -309,7 +309,17 @@
                                         'var orSel=document.getElementById(\'orModelSelect\');' +
                                         'if(orSel&&orSel.value) localStorage.setItem(\'mbt_openrouter_model\', orSel.value);' +
                                     '}' +
-                                    'mBTME.alert(\'Success\', \'Assistant Linked\');' +
+                                    'if(!k && p!==\'lmstudio\') { mBTME.alert(\'No Key\', \'Enter an API key before synchronizing.\'); return; }' +
+                                    'var btn=document.getElementById(\'saveApiKeyBtn\');' +
+                                    'if(btn){ btn.textContent=\'Testing..\'; btn.disabled=true; }' +
+                                    'mBT.features.ai.callUnifiedAI(p, k, \'Reply with the single word: connected\', \'You are a connection test. Reply only with the word: connected\')' +
+                                    '.then(function(r){' +
+                                        'if(btn){ btn.textContent=\'Synchronize Link\'; btn.disabled=false; }' +
+                                        'mBTME.alert(\'Connected\', p.charAt(0).toUpperCase()+p.slice(1)+\' API key verified and saved.\');' +
+                                    '}).catch(function(e){' +
+                                        'if(btn){ btn.textContent=\'Synchronize Link\'; btn.disabled=false; }' +
+                                        'mBTME.alert(\'Connection Failed\', \'Could not reach \'+p+\'. Check your key and try again.\');' +
+                                    '});' +
                                 '" class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>' +
                             '</div>' +
                         '</div>' +
@@ -385,7 +395,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.79';
+            var currentVersion = updateStatus.localVersion || 'v22.81';
 
             var statusMsg = '';
             if (isChecking) {

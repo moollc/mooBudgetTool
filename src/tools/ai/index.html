@@ -1003,11 +1003,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     };
 
     function getMonolithProvider() {
-        return localStorage.getItem(MONOLITH_PREFIX + 'selectedAiProvider') || 'gemini';
+        return localStorage.getItem('mbt_selected_ai_provider') || 'gemini';
     }
 
     function getMonolithApiKey(provider) {
-        return localStorage.getItem(MONOLITH_PREFIX + provider + 'ApiKey') || '';
+        return localStorage.getItem('mbt_' + provider + '_api_key') || '';
     }
 
     function getMonolithSystemPrompt() {
