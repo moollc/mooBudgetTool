@@ -10,7 +10,7 @@ class MBTTool extends HTMLElement {
         this.attachShadow({ mode: 'open' });
     }
 
-    connectedCallback: function() {
+    connectedCallback() {
         var src = this.getAttribute('data-src');
         var self = this;
         if (!src) return;

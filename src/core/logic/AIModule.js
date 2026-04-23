@@ -20,7 +20,7 @@ window.mBTAIModule = {
         lmstudioEndpoint: 'http://localhost:1234/v1/chat/completions',
         systemContext:    'ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates.',
         /* Phase 60.B: action-trigger addendum appended to systemContext in chat mode */
-        chatActionPrompt: 'ACTION CAPABILITY: When you identify a specific actionable budget change, output a JSON action block immediately before your explanation:\n```json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n```\nKeep explanations brief.'
+        chatActionPrompt: 'ACTION CAPABILITY: When you identify a specific actionable budget change, output a JSON action block immediately before your explanation:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\nKeep explanations brief.'
     },
 
     /* ── Storage Accessors ──────────────────────────────────────────────── */
@@ -129,7 +129,7 @@ window.mBTAIModule = {
 
     /* ── Phase 60.B: Action Block Parser ───────────────────────────────── */
     _parseActionFromResponse: function (text) {
-        var match = text.match(/```json\s*(\{[\s\S]*?"mbt_action"[\s\S]*?\})\s*```/);
+        var match = text.match(/\x60\x60\x60json\s*(\{[\s\S]*?"mbt_action"[\s\S]*?\})\s*\x60\x60\x60/);
         if (!match) return null;
         try {
             var obj = JSON.parse(match[1]);
@@ -225,7 +225,7 @@ window.mBTAIModule = {
 
         var prompt = 'Analyze this budget data: ' + JSON.stringify(context) + '. Review financials, logistics (documents), and staffing. Identify 3 risks and 3 savings opportunities. Be concise.';
 
-        if (mBTME.showLoader) mBTME.showLoader('Assistant Analysis in progress...');
+        if (mBTME.showLoader) mBTME.showLoader('Assistant Analysis in progress..');
         return self.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
             if (mBTME.hideLoader) mBTME.hideLoader();
 
@@ -319,10 +319,10 @@ window.mBTAIModule = {
                     '</div>' +
                 '</div>' +
                 '<div id="aiChatHistory" class="flex-grow overflow-y-auto p-4 space-y-2">' +
-                    (budget.aiContext.chat.length ? renderMessages() : '<div class="text-center text-slate-400 text-xs mt-10">Start a conversation...</div>') +
+                    (budget.aiContext.chat.length ? renderMessages() : '<div class="text-center text-slate-400 text-xs mt-10">Start a conversation..</div>') +
                 '</div>' +
                 '<div class="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0">' +
-                    '<input type="text" id="aiChatInput" class="flex-grow p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" placeholder="Ask about rates, logistics, or risks..." onkeydown="if(event.key===\'Enter\') document.getElementById(\'aiChatSendBtn\').click()">' +
+                    '<input type="text" id="aiChatInput" class="flex-grow p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" placeholder="Ask about rates, logistics, or risks.." onkeydown="if(event.key===\'Enter\') document.getElementById(\'aiChatSendBtn\').click()">' +
                     '<button id="aiChatSendBtn" class="p-3 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-500 transition-all w-12 flex items-center justify-center shrink-0">' + (mBTAssets.paperPlane || '&rarr;') + '</button>' +
                 '</div>' +
             '</div>';
@@ -345,7 +345,7 @@ window.mBTAIModule = {
                     input.value = '';
 
                     var history = document.getElementById('aiChatHistory');
-                    history.innerHTML = renderMessages() + '<div class="ai-message assistant animate-pulse p-3 bg-white border border-slate-100 mr-8 rounded-lg"><div class="text-xs text-slate-400">Analyzing...</div></div>';
+                    history.innerHTML = renderMessages() + '<div class="ai-message assistant animate-pulse p-3 bg-white border border-slate-100 mr-8 rounded-lg"><div class="text-xs text-slate-400">Analyzing..</div></div>';
                     history.scrollTop = history.scrollHeight;
 
                     var count = document.getElementById('aiMsgCount');

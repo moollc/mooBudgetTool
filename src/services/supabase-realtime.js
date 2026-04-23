@@ -38,7 +38,7 @@
     var _reconnectTimer = null;     /* setTimeout handle for reconnect backoff */
     var _reconnectDelay = 5000;     /* Reconnect delay ms — doubles on failure */
     var _channels = {};       /* Active channel map { key: { topic, joinRef } } */
-    var _presenceState = {};       /* { userId: { user_id, display_name, ... } } */
+    var _presenceState = {};       /* { userId: { user_id, display_name, .. } } */
     var _typingLocks = {};       /* { fieldId: { userId, displayName } } */
     var _activeProjectId = null;     /* projectId currently subscribed */
     var _connected = false;    /* WebSocket.OPEN state flag */
@@ -251,7 +251,7 @@
         if (payload && typeof payload === 'object') {
             for (var key in payload) {
                 var entry = payload[key];
-                /* Supabase Realtime v2: presence entries are { metas: [...] } */
+                /* Supabase Realtime v2: presence entries are { metas: [..] } */
                 var metas = (entry && entry.metas) ? entry.metas : (Array.isArray(entry) ? entry : [entry]);
                 if (metas.length) _presenceState[key] = metas[0];
             }

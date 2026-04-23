@@ -519,6 +519,6 @@
     };
 
     // Note: index.html has a DOMContentLoaded listener that calls mBT.core.init().
-    // We intentionally removed the direct `boot()` call to prevent double-initialization.
+    // We intentionally removed the direct 'boot()' call to prevent double-initialization.
 
 })();
