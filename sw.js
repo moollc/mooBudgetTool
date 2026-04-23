@@ -1,6 +1,6 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
 
-var CACHE_NAME = 'mbt-monolith-cache-v22.83';
+var CACHE_NAME = 'mbt-monolith-cache-v22.84';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -76,6 +76,9 @@ var PRECACHE_ASSETS = [
     './src/core/wasm_node/mbt_wasm_node_bg.wasm',
     './src/core/wasm_node/pkg/mbt_wasm.js',
     './src/core/wasm_node/pkg/mbt_wasm_bg.wasm',
+
+    /* --- AI tool dependencies (loaded by src/tools/ai/index.html iframe) --- */
+    './src/services/ai-context.js',
 
     /* --- Tool HTML files (dynamically loaded via openTool() iframes) --- */
     './src/tools/tools-manifest.json',
