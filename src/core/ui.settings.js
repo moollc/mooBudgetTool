@@ -223,6 +223,7 @@
             var storedLmEndpoint = localStorage.getItem('mbt_lmstudio_endpoint') || localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1';
             var storedLmModel = localStorage.getItem('mbt_lmstudio_model') || localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || '';
             var storedOrModel = localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini';
+            var storedGeminiModel = localStorage.getItem('mbt_gemini_model') || 'gemini-2.5-flash';
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
                         '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
@@ -246,6 +247,7 @@
                                         'document.getElementById(\'apiKeyInput\').value=mBT.features.ai.getStoredApiKey(p);' +
                                         'document.getElementById(\'lmstudioFields\').style.display=(p===\'lmstudio\')?\'block\':\'none\';' +
                                         'document.getElementById(\'openrouterFields\').style.display=(p===\'openrouter\')?\'block\':\'none\';' +
+                                        'document.getElementById(\'geminiFields\').style.display=(p===\'gemini\')?\'block\':\'none\';' +
                                         'document.getElementById(\'apiCredRow\').style.display=(p===\'lmstudio\')?\'none\':\'block\';' +
                                     '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">' +
                                         '<option value="gemini" ' + (provider === 'gemini' ? 'selected' : '') + '>Google Gemini API</option>' +
@@ -274,12 +276,21 @@
                                     '<div class="flex justify-between items-center mb-1.5">' +
                                         '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
                                         '<button onclick="mBT_fetchORModels()" class="text-[9px] font-bold text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
-
                                     '</div>' +
                                     '<select id="orModelSelect" onchange="localStorage.setItem(\'mbt_openrouter_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer">' +
                                         '<option value="' + storedOrModel + '" selected>' + storedOrModel + '</option>' +
                                     '</select>' +
                                     '<p class="text-[8px] text-slate-600 mt-1.5 font-bold">Enter your API key above, then click Fetch Models to load the full catalogue.</p>' +
+                                '</div>' +
+                                '<div id="geminiFields" style="display:' + (provider === 'gemini' ? 'block' : 'none') + '">' +
+                                    '<div class="flex justify-between items-center mb-1.5">' +
+                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
+                                        '<button onclick="mBT_fetchGeminiModels()" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
+                                    '</div>' +
+                                    '<select id="geminiModelSelect" onchange="localStorage.setItem(\'mbt_gemini_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">' +
+                                        '<option value="' + storedGeminiModel + '" selected>' + storedGeminiModel + '</option>' +
+                                    '</select>' +
+                                    '<p class="text-[8px] text-slate-600 mt-1.5 font-bold">Enter your API key above, then click Fetch Models to load available Gemini models.</p>' +
                                 '</div>' +
                                 '<div>' +
                                     '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Persona &amp; Constraints</label>' +
@@ -395,7 +406,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.85';
+            var currentVersion = updateStatus.localVersion || 'v22.87';
 
             var statusMsg = '';
             if (isChecking) {
@@ -441,6 +452,28 @@
         window.dispatchEvent(new CustomEvent('mbt:theme-changed', { detail: { theme: themeName } }));
     };
 
+
+    /* --- Gemini Model Fetch Helper --- */
+    window.mBT_fetchGeminiModels = function () {
+        var keyEl = document.getElementById('apiKeyInput');
+        var sel   = document.getElementById('geminiModelSelect');
+        if (!keyEl || !sel) return;
+        var k = keyEl.value.trim();
+        if (!k) { if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Enter your Gemini API key first.'); return; }
+        sel.innerHTML = '<option disabled selected>Loading...</option>';
+        mBT.features.ai.fetchGeminiModels(k).then(function (models) {
+            var saved = localStorage.getItem('mbt_gemini_model') || 'gemini-2.5-flash';
+            var html = '';
+            for (var i = 0; i < models.length; i++) {
+                html += '<option value="' + models[i].id + '"' + (models[i].id === saved ? ' selected' : '') + '>' + (models[i].name || models[i].id) + '</option>';
+            }
+            if (!html) html = '<option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>';
+            sel.innerHTML = html;
+        }).catch(function (e) {
+            if (typeof mBTME !== 'undefined') mBTME.alert('Error', e.message);
+            sel.innerHTML = '<option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>';
+        });
+    };
 
     /* --- OpenRouter Model Fetch Helper (avoids inline-onclick quote contamination) --- */
     window.mBT_fetchORModels = function () {

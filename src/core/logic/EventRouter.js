@@ -754,9 +754,13 @@ window.mBTRouter = (function () {
                 } catch (_le) { /* ignore */ }
             }
 
-            var _sys = 'You are a professional film production assistant. Use ONLY the project context provided below. ' +
-                       'CRITICAL: Return ONLY a valid JSON object. No conversational filler, no prose, no explanation. ' +
-                       'If a value is unknown, use an empty string. Ensure valid JSON escaping.';
+            var _hasContext = !!(ctxFragment || inlineCtx.length);
+            var _sys = 'You are a professional film production assistant completing a production document. ' +
+                       (_hasContext
+                           ? 'Derive ALL field values strictly from the project context provided — do not invent facts not supported by it. '
+                           : 'No treatment or script has been provided. Use the project name, budget figures, and any known metadata to write professional placeholder values. Clearly base them on what is known. ') +
+                       'CRITICAL: Return ONLY a valid JSON object. No prose, no explanation, no markdown fences. ' +
+                       'Ensure valid JSON escaping.';
 
             /* Cap context at 1500 chars for doc fill — keeps prompt small, avoids 503 on Gemini */
             var _prompt = 'Populate these ' + _templateId + ' fields using the project context provided.\n' +
