@@ -1672,6 +1672,44 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* Wire fundingPackage Autofill (budget -> AI cascade) */
     var fpAutofillBtn = fresh.querySelector('#btn-fp-autofill');
     if (fpAutofillBtn) fpAutofillBtn.addEventListener('click', autoPopulateFundingPackage);
+    
+    /* Phase 160: Storyboard Image Paste Handler */
+    if (templateId === 'storyboard') {
+       var table = fresh.querySelector('table');
+       if (table) {
+           table.addEventListener('paste', function(e) {
+               var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+               var blob = null;
+               for (var i = 0; i < items.length; i++) {
+                   if (items[i].type.indexOf("image") === 0) {
+                       blob = items[i].getAsFile();
+                       break;
+                   }
+               }
+               if (blob) {
+                   var target = e.target;
+                   var tr = target.closest('tr');
+                   if (tr) {
+                       var input = tr.querySelector('[data-i]');
+                       if (input) {
+                           var idx = parseInt(input.getAttribute('data-i'), 10);
+                           var reader = new FileReader();
+                           reader.onload = function(evt) {
+                               if (editorData.frames && editorData.frames[idx]) {
+                                   editorData.frames[idx].image = evt.target.result;
+                                   saveEditorData();
+                                   buildEditor('storyboard');
+                                   if (activeTab === 'preview') renderPreview();
+                               }
+                           };
+                           reader.readAsDataURL(blob);
+                       }
+                   }
+               }
+           });
+       }
+    }
+
     /* Phase 70: auto-fetch weather on open if location is set but forecasts not yet loaded */
     if (editorData && editorData.shootingLocations && editorData.shootingLocations.length &&
         editorData.shootingLocations[0].address && !editorData.locationForecasts) {
@@ -2348,6 +2386,90 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return html;
   }
 
+  window.promptStoryboardImage = function(index) {
+    var frames = editorData.frames || [];
+    var f = frames[index];
+    if (!f) return;
+    
+    var choice = prompt("Image options for frame " + (f.num || index+1) + ":\n1. Paste Image URL or base64\n2. Generate via AI\n3. Clear Image\n\n(Tip: You can also focus a field in the row and Paste (Ctrl+V) an image directly)\n\nEnter 1, 2, or 3:", "1");
+    if (!choice) return;
+    
+    if (choice === '1') {
+      var url = prompt("Paste Image URL or Base64 data URI:", f.image || "");
+      if (url !== null) {
+        f.image = url;
+        saveEditorData();
+        buildEditor(activeTemplateId);
+        if (activeTab === 'preview') renderPreview();
+      }
+    } else if (choice === '2') {
+      var promptText = prompt("Enter AI Image Prompt:", f.description || "");
+      if (promptText) {
+         var provider = 'pollinations';
+         var apiKey = '';
+         try {
+             if (window.parent && window.parent.mBTAIModule) {
+                 var p = window.parent.mBTAIModule.getSelectedProvider();
+                 if (p === 'openai' || p === 'openrouter') {
+                     provider = p;
+                     apiKey = window.parent.mBTAIModule.getStoredApiKey(p);
+                 }
+             }
+         } catch(e) {}
+         
+         var cell = document.getElementById('sb-img-cell-' + index);
+         if (cell) cell.innerHTML = '<span style="font-size:8px;color:#94a3b8;">Gen...</span>';
+         
+         if ((provider === 'openai' || provider === 'openrouter') && apiKey) {
+             var apiUrl = (provider === 'openai') ? 'https://api.openai.com/v1/images/generations' : 'https://openrouter.ai/api/v1/images/generations';
+             var apiModel = (provider === 'openai') ? 'dall-e-3' : 'openai/dall-e-3';
+             fetch(apiUrl, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                 body: JSON.stringify({ model: apiModel, prompt: promptText, n: 1, size: '1024x1024', response_format: 'b64_json' })
+             }).then(function(r) { return r.json(); }).then(function(res) {
+                 if (res.data && res.data[0] && res.data[0].b64_json) {
+                     f.image = 'data:image/png;base64,' + res.data[0].b64_json;
+                     saveEditorData();
+                     buildEditor(activeTemplateId);
+                     if (activeTab === 'preview') renderPreview();
+                 } else {
+                     alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
+                     buildEditor(activeTemplateId);
+                 }
+             }).catch(function(err) {
+                 alert("AI Generation error: " + err.message);
+                 buildEditor(activeTemplateId);
+             });
+         } else {
+             /* Fallback: Pollinations — fetch and convert to base64 so it survives offline */
+             var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=512&height=288&nologo=true&seed=' + Date.now();
+             fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
+                 var reader = new FileReader();
+                 reader.onload = function(evt) {
+                     f.image = evt.target.result;
+                     saveEditorData();
+                     buildEditor(activeTemplateId);
+                     if (activeTab === 'preview') renderPreview();
+                 };
+                 reader.readAsDataURL(blob);
+             }).catch(function() {
+                 /* If fetch fails (CORS / offline), fall back to storing the URL */
+                 f.image = imgUrl;
+                 saveEditorData();
+                 buildEditor(activeTemplateId);
+                 if (activeTab === 'preview') renderPreview();
+             });
+         }
+      }
+    } else if (choice === '3') {
+      f.image = '';
+      saveEditorData();
+      buildEditor(activeTemplateId);
+      if (activeTab === 'preview') renderPreview();
+    }
+  };
+
   function buildStoryboardHtml(d) {
     var frames = d.frames || [];
     var SHOT_TYPES = ['', 'ELS', 'LS', 'WS', 'MS', 'MCU', 'CU', 'ECU', 'OTS', 'POV', 'Bird\'s Eye', 'Worm\'s Eye', 'Dutch Angle', 'Two Shot'];
@@ -2364,15 +2486,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:100px;">Shot Type</th>' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:110px;">Camera Move</th>' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;">Description</th>' +
+      '<th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#64748b;width:60px;">Image</th>' +
       '<th style="width:24px;"></th></tr></thead><tbody>';
     frames.forEach(function (f, i) {
       var shotOpts = SHOT_TYPES.map(function(s) { return '<option value="' + esc(s) + '"' + (f.shotType === s ? ' selected' : '') + '>' + esc(s || '—') + '</option>'; }).join('');
       var camOpts = CAM_MOVES.map(function(c) { return '<option value="' + esc(c) + '"' + (f.camera === c ? ' selected' : '') + '>' + esc(c || '—') + '</option>'; }).join('');
+      var imgPreview = f.image ? '<img src="' + esc(f.image) + '" style="max-width:100%;max-height:40px;object-fit:cover;border-radius:2px;cursor:pointer;" title="Click to change" onclick="window.promptStoryboardImage(' + i + ')" />' : '<button class="ed-add-btn" style="margin:0;font-size:8px;padding:2px 4px;" onclick="window.promptStoryboardImage(' + i + ')" type="button">Attach/Gen</button>';
       html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
         '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="num" value="' + esc(f.num || '') + '" style="width:30px;text-align:center;"></td>' +
         '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="shotType">' + shotOpts + '</select></td>' +
         '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="camera">' + camOpts + '</select></td>' +
         '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="description" value="' + esc(f.description || '') + '" placeholder="Action / notes…" style="width:100%;"></td>' +
+        '<td style="padding:4px 6px;text-align:center;" id="sb-img-cell-' + i + '">' + imgPreview + '</td>' +
         '<td style="padding:4px;"><button class="ed-del" data-arr="frames" data-del="' + i + '">&times;</button></td>' +
       '</tr>';
     });

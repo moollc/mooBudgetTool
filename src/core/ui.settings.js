@@ -202,15 +202,17 @@
             var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
             var storedPrompt = mBT.features.ai.getSystemPrompt();
             var keyLinks = {
-                'gemini': 'https://aistudio.google.com/app/apikey',
-                'openai': 'https://platform.openai.com/api-keys',
-                'deepseek': 'https://platform.deepseek.com/api_keys',
-                'grok': 'https://console.x.ai/',
-                'anthropic': 'https://console.anthropic.com/settings/keys',
-                'lmstudio': '#'
+                'gemini':      'https://aistudio.google.com/app/apikey',
+                'openai':      'https://platform.openai.com/api-keys',
+                'deepseek':    'https://platform.deepseek.com/api_keys',
+                'grok':        'https://console.x.ai/',
+                'anthropic':   'https://console.anthropic.com/settings/keys',
+                'openrouter':  'https://openrouter.ai/keys',
+                'lmstudio':    '#'
             };
             var storedLmEndpoint = localStorage.getItem('mbt_lmstudio_endpoint') || localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1';
             var storedLmModel = localStorage.getItem('mbt_lmstudio_model') || localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || '';
+            var storedOrModel = localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini';
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
                         '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
@@ -226,12 +228,14 @@
                                     '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Active Provider</label>' +
                                     '<select id="aiProviderSelect" onchange="' +
                                         'var p=this.value;' +
+                                        'mBT.features.ai.saveSelectedProvider(p);' +
                                         'var map=' + JSON.stringify(keyLinks).replace(/"/g, "'") + ';' +
                                         'var link=document.getElementById(\'apiKeyLink\');' +
                                         'link.href=map[p]||\'#\';' +
                                         'link.style.visibility=(p===\'lmstudio\')?\'hidden\':\'visible\';' +
                                         'document.getElementById(\'apiKeyInput\').value=getStoredApiKey(p);' +
                                         'document.getElementById(\'lmstudioFields\').style.display=(p===\'lmstudio\')?\'block\':\'none\';' +
+                                        'document.getElementById(\'openrouterFields\').style.display=(p===\'openrouter\')?\'block\':\'none\';' +
                                         'document.getElementById(\'apiCredRow\').style.display=(p===\'lmstudio\')?\'none\':\'block\';' +
                                     '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">' +
                                         '<option value="gemini" ' + (provider === 'gemini' ? 'selected' : '') + '>Google Gemini API</option>' +
@@ -239,6 +243,7 @@
                                         '<option value="deepseek" ' + (provider === 'deepseek' ? 'selected' : '') + '>DeepSeek API</option>' +
                                         '<option value="grok" ' + (provider === 'grok' ? 'selected' : '') + '>Grok (xAI) API</option>' +
                                         '<option value="anthropic" ' + (provider === 'anthropic' ? 'selected' : '') + '>Anthropic (Claude)</option>' +
+                                        '<option value="openrouter" ' + (provider === 'openrouter' ? 'selected' : '') + '>OpenRouter</option>' +
                                         '<option value="lmstudio" ' + (provider === 'lmstudio' ? 'selected' : '') + '>LM Studio (Local)</option>' +
                                     '</select>' +
                                 '</div>' +
@@ -254,6 +259,32 @@
                                     '<input type="text" id="lmEndpointInput" value="' + storedLmEndpoint + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500 mb-2" placeholder="http://localhost:1234/v1/chat/completions">' +
                                     '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Model ID</label>' +
                                     '<input type="text" id="lmModelInput" value="' + storedLmModel + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="local-model">' +
+                                '</div>' +
+                                '<div id="openrouterFields" style="display:' + (provider === 'openrouter' ? 'block' : 'none') + '">' +
+                                    '<div class="flex justify-between items-center mb-1.5">' +
+                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
+                                        '<button onclick="' +
+                                            'var k=document.getElementById(\'apiKeyInput\').value.trim();' +
+                                            'if(!k){mBTME.alert(\'Error\',\'Enter your OpenRouter API key first.\');return;}' +
+                                            'var sel=document.getElementById(\'orModelSelect\');' +
+                                            'sel.innerHTML=\'<option disabled selected>Loading...</option>\';' +
+                                            'mBT.features.ai.fetchOpenRouterModels(k).then(function(models){' +
+                                                'var saved=localStorage.getItem(\'mbt_openrouter_model\')||\'openai/gpt-4o-mini\';' +
+                                                'var free=models.filter(function(m){return m.pricing&&m.pricing.prompt===\'0\';});' +
+                                                'var paid=models.filter(function(m){return !m.pricing||m.pricing.prompt!==\'0\';});' +
+                                                'var html=\'<optgroup label=\\"Free Models\\">\';' +
+                                                'free.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+m.id+\'</option>\';});' +
+                                                'html+=\'</optgroup><optgroup label=\\"Paid Models\\">\';' +
+                                                'paid.forEach(function(m){html+=\'<option value="\'+m.id+\'"\'+( m.id===saved?\' selected\':\'\')+\'>\'+m.id+\'</option>\';});' +
+                                                'html+=\'</optgroup>\';' +
+                                                'sel.innerHTML=html;' +
+                                            '}).catch(function(e){mBTME.alert(\'Error\',e.message);sel.innerHTML=\'<option value=\\"openai/gpt-4o-mini\\" selected>openai/gpt-4o-mini</option>\';});' +
+                                        '" class="text-[9px] font-bold text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
+                                    '</div>' +
+                                    '<select id="orModelSelect" onchange="localStorage.setItem(\'mbt_openrouter_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer">' +
+                                        '<option value="' + storedOrModel + '" selected>' + storedOrModel + '</option>' +
+                                    '</select>' +
+                                    '<p class="text-[8px] text-slate-600 mt-1.5 font-bold">Enter your API key above, then click Fetch Models to load the full catalogue.</p>' +
                                 '</div>' +
                                 '<div>' +
                                     '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Persona &amp; Constraints</label>' +
@@ -278,6 +309,10 @@
                                         'var md=document.getElementById(\'lmModelInput\').value.trim();' +
                                         'if(ep) localStorage.setItem(\'mbt_lmstudio_endpoint\', ep);' +
                                         'if(md) localStorage.setItem(\'mbt_lmstudio_model\', md);' +
+                                    '}' +
+                                    'if(p===\'openrouter\'){' +
+                                        'var orSel=document.getElementById(\'orModelSelect\');' +
+                                        'if(orSel&&orSel.value) localStorage.setItem(\'mbt_openrouter_model\', orSel.value);' +
                                     '}' +
                                     'mBTME.alert(\'Success\', \'Assistant Linked\');' +
                                 '" class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>' +

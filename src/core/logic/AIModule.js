@@ -11,13 +11,15 @@ window.mBTAIModule = {
 
     /* ── Configuration ─────────────────────────────────────────────────── */
     config: {
-        geminiModel:      'gemini-2.5-flash',
-        openAiModel:      'gpt-4o-mini',
-        deepSeekModel:    'deepseek-chat',
-        grokModel:        'grok-beta',
-        claudeModel:      'claude-sonnet-4-6',
-        lmstudioModel:    'local-model',
-        lmstudioEndpoint: 'http://localhost:1234/v1/chat/completions',
+        geminiModel:        'gemini-2.5-flash',
+        openAiModel:        'gpt-4o-mini',
+        deepSeekModel:      'deepseek-chat',
+        grokModel:          'grok-beta',
+        claudeModel:        'claude-sonnet-4-6',
+        lmstudioModel:      'local-model',
+        lmstudioEndpoint:   'http://localhost:1234/v1/chat/completions',
+        openrouterModel:    'openai/gpt-4o-mini',
+        openrouterEndpoint: 'https://openrouter.ai/api/v1/chat/completions',
         systemContext:    'ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates.',
         /* Phase 60.B: action-trigger addendum appended to systemContext in chat mode */
         chatActionPrompt: 'ACTION CAPABILITY: When you identify a specific actionable budget change, output a JSON action block immediately before your explanation:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\nKeep explanations brief.'
@@ -90,9 +92,13 @@ window.mBTAIModule = {
 
         } else {
             var oUrl, oModel;
-            if (provider === 'openai')        { oUrl = 'https://api.openai.com/v1/chat/completions'; oModel = self.config.openAiModel; }
-            else if (provider === 'deepseek') { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
-            else if (provider === 'grok')     { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
+            if (provider === 'openai')           { oUrl = 'https://api.openai.com/v1/chat/completions'; oModel = self.config.openAiModel; }
+            else if (provider === 'deepseek')    { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
+            else if (provider === 'grok')        { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
+            else if (provider === 'openrouter') {
+                oUrl   = self.config.openrouterEndpoint;
+                oModel = localStorage.getItem('mbt_openrouter_model') || self.config.openrouterModel;
+            }
             else if (provider === 'lmstudio') {
                 oUrl   = localStorage.getItem('mbt_lmstudio_endpoint')
                       || localStorage.getItem('mbt_ai_endpoint')
@@ -471,6 +477,24 @@ window.mBTAIModule = {
             }, 1500);
         }).catch(function (err) {
             mBTME.alert('Analysis Failed', err.message || 'AI request failed. Check your API key and connection.');
+        });
+    },
+
+    /* ── OpenRouter: Fetch available models ────────────────────────────── */
+    fetchOpenRouterModels: function (apiKey) {
+        return fetch('https://openrouter.ai/api/v1/models', {
+            headers: { 'Authorization': 'Bearer ' + apiKey }
+        }).then(function (res) {
+            if (!res.ok) throw new Error('OpenRouter models fetch failed: ' + res.status);
+            return res.json();
+        }).then(function (data) {
+            return (data.data || []).sort(function (a, b) {
+                /* Free models first (pricing.prompt === '0'), then alphabetical */
+                var aFree = (a.pricing && a.pricing.prompt === '0') ? 0 : 1;
+                var bFree = (b.pricing && b.pricing.prompt === '0') ? 0 : 1;
+                if (aFree !== bFree) return aFree - bFree;
+                return (a.id || '').localeCompare(b.id || '');
+            });
         });
     },
 
