@@ -1053,8 +1053,9 @@ var mBTContacts = (function () {
             else if (ext === 'json') parsed = parseJSON(text);
             else if (ext === 'csv') {
                 /* Use service's CSV parser if available, otherwise fallback to basic */
-                if (window.mBTContactsService && typeof mBTContactsService.parseCSV === 'function') {
-                    parsed = mBTContactsService.parseCSV(text);
+                var _svc = (window.mBT && window.mBT.services && window.mBT.services.contacts) || window.mBTContactsService;
+                if (_svc && typeof _svc.parseCSV === 'function') {
+                    parsed = _svc.parseCSV(text);
                 } else if (STORAGE && STORAGE.parseCSV) {
                     parsed = STORAGE.parseCSV(text);
                 }
@@ -1109,11 +1110,12 @@ var mBTContacts = (function () {
     }
 
     function importFromDevice() {
-        if (!window.mBTContactsService || typeof mBTContactsService.importFromDevice !== 'function') {
-            walletSnack('Contacts service not initialized.');
+        var svc = (window.mBT && window.mBT.services && window.mBT.services.contacts) || window.mBTContactsService;
+        if (!svc || typeof svc.importFromDevice !== 'function') {
+            alert('Import from Device requires the Contacts Service. On Desktop, export your contacts as a VCF or CSV file and use the File Import button instead.');
             return;
         }
-        mBTContactsService.importFromDevice().then(function (res) {
+        svc.importFromDevice().then(function (res) {
             if (res.error) {
                 alert(res.error);
             } else if (res.imported > 0) {
@@ -1122,6 +1124,8 @@ var mBTContacts = (function () {
                     render();
                     walletSnack('Imported ' + res.imported + ' device contacts.');
                 });
+            } else {
+                walletSnack('No contacts selected.');
             }
         });
     }
