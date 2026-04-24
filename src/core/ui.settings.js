@@ -406,7 +406,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v22.88';
+            var currentVersion = updateStatus.localVersion || 'v22.91';
 
             var statusMsg = '';
             if (isChecking) {

@@ -92,46 +92,77 @@
             });
         },
 
-        /* Phase 155: CSV Parser for Contact Import (Google Contacts & Standard) */
+        /* Phase 155 / 165: CSV Parser for Contact Import (Google Contacts & Standard) */
         parseCSV: function (text) {
             if (!text) return [];
-            var lines = text.split(/\r?\n/);
-            if (lines.length < 2) return [];
-            var headers = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
-            
-            /* Map common headers to internal fields */
-            var map = {
-                name: headers.indexOf('name') > -1 ? headers.indexOf('name') : headers.indexOf('display name'),
-                first: headers.indexOf('given name'),
-                last: headers.indexOf('family name'),
-                email: headers.indexOf('email') > -1 ? headers.indexOf('email') : headers.indexOf('e-mail 1 - value'),
-                phone: headers.indexOf('phone') > -1 ? headers.indexOf('phone') : headers.indexOf('phone 1 - value'),
-                dept: headers.indexOf('department'),
-                role: headers.indexOf('role') || headers.indexOf('title') || headers.indexOf('job title')
-            };
+
+            /* RFC-4180 tokenizer — handles quoted fields containing commas and newlines */
+            function tokenizeCSV(raw) {
+                var rows = [];
+                var row = [];
+                var field = '';
+                var inQuote = false;
+                for (var i = 0; i < raw.length; i++) {
+                    var ch = raw[i];
+                    var next = raw[i + 1];
+                    if (inQuote) {
+                        if (ch === '"' && next === '"') { field += '"'; i++; }
+                        else if (ch === '"') { inQuote = false; }
+                        else { field += ch; }
+                    } else {
+                        if (ch === '"') { inQuote = true; }
+                        else if (ch === ',') { row.push(field.trim()); field = ''; }
+                        else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+                            if (ch === '\r') i++;
+                            row.push(field.trim()); field = '';
+                            if (row.some(function(c) { return c !== ''; })) rows.push(row);
+                            row = [];
+                        } else { field += ch; }
+                    }
+                }
+                if (field !== '' || row.length) { row.push(field.trim()); if (row.some(function(c) { return c !== ''; })) rows.push(row); }
+                return rows;
+            }
+
+            var rows = tokenizeCSV(text);
+            if (rows.length < 2) return [];
+            var headers = rows[0].map(function(h) { return h.toLowerCase(); });
+
+            function col() {
+                for (var a = 0; a < arguments.length; a++) {
+                    var idx = headers.indexOf(arguments[a]);
+                    if (idx > -1) return idx;
+                }
+                return -1;
+            }
+
+            /* Google Contacts uses "E-mail 1 - Value", "Phone 1 - Value", "Given Name", "Family Name" */
+            var iName  = col('name', 'display name');
+            var iFirst = col('given name', 'first name', 'firstname');
+            var iLast  = col('family name', 'last name', 'lastname', 'surname');
+            var iEmail = col('e-mail 1 - value', 'email 1 - value', 'email address', 'email', 'e-mail');
+            var iPhone = col('phone 1 - value', 'mobile phone', 'phone', 'telephone', 'tel');
+            var iDept  = col('department', 'dept');
+            var iRole  = col('job title', 'title', 'role', 'position');
 
             var contacts = [];
-            for (var i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-                /* Simple CSV split (doesn't handle commas inside quotes, but fine for most exports) */
-                var cols = lines[i].split(',').map(function(c) { return c.trim().replace(/^"|"$/g, ''); });
+            for (var i = 1; i < rows.length; i++) {
+                var cols = rows[i];
                 var cName = '';
-                if (map.name > -1 && cols[map.name]) {
-                    cName = cols[map.name];
-                } else if (map.first > -1 && map.last > -1) {
-                    cName = (cols[map.first] || '') + ' ' + (cols[map.last] || '');
-                } else if (map.first > -1) {
-                    cName = cols[map.first];
+                if (iName > -1 && cols[iName]) {
+                    cName = cols[iName];
+                } else if (iFirst > -1) {
+                    cName = (cols[iFirst] || '') + (iLast > -1 && cols[iLast] ? ' ' + cols[iLast] : '');
                 }
                 cName = cName.trim();
                 if (!cName) continue;
 
                 contacts.push({
-                    name: cName,
-                    email: (map.email > -1 && cols[map.email]) ? cols[map.email] : null,
-                    phone: (map.phone > -1 && cols[map.phone]) ? cols[map.phone] : null,
-                    department: (map.dept > -1 && cols[map.dept]) ? cols[map.dept] : '',
-                    role: (map.role > -1 && cols[map.role]) ? cols[map.role] : ''
+                    name:       cName,
+                    email:      (iEmail > -1 && cols[iEmail]) ? cols[iEmail] : null,
+                    phone:      (iPhone > -1 && cols[iPhone]) ? cols[iPhone] : null,
+                    department: (iDept  > -1 && cols[iDept])  ? cols[iDept]  : '',
+                    role:       (iRole  > -1 && cols[iRole])  ? cols[iRole]  : ''
                 });
             }
             return contacts;

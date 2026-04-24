@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v22.88</title>
+    <title>mooBudgetTool v22.91</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -378,7 +378,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "22.88";
+    var APP_VERSION = "22.91";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -9438,7 +9438,41 @@
                                 if (c.email && c.email[0]) document.getElementById('crewEmail').value = c.email[0];
                             }
                         }).catch(function (ex) { console.log('Contact Import cancelled'); });
-                    } else { mBTME.alert("Not Supported", "Contact import not available in this browser."); }
+                    } else {
+                        /* Desktop fallback: pick from saved mBT contacts */
+                        var roster = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
+                        if (!roster.length) {
+                            mBTME.alert('No Contacts', 'No contacts saved yet. Add contacts via Settings → Database → Contacts first.');
+                            return;
+                        }
+                        var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
+                            'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
+                            'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
+                            '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
+                        roster.forEach(function (c) {
+                            listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
+                                'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || '')) + '" ' +
+                                'onclick="(function(){' +
+                                    'var n=document.getElementById(\'crewName\');' +
+                                    'var p=document.getElementById(\'crewPhone\');' +
+                                    'var e=document.getElementById(\'crewEmail\');' +
+                                    'if(n) n.value=' + JSON.stringify(c.name || '') + ';' +
+                                    'if(p) p.value=' + JSON.stringify(c.phone || '') + ';' +
+                                    'if(e) e.value=' + JSON.stringify(c.email || '') + ';' +
+                                    'mBTME.close(\'contactPickerModal\');' +
+                                '})()">' +
+                                '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                                '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                                '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.category || '') + '</div></div>' +
+                                '</div>';
+                        });
+                        listHtml += '</div>';
+                        mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
+                        setTimeout(function () {
+                            var s = document.getElementById('contactPickerSearch');
+                            if (s) s.focus();
+                        }, 80);
+                    }
                 });
             }
         }, 50);
