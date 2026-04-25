@@ -683,9 +683,31 @@ var mBTCalendar = (function () {
             dispatchFocus();
             window.addEventListener('focus', dispatchFocus);
 
-            /* Phase 73B: receive undo/redo routing from parent monolith */
+            /* Receive work-week changes from parent monolith settings */
             window.addEventListener('message', function(e) {
-                if (!e.data || e.data.type !== 'mbt:tool-action') return;
+                if (!e.data || e.data.type !== 'mbt:workWeek') return;
+                if (!state.budget) return;
+                if (!state.budget.settings) state.budget.settings = {};
+                state.budget.settings.workWeek = parseInt(e.data.workWeek) || 5;
+                var sel = dom.getElementById('sel-work-week');
+                if (sel) sel.value = String(state.budget.settings.workWeek);
+                refreshAll();
+            });
+
+            /* Receive reconcile from parent — reload budget from localforage and re-render */
+            window.addEventListener('message', function(e) {
+                if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
+                if (!state.projectKey) return;
+                localforage.getItem(state.projectKey).then(function(budget) {
+                    if (!budget) return;
+                    state.budget = budget;
+                    state.milestones = budget.calendarNotes || [];
+                    var ww = (budget.settings && budget.settings.workWeek) || 5;
+                    var sel = dom.getElementById('sel-work-week');
+                    if (sel) sel.value = String(ww);
+                    refreshAll();
+                    renderMilestones();
+                }).catch(function(e) { console.error('[CAL] reconcile reload failed', e); });
             });
 
             dom.getElementById('btn-back').addEventListener('click', function () {

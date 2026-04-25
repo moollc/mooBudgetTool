@@ -11154,7 +11154,7 @@
                 var grouped = {};
                 for (var ti = 0; ti < TYPE_ORDER.length; ti++) grouped[TYPE_ORDER[ti]] = [];
 
-                var providers = mBT.palette._providers;
+                var providers = (mBT.palette && mBT.palette._providers) || [];
                 for (var pi = 0; pi < providers.length; pi++) {
                     var pResults = providers[pi].query(q);
                     for (var ri = 0; ri < pResults.length; ri++) {

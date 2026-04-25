@@ -5,7 +5,7 @@
     /* --- 1. PROJECT CONTEXT --- */
 
     function getCurrentProjectContext() {
-        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: { entries: [], total: 0 }, schedule: null };
+        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: { entries: [], total: 0 }, schedule: null, fundingSources: [] };
 
         /* --- Primary path: Shell storage (IndexedDB via mBT.storage) --- */
         var shellPromise = (function () {
@@ -60,6 +60,7 @@
                     if (!context.projectName) context.projectName = doc.projectName || doc.name || 'Untitled';
                     if (!context.budget)      context.budget      = parseFloat(doc.grandTotal || doc.budgetLimit || 0);
                     context._budgetDoc = doc; /* cache for Budget State panel */
+                    context.fundingSources = doc.fundingSources || [];
                 }
                 context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
                 context.timeline = buildTimeline(context.allocations);
