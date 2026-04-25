@@ -544,8 +544,26 @@
                 window.addEventListener('focus', dispatchFocus);
 
                 /* Phase 73B: receive undo/redo routing from parent monolith */
+                /* Receive work-week changes from parent monolith settings */
                 window.addEventListener('message', function(e) {
-                    if (!e.data || e.data.type !== 'mbt:tool-action') return;
+                    if (!e.data || e.data.type !== 'mbt:workWeek') return;
+                    if (!mBTStages.state || !mBTStages.state.project) return;
+                    if (!mBTStages.state.project.settings) mBTStages.state.project.settings = {};
+                    mBTStages.state.project.settings.workWeek = parseInt(e.data.workWeek) || 5;
+                    if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
+                    if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
+                });
+
+                /* Receive reconcile from parent — reload budget from localforage and re-render */
+                window.addEventListener('message', function(e) {
+                    if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
+                    if (!mBTStages.state || !mBTStages.state._projectKey) return;
+                    localforage.getItem(mBTStages.state._projectKey).then(function(budget) {
+                        if (!budget) return;
+                        mBTStages.state.project = budget;
+                        if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
+                        if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
+                    }).catch(function(e) { console.error('[STAGES] reconcile reload failed', e); });
                 });
 
                 /* Live cap sync from main budget -- refresh totalCap + vitals without reopen */

@@ -643,6 +643,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var critCount = 0;
         for (var r = 0; r < risks.length; r++) { if (risks[r].severity === 'critical') critCount++; }
         var riskClass = critCount > 0 ? 'bs-card--bad' : risks.length > 0 ? 'bs-card--warn' : 'bs-card--good';
+        
+        /* Funding sources & Coverage */
+        var sources = (doc && doc.fundingSources) || (ctx && ctx.fundingSources) || [];
+        var fundingCount = sources.length;
+        var secured = 0;
+        for (var f = 0; f < sources.length; f++) {
+            if (sources[f].status === 'Confirmed' || sources[f].status === 'Received') {
+                secured += parseFloat(sources[f].amount) || 0;
+            }
+        }
+        var coveragePct = total > 0 ? (secured / total * 100) : 0;
+        var gap = total - secured;
+        var coverageClass = coveragePct >= 100 ? 'bs-card--good' : coveragePct > 50 ? 'bs-card--warn' : 'bs-card--bad';
 
         cards.innerHTML =
             '<div class="bs-card">' +
@@ -678,6 +691,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                 '<div class="bs-card-label">Risks</div>' +
                 '<div class="bs-card-value">' + (risks.length || '0') + '</div>' +
                 (critCount ? '<div class="bs-card-sub">' + critCount + ' critical</div>' : '') +
+            '</div>' +
+            '<div class="bs-card ' + coverageClass + '">' +
+                '<div class="bs-card-label">Coverage</div>' +
+                '<div class="bs-card-value">' + coveragePct.toFixed(1) + '%</div>' +
+                '<div class="bs-card-sub">' + (fundingCount || '0') + ' sources</div>' +
+            '</div>' +
+            '<div class="bs-card ' + (gap <= 0 ? 'bs-card--good' : 'bs-card--bad') + '">' +
+                '<div class="bs-card-label">Funding Gap</div>' +
+                '<div class="bs-card-value">' + (gap > 0 ? formatMoney(gap, currency) : 'Funded') + '</div>' +
             '</div>';
     }
 
@@ -769,7 +791,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     window.addEventListener('message', function (e) {
         if (!e.data || e.data.type !== 'budget-sync') return;
         var payload = e.data.payload || e.data;
-        paintProjectKnowledge(payload.context || context, payload.budgetDoc || null);
+        var newCtx = payload.context || context;
+        context = newCtx;
+        paintProjectKnowledge(newCtx, payload.budgetDoc || null);
+        renderBudgetStateCards(newCtx, payload.budgetDoc || null);
         /* Keep version badge in sync with monolith */
         try {
             var v = window.parent && window.parent.APP_VERSION;
@@ -1576,6 +1601,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         /* Ask parent to push a ledger-sync so our Context panel populates immediately */
         if (window.parent !== window) {
             window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'SYNC_FUNDING_SOURCE' }, '*');
         }
 
         window.mBTAIContext.getCurrentProjectContext()

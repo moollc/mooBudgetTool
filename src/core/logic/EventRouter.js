@@ -314,6 +314,14 @@ window.mBTRouter = (function () {
         }
     }
 
+    /* --- Phase 150: tool broadcast helper --- */
+    function _broadcastToTool(type, payload) {
+        var iframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: type, payload: payload }, '*');
+        }
+    }
+
     /* --- Phase 133: centralized postMessage dispatcher extracted from inline listener --- */
     function _handleToolAction(e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
@@ -584,8 +592,21 @@ window.mBTRouter = (function () {
                 if (mBT.features && mBT.features.funding && mBT.features.funding.updateCard) {
                     mBT.features.funding.updateCard();
                 }
+                if (window.mBTAIContext) {
+                    mBTAIContext.getCurrentProjectContext().then(function(ctx) {
+                        _broadcastToTool('budget-sync', { context: ctx, budgetDoc: budget });
+                    });
+                }
             });
             if (window.mBTME) mBTME.alert('Funding Sources Added', pfAdded + ' source' + (pfAdded === 1 ? '' : 's') + ' pushed to \u201c' + budget.projectName + '\u201d.');
+
+        /* --- Phase 150: SYNC_FUNDING_SOURCE — AI tool requests current funding state --- */
+        } else if (action === 'SYNC_FUNDING_SOURCE') {
+            if (window.mBTAIContext) {
+                mBTAIContext.getCurrentProjectContext().then(function(ctx) {
+                    if (e.source) e.source.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }, '*');
+                });
+            }
 
         /* --- Phase 63: resolve-diff --- */
         } else if (action === 'resolve-diff' && payload.mergedSections) {
