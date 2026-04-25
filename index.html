@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v22.91</title>
+    <title>mooBudgetTool v22.94</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -378,7 +378,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "22.91";
+    var APP_VERSION = "22.94";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3729,6 +3729,11 @@
                 (section.items || []).map(function (item) { return mBT.ui.render.lineItem(item, name); }).join('') +
                 '</tbody>' +
                 '</table>' +
+                '</div>' +
+                '<div class="p-1 bg-slate-50 border-t border-slate-100">' +
+                '<button data-action="section-add" data-id="' + safeSectionName + '" class="w-full py-1.5 text-center text-blue-500 font-black text-[9px] hover:bg-blue-50 hover:text-blue-700 transition-colors uppercase tracking-widest">' +
+                (assets.plus ? assets.plus + ' ' : '+ ') + 'Add Line Item' +
+                '</button>' +
                 '</div>';
 
             return mBT.ui.render.section({ name: name, total: mBTLE.format.currency(section.total), isOpen: section.isOpen, content: bodyContent });
@@ -7467,10 +7472,11 @@
 
         // --- 1. Sub-View Generators ---
         renderDbView: function (subTab) {
+            var _budget = window.budget || { sections: {}, settings: {} };
             if (subTab === 'contacts') {
                 var globalContacts = mBTOG.contacts || [];
                 var assignedContacts = [];
-                Object.values(budget.sections || {}).forEach(function (sec) {
+                Object.values(_budget.sections || {}).forEach(function (sec) {
                     sec.items.forEach(function (item) {
                         if (item.crew && item.crew.name) {
                             assignedContacts.push({
@@ -7972,6 +7978,15 @@
                 mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
             }
             this.open('database', 'lineItems');
+        },
+
+        toggleContactSharing: function (val) {
+            var next = (typeof val === 'boolean') ? val : !JSON.parse(localStorage.getItem('moo_og_share_contacts') || 'false');
+            localStorage.setItem('moo_og_share_contacts', JSON.stringify(next));
+            if (next) {
+                mBTME.alert('Contact Sharing On', 'Contacts marked as shared will be published to the OpenGate community roster.');
+            }
+            this.open('cloud');
         },
 
         /* --- 46.1 Auth handlers --- */
@@ -9344,18 +9359,54 @@
         }
 
         // 2. Profile Form (Profile Tab)
-        var profileHtml = '<div class="space-y-4 pt-2">' +
+        /* Build contact detail badges from linked DB record */
+        var linkedBadges = '';
+        if (crew.role || crew.department) {
+            linkedBadges += '<span class="inline-block text-[7px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase tracking-widest">' + mBT.ui.render.esc(crew.role || crew.department) + '</span> ';
+        }
+        if (crew.rate) {
+            linkedBadges += '<span class="inline-block text-[7px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-widest">Rate: ' + mBT.ui.render.esc(String(crew.rate)) + '</span> ';
+        }
+        if (crew.walletType) {
+            linkedBadges += '<span class="inline-block text-[7px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 uppercase tracking-widest">' + mBT.ui.render.esc(crew.walletType) + (crew.walletAddress ? ': ' + mBT.ui.render.esc(crew.walletAddress) : '') + '</span>';
+        }
+
+        /* Build portfolio chips */
+        var portfolioHtml = '';
+        if (crew.portfolio && crew.portfolio.length) {
+            portfolioHtml = '<div class="pt-1">' +
+                '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1">Portfolio</div>' +
+                '<div class="flex flex-wrap gap-1">';
+            crew.portfolio.forEach(function (p) {
+                if (p.type === 'link') {
+                    portfolioHtml += '<a href="' + mBT.ui.render.esc(p.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                        'class="flex items-center gap-1 text-[8px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors no-underline">' +
+                        mBT.ui.render.esc(p.label || p.url) + '</a>';
+                } else if (p.data) {
+                    portfolioHtml += '<a download="' + mBT.ui.render.esc(p.name || 'file') + '" href="' + mBT.ui.render.esc(p.data) + '" ' +
+                        'class="flex items-center gap-1 text-[8px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors no-underline">' +
+                        mBT.ui.render.esc(p.label || p.name) + '</a>';
+                }
+            });
+            portfolioHtml += '</div></div>';
+        }
+
+        var profileHtml = '<div class="space-y-3 pt-2">' +
             '<div class="flex justify-end">' +
             '<button type="button" id="importContactBtn" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">' + (mBTAssets.plus || "") + ' Import Contact</button>' +
             '</div>' +
-            '<div class="space-y-3">' +
+            (linkedBadges ? '<div class="flex flex-wrap gap-1">' + linkedBadges + '</div>' : '') +
+            /* Hidden field carries the full contact JSON from picker */
+            '<input type="hidden" id="crewImportData" value="">' +
+            '<div class="space-y-2">' +
             '<input type="text" id="crewName" value="' + mBT.ui.render.esc(crew.name || '') + '" placeholder="FULL NAME" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
-            '<div class="grid grid-cols-2 gap-3">' +
+            '<div class="grid grid-cols-2 gap-2">' +
             '<input type="tel" id="crewPhone" value="' + mBT.ui.render.esc(crew.phone || '') + '" placeholder="PHONE" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
             '<input type="email" id="crewEmail" value="' + mBT.ui.render.esc(crew.email || '') + '" placeholder="EMAIL" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
             '</div>' +
             '</div>' +
-            '<div class="flex justify-between items-center pt-2">' +
+            portfolioHtml +
+            '<div class="flex justify-between items-center pt-1">' +
             (!isGlobalEdit && sectionName ? '<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment(\'' + mBT.ui.render.esc(itemId) + '\', \'' + mBT.ui.render.esc(sectionName) + '\')">Unassign</button>' : '<div></div>') +
             '<button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>' +
             '</div>' +
@@ -9394,30 +9445,60 @@
             if (form) {
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();
-                    var name = document.getElementById('crewName').value.trim();
+                    var name  = document.getElementById('crewName').value.trim();
                     var phone = document.getElementById('crewPhone').value.trim();
                     var email = document.getElementById('crewEmail').value.trim();
 
+                    /* Read full contact data from hidden field if populated by picker */
+                    var importedContact = null;
+                    var importField = document.getElementById('crewImportData');
+                    if (importField && importField.value) {
+                        try { importedContact = JSON.parse(importField.value); } catch (ex) {}
+                    }
+
+                    /* Build the full crew object — merge typed fields over imported contact */
+                    var crewObj = importedContact ? {
+                        contactId:    importedContact.id || null,
+                        name:         name || importedContact.name || '',
+                        phone:        phone || importedContact.phone || '',
+                        email:        email || importedContact.email || '',
+                        role:         importedContact.role || '',
+                        department:   importedContact.department || '',
+                        rate:         importedContact.rate || null,
+                        walletType:   importedContact.walletType || '',
+                        walletAddress: importedContact.walletAddress || '',
+                        portfolio:    importedContact.portfolio || []
+                    } : { name: name, phone: phone, email: email };
+
                     if (itemId && itemId.startsWith('dummy_new_contact')) {
                         if (!name) return mBTME.alert("Required", "Name is required.");
-                        mBTOG.contacts.push({ id: 'c_' + Date.now(), name, role: 'Crew', phone, email });
+                        var newC = { id: 'c_' + Date.now(), name: name, role: 'Crew', phone: phone, email: email };
+                        mBTOG.contacts.push(newC);
                         mBTOG.saveContacts();
+                        /* Also persist to IndexedDB if storage available */
+                        if (window.mBTStorage && typeof mBTStorage.saveContact === 'function') {
+                            mBTStorage.saveContact({ id: newC.id, name: newC.name, role: newC.role, phone: newC.phone, email: newC.email, portfolio: [] });
+                        }
                         mBTME.close('crewProfileModal');
                         if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
                     }
                     else if (isGlobalEdit) {
                         var gIdx = mBTOG.contacts.findIndex(function (c) { return c.id === itemId; });
                         if (gIdx > -1) {
-                            mBTOG.contacts[gIdx].name = name;
+                            mBTOG.contacts[gIdx].name  = name;
                             mBTOG.contacts[gIdx].phone = phone;
                             mBTOG.contacts[gIdx].email = email;
                             mBTOG.saveContacts();
+                            /* Sync to IndexedDB */
+                            if (window.mBTStorage && typeof mBTStorage.saveContact === 'function') {
+                                mBTStorage.saveContact(mBTOG.contacts[gIdx]);
+                            }
                             mBTME.close('crewProfileModal');
                             if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
                         }
                     }
                     else if (item) {
-                        item.crew = { name, phone, email };
+                        item.crew = crewObj;
                         mBTME.close('crewProfileModal');
                         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
                         if (typeof render === 'function') render();
@@ -9439,39 +9520,71 @@
                             }
                         }).catch(function (ex) { console.log('Contact Import cancelled'); });
                     } else {
-                        /* Desktop fallback: pick from saved mBT contacts */
-                        var roster = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
-                        if (!roster.length) {
-                            mBTME.alert('No Contacts', 'No contacts saved yet. Add contacts via Settings → Database → Contacts first.');
-                            return;
-                        }
-                        var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
-                            'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
-                            'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
-                            '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
-                        roster.forEach(function (c) {
-                            listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
-                                'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || '')) + '" ' +
-                                'onclick="(function(){' +
-                                    'var n=document.getElementById(\'crewName\');' +
-                                    'var p=document.getElementById(\'crewPhone\');' +
-                                    'var e=document.getElementById(\'crewEmail\');' +
-                                    'if(n) n.value=' + JSON.stringify(c.name || '') + ';' +
-                                    'if(p) p.value=' + JSON.stringify(c.phone || '') + ';' +
-                                    'if(e) e.value=' + JSON.stringify(c.email || '') + ';' +
-                                    'mBTME.close(\'contactPickerModal\');' +
-                                '})()">' +
-                                '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
-                                '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
-                                '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.category || '') + '</div></div>' +
-                                '</div>';
+                        /* Desktop fallback: merge mBTOG.contacts + Contacts DB, then show picker */
+                        var _ogContacts = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
+                        var _dbPromise = (window.mBT && window.mBT.storage && typeof mBT.storage.getAllContacts === 'function')
+                            ? mBT.storage.getAllContacts() : Promise.resolve([]);
+                        _dbPromise.catch(function () { return []; }).then(function (_dbContacts) {
+                            /* Merge: prefer DB contacts, fill in mBTOG contacts not already present by name */
+                            var seen = {};
+                            var roster = [];
+                            _dbContacts.forEach(function (c) {
+                                if (c.name) { seen[c.name.toLowerCase()] = true; roster.push(c); }
+                            });
+                            _ogContacts.forEach(function (c) {
+                                if (c.name && !seen[c.name.toLowerCase()]) roster.push(c);
+                            });
+                            if (!roster.length) {
+                                mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
+                                return;
+                            }
+                            var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
+                                'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
+                                'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
+                                '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
+                            roster.forEach(function (c) {
+                                /* Encode full contact as JSON in a data attribute for pickup by onclick */
+                                var safeJson = mBT.ui.render.esc(JSON.stringify({
+                                    id: c.id || '',
+                                    name: c.name || '',
+                                    phone: c.phone || '',
+                                    email: c.email || '',
+                                    role: c.role || c.department || '',
+                                    department: c.department || c.role || '',
+                                    rate: c.rate || null,
+                                    walletType: c.walletType || '',
+                                    walletAddress: c.walletAddress || '',
+                                    portfolio: c.portfolio || []
+                                }));
+                                listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
+                                    'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || c.department || '')) + '" ' +
+                                    'data-cname="' + mBT.ui.render.esc(c.name || '') + '" ' +
+                                    'data-cphone="' + mBT.ui.render.esc(c.phone || '') + '" ' +
+                                    'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
+                                    'data-cjson="' + safeJson + '" ' +
+                                    'onclick="(function(el){' +
+                                        'var n=document.getElementById(\'crewName\');' +
+                                        'var p=document.getElementById(\'crewPhone\');' +
+                                        'var e=document.getElementById(\'crewEmail\');' +
+                                        'if(n) n.value=el.dataset.cname||\'\';' +
+                                        'if(p) p.value=el.dataset.cphone||\'\';' +
+                                        'if(e) e.value=el.dataset.cemail||\'\';' +
+                                        'var h=document.getElementById(\'crewImportData\');' +
+                                        'if(h) h.value=el.dataset.cjson;' +
+                                        'mBTME.close(\'contactPickerModal\');' +
+                                    '})(this)">' +
+                                    '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                                    '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                                    '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.department || c.category || '') + '</div></div>' +
+                                    '</div>';
+                            });
+                            listHtml += '</div>';
+                            mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
+                            setTimeout(function () {
+                                var s = document.getElementById('contactPickerSearch');
+                                if (s) s.focus();
+                            }, 80);
                         });
-                        listHtml += '</div>';
-                        mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
-                        setTimeout(function () {
-                            var s = document.getElementById('contactPickerSearch');
-                            if (s) s.focus();
-                        }, 80);
                     }
                 });
             }

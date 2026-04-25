@@ -8,7 +8,7 @@
 // === DB CONSTANTS ===
 
 var DB_NAME = 'mBT_DB';
-var DB_VERSION = 3;
+var DB_VERSION = 4;
 
 var STORE_NAMES = {
   PROJECTS: 'mbt_projects',
@@ -125,6 +125,13 @@ var mBTStorage = {
           contactStore.createIndex('name', 'name', { unique: false });
           contactStore.createIndex('role', 'role', { unique: false });
           contactStore.createIndex('category', 'category', { unique: false });
+          contactStore.createIndex('department', 'department', { unique: false });
+        } else if (event.oldVersion < 4) {
+          /* v4 upgrade: add department index if store already exists */
+          var existingStore = event.target.transaction.objectStore(STORE_NAMES.CONTACTS);
+          if (!existingStore.indexNames.contains('department')) {
+            existingStore.createIndex('department', 'department', { unique: false });
+          }
         }
 
         if (!db.objectStoreNames.contains(STORE_NAMES.SESSIONS)) {
@@ -669,11 +676,23 @@ var mBTStorage = {
     });
   },
 
+  getContactById: function (id) {
+    return this._getDb().then(function (db) {
+      var store = db.transaction(STORE_NAMES.CONTACTS, 'readonly').objectStore(STORE_NAMES.CONTACTS);
+      return new Promise(function (resolve, reject) {
+        var request = store.get(id);
+        request.onsuccess = function () { resolve(request.result || null); };
+        request.onerror = function () { reject(request.error); };
+      });
+    });
+  },
+
   saveContact: function (contact) {
     return this._getDb().then(function (db) {
       if (!contact.id) {
         contact.id = 'contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
       }
+      if (!contact.portfolio) contact.portfolio = [];
       contact.updated_at = new Date().toISOString();
       var store = db.transaction([STORE_NAMES.CONTACTS], 'readwrite').objectStore(STORE_NAMES.CONTACTS);
       return new Promise(function (resolve, reject) {
@@ -682,6 +701,68 @@ var mBTStorage = {
         request.onerror = function () { reject(request.error); };
       });
     });
+  },
+
+  /* RFC-4180 CSV parser — canonical location, used by contacts tool and monolith */
+  parseCSV: function (text) {
+    if (!text) return [];
+    function tokenize(raw) {
+      var rows = [], row = [], field = '', inQuote = false;
+      for (var i = 0; i < raw.length; i++) {
+        var ch = raw[i], next = raw[i + 1];
+        if (inQuote) {
+          if (ch === '"' && next === '"') { field += '"'; i++; }
+          else if (ch === '"') { inQuote = false; }
+          else { field += ch; }
+        } else {
+          if (ch === '"') { inQuote = true; }
+          else if (ch === ',') { row.push(field.trim()); field = ''; }
+          else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+            if (ch === '\r') i++;
+            row.push(field.trim()); field = '';
+            if (row.some(function (c) { return c !== ''; })) rows.push(row);
+            row = [];
+          } else { field += ch; }
+        }
+      }
+      if (field !== '' || row.length) { row.push(field.trim()); if (row.some(function (c) { return c !== ''; })) rows.push(row); }
+      return rows;
+    }
+    var rows = tokenize(text);
+    if (rows.length < 2) return [];
+    var headers = rows[0].map(function (h) { return h.toLowerCase(); });
+    function col() {
+      for (var a = 0; a < arguments.length; a++) {
+        var idx = headers.indexOf(arguments[a]);
+        if (idx > -1) return idx;
+      }
+      return -1;
+    }
+    var iName  = col('name', 'display name');
+    var iFirst = col('given name', 'first name', 'firstname');
+    var iLast  = col('family name', 'last name', 'lastname', 'surname');
+    var iEmail = col('e-mail 1 - value', 'email 1 - value', 'email address', 'email', 'e-mail');
+    var iPhone = col('phone 1 - value', 'mobile phone', 'phone', 'telephone', 'tel');
+    var iDept  = col('department', 'dept');
+    var iRole  = col('job title', 'title', 'role', 'position');
+    var contacts = [];
+    for (var i = 1; i < rows.length; i++) {
+      var cols = rows[i];
+      var cName = '';
+      if (iName > -1 && cols[iName]) { cName = cols[iName]; }
+      else if (iFirst > -1) { cName = (cols[iFirst] || '') + (iLast > -1 && cols[iLast] ? ' ' + cols[iLast] : ''); }
+      cName = cName.trim();
+      if (!cName) continue;
+      contacts.push({
+        name:       cName,
+        email:      (iEmail > -1 && cols[iEmail]) ? cols[iEmail] : null,
+        phone:      (iPhone > -1 && cols[iPhone]) ? cols[iPhone] : null,
+        department: (iDept  > -1 && cols[iDept])  ? cols[iDept]  : '',
+        role:       (iRole  > -1 && cols[iRole])  ? cols[iRole]  : '',
+        portfolio:  []
+      });
+    }
+    return contacts;
   },
 
   deleteContact: function (id, skipTombstone) {

@@ -127,7 +127,10 @@
             }).then(function () {
                 self.loadTemplates();
                 /* Attempt cloud sync after local data is ready. Non-blocking. */
-                setTimeout(function () { self.syncFromCloud(); }, 800);
+                setTimeout(function () {
+                    self.syncFromCloud();
+                    self.syncContactsFromCloud();
+                }, 1200);
             });
         },
 
@@ -161,9 +164,48 @@
             }
         },
 
-        /* --- CONTACTS --- */
+        /* --- CONTACTS ---
+         * mBTOG.contacts is a runtime cache of the canonical IndexedDB `contacts` store.
+         * All writes go through window.mBTStorage.saveContact().
+         * mBTOG.contacts is refreshed from IndexedDB on init and after any write.
+         * Legacy localforage `moo_contacts` is migrated in on first load.
+         */
 
         loadContacts: function () {
+            var self = this;
+            /* If mBTStorage is available, use it as canonical source */
+            if (window.mBTStorage && typeof window.mBTStorage.getAllContacts === 'function') {
+                return window.mBTStorage.getAllContacts().then(function (dbContacts) {
+                    self.contacts.length = 0;
+                    for (var i = 0; i < dbContacts.length; i++) { self.contacts.push(dbContacts[i]); }
+                    /* One-time migration: pull any legacy moo_contacts into IndexedDB */
+                    return _loadWithMigration('moo_contacts').then(function (legacy) {
+                        if (!legacy || !legacy.length) return;
+                        var byId = {};
+                        for (var j = 0; j < dbContacts.length; j++) { byId[dbContacts[j].id] = true; }
+                        var migrated = [];
+                        for (var k = 0; k < legacy.length; k++) {
+                            var lc = legacy[k];
+                            if (!lc.id) lc.id = 'contact_' + Date.now() + '_' + k;
+                            if (!byId[lc.id]) {
+                                lc.portfolio = lc.portfolio || [];
+                                migrated.push(window.mBTStorage.saveContact(lc));
+                                self.contacts.push(lc);
+                            }
+                        }
+                        if (migrated.length) {
+                            return Promise.all(migrated).then(function () {
+                                /* Clear legacy store after successful migration */
+                                return _lfSet('moo_contacts', []);
+                            });
+                        }
+                    });
+                }).catch(function () { return self._loadContactsFallback(); });
+            }
+            return self._loadContactsFallback();
+        },
+
+        _loadContactsFallback: function () {
             var self = this;
             return _loadWithMigration('moo_contacts').then(function (stored) {
                 self.contacts.length = 0;
@@ -173,8 +215,148 @@
             });
         },
 
+        /* Refresh runtime cache from IndexedDB (call after any write) */
+        refreshContacts: function () {
+            var self = this;
+            if (window.mBTStorage && typeof window.mBTStorage.getAllContacts === 'function') {
+                return window.mBTStorage.getAllContacts().then(function (all) {
+                    self.contacts.length = 0;
+                    for (var i = 0; i < all.length; i++) { self.contacts.push(all[i]); }
+                    return all;
+                }).catch(function () { return self.contacts; });
+            }
+            return Promise.resolve(self.contacts);
+        },
+
+        /* Save a contact to IndexedDB and refresh the cache */
+        saveContact: function (contact) {
+            var self = this;
+            if (window.mBTStorage && typeof window.mBTStorage.saveContact === 'function') {
+                return window.mBTStorage.saveContact(contact).then(function (saved) {
+                    return self.refreshContacts().then(function () { return saved; });
+                });
+            }
+            /* Fallback: update in-memory array and persist to localforage */
+            if (!contact.id) contact.id = 'contact_' + Date.now();
+            var idx = -1;
+            for (var i = 0; i < self.contacts.length; i++) {
+                if (self.contacts[i].id === contact.id) { idx = i; break; }
+            }
+            if (idx > -1) { self.contacts[idx] = contact; } else { self.contacts.push(contact); }
+            return _lfSet('moo_contacts', self.contacts).then(function () { return contact; });
+        },
+
+        /* Legacy shim — kept so old callers don't break during transition */
         saveContacts: function () {
             return _lfSet('moo_contacts', this.contacts);
+        },
+
+        /* --- OG_CONTACTS CLOUD SYNC (opt-in) ---
+         * Pushes non-private contacts to og_contacts Supabase table.
+         * Pulls shared contacts from other users and merges as read-only.
+         * Controlled by localStorage key: moo_og_share_contacts ('true'/'false').
+         */
+        OG_CONTACTS_TABLE: 'og_contacts',
+
+        _getOwnerId: function () {
+            var uid = localStorage.getItem('mbt_user_id');
+            if (!uid) {
+                uid = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+                localStorage.setItem('mbt_user_id', uid);
+            }
+            return uid;
+        },
+
+        syncContactsFromCloud: function () {
+            var self = this;
+            if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve([]);
+            var shareEnabled = localStorage.getItem('moo_og_share_contacts') === 'true';
+            if (!shareEnabled) return Promise.resolve([]);
+
+            return fetch(OG_CLOUD_URL + '/rest/v1/' + self.OG_CONTACTS_TABLE + '?select=*&order=shared_at.desc', {
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
+                }
+            }).then(function (res) {
+                if (!res.ok) return [];
+                return res.json();
+            }).then(function (rows) {
+                if (!rows || !rows.length) return [];
+                var ownerId = self._getOwnerId();
+                var sharedByOthers = rows.filter(function (r) { return r.owner_id !== ownerId; });
+                /* Store shared contacts in a separate localforage key — never mixed into IndexedDB */
+                return _lfSet('moo_og_shared_contacts', sharedByOthers).then(function () {
+                    window.dispatchEvent(new CustomEvent('mbt:shared-contacts-updated', { detail: { count: sharedByOthers.length } }));
+                    return sharedByOthers;
+                });
+            }).catch(function () { return []; });
+        },
+
+        pushContactsToCloud: function () {
+            var self = this;
+            if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve(0);
+            var shareEnabled = localStorage.getItem('moo_og_share_contacts') === 'true';
+            if (!shareEnabled) return Promise.resolve(0);
+
+            var ownerId = self._getOwnerId();
+            var ownerName = localStorage.getItem('mbt_display_name') || 'mBT User';
+            var toShare = self.contacts.filter(function (c) { return !c.privateContact; });
+
+            if (!toShare.length) return Promise.resolve(0);
+
+            var pushed = 0;
+            var promises = toShare.map(function (c) {
+                var payload = {
+                    id:             c.id,
+                    owner_id:       ownerId,
+                    owner_name:     ownerName,
+                    name:           c.name,
+                    department:     c.department || c.role || '',
+                    role:           c.role || c.department || '',
+                    email:          c.email || null,
+                    phone:          c.phone || null,
+                    rate:           c.rate || null,
+                    /* wallet & portfolio: only share URL-type portfolio items, never Base64 file data */
+                    portfolio:      (c.portfolio || []).filter(function (p) { return p.type === 'link'; }),
+                    private_contact: false
+                    /* wallet_type / wallet_address intentionally excluded from cloud */
+                };
+                return fetch(OG_CLOUD_URL + '/rest/v1/' + self.OG_CONTACTS_TABLE, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': OG_CLOUD_KEY,
+                        'Authorization': 'Bearer ' + OG_CLOUD_KEY,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates,return=minimal'
+                    },
+                    body: JSON.stringify(payload)
+                }).then(function (res) { if (res.ok) pushed++; }).catch(function () {});
+            });
+
+            return Promise.all(promises).then(function () {
+                localStorage.setItem('moo_og_contacts_last_push', new Date().toISOString());
+                return pushed;
+            });
+        },
+
+        deleteContactFromCloud: function (contactId) {
+            var self = this;
+            if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve(false);
+            var shareEnabled = localStorage.getItem('moo_og_share_contacts') === 'true';
+            if (!shareEnabled) return Promise.resolve(false);
+            return fetch(OG_CLOUD_URL + '/rest/v1/' + self.OG_CONTACTS_TABLE + '?id=eq.' + encodeURIComponent(contactId), {
+                method: 'DELETE',
+                headers: {
+                    'apikey': OG_CLOUD_KEY,
+                    'Authorization': 'Bearer ' + OG_CLOUD_KEY,
+                    'Prefer': 'return=minimal'
+                }
+            }).then(function (res) { return res.ok; }).catch(function () { return false; });
+        },
+
+        getSharedContacts: function () {
+            return _lfGet('moo_og_shared_contacts').then(function (data) { return data || []; });
         },
 
         /* --- CLOUD SYNC --- */

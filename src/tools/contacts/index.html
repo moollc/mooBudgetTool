@@ -291,12 +291,35 @@ var mBTContacts = (function () {
             ? localforage.getItem(state.projectKey)
             : (STORAGE.getMonolithBudget ? STORAGE.getMonolithBudget() : Promise.resolve(null));
 
-        Promise.all([STORAGE.getAllContacts(), budgetPromise]).then(function (results) {
+        var sharedContactsPromise = localforage.getItem('moo_og_shared_contacts').then(function (d) { return d || []; }).catch(function () { return []; });
+
+        Promise.all([STORAGE.getAllContacts(), budgetPromise, sharedContactsPromise]).then(function (results) {
             state.dbContacts = results[0] || [];
             state.budget = results[1] || null;
             state.budgetCrew = extractBudgetCrew(state.budget);
             state.pos = (state.budget && state.budget.ledgers && Array.isArray(state.budget.ledgers.pos)) ? state.budget.ledgers.pos : [];
             state.currency = params.get('currency') || (state.budget && state.budget.displayCurrency) || 'JMD';
+
+            /* Merge shared contacts (read-only, marked with sharedFrom) */
+            var shared = results[2] || [];
+            var dbIds = {};
+            state.dbContacts.forEach(function (c) { dbIds[c.id] = true; });
+            shared.forEach(function (sc) {
+                if (!dbIds[sc.id]) {
+                    state.dbContacts.push({
+                        id:         sc.id,
+                        name:       sc.name,
+                        department: sc.department || sc.role || '',
+                        role:       sc.role || sc.department || '',
+                        email:      sc.email || null,
+                        phone:      sc.phone || null,
+                        rate:       sc.rate || null,
+                        portfolio:  sc.portfolio || [],
+                        sharedFrom: sc.owner_name || 'OpenGate',
+                        readOnly:   true
+                    });
+                }
+            });
 
             dom.getElementById('skeleton').classList.add('hidden');
             dom.getElementById('contacts-grid').classList.remove('hidden');
@@ -435,6 +458,9 @@ var mBTContacts = (function () {
                     '<div class="flex items-center gap-2 flex-wrap mb-2">' +
                         '<span class="text-[13px] font-black text-slate-900 truncate">' + esc(name) + '</span>' +
                         (isBudget ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-widest">Budget</span>' : '') +
+                        (c.sharedFrom ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 uppercase tracking-widest" title="Shared via OpenGate by ' + esc(c.sharedFrom) + '">OpenGate</span>' : '') +
+                        (c.privateContact ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase tracking-widest">Private</span>' : '') +
+                        ((c.portfolio && c.portfolio.length) ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase tracking-widest">' + c.portfolio.length + ' portfolio</span>' : '') +
                     '</div>' +
                     '<span class="inline-block text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full text-white" style="background:' + accent + ';">' + esc(dept) + '</span>' +
                 '</div>' +
@@ -608,6 +634,44 @@ var mBTContacts = (function () {
                         '<div class="text-[8px] text-emerald-500 font-black uppercase tracking-widest">Paid</div>' +
                     '</div>' +
                 '</div>';
+            });
+        }
+        html += '</div>';
+
+        /* Section 4: Portfolio */
+        html += '<div class="mt-3">';
+        html += '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Portfolio</div>';
+        var portfolio = c.portfolio || [];
+        if (!portfolio.length) {
+            html += '<div class="text-[9px] text-slate-400 italic">No portfolio items. Add links or files when editing.</div>';
+        } else {
+            portfolio.forEach(function (p) {
+                if (p.type === 'link') {
+                    html += '<a href="' + esc(p.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                        'class="flex items-center gap-2 p-2 bg-blue-50 rounded-xl mb-1 hover:bg-blue-100 transition-colors no-underline">' +
+                        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+                        '<span class="text-[9px] font-bold text-blue-700 truncate">' + esc(p.label || p.url) + '</span>' +
+                        '</a>';
+                } else {
+                    /* File — offer download or inline preview for images/PDFs */
+                    var isImage = p.mimeType && p.mimeType.indexOf('image/') === 0;
+                    var isPdf   = p.mimeType === 'application/pdf';
+                    if (p.data) {
+                        if (isImage) {
+                            html += '<div class="mb-1">' +
+                                '<div class="text-[8px] text-slate-400 mb-0.5">' + esc(p.label || p.name) + '</div>' +
+                                '<img src="' + esc(p.data) + '" class="max-w-full rounded-lg border border-slate-200" style="max-height:120px;object-fit:contain;">' +
+                            '</div>';
+                        } else {
+                            html += '<a download="' + esc(p.name || 'file') + '" href="' + esc(p.data) + '" ' +
+                                'class="flex items-center gap-2 p-2 bg-slate-50 rounded-xl mb-1 hover:bg-slate-100 transition-colors no-underline">' +
+                                '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+                                '<span class="text-[9px] font-bold text-slate-600 truncate">' + esc(p.label || p.name) + '</span>' +
+                                '<span class="text-[8px] text-slate-400 ml-auto shrink-0">' + (p.size ? Math.round(p.size / 1024) + 'KB' : '') + '</span>' +
+                                '</a>';
+                        }
+                    }
+                }
             });
         }
         html += '</div>';
@@ -877,6 +941,25 @@ var mBTContacts = (function () {
                         '<option value="wise"'     + ((prefill && prefill.walletType === 'wise')     ? ' selected' : '') + '>Wise</option>' +
                     '</select></div>' +
                     field('Wallet / Account ID', 'text', 'm-wallet-address', 'Account number, email, or @tag', (prefill && prefill.walletAddress) || '') +
+                    /* Portfolio section */
+                    '<div>' +
+                        '<label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Portfolio</label>' +
+                        '<div id="m-portfolio-list" class="space-y-1.5 mb-2">' + buildPortfolioEditRows(prefill && prefill.portfolio) + '</div>' +
+                        '<div class="flex gap-2">' +
+                            '<input type="text" id="m-portfolio-label" placeholder="Label" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-[10px] text-white outline-none focus:border-blue-500">' +
+                            '<input type="url" id="m-portfolio-url" placeholder="https://..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-[10px] text-white outline-none focus:border-blue-500">' +
+                            '<button id="m-portfolio-add-link" class="shrink-0 bg-slate-700 hover:bg-blue-600 text-white text-[9px] font-black px-2 py-1.5 rounded-lg transition-colors">+ Link</button>' +
+                        '</div>' +
+                        '<label class="block mt-2">' +
+                            '<input type="file" id="m-portfolio-file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.gif,.mp4,.mov">' +
+                            '<span class="cursor-pointer text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-400 transition-colors">+ Attach File (PDF / Image / Video)</span>' +
+                        '</label>' +
+                    '</div>' +
+                    /* Privacy toggle */
+                    '<div class="flex items-center gap-3 pt-1">' +
+                        '<input type="checkbox" id="m-private" class="w-4 h-4 rounded accent-blue-600"' + ((prefill && prefill.privateContact) ? ' checked' : '') + '>' +
+                        '<label for="m-private" class="text-[9px] font-black uppercase tracking-widest text-slate-400 cursor-pointer">Private — exclude from OpenGate sharing</label>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="px-6 py-4 border-t border-slate-800 flex justify-end gap-2 shrink-0">' +
                     '<button class="modal-cancel text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">Cancel</button>' +
@@ -889,11 +972,84 @@ var mBTContacts = (function () {
         modal.querySelector('.modal-cancel').addEventListener('click', closeModal);
         modal.querySelector('.modal-save').addEventListener('click', saveContact);
         modal.addEventListener('click', function (ev) { if (ev.target === modal) closeModal(); });
+        wirePortfolioModal();
     }
 
     function field(label, type, id, placeholder, value) {
         return '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">' + esc(label) + '</label>' +
             '<input type="' + type + '" id="' + id + '" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors" placeholder="' + esc(placeholder) + '" value="' + esc(value) + '"></div>';
+    }
+
+    /* Runtime portfolio accumulator for the open modal */
+    var _modalPortfolio = [];
+
+    function buildPortfolioEditRows(portfolio) {
+        _modalPortfolio = (portfolio || []).slice();
+        return _modalPortfolio.map(function (p, i) {
+            var icon = p.type === 'link'
+                ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
+                : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+            return '<div class="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1.5" data-portfolio-idx="' + i + '">' +
+                '<span class="text-slate-400">' + icon + '</span>' +
+                '<span class="text-[10px] text-white flex-1 truncate">' + esc(p.label || p.url || p.name || 'Item') + '</span>' +
+                '<button type="button" onclick="mBTContactsRemovePortfolioItem(' + i + ')" class="text-slate-500 hover:text-red-400 transition-colors text-[10px]">&times;</button>' +
+            '</div>';
+        }).join('');
+    }
+
+    function refreshPortfolioRows() {
+        var list = document.getElementById('m-portfolio-list');
+        if (list) list.innerHTML = buildPortfolioEditRows(_modalPortfolio);
+    }
+
+    window.mBTContactsRemovePortfolioItem = function (idx) {
+        _modalPortfolio.splice(idx, 1);
+        refreshPortfolioRows();
+    };
+
+    function wirePortfolioModal() {
+        var addLinkBtn = document.getElementById('m-portfolio-add-link');
+        if (addLinkBtn) {
+            addLinkBtn.addEventListener('click', function () {
+                var label = (document.getElementById('m-portfolio-label').value || '').trim();
+                var url   = (document.getElementById('m-portfolio-url').value || '').trim();
+                if (!url) { alert('Enter a URL first'); return; }
+                if (!label) label = url;
+                _modalPortfolio.push({ type: 'link', label: label, url: url, addedAt: new Date().toISOString() });
+                document.getElementById('m-portfolio-label').value = '';
+                document.getElementById('m-portfolio-url').value = '';
+                refreshPortfolioRows();
+            });
+        }
+        var fileInput = document.getElementById('m-portfolio-file');
+        if (fileInput) {
+            fileInput.addEventListener('change', function () {
+                var file = fileInput.files[0];
+                if (!file) return;
+                var MAX = 5 * 1024 * 1024;
+                if (file.size > MAX) { alert('File too large. Max 5MB per attachment.'); fileInput.value = ''; return; }
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    _modalPortfolio.push({
+                        type: 'file',
+                        label: file.name,
+                        name: file.name,
+                        mimeType: file.type,
+                        size: file.size,
+                        data: ev.target.result,
+                        addedAt: new Date().toISOString()
+                    });
+                    fileInput.value = '';
+                    refreshPortfolioRows();
+                };
+                reader.readAsDataURL(file);
+            });
+            /* Make the label click trigger the file input */
+            var fileLabel = fileInput.nextElementSibling;
+            if (fileLabel) {
+                fileLabel.addEventListener('click', function () { fileInput.click(); });
+            }
+        }
     }
 
     function closeModal() {
@@ -916,12 +1072,25 @@ var mBTContacts = (function () {
 
         if (!name) { alert('Name is required'); return; }
 
+        var privateContact = !!(document.getElementById('m-private') && document.getElementById('m-private').checked);
+
+        /* Preserve existing portfolio items and merge with newly added ones */
+        var existingPortfolio = [];
+        if (state.editingId) {
+            var existingC = state.dbContacts.find(function (c) { return c.id === state.editingId; });
+            existingPortfolio = (existingC && existingC.portfolio) ? existingC.portfolio : [];
+        }
+        /* _modalPortfolio was rebuilt from existing items + additions in the modal */
+        var finalPortfolio = _modalPortfolio.slice();
+
         var contact = {
             name: name, department: dept, email: email || null, phone: phone || null,
             rate: rate || null, role: dept, category: dept,
             dietaryRestrictions: dietary || null, allergies: allergies || null,
             walletType:    walletType    || null,
-            walletAddress: walletAddress || null
+            walletAddress: walletAddress || null,
+            portfolio:     finalPortfolio,
+            privateContact: privateContact
         };
         if (state.editingId) contact.id = state.editingId;
 
@@ -1110,24 +1279,152 @@ var mBTContacts = (function () {
     }
 
     function importFromDevice() {
-        var svc = (window.mBT && window.mBT.services && window.mBT.services.contacts) || window.mBTContactsService;
-        if (!svc || typeof svc.importFromDevice !== 'function') {
-            alert('Import from Device requires the Contacts Service. On Desktop, export your contacts as a VCF or CSV file and use the File Import button instead.');
-            return;
-        }
-        svc.importFromDevice().then(function (res) {
-            if (res.error) {
-                alert(res.error);
-            } else if (res.imported > 0) {
-                STORAGE.getAllContacts().then(function (all) {
+        /* Mobile: use native Contact Picker API */
+        if ('contacts' in navigator && 'ContactsManager' in window) {
+            navigator.contacts.select(['name', 'tel', 'email'], { multiple: true }).then(function (results) {
+                if (!results || !results.length) { walletSnack('No contacts selected.'); return; }
+                var svc = (window.mBT && window.mBT.services && window.mBT.services.contacts) || window.mBTContactsService;
+                var saves = results.map(function (r, i) {
+                    var contact = {
+                        id: 'device_' + Date.now() + '_' + i,
+                        name: (r.name && r.name[0]) ? r.name[0] : 'Unknown',
+                        email: (r.email && r.email[0]) ? r.email[0] : null,
+                        phone: (r.tel && r.tel[0]) ? r.tel[0] : null,
+                        category: 'Crew', role: '', isMe: false, source: 'device'
+                    };
+                    return svc ? svc.save(contact) : STORAGE.saveContact(contact);
+                });
+                Promise.all(saves).then(function () {
+                    return STORAGE.getAllContacts();
+                }).then(function (all) {
                     state.dbContacts = all || [];
                     render();
-                    walletSnack('Imported ' + res.imported + ' device contacts.');
+                    walletSnack('Imported ' + results.length + ' device contact' + (results.length !== 1 ? 's' : '') + '.');
                 });
-            } else {
-                walletSnack('No contacts selected.');
-            }
+            }).catch(function () { walletSnack('Contact access denied or cancelled.'); });
+            return;
+        }
+
+        /* Desktop: show choice modal — file import or pick from mBT roster */
+        showDesktopImportModal();
+    }
+
+    function showDesktopImportModal() {
+        /* Build modal overlay */
+        var overlay = dom.createElement('div');
+        overlay.id = 'desktop-import-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+        function closeOverlay() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+
+        var modal = dom.createElement('div');
+        modal.style.cssText = 'background:#fff;border-radius:1.25rem;padding:1.5rem;width:320px;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+        modal.innerHTML =
+            '<h3 style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#0f172a;margin:0 0 4px">Import Contacts</h3>' +
+            '<p style="font-size:9px;color:#94a3b8;font-weight:700;margin:0 0 16px">Choose an import source</p>' +
+            '<button id="dim-file" style="width:100%;padding:12px;background:#f1f5f9;border:none;border-radius:.75rem;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;margin-bottom:8px;text-align:left;">Upload VCF / CSV File</button>' +
+            '<button id="dim-roster" style="width:100%;padding:12px;background:#eff6ff;border:none;border-radius:.75rem;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;margin-bottom:16px;text-align:left;color:#1d4ed8;">Select from mBT Contacts</button>' +
+            '<button id="dim-cancel" style="width:100%;padding:8px;background:none;border:none;font-size:9px;font-weight:700;color:#94a3b8;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;">Cancel</button>';
+
+        overlay.appendChild(modal);
+        dom.body.appendChild(overlay);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeOverlay(); });
+
+        dom.getElementById('dim-cancel').addEventListener('click', closeOverlay);
+
+        /* Option 1: file import */
+        dom.getElementById('dim-file').addEventListener('click', function () {
+            closeOverlay();
+            var inp = dom.getElementById('contact-import-input');
+            if (inp) { inp.value = ''; inp.click(); }
         });
+
+        /* Option 2: pick from mBT roster in parent window */
+        dom.getElementById('dim-roster').addEventListener('click', function () {
+            closeOverlay();
+            var roster = [];
+            try { roster = (window.parent && window.parent.mBTOG && window.parent.mBTOG.contacts) ? window.parent.mBTOG.contacts : []; } catch(ex) {}
+            if (!roster.length) { walletSnack('No contacts in mBT roster yet. Add them via Settings first.'); return; }
+            showRosterPicker(roster);
+        });
+    }
+
+    function showRosterPicker(roster) {
+        var overlay = dom.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        function closeOverlay() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+
+        var modal = dom.createElement('div');
+        modal.style.cssText = 'background:#fff;border-radius:1.25rem;padding:1.25rem;width:340px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+
+        var searchId = 'rp-search-' + Date.now();
+        var listId   = 'rp-list-' + Date.now();
+        modal.innerHTML =
+            '<h3 style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#0f172a;margin:0 0 10px">Select Contacts</h3>' +
+            '<input id="' + searchId + '" type="text" placeholder="Search..." style="width:100%;box-sizing:border-box;padding:8px 10px;background:#f1f5f9;border:none;border-radius:.625rem;font-size:10px;font-weight:700;outline:none;margin-bottom:8px;">' +
+            '<div id="' + listId + '" style="overflow-y:auto;flex:1;"></div>' +
+            '<div style="display:flex;gap:8px;margin-top:12px;">' +
+            '<button id="rp-cancel" style="flex:1;padding:8px;background:#f1f5f9;border:none;border-radius:.625rem;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;">Cancel</button>' +
+            '<button id="rp-import" style="flex:1;padding:8px;background:#2563eb;color:#fff;border:none;border-radius:.625rem;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;">Import Selected</button>' +
+            '</div>';
+
+        overlay.appendChild(modal);
+        dom.body.appendChild(overlay);
+
+        var selected = {};
+
+        function renderList(filter) {
+            var list = dom.getElementById(listId);
+            if (!list) return;
+            var html = '';
+            roster.forEach(function (c) {
+                if (filter && (c.name || '').toLowerCase().indexOf(filter.toLowerCase()) === -1) return;
+                var chk = selected[c.id] ? '#2563eb' : '#e2e8f0';
+                var chkTxt = selected[c.id] ? '#fff' : '#e2e8f0';
+                html += '<div data-rid="' + esc(c.id) + '" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:.625rem;cursor:pointer;margin-bottom:4px;background:' + (selected[c.id] ? '#eff6ff' : '#fff') + ';">' +
+                    '<div style="width:24px;height:24px;border-radius:50%;background:' + chk + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+                    '<span style="font-size:10px;font-weight:900;color:' + chkTxt + ';">' + (selected[c.id] ? '&#10003;' : '') + '</span></div>' +
+                    '<div><div style="font-size:10px;font-weight:900;color:#0f172a;">' + esc(c.name || '') + '</div>' +
+                    '<div style="font-size:9px;color:#94a3b8;font-weight:700;">' + esc(c.role || c.category || '') + '</div></div></div>';
+            });
+            list.innerHTML = html || '<p style="font-size:9px;color:#94a3b8;font-weight:700;text-align:center;padding:16px;">No matches</p>';
+            list.querySelectorAll('[data-rid]').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    var rid = el.getAttribute('data-rid');
+                    if (selected[rid]) { delete selected[rid]; } else { selected[rid] = true; }
+                    renderList(dom.getElementById(searchId) ? dom.getElementById(searchId).value : '');
+                });
+            });
+        }
+
+        renderList('');
+        dom.getElementById(searchId).addEventListener('input', function () { renderList(this.value); });
+        dom.getElementById('rp-cancel').addEventListener('click', closeOverlay);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeOverlay(); });
+
+        dom.getElementById('rp-import').addEventListener('click', function () {
+            var ids = Object.keys(selected);
+            if (!ids.length) { walletSnack('No contacts selected.'); return; }
+            var toImport = roster.filter(function (c) { return selected[c.id]; });
+            var chain = Promise.resolve();
+            toImport.forEach(function (c) {
+                chain = chain.then(function () {
+                    return STORAGE.saveContact({
+                        name: c.name, email: c.email || null, phone: c.phone || null,
+                        role: c.role || '', category: c.category || '', department: c.department || '',
+                        rate: c.rate || null, walletType: c.walletType || null, walletAddress: c.walletAddress || null
+                    });
+                });
+            });
+            chain.then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
+                state.dbContacts = all || [];
+                render();
+                closeOverlay();
+                walletSnack('Imported ' + toImport.length + ' contact' + (toImport.length !== 1 ? 's' : '') + ' from mBT roster.');
+            });
+        });
+
+        setTimeout(function () { var s = dom.getElementById(searchId); if (s) s.focus(); }, 50);
     }
 
     /* ========= Init ========= */
