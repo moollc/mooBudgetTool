@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v22.94</title>
+    <title>mooBudgetTool v23.04</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -234,6 +234,7 @@
     <script src="./src/core/ui.settings.js"></script>
     <script src="./src/core/finance.engine.js"></script>
     <script src="./src/core/services/Security.js"></script>
+    <script src="./src/core/services/mBTAssistant.js"></script>
     <script src="./src/config/supabase.js"></script>
     <script src="./src/services/supabase-sync.js"></script>
     <script src="./src/services/supabase-realtime.js"></script>
@@ -378,7 +379,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "22.94";
+    var APP_VERSION = "23.04";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -2331,15 +2332,47 @@
         }
         /* Recompute every item's rate from its baseRate using the new region.
          * Preserves user intent: baseRate is the anchor; rate is the displayed regional figure. */
+        /* Phase 172: Rate Substitution (Not Multiplication)
+           Region switch should LOOK UP the researched rate per region from OpenGate
+           and substitute it directly. Multiplying a JMD number by a scalar to "convert"
+           to USD produces nonsense (e.g. 45000 JMD * 3.5 = 157500 "USD" — not a real rate).
+           Falls through to math scaling only when no researched data exists for that
+           description+region key. Currency conversion is a SEPARATE operation handled
+           by the dashboard currency selector — not this function. */
         function applyRegion(newRegion) {
             if (typeof budget === 'undefined' || !budget || !budget.sections) return;
+            var currentReg = (window.mBTOG && mBTOG.settings) ? mBTOG.settings.location : 'Jamaica';
+
+            /* Pull researched market rates from OpenGate (keyed by description|region). */
+            var averages = {};
+            if (window.mBTOG && typeof mBTOG._computeLocalAverages === 'function') {
+                try { averages = mBTOG._computeLocalAverages() || {}; } catch (e) { averages = {}; }
+            }
+
             var secs = budget.sections;
             Object.keys(secs).forEach(function (sk) {
                 var items = (secs[sk] && secs[sk].items) || [];
                 for (var i = 0; i < items.length; i++) {
-                    ensureBase(items[i], newRegion);
-                    var mult = resolve(items[i], newRegion);
-                    items[i].rate = Math.round((parseFloat(items[i].baseRate) || 0) * mult * 100) / 100;
+                    var item = items[i];
+                    /* Anchor baseRate to the OLD region BEFORE switching, so manual overrides survive. */
+                    ensureBase(item, currentReg);
+
+                    var key = (item.description || '').toLowerCase() + '|' + newRegion.toLowerCase();
+                    var avgData = averages[key];
+
+                    if (avgData && avgData.avg_rate > 0) {
+                        /* PRIMARY: Substitute the researched rate for this region.
+                           Also stamp the native currency so the dashboard currency
+                           selector knows what to convert from when displaying. */
+                        item.rate = Math.round(avgData.avg_rate * 100) / 100;
+                        if (avgData.currency) item.rateCurrency = avgData.currency;
+                        item.rateSource = avgData.source || 'default';
+                    } else {
+                        /* FALLBACK: No research data — math scaling (legacy behavior). */
+                        var mult = resolve(item, newRegion);
+                        item.rate = Math.round((parseFloat(item.baseRate) || 0) * mult * 100) / 100;
+                        item.rateSource = 'scaled';
+                    }
                 }
             });
         }
@@ -3028,7 +3061,21 @@
     // 2. The Main Render Loop (The Gatekeeper)
     mBT.ui.refresh = function () {
         var app = document.getElementById('app');
-        if (!budget || !app) return;
+        if (!app) return;
+        if (!budget) {
+            app.innerHTML =
+                '<div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">' +
+                '<img src="./assets/cow-192.png" class="w-16 h-16 object-contain opacity-60" alt="mBT">' +
+                '<div>' +
+                '<h2 class="text-base font-black uppercase tracking-widest text-slate-700 mb-1">No Budget Loaded</h2>' +
+                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to get started</p>' +
+                '</div>' +
+                '<button onclick="showNewProjectModal()" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">' +
+                'Create New Budget' +
+                '</button>' +
+                '</div>';
+            return;
+        }
 
         // Deficiency Fix: Theme Toggle Latency
         // Updated: Standardized on Slate-200 (#e2e8f0) for improved production environment contrast.
@@ -5115,7 +5162,8 @@
 
         // --- 4. Render Engine Handshake ---
         renderFrame: function () {
-            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+            var self = this;
+            var doc = budget.documents.find(function (d) { return d.id === self.state.currentDocId; });
             var container = document.getElementById('mBTDB_Container');
             if (!container) return;
 
@@ -5154,35 +5202,34 @@
             });
 
             this._renderMetaHeader(doc);
+            var self = this;
             setTimeout(function () {
                 if (typeof GridStack === 'undefined') return console.error("GridStack resolution failure.");
                 var wrapper = document.getElementById('mBTDB_Workspace');
-                // Re-apply editing class if state persisted
-                if (this.state.isEditing) wrapper.classList.add('editing-mode');
+                if (self.state.isEditing) wrapper.classList.add('editing-mode');
 
-                // Batch 2.1: Grid Physics Refinement
-                // Reduced cellHeight (30px) for granular text matching. Increased margin for visual breathing room.
-                this.state.grid = GridStack.init({
+                self.state.grid = GridStack.init({
                     column: 12,
                     cellHeight: 30,
                     minRow: 1,
                     margin: 5,
                     animate: true,
-                    float: false, // Gravity Enabled (Widgets snap up)
+                    float: false,
                     resizable: { handles: 'n,e,s,w,ne,se,sw,nw' },
-                    staticGrid: !this.state.isEditing
+                    staticGrid: !self.state.isEditing
                 }, wrapper.querySelector('.grid-stack'));
 
-                this._loadWidgetsToGrid(doc);
-                this._updateHeaderButtons();
-                this.state.grid.on('change', function () { return this._triggerSave(); });
-                this._initMudMaps(); // Initialize canvases
+                self._loadWidgetsToGrid(doc);
+                self._updateHeaderButtons();
+                self.state.grid.on('change', function () { return self._triggerSave(); });
+                self._initMudMaps();
             }, 50);
         },
 
         _loadWidgetsToGrid: function (doc) {
+            var self = this;
             var grid = this.state.grid; grid.removeAll(); grid.batchUpdate();
-            doc.content.widgets.forEach(function (w) { if (w.type === 'header') return; grid.addWidget({ x: w.x, y: w.y, w: w.w, h: w.h, content: this._generateWidgetHTML(w, doc), id: w.id }); });
+            doc.content.widgets.forEach(function (w) { if (w.type === 'header') return; grid.addWidget({ x: w.x, y: w.y, w: w.w, h: w.h, content: self._generateWidgetHTML(w, doc), id: w.id }); });
             grid.commit();
         },
         _generateWidgetHTML: function (widget, doc) {
@@ -5280,6 +5327,22 @@
         },
 
         _renderMetaHeader: function (doc) {
+            /* Non-callSheet docs get a lightweight title-only header */
+            var _callSheetTypes = ['callSheet', 'storyboard', 'productionReport', 'movementOrder'];
+            if (_callSheetTypes.indexOf(doc.type) === -1 || doc.type === 'storyboard') {
+                var metaEl = document.getElementById('mBTDB_MetaArea');
+                if (metaEl) {
+                    var _lock = this.state.isEditing ? '' : 'disabled';
+                    var _d = doc.content.data;
+                    metaEl.innerHTML = '<div class="flex justify-between items-end border-b-4 border-black pb-2 mb-4">' +
+                        '<input ' + _lock + ' value="' + esc((_d.meta && _d.meta.productionTitle) || (window.budget && window.budget.projectName) || 'UNTITLED') + '" ' +
+                        'onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" ' +
+                        'class="text-3xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">' +
+                        '<div class="text-right shrink-0 text-xs font-black uppercase tracking-widest text-slate-400">' + esc(doc.label || doc.type) + '</div>' +
+                        '</div>';
+                }
+                return;
+            }
             var d = doc.content.data;
             var lock = this.state.isEditing ? '' : 'disabled';
             var is24h = d.meta.is24h || false;
@@ -5756,30 +5819,318 @@
                 '</div>' +
                 '</div>';
         },
-        // Logic Resolution: New Image Rendering Logic with Optimization
+        // Logic Resolution: Image widget — click opens frame editor modal in editing mode
         _renderImage: function (docId, widgetId, data) {
             var val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
+            var frameState = (data.frameState && data.frameState[widgetId]) || {};
+            var scale = frameState.scale || 1;
+            var ox = frameState.offsetX || 0;
+            var oy = frameState.offsetY || 0;
+            var imgTransform = 'scale(' + scale + ') translate(' + ox + 'px,' + oy + 'px)';
 
             if (val) {
-                var html = '<div class="relative w-full h-full group bg-slate-50 flex items-center justify-center overflow-hidden">' +
-                    '<img src="' + val + '" class="max-w-full max-h-full object-contain">';
+                var html = '<div class="relative w-full h-full group bg-slate-900 flex items-center justify-center overflow-hidden">' +
+                    '<img src="' + val + '" style="transform:' + imgTransform + ';transform-origin:center;transition:transform 0.15s ease;max-width:100%;max-height:100%;object-contain:contain;">';
                 if (this.state.isEditing) {
-                    html += '<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">' +
-                        '<button onclick="document.getElementById(\'file_' + widgetId + '\').click()" class="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-50">Change</button>' +
-                        '<button onclick="mBTDB.updateData(\'' + docId + '\', \'additional.' + widgetId + '\', \'\')" class="bg-white text-rose-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-rose-50">Remove</button>' +
-                        '</div>' +
-                        '<input type="file" id="file_' + widgetId + '" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, \'' + docId + '\', \'' + widgetId + '\')">';
+                    html += '<div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">' +
+                        '<button onclick="mBTDB.openFrameEditor(\'' + docId + '\',\'' + widgetId + '\')" class="bg-white text-slate-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 shadow-lg">' +
+                        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;display:inline;margin-right:4px;vertical-align:middle;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                        'Edit Frame</button>' +
+                        '</div>';
                 }
                 html += '</div>';
                 return html;
             } else {
-                if (!this.state.isEditing) return '<div class="w-full h-full flex items-center justify-center bg-slate-50 text-[10px] text-slate-300 font-bold uppercase tracking-widest">Empty Image Block</div>';
-                return '<div class="w-full h-full flex flex-col items-center justify-center bg-slate-50 hover:bg-blue-50/50 transition-colors border-2 border-dashed border-slate-100 hover:border-blue-200 cursor-pointer p-4 group" onclick="document.getElementById(\'file_' + widgetId + '\').click()">' +
-                    '<div class="text-slate-300 group-hover:text-blue-400 mb-2 scale-125 transition-transform group-hover:scale-150">' + (this.icons.image || "") + '</div>' +
-                    '<span class="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-500">Upload Image</span>' +
-                    '<input type="file" id="file_' + widgetId + '" accept="image/*" class="hidden" onchange="mBTDB._handleImageUpload(this, \'' + docId + '\', \'' + widgetId + '\')">' +
+                if (!this.state.isEditing) return '<div class="w-full h-full flex items-center justify-center bg-slate-900 text-[10px] text-slate-600 font-bold uppercase tracking-widest">Empty Frame</div>';
+                return '<div class="w-full h-full flex flex-col items-center justify-center bg-slate-900 hover:bg-slate-800 transition-colors border-2 border-dashed border-slate-700 hover:border-blue-500 cursor-pointer p-4 group" onclick="mBTDB.openFrameEditor(\'' + docId + '\',\'' + widgetId + '\')">' +
+                    '<div class="text-slate-600 group-hover:text-blue-400 mb-2 transition-colors">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                    '</div>' +
+                    '<span class="text-[9px] font-black text-slate-500 uppercase tracking-widest group-hover:text-blue-400">Add Frame</span>' +
                     '</div>';
             }
+        },
+
+        // Frame Editor Modal — full preview with form factor, pan/zoom, all actions
+        openFrameEditor: function (docId, widgetId) {
+            var self = this;
+            var doc = budget.documents.find(function (d) { return d.id === docId; });
+            if (!doc) return;
+            var data = doc.content.data || {};
+            var val = data.additional ? data.additional[widgetId] : (data[widgetId] || "");
+            var frameState = (data.frameState && data.frameState[widgetId]) || { scale: 1, offsetX: 0, offsetY: 0, formFactor: '16:9', orientation: 'horizontal' };
+
+            /* Form factor presets — (aspect-ratio CSS value) */
+            var FORM_FACTORS = [
+                { id: '16:9',  label: '16:9',  css: '16/9',  desc: '1080p / HD' },
+                { id: '2.39:1', label: 'Scope', css: '2.39/1', desc: 'Anamorphic' },
+                { id: '4:3',   label: '4:3',   css: '4/3',   desc: 'Academy' },
+                { id: '1:1',   label: '1:1',   css: '1/1',   desc: 'Square' },
+                { id: '9:16',  label: '9:16',  css: '9/16',  desc: 'Vertical' }
+            ];
+
+            var activeFactor = frameState.formFactor || '16:9';
+            var activeFF = FORM_FACTORS.find(function (f) { return f.id === activeFactor; }) || FORM_FACTORS[0];
+
+            var ffTabsHtml = FORM_FACTORS.map(function (f) {
+                var isActive = f.id === activeFactor;
+                return '<button onclick="mBTDB._setFrameFormFactor(\'' + docId + '\',\'' + widgetId + '\',\'' + f.id + '\')" ' +
+                    'id="ff_tab_' + widgetId + '_' + f.id.replace(/[:.]/g, '_') + '" ' +
+                    'class="px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ' +
+                    (isActive ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white') + '">' +
+                    '<div class="font-black">' + f.label + '</div>' +
+                    '<div class="text-[7px] opacity-70">' + f.desc + '</div>' +
+                    '</button>';
+            }).join('');
+
+            var previewHtml = '<div id="sbFramePreviewWrap" class="relative bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center" ' +
+                'style="width:100%;aspect-ratio:' + activeFF.css + ';max-height:55vh;">' +
+                (val
+                    ? '<img id="sbFramePreviewImg" src="' + val + '" ' +
+                      'style="width:100%;height:100%;object-fit:contain;transform:scale(' + frameState.scale + ') translate(' + frameState.offsetX + 'px,' + frameState.offsetY + 'px);transform-origin:center;cursor:grab;" ' +
+                      'draggable="false">'
+                    : '<div class="flex flex-col items-center justify-center gap-3 text-slate-600">' +
+                      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                      '<span class="text-[10px] font-black uppercase tracking-widest">No Image</span>' +
+                      '</div>'
+                ) +
+                /* Zoom controls overlay */
+                '<div class="absolute bottom-2 right-2 flex gap-1">' +
+                '<button onclick="mBTDB._adjustFrameZoom(\'' + docId + '\',\'' + widgetId + '\',-0.1)" class="w-7 h-7 bg-black/60 text-white rounded-lg text-sm font-black hover:bg-black flex items-center justify-center" title="Zoom Out">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>' +
+                '<button onclick="mBTDB._adjustFrameZoom(\'' + docId + '\',\'' + widgetId + '\',0.1)" class="w-7 h-7 bg-black/60 text-white rounded-lg text-sm font-black hover:bg-black flex items-center justify-center" title="Zoom In">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>' +
+                '<button onclick="mBTDB._resetFrameTransform(\'' + docId + '\',\'' + widgetId + '\')" class="w-7 h-7 bg-black/60 text-white rounded-lg text-[8px] font-black hover:bg-black flex items-center justify-center" title="Reset">1:1</button>' +
+                '</div>' +
+                '</div>';
+
+            var actionsHtml =
+                /* Paste */
+                '<button onclick="mBTDB._pasteFrameImage(\'' + docId + '\',\'' + widgetId + '\')" class="flex-1 flex flex-col items-center gap-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all active:scale-95">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>' +
+                '<span class="text-[8px] font-black uppercase tracking-widest text-slate-300">Paste</span>' +
+                '</button>' +
+                /* Attach */
+                '<button onclick="document.getElementById(\'sbFrameFile_' + widgetId + '\').click()" class="flex-1 flex flex-col items-center gap-1 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all active:scale-95">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+                '<span class="text-[8px] font-black uppercase tracking-widest text-slate-300">Attach</span>' +
+                '</button>' +
+                '<input type="file" id="sbFrameFile_' + widgetId + '" accept="image/*" class="hidden" onchange="mBTDB._handleFrameFileUpload(this,\'' + docId + '\',\'' + widgetId + '\')">' +
+                /* Generate (scaffolded — Phase 2) */
+                '<button onclick="mBTDB._generateFrameImage(\'' + docId + '\',\'' + widgetId + '\')" class="flex-1 flex flex-col items-center gap-1 py-3 bg-indigo-900 hover:bg-indigo-800 rounded-xl transition-all active:scale-95" title="AI image generation — coming soon">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' +
+                '<span class="text-[8px] font-black uppercase tracking-widest text-indigo-300">Generate</span>' +
+                '</button>' +
+                /* Clear */
+                (val
+                    ? '<button onclick="mBTDB._clearFrameImage(\'' + docId + '\',\'' + widgetId + '\')" class="flex-1 flex flex-col items-center gap-1 py-3 bg-rose-900 hover:bg-rose-800 rounded-xl transition-all active:scale-95">' +
+                      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>' +
+                      '<span class="text-[8px] font-black uppercase tracking-widest text-rose-300">Clear</span>' +
+                      '</button>'
+                    : ''
+                );
+
+            var content =
+                '<div class="flex flex-col gap-3 p-4 bg-slate-800 min-h-0" style="min-width:min(90vw,520px);">' +
+                /* Form factor tabs */
+                '<div class="flex gap-1.5 flex-wrap">' + ffTabsHtml + '</div>' +
+                /* Preview */
+                previewHtml +
+                /* Paste hint */
+                '<p class="text-[8px] text-slate-500 font-bold text-center">Tip: Copy an image anywhere then click Paste — or drag &amp; drop onto the preview</p>' +
+                /* Actions row */
+                '<div class="flex gap-2">' + actionsHtml + '</div>' +
+                '</div>';
+
+            mBTME.open('sbFrameEditor_' + widgetId, '', content, 'max-w-2xl', { hideHeader: true, noPadding: true });
+
+            /* Wire drag-to-pan on preview image after modal renders */
+            setTimeout(function () { self._initFramePan(docId, widgetId); }, 80);
+
+            /* Wire drag-and-drop on preview wrap */
+            setTimeout(function () {
+                var wrap = document.getElementById('sbFramePreviewWrap');
+                if (!wrap) return;
+                wrap.addEventListener('dragover', function (e) { e.preventDefault(); wrap.style.outline = '2px solid #3b82f6'; });
+                wrap.addEventListener('dragleave', function () { wrap.style.outline = ''; });
+                wrap.addEventListener('drop', function (e) {
+                    e.preventDefault();
+                    wrap.style.outline = '';
+                    var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+                    if (file && file.type.indexOf('image/') === 0) {
+                        self._processFrameImageFile(file, docId, widgetId);
+                    }
+                });
+            }, 80);
+        },
+
+        /* Set form factor — updates tab UI + preview aspect ratio without closing modal */
+        _setFrameFormFactor: function (docId, widgetId, factorId) {
+            var FACTORS = { '16:9': '16/9', '2.39:1': '2.39/1', '4:3': '4/3', '1:1': '1/1', '9:16': '9/16' };
+            var css = FACTORS[factorId] || '16/9';
+            var wrap = document.getElementById('sbFramePreviewWrap');
+            if (wrap) wrap.style.aspectRatio = css;
+            /* Highlight active tab */
+            var allTabs = document.querySelectorAll('[id^="ff_tab_' + widgetId + '_"]');
+            for (var i = 0; i < allTabs.length; i++) {
+                var isActive = allTabs[i].id.indexOf(factorId.replace(/[:.]/g, '_')) > -1;
+                allTabs[i].className = allTabs[i].className.replace(/bg-blue-600 text-white|bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white/g, '');
+                allTabs[i].className += isActive ? ' bg-blue-600 text-white' : ' bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white';
+            }
+            /* Persist to frame state */
+            var doc = budget.documents.find(function (d) { return d.id === docId; });
+            if (!doc) return;
+            if (!doc.content.data.frameState) doc.content.data.frameState = {};
+            if (!doc.content.data.frameState[widgetId]) doc.content.data.frameState[widgetId] = { scale: 1, offsetX: 0, offsetY: 0 };
+            doc.content.data.frameState[widgetId].formFactor = factorId;
+            this._triggerSave();
+        },
+
+        /* Zoom in/out on the preview image */
+        _adjustFrameZoom: function (docId, widgetId, delta) {
+            var doc = budget.documents.find(function (d) { return d.id === docId; });
+            if (!doc) return;
+            if (!doc.content.data.frameState) doc.content.data.frameState = {};
+            var fs = doc.content.data.frameState[widgetId] || { scale: 1, offsetX: 0, offsetY: 0 };
+            fs.scale = Math.max(0.3, Math.min(5, (fs.scale || 1) + delta));
+            doc.content.data.frameState[widgetId] = fs;
+            this._triggerSave();
+            var img = document.getElementById('sbFramePreviewImg');
+            if (img) img.style.transform = 'scale(' + fs.scale + ') translate(' + fs.offsetX + 'px,' + fs.offsetY + 'px)';
+        },
+
+        /* Reset transform to default */
+        _resetFrameTransform: function (docId, widgetId) {
+            var doc = budget.documents.find(function (d) { return d.id === docId; });
+            if (!doc) return;
+            if (!doc.content.data.frameState) doc.content.data.frameState = {};
+            doc.content.data.frameState[widgetId] = { scale: 1, offsetX: 0, offsetY: 0, formFactor: (doc.content.data.frameState[widgetId] || {}).formFactor || '16:9' };
+            this._triggerSave();
+            var img = document.getElementById('sbFramePreviewImg');
+            if (img) img.style.transform = 'scale(1) translate(0px,0px)';
+        },
+
+        /* Drag-to-pan the image inside the preview */
+        _initFramePan: function (docId, widgetId) {
+            var self = this;
+            var img = document.getElementById('sbFramePreviewImg');
+            if (!img) return;
+            var dragging = false;
+            var startX = 0;
+            var startY = 0;
+            var doc = budget.documents.find(function (d) { return d.id === docId; });
+            var getFS = function () {
+                if (!doc || !doc.content.data.frameState) return { scale: 1, offsetX: 0, offsetY: 0 };
+                return doc.content.data.frameState[widgetId] || { scale: 1, offsetX: 0, offsetY: 0 };
+            };
+            img.addEventListener('mousedown', function (e) {
+                dragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                img.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', function (e) {
+                if (!dragging) return;
+                var fs = getFS();
+                var dx = (e.clientX - startX) / (fs.scale || 1);
+                var dy = (e.clientY - startY) / (fs.scale || 1);
+                var newOX = (fs.offsetX || 0) + dx;
+                var newOY = (fs.offsetY || 0) + dy;
+                img.style.transform = 'scale(' + fs.scale + ') translate(' + newOX + 'px,' + newOY + 'px)';
+                startX = e.clientX;
+                startY = e.clientY;
+                if (doc && doc.content.data.frameState && doc.content.data.frameState[widgetId]) {
+                    doc.content.data.frameState[widgetId].offsetX = newOX;
+                    doc.content.data.frameState[widgetId].offsetY = newOY;
+                }
+            });
+            document.addEventListener('mouseup', function () {
+                if (dragging) {
+                    dragging = false;
+                    img.style.cursor = 'grab';
+                    self._triggerSave();
+                }
+            });
+        },
+
+        /* Paste image from clipboard */
+        _pasteFrameImage: function (docId, widgetId) {
+            var self = this;
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                mBTME.alert('Paste', 'Use Ctrl+V / Cmd+V with your cursor in the preview area, or use Attach to select a file.');
+                return;
+            }
+            navigator.clipboard.read().then(function (items) {
+                for (var i = 0; i < items.length; i++) {
+                    var types = items[i].types;
+                    for (var t = 0; t < types.length; t++) {
+                        if (types[t].indexOf('image/') === 0) {
+                            items[i].getType(types[t]).then(function (blob) {
+                                self._processFrameImageFile(blob, docId, widgetId);
+                            });
+                            return;
+                        }
+                    }
+                }
+                mBTME.alert('Paste', 'No image found on clipboard. Copy an image first then try again.');
+            }).catch(function () {
+                mBTME.alert('Paste', 'Clipboard access denied. Use Attach to select a file.');
+            });
+        },
+
+        /* Handle file input change for frame editor */
+        _handleFrameFileUpload: function (input, docId, widgetId) {
+            if (!input.files || !input.files[0]) return;
+            this._processFrameImageFile(input.files[0], docId, widgetId);
+        },
+
+        /* Shared: compress and save any image File/Blob into the frame widget */
+        _processFrameImageFile: function (file, docId, widgetId) {
+            var self = this;
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var img = new Image();
+                img.onload = function () {
+                    var canvas = document.createElement('canvas');
+                    var MAX_WIDTH = 2048;
+                    var w = img.width;
+                    var h = img.height;
+                    if (w > MAX_WIDTH) { h = h * MAX_WIDTH / w; w = MAX_WIDTH; }
+                    canvas.width = w;
+                    canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                    self.updateData(docId, 'additional.' + widgetId, dataUrl);
+                    /* Re-open editor so preview refreshes with new image */
+                    mBTME.close('sbFrameEditor_' + widgetId + 'Modal');
+                    self.openFrameEditor(docId, widgetId);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        },
+
+        /* Clear image and reset frame state */
+        _clearFrameImage: function (docId, widgetId) {
+            var self = this;
+            mBTME.confirm('Clear Frame', 'Remove the image from this frame?', function () {
+                self.updateData(docId, 'additional.' + widgetId, '');
+                var doc = budget.documents.find(function (d) { return d.id === docId; });
+                if (doc && doc.content.data.frameState && doc.content.data.frameState[widgetId]) {
+                    doc.content.data.frameState[widgetId].scale = 1;
+                    doc.content.data.frameState[widgetId].offsetX = 0;
+                    doc.content.data.frameState[widgetId].offsetY = 0;
+                }
+                self._triggerSave();
+                mBTME.close('sbFrameEditor_' + widgetId + 'Modal');
+                self._refreshWidget(docId, widgetId);
+            });
+        },
+
+        /* Generate stub — Phase 2 (AI inpainting / region-based gen) */
+        _generateFrameImage: function (docId, widgetId) {
+            mBTME.alert('Generate Frame', 'AI image generation is coming in Phase 2. For now, use Attach or Paste to add images.');
         },
 
         // --- Batch 2: Logistics Widgets (Transport, MudMap, Footer) ---
@@ -6492,6 +6843,15 @@
         /* Phase 149.1B -- Assistant Hub: single-bar blueprint strip + expanded modal */
         showAssistantHub: function () {
             var self = this;
+            var _provider = mBT.features.ai.getSelectedProvider();
+            var _apiKey = mBT.features.ai.getStoredApiKey(_provider);
+            var _needsSetup = !_apiKey && _provider !== 'lmstudio';
+            if (_needsSetup) {
+                mBTME.alert('Assistant Setup', 'Configure your AI provider and API key before using the Assistant.', function () {
+                    mBT.features.settings.open('ai');
+                });
+                return;
+            }
             var content = '<div class="flex flex-col h-[88vh] bg-slate-900 text-white font-sans">' +
                 '<!-- Top Bar: Blueprint chips + Inject Rates inline (single row ~48px) -->' +
                 '<div class="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-slate-950/60 flex-wrap">' +
@@ -10533,7 +10893,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=22.77', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.04', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};

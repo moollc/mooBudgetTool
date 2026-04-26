@@ -315,10 +315,14 @@ window.mBTRouter = (function () {
     }
 
     /* --- Phase 150: tool broadcast helper --- */
+    function _safeSerialize(obj) {
+        try { return JSON.parse(JSON.stringify(obj)); } catch (e) { return {}; }
+    }
+
     function _broadcastToTool(type, payload) {
         var iframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
         if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: type, payload: payload }, '*');
+            iframe.contentWindow.postMessage({ type: type, payload: _safeSerialize(payload) }, '*');
         }
     }
 
@@ -347,7 +351,7 @@ window.mBTRouter = (function () {
                 if (_ctx.getMBTActiveTool() === 'po') {
                     var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
                     if (_poIframe && _poIframe.contentWindow) {
-                        _poIframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }, '*');
+                        _poIframe.contentWindow.postMessage(_safeSerialize({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }), '*');
                     }
                 }
             }
@@ -430,7 +434,7 @@ window.mBTRouter = (function () {
         /* --- Phase 64: Share Hub Peer Roster Request --- */
         } else if (action === 'get-peers') {
             if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
-                e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }, '*');
+                e.source.postMessage(_safeSerialize({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }), '*');
             } else {
                 e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
             }
@@ -554,6 +558,18 @@ window.mBTRouter = (function () {
                 return;
             }
             if (!budget.fundingSources) budget.fundingSources = [];
+
+            /* Sanity check: block a push that is >500% of the current grand total (prevents inflation bug) */
+            var pfIncoming = 0;
+            for (var pfK = 0; pfK < payload.sources.length; pfK++) {
+                pfIncoming += parseFloat((payload.sources[pfK] || {}).amount) || 0;
+            }
+            var pfCurrentTotal = parseFloat(budget.grandTotal || 0);
+            if (pfCurrentTotal > 0 && pfIncoming > pfCurrentTotal * 5) {
+                if (window.mBTME) mBTME.alert('Funding Volume Warning', 'Push blocked: incoming total (' + pfIncoming.toFixed(0) + ') exceeds 500% of current budget. Verify amounts and try again.');
+                return;
+            }
+
             var pfAdded = 0;
             for (var pfI = 0; pfI < payload.sources.length; pfI++) {
                 var pfSrc = payload.sources[pfI];
@@ -594,6 +610,22 @@ window.mBTRouter = (function () {
                 }
                 if (window.mBTAIContext) {
                     mBTAIContext.getCurrentProjectContext().then(function(ctx) {
+                        /* Inject pre-calculated financialSummary to prevent tool-side math drift */
+                        var bTotal = parseFloat(budget.grandTotal || 0);
+                        var bFunding = 0;
+                        var bSources = budget.fundingSources || [];
+                        for (var bfi = 0; bfi < bSources.length; bfi++) {
+                            bFunding += parseFloat(bSources[bfi].amount) || 0;
+                        }
+                        ctx.financialSummary = {
+                            totalBudget:  bTotal,
+                            totalFunding: bFunding,
+                            coverage:     bTotal > 0 ? ((bFunding / bTotal) * 100).toFixed(1) : '0.0',
+                            gap:          Math.max(0, bTotal - bFunding),
+                            isFunded:     bFunding >= bTotal,
+                            currency:     budget.currency || 'JMD'
+                        };
+                        ctx.appVersion = window.APP_VERSION || '';
                         _broadcastToTool('budget-sync', { context: ctx, budgetDoc: budget });
                     });
                 }
@@ -604,7 +636,7 @@ window.mBTRouter = (function () {
         } else if (action === 'SYNC_FUNDING_SOURCE') {
             if (window.mBTAIContext) {
                 mBTAIContext.getCurrentProjectContext().then(function(ctx) {
-                    if (e.source) e.source.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }, '*');
+                    if (e.source) e.source.postMessage(_safeSerialize({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }), '*');
                 });
             }
 
@@ -682,7 +714,7 @@ window.mBTRouter = (function () {
             var _templateId = (action === 'ai-funding-fill') ? 'fundingPackage' : (payload.templateId || 'generic');
             var _maxTokens = payload.maxTokens || 6000;
             var _reply = function (obj) {
-                if (_src) _src.postMessage({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }, '*');
+                if (_src) _src.postMessage(_safeSerialize({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }), '*');
             };
             if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function' || !_fields.length) {
                 _reply({}); return;
@@ -767,11 +799,24 @@ window.mBTRouter = (function () {
                 inlineCtx.push(k + ': ' + String(v).slice(0, 200));
             });
 
-            /* If ledger has no treatment fragment, fall back to direct localStorage read */
+            /* If ledger has no treatment fragment, try mBTAssistant sources first,
+               then fall back to legacy localStorage keys (migrated on first load by mBTAssistant.init). */
             if (!ctxFragment) {
                 try {
-                    var _rawTreatment = localStorage.getItem('mbt_ai_treatment') || '';
-                    if (_rawTreatment.trim()) ctxFragment = '--- TREATMENT ---\n' + _rawTreatment.slice(0, 3000);
+                    if (window.mBTAssistant && typeof mBTAssistant.getSources === 'function') {
+                        var _srcs = mBTAssistant.getSources();
+                        var _treatSrc = null;
+                        for (var _si = 0; _si < _srcs.length; _si++) {
+                            if (_srcs[_si].type === 'treatment' || _srcs[_si].type === 'script') { _treatSrc = _srcs[_si]; break; }
+                        }
+                        if (_treatSrc && (_treatSrc.text || '').trim()) {
+                            ctxFragment = '--- ' + (_treatSrc.name || 'SOURCE').toUpperCase() + ' ---\n' + (_treatSrc.text || '').slice(0, 3000);
+                        }
+                    }
+                    if (!ctxFragment) {
+                        var _rawTreatment = localStorage.getItem('mbt_ai_treatment') || '';
+                        if (_rawTreatment.trim()) ctxFragment = '--- TREATMENT ---\n' + _rawTreatment.slice(0, 3000);
+                    }
                 } catch (_le) { /* ignore */ }
             }
 
@@ -1046,7 +1091,10 @@ window.mBTRouter = (function () {
                    searchFooterBtn/toolsDrawerBtn start with 'hidden' in template — toggle correctly removes it. */
                 var hiddenRaw = localStorage.getItem('mBT_footerHiddenBtns');
                 var hidden = [];
-                try { hidden = hiddenRaw ? JSON.parse(hiddenRaw) : []; } catch (ex) { hidden = []; }
+                var _defaultHidden = ['actualsToggleBtn', 'searchFooterBtn', 'toolsDrawerBtn', 'footerHelpBtn', 'activityFeedBtn'];
+                try {
+                    hidden = hiddenRaw ? JSON.parse(hiddenRaw) : _defaultHidden;
+                } catch (ex) { hidden = _defaultHidden; }
                 _getBtns().forEach(function (btn) {
                     btn.style.display = '';                              /* clear any stale inline display */
                     btn.classList.toggle('hidden', hidden.indexOf(btn.id) > -1);

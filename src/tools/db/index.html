@@ -2427,124 +2427,316 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return html;
   }
 
+  /* Shared: process a File/Blob into a downscaled base64 and save to frame */
+  window._sbApplyImageFile = function(file, index) {
+    var frames = editorData.frames || [];
+    var f = frames[index];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(evt) {
+      downscaleImage(evt.target.result, 1024, 576, 0.85, function(scaled) {
+        f.image = scaled;
+        saveEditorData();
+        buildEditor(activeTemplateId);
+        if (activeTab === 'preview') renderPreview();
+        _sbCloseFrameModal();
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /* Close and remove the frame editor overlay */
+  window._sbCloseFrameModal = function() {
+    var overlay = document.getElementById('sb-frame-modal-overlay');
+    if (overlay) overlay.parentNode.removeChild(overlay);
+  };
+
+  /* Run the existing AI generation logic, now called from within the modal */
+  window._sbRunGenerate = function(index, promptText) {
+    var frames = editorData.frames || [];
+    var f = frames[index];
+    if (!f || !promptText) return;
+
+    /* Write prompt back as description if frame had none (two-way sync) */
+    if (!f.description) {
+      f.description = promptText;
+      saveEditorData();
+    }
+
+    var genBtn = document.getElementById('sb-gen-btn');
+    var genStatus = document.getElementById('sb-gen-status');
+    if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
+    if (genStatus) genStatus.textContent = 'Contacting AI…';
+
+    /* Read selected model from dropdown */
+    var selectedModel = (document.getElementById('sb-gen-model') || {}).value || '';
+
+    /* Provider/key are read by mBTAssistant internally — no direct localStorage access needed.
+       Phase 173: dropped legacy localStorage reads here; the delegate path below handles auth. */
+
+    function onSuccess(scaled) {
+      f.image = scaled;
+      saveEditorData();
+      buildEditor(activeTemplateId);
+      if (activeTab === 'preview') renderPreview();
+      _sbCloseFrameModal();
+      window.promptStoryboardImage(index);
+    }
+    function onError(msg) {
+      if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate'; }
+      if (genStatus) genStatus.textContent = 'Error: ' + (msg || 'generation failed');
+    }
+
+    /* Delegate to mBTAssistant (loaded in parent monolith) — single source of truth for all image gen.
+       Falls back to Pollinations if the service is unavailable (standalone/offline). */
+    var _assistant = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
+    if (_assistant && typeof _assistant.callImageGen === 'function') {
+      _assistant.callImageGen({ prompt: promptText, model: selectedModel || '', aspectRatio: '16:9' })
+        .then(function(dataUrl) { downscaleImage(dataUrl, 1024, 576, 0.85, onSuccess); })
+        .catch(function(err) { onError(err.message); });
+    } else {
+      /* Pollinations fallback — no key required */
+      var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=1024&height=576&nologo=true&seed=' + Date.now();
+      fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
+        var rd = new FileReader();
+        rd.onload = function(evt) { downscaleImage(evt.target.result, 1024, 576, 0.85, onSuccess); };
+        rd.readAsDataURL(blob);
+      }).catch(function() { onError('Network or CORS error. Check connection and try again.'); });
+    }
+  }
+
+  /* Frame editor modal — replaces the old prompt() dialog */
   window.promptStoryboardImage = function(index) {
     var frames = editorData.frames || [];
     var f = frames[index];
     if (!f) return;
-    
-    var choice = prompt("Image options for frame " + (f.num || index+1) + ":\n1. Paste Image URL or base64\n2. Generate via AI\n3. Clear Image\n\n(Tip: You can also focus a field in the row and Paste (Ctrl+V) an image directly)\n\nEnter 1, 2, or 3:", "1");
-    if (!choice) return;
-    
-    if (choice === '1') {
-      var url = prompt("Paste Image URL or Base64 data URI:", f.image || "");
-      if (url !== null && url !== "") {
-        downscaleImage(url, 512, 288, 0.8, function(scaled) {
-          f.image = scaled;
-          saveEditorData();
-          buildEditor(activeTemplateId);
-          if (activeTab === 'preview') renderPreview();
-        });
-      }
-    } else if (choice === '2') {
-      var promptText = prompt("Enter AI Image Prompt:", f.description || "");
-      if (promptText) {
-         var provider = 'pollinations';
-         var apiKey = '';
-         try {
-             if (window.parent && window.parent.mBTAIModule) {
-                 var p = window.parent.mBTAIModule.getSelectedProvider();
-                 if (p === 'openai' || p === 'openrouter' || p === 'gemini') {
-                     provider = p;
-                     apiKey = window.parent.mBTAIModule.getStoredApiKey(p);
-                 }
-             }
-         } catch(e) {}
-         
-         var cell = document.getElementById('sb-img-cell-' + index);
-         if (cell) cell.innerHTML = '<span style="font-size:8px;color:#94a3b8;">Gen...</span>';
-         
-         if ((provider === 'openai' || provider === 'openrouter' || provider === 'gemini') && apiKey) {
-             if (provider === 'gemini') {
-                 fetch('https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=' + apiKey, {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ instances: [{ prompt: promptText }], parameters: { sampleCount: 1, aspectRatio: "16:9" } })
-                 }).then(function(r) { return r.json(); }).then(function(res) {
-                     if (res.predictions && res.predictions[0] && res.predictions[0].bytesBase64Encoded) {
-                         var b64 = res.predictions[0].bytesBase64Encoded;
-                         var mime = res.predictions[0].mimeType || 'image/jpeg';
-                         downscaleImage('data:' + mime + ';base64,' + b64, 512, 288, 0.8, function(scaled) {
-                             f.image = scaled;
-                             saveEditorData();
-                             buildEditor(activeTemplateId);
-                             if (activeTab === 'preview') renderPreview();
-                         });
-                     } else {
-                         alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
-                         buildEditor(activeTemplateId);
-                     }
-                 }).catch(function(err) {
-                     alert("AI Generation error: " + err.message);
-                     buildEditor(activeTemplateId);
-                 });
-             } else {
-                 var apiUrl = (provider === 'openai') ? 'https://api.openai.com/v1/images/generations' : 'https://openrouter.ai/api/v1/images/generations';
-                 var apiModel = (provider === 'openai') ? 'dall-e-3' : (localStorage.getItem('mbt_openrouter_model') || 'openai/dall-e-3');
-                 var headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey };
-                 if (provider === 'openrouter') {
-                     headers['HTTP-Referer'] = window.location.origin;
-                     headers['X-Title'] = 'mBT';
-                 }
-                 fetch(apiUrl, {
-                     method: 'POST',
-                     headers: headers,
-                     body: JSON.stringify({ model: apiModel, prompt: promptText, n: 1, size: '1024x1024', response_format: 'b64_json' })
-                 }).then(function(r) { return r.json(); }).then(function(res) {
-                     if (res.data && res.data[0] && res.data[0].b64_json) {
-                         downscaleImage('data:image/png;base64,' + res.data[0].b64_json, 512, 288, 0.8, function(scaled) {
-                             f.image = scaled;
-                             saveEditorData();
-                             buildEditor(activeTemplateId);
-                             if (activeTab === 'preview') renderPreview();
-                         });
-                     } else {
-                         alert("AI Generation failed: " + (res.error ? res.error.message : JSON.stringify(res)));
-                         buildEditor(activeTemplateId);
-                     }
-                 }).catch(function(err) {
-                     alert("AI Generation error: " + err.message);
-                     buildEditor(activeTemplateId);
-                 });
-             }
-         } else {
-             /* Fallback: Pollinations — fetch and convert to base64 so it survives offline */
-             var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=512&height=288&nologo=true&seed=' + Date.now();
-             fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
-                 var reader = new FileReader();
-                 reader.onload = function(evt) {
-                     downscaleImage(evt.target.result, 512, 288, 0.8, function(scaled) {
-                         f.image = scaled;
-                         saveEditorData();
-                         buildEditor(activeTemplateId);
-                         if (activeTab === 'preview') renderPreview();
-                     });
-                 };
-                 reader.readAsDataURL(blob);
-             }).catch(function() {
-                 /* Network/CORS failure — do NOT store a raw remote URL; it breaks offline rendering.
-                    Show a user-friendly error and leave the frame image unchanged. */
-                 if (cell) cell.innerHTML = '<span style="font-size:8px;color:#f87171;">Network Error</span>';
-                 alert('Image generation failed: network or CORS error. Ensure you are online and try again.');
-                 buildEditor(activeTemplateId);
-             });
-         }
-      }
-    } else if (choice === '3') {
-      f.image = '';
-      saveEditorData();
-      buildEditor(activeTemplateId);
-      if (activeTab === 'preview') renderPreview();
+
+    _sbCloseFrameModal(); /* remove any stale overlay */
+
+    var FORM_FACTORS = [
+      { id: '16:9', label: '16:9', css: '16/9', desc: '1080p / HD' },
+      { id: '2.39:1', label: 'Scope', css: '2.39/1', desc: 'Anamorphic' },
+      { id: '4:3', label: '4:3', css: '4/3', desc: 'Academy' },
+      { id: '1:1', label: '1:1', css: '1/1', desc: 'Square' },
+      { id: '9:16', label: '9:16', css: '9/16', desc: 'Vertical' }
+    ];
+    var activeFactor = (f.formFactor || '16:9');
+    var activeFF = FORM_FACTORS.filter(function(ff) { return ff.id === activeFactor; })[0] || FORM_FACTORS[0];
+
+    /* Compact aspect ratio tabs — label only, no sub-desc */
+    var ffTabsHtml = FORM_FACTORS.map(function(ff) {
+      var isActive = ff.id === activeFactor;
+      return '<button onclick="_sbSetFormFactor(' + index + ',\'' + ff.id + '\')" ' +
+        'style="padding:3px 8px;border-radius:5px;border:none;cursor:pointer;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;' +
+        (isActive ? 'background:#2563eb;color:#fff;' : 'background:#334155;color:#64748b;') + '">' +
+        ff.label + '</button>';
+    }).join('');
+
+    var previewHtml = '<div id="sb-frame-preview-wrap" style="position:relative;background:#0f172a;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:' + activeFF.css + ';max-height:46vh;">' +
+      (f.image
+        ? '<img id="sb-frame-preview-img" src="' + f.image + '" style="width:100%;height:100%;object-fit:contain;cursor:grab;">'
+        : '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;color:#334155;">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+          '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">No Image</span></div>'
+      ) +
+      /* Zoom controls — overlaid bottom-right */
+      '<div style="position:absolute;bottom:6px;right:6px;display:flex;gap:3px;">' +
+      '<button onclick="_sbZoomFrame(' + index + ',-0.15)" style="width:24px;height:24px;background:rgba(0,0,0,.55);border:none;border-radius:5px;color:#fff;cursor:pointer;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;">&#8722;</button>' +
+      '<button onclick="_sbZoomFrame(' + index + ',0.15)" style="width:24px;height:24px;background:rgba(0,0,0,.55);border:none;border-radius:5px;color:#fff;cursor:pointer;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;">&#43;</button>' +
+      '<button onclick="_sbResetZoom(' + index + ')" style="width:24px;height:24px;background:rgba(0,0,0,.55);border:none;border-radius:5px;color:#fff;cursor:pointer;font-size:8px;font-weight:900;">1:1</button>' +
+      '</div></div>';
+
+    /* Build prompt from shot metadata only */
+    var _sbPromptParts = [];
+    if (f.shotType) _sbPromptParts.push(f.shotType + ' shot');
+    if (f.camera && f.camera !== 'Static' && f.camera !== '—' && f.camera !== '') _sbPromptParts.push(f.camera);
+    if (f.description) _sbPromptParts.push(f.description);
+    var _sbAutoPrompt = _sbPromptParts.join(', ');
+
+    /* Detect provider via mBTAssistant (parent monolith) with localStorage fallback for standalone mode.
+       Phase 173: prefer the singleton so provider/key state is consistent across tools. */
+    var _sbAssistant = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
+    var _sbProvider  = (_sbAssistant && _sbAssistant.getProvider && _sbAssistant.getProvider())
+                       || localStorage.getItem('mbt_selected_ai_provider')
+                       || 'pollinations';
+    var _sbApiKey    = (_sbAssistant && _sbAssistant.getApiKey && _sbAssistant.getApiKey(_sbProvider))
+                       || localStorage.getItem('mbt_' + _sbProvider + '_api_key')
+                       || '';
+    var _sbModelOpts = '';
+    if (_sbProvider === 'gemini') {
+      _sbModelOpts = '<option value="imagen-3.0-generate-001">Imagen 3</option>' +
+        '<option value="imagen-3.0-fast-generate-001">Imagen 3 Fast</option>';
+    } else if (_sbProvider === 'openai') {
+      _sbModelOpts = '<option value="dall-e-3">DALL·E 3</option>' +
+        '<option value="dall-e-2">DALL·E 2</option>';
+    } else if (_sbProvider === 'openrouter') {
+      _sbModelOpts = '<option value="black-forest-labs/flux-schnell">FLUX Schnell</option>' +
+        '<option value="black-forest-labs/flux-1.1-pro">FLUX 1.1 Pro</option>' +
+        '<option value="openai/dall-e-3">DALL·E 3</option>';
+    } else {
+      _sbModelOpts = '<option value="pollinations">Pollinations</option>';
     }
+
+    /* SVG icons shared */
+    var _icoAttach = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+    var _icoPaste  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>';
+    var _icoClear  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+    var _icoGen    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+
+    var _btnBase   = 'display:flex;align-items:center;gap:5px;padding:7px 10px;border:none;border-radius:8px;cursor:pointer;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;';
+
+    /* Single compact action bar: Model | Attach | Paste | [Clear] */
+    var actionsHtml =
+      '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">' +
+      /* Model selector */
+      '<select id="sb-gen-model" style="padding:7px 8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:9px;font-weight:700;outline:none;cursor:pointer;flex:1;min-width:0;">' +
+      _sbModelOpts +
+      '</select>' +
+      /* Attach */
+      '<button onclick="document.getElementById(\'sb-file-input-' + index + '\').click()" style="' + _btnBase + 'background:#1e293b;color:#cbd5e1;">' +
+      _icoAttach + '<span class="sb-btn-lbl">Attach</span></button>' +
+      '<input type="file" id="sb-file-input-' + index + '" accept="image/*" style="display:none;" onchange="_sbApplyImageFile(this.files[0],' + index + ')">' +
+      /* Paste */
+      '<button onclick="_sbPasteImage(' + index + ')" style="' + _btnBase + 'background:#1e293b;color:#cbd5e1;">' +
+      _icoPaste + '<span class="sb-btn-lbl">Paste</span></button>' +
+      /* Clear — only if image exists */
+      (f.image ? '<button onclick="_sbClearFrameImage(' + index + ')" style="' + _btnBase + 'background:#450a0a;color:#fca5a5;">' +
+      _icoClear + '<span class="sb-btn-lbl">Clear</span></button>' : '') +
+      '</div>';
+
+    /* Prompt + Generate row */
+    var genRow =
+      '<div style="display:flex;gap:6px;margin-top:6px;">' +
+      '<input id="sb-gen-prompt" type="text" placeholder="Describe the shot…" value="' + esc(_sbAutoPrompt) + '" ' +
+      'style="flex:1;padding:7px 10px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:11px;font-weight:600;outline:none;" ' +
+      'onkeydown="if(event.key===\'Enter\'){var t=document.getElementById(\'sb-gen-prompt\');if(t)_sbRunGenerate(' + index + ',t.value.trim());}">' +
+      '<button id="sb-gen-btn" onclick="var t=document.getElementById(\'sb-gen-prompt\');if(t)_sbRunGenerate(' + index + ',t.value.trim());" ' +
+      'style="' + _btnBase + 'background:#4f46e5;color:#fff;padding:7px 14px;font-size:10px;">' +
+      _icoGen + 'Generate</button>' +
+      '</div>' +
+      '<div id="sb-gen-status" style="font-size:9px;color:#64748b;margin-top:3px;min-height:12px;"></div>';
+
+    var overlay = document.createElement('div');
+    overlay.id = 'sb-frame-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:12px;';
+    overlay.innerHTML =
+      '<div style="background:#0f172a;border-radius:14px;padding:12px;width:100%;max-width:540px;display:flex;flex-direction:column;gap:8px;max-height:95vh;overflow-y:auto;">' +
+      /* Header: frame label + aspect tabs + close */
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+      '<span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-right:4px;">Frame ' + (f.num || index + 1) + '</span>' +
+      ffTabsHtml +
+      '<button onclick="_sbCloseFrameModal()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;border-radius:6px;color:#94a3b8;cursor:pointer;width:26px;height:26px;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#215;</button>' +
+      '</div>' +
+      /* Preview */
+      previewHtml +
+      /* Action bar + generate */
+      actionsHtml +
+      genRow +
+      '</div>' +
+      /* Hide button labels when modal is narrow — injected style */
+      '<style>@container(max-width:360px){.sb-btn-lbl{display:none}}</style>';
+
+    /* Close on backdrop click */
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) _sbCloseFrameModal(); });
+    document.body.appendChild(overlay);
+
+    /* Wire drag-and-drop on preview */
+    var wrap = document.getElementById('sb-frame-preview-wrap');
+    if (wrap) {
+      wrap.addEventListener('dragover', function(e) { e.preventDefault(); wrap.style.outline = '2px solid #2563eb'; });
+      wrap.addEventListener('dragleave', function() { wrap.style.outline = ''; });
+      wrap.addEventListener('drop', function(e) {
+        e.preventDefault();
+        wrap.style.outline = '';
+        var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file && file.type.indexOf('image/') === 0) _sbApplyImageFile(file, index);
+      });
+    }
+
+    /* Wire pan on preview image */
+    var img = document.getElementById('sb-frame-preview-img');
+    if (img) {
+      var dragging = false; var sx = 0; var sy = 0;
+      var scale = f.panZoom ? f.panZoom.scale : 1;
+      var ox = f.panZoom ? f.panZoom.ox : 0;
+      var oy = f.panZoom ? f.panZoom.oy : 0;
+      img.style.transform = 'scale(' + scale + ') translate(' + ox + 'px,' + oy + 'px)';
+      img.addEventListener('mousedown', function(e) { dragging = true; sx = e.clientX; sy = e.clientY; img.style.cursor = 'grabbing'; e.preventDefault(); });
+      document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        ox += (e.clientX - sx) / scale; oy += (e.clientY - sy) / scale;
+        sx = e.clientX; sy = e.clientY;
+        img.style.transform = 'scale(' + scale + ') translate(' + ox + 'px,' + oy + 'px)';
+        if (!f.panZoom) f.panZoom = {};
+        f.panZoom.ox = ox; f.panZoom.oy = oy;
+      });
+      document.addEventListener('mouseup', function() { if (dragging) { dragging = false; img.style.cursor = 'grab'; saveEditorData(); } });
+    }
+  };
+
+  /* Form factor switch — update tab highlight + preview aspect ratio */
+  window._sbSetFormFactor = function(index, factorId) {
+    var frames = editorData.frames || [];
+    var f = frames[index];
+    if (!f) return;
+    f.formFactor = factorId;
+    saveEditorData();
+    var FACTORS = { '16:9':'16/9', '2.39:1':'2.39/1', '4:3':'4/3', '1:1':'1/1', '9:16':'9/16' };
+    var wrap = document.getElementById('sb-frame-preview-wrap');
+    if (wrap) wrap.style.aspectRatio = FACTORS[factorId] || '16/9';
+    /* Rebuild modal to refresh tab highlights */
+    _sbCloseFrameModal();
+    window.promptStoryboardImage(index);
+  };
+
+  window._sbZoomFrame = function(index, delta) {
+    var f = (editorData.frames || [])[index];
+    if (!f) return;
+    if (!f.panZoom) f.panZoom = { scale: 1, ox: 0, oy: 0 };
+    f.panZoom.scale = Math.max(0.3, Math.min(5, (f.panZoom.scale || 1) + delta));
+    saveEditorData();
+    var img = document.getElementById('sb-frame-preview-img');
+    if (img) img.style.transform = 'scale(' + f.panZoom.scale + ') translate(' + (f.panZoom.ox||0) + 'px,' + (f.panZoom.oy||0) + 'px)';
+  };
+
+  window._sbResetZoom = function(index) {
+    var f = (editorData.frames || [])[index];
+    if (!f) return;
+    f.panZoom = { scale: 1, ox: 0, oy: 0 };
+    saveEditorData();
+    var img = document.getElementById('sb-frame-preview-img');
+    if (img) img.style.transform = 'scale(1) translate(0px,0px)';
+  };
+
+  window._sbClearFrameImage = function(index) {
+    var f = (editorData.frames || [])[index];
+    if (!f) return;
+    if (!confirm('Remove the image from Frame ' + (f.num || index + 1) + '?')) return;
+    f.image = '';
+    f.panZoom = null;
+    saveEditorData();
+    buildEditor(activeTemplateId);
+    if (activeTab === 'preview') renderPreview();
+    _sbCloseFrameModal();
+    window.promptStoryboardImage(index);
+  };
+
+  window._sbPasteImage = function(index) {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      alert('Use Ctrl+V / Cmd+V with your cursor in the preview area, or use Attach to select a file.');
+      return;
+    }
+    navigator.clipboard.read().then(function(items) {
+      for (var i = 0; i < items.length; i++) {
+        for (var t = 0; t < items[i].types.length; t++) {
+          if (items[i].types[t].indexOf('image/') === 0) {
+            items[i].getType(items[i].types[t]).then(function(blob) { _sbApplyImageFile(blob, index); });
+            return;
+          }
+        }
+      }
+      alert('No image found on clipboard. Copy an image first then try again.');
+    }).catch(function() { alert('Clipboard access denied. Use Attach to select a file.'); });
   };
 
   function buildStoryboardHtml(d) {
