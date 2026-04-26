@@ -2496,12 +2496,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         .catch(function(err) { onError(err.message); });
     } else {
       /* Pollinations fallback — no key required */
-      var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=1024&height=576&nologo=true&seed=' + Date.now();
-      fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
+      var _fbModel = (selectedModel && selectedModel !== 'pollinations') ? '&model=' + encodeURIComponent(selectedModel) : '';
+      var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=1024&height=576&nologo=true&seed=' + Date.now() + _fbModel;
+      fetch(imgUrl).then(function(r) {
+        if (!r.ok) throw new Error('Pollinations ' + r.status + ': blocked on localhost. Test from a deployed URL or switch to Gemini/OpenAI.');
+        return r.blob();
+      }).then(function(blob) {
         var rd = new FileReader();
         rd.onload = function(evt) { downscaleImage(evt.target.result, 1024, 576, 0.85, onSuccess); };
         rd.readAsDataURL(blob);
-      }).catch(function() { onError('Network or CORS error. Check connection and try again.'); });
+      }).catch(function(e) { onError(e.message || 'Network or CORS error. Check connection and try again.'); });
     }
   }
 
@@ -2553,28 +2557,43 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (f.description) _sbPromptParts.push(f.description);
     var _sbAutoPrompt = _sbPromptParts.join(', ');
 
-    /* Detect provider via mBTAssistant (parent monolith) with localStorage fallback for standalone mode.
-       Phase 173: prefer the singleton so provider/key state is consistent across tools. */
-    var _sbAssistant = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
-    var _sbProvider  = (_sbAssistant && _sbAssistant.getProvider && _sbAssistant.getProvider())
-                       || localStorage.getItem('mbt_selected_ai_provider')
-                       || 'pollinations';
-    var _sbApiKey    = (_sbAssistant && _sbAssistant.getApiKey && _sbAssistant.getApiKey(_sbProvider))
-                       || localStorage.getItem('mbt_' + _sbProvider + '_api_key')
-                       || '';
+    /* Detect image provider + model via mBTAssistant / localStorage.
+       Image provider is stored separately from chat provider (mbt_ai_image_provider). */
+    var _sbAssistant   = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
+    var _sbImgProvider = localStorage.getItem('mbt_ai_image_provider')
+                         || (_sbAssistant && _sbAssistant.getProvider && _sbAssistant.getProvider())
+                         || localStorage.getItem('mbt_selected_ai_provider')
+                         || 'pollinations';
+    var _sbImgModel    = localStorage.getItem('mbt_ai_image_model') || '';
+
+    /* Helper: build <option> with selected attr if value matches stored model */
+    var _sbOpt = function(val, label) {
+      var sel = (_sbImgModel === val) ? ' selected' : '';
+      return '<option value="' + val + '"' + sel + '>' + label + '</option>';
+    };
+
     var _sbModelOpts = '';
-    if (_sbProvider === 'gemini') {
-      _sbModelOpts = '<option value="imagen-3.0-generate-001">Imagen 3</option>' +
-        '<option value="imagen-3.0-fast-generate-001">Imagen 3 Fast</option>';
-    } else if (_sbProvider === 'openai') {
-      _sbModelOpts = '<option value="dall-e-3">DALL·E 3</option>' +
-        '<option value="dall-e-2">DALL·E 2</option>';
-    } else if (_sbProvider === 'openrouter') {
-      _sbModelOpts = '<option value="black-forest-labs/flux-schnell">FLUX Schnell</option>' +
-        '<option value="black-forest-labs/flux-1.1-pro">FLUX 1.1 Pro</option>' +
-        '<option value="openai/dall-e-3">DALL·E 3</option>';
+    if (_sbImgProvider === 'gemini') {
+      _sbModelOpts = _sbOpt('imagen-3.0-generate-001', 'Imagen 3') +
+        _sbOpt('imagen-3.0-fast-generate-001', 'Imagen 3 Fast');
+    } else if (_sbImgProvider === 'openai') {
+      _sbModelOpts = _sbOpt('dall-e-3', 'DALL·E 3') +
+        _sbOpt('dall-e-2', 'DALL·E 2');
+    } else if (_sbImgProvider === 'openrouter') {
+      _sbModelOpts = _sbOpt('black-forest-labs/flux-schnell', 'FLUX Schnell') +
+        _sbOpt('black-forest-labs/flux-1.1-pro', 'FLUX 1.1 Pro') +
+        _sbOpt('openai/dall-e-3', 'DALL·E 3');
     } else {
-      _sbModelOpts = '<option value="pollinations">Pollinations</option>';
+      /* Pollinations — full model list matching AI Settings */
+      _sbModelOpts = _sbOpt('flux', 'Flux.1 Standard') +
+        _sbOpt('flux-realism', 'Flux Realism') +
+        _sbOpt('flux-anime', 'Flux Anime') +
+        _sbOpt('flux-3d', 'Flux 3D Render') +
+        _sbOpt('flux-nanobanana', 'Flux NanoBanana') +
+        _sbOpt('flux-pixel', 'Flux Pixel Art') +
+        _sbOpt('any-dark', 'Any Dark');
+      /* If no stored model matches, default first option selected */
+      if (!_sbImgModel) _sbModelOpts = _sbModelOpts.replace('value="flux"', 'value="flux" selected');
     }
 
     /* SVG icons shared */

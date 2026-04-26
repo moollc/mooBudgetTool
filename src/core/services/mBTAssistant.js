@@ -475,8 +475,12 @@ var mBTAssistant = (function () {
         }
 
         /* ---- Pollinations fallback (no key required) ---- */
-        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=576&nologo=true&seed=' + Date.now())
-            .then(function (r) { return r.blob(); })
+        var _polModel = (model && model !== 'pollinations') ? '&model=' + encodeURIComponent(model) : '';
+        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=576&nologo=true&seed=' + Date.now() + _polModel)
+            .then(function (r) {
+                if (!r.ok) throw new Error('Pollinations ' + r.status + ': image generation failed. Try a different provider or test from a non-localhost URL.');
+                return r.blob();
+            })
             .then(function (blob) {
                 return new Promise(function (resolve, reject) {
                     var rd = new FileReader();

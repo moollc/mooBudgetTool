@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.19</title>
+    <title>mooBudgetTool v23.21</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -383,7 +383,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.19";
+    var APP_VERSION = "23.21";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -6258,9 +6258,95 @@
             });
         },
 
-        /* Generate stub — Phase 2 (AI inpainting / region-based gen) */
+        /* Generate frame image via mBTAssistant */
         _generateFrameImage: function (docId, widgetId) {
-            mBTME.alert('Generate Frame', 'AI image generation is coming in Phase 2. For now, use Attach or Paste to add images.');
+            var self = this;
+
+            /* Build prompt sub-form inside the frame editor modal */
+            var imgProv  = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+            var imgModel = localStorage.getItem('mbt_ai_image_model') || 'flux';
+            var provLabel = imgProv.charAt(0).toUpperCase() + imgProv.slice(1);
+
+            /* Inline prompt row injected below the actions bar */
+            var existing = document.getElementById('sbGenRow_' + widgetId);
+            if (existing) { existing.parentNode.removeChild(existing); }
+
+            var genRow = document.createElement('div');
+            genRow.id = 'sbGenRow_' + widgetId;
+            genRow.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:10px;background:#1e293b;border-radius:10px;';
+            genRow.innerHTML =
+                '<div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">' +
+                provLabel + ' &mdash; ' + imgModel + '</div>' +
+                '<div style="display:flex;gap:6px;">' +
+                '<input id="sbGenPrompt_' + widgetId + '" type="text" placeholder="Describe the shot…" ' +
+                'style="flex:1;padding:7px 10px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:11px;font-weight:600;outline:none;" ' +
+                'onkeydown="if(event.key===\'Enter\'){mBTDB._runFrameGen(\'' + docId + '\',\'' + widgetId + '\');}">' +
+                '<button id="sbGenBtn_' + widgetId + '" onclick="mBTDB._runFrameGen(\'' + docId + '\',\'' + widgetId + '\')" ' +
+                'style="padding:7px 14px;background:#4f46e5;color:#fff;border:none;border-radius:8px;font-size:10px;font-weight:900;cursor:pointer;white-space:nowrap;">Generate</button>' +
+                '</div>' +
+                '<div id="sbGenStatus_' + widgetId + '" style="font-size:9px;color:#64748b;min-height:12px;"></div>';
+
+            /* Append inside the modal body */
+            var bodyEl = document.getElementById('sbFrameEditor_' + widgetId + 'ModalBody');
+            if (bodyEl) {
+                var contentWrap = bodyEl.querySelector('.flex.flex-col');
+                if (contentWrap) contentWrap.appendChild(genRow);
+                else bodyEl.appendChild(genRow);
+            }
+
+            var promptEl = document.getElementById('sbGenPrompt_' + widgetId);
+            if (promptEl) setTimeout(function() { promptEl.focus(); }, 50);
+        },
+
+        _runFrameGen: function (docId, widgetId) {
+            var self = this;
+            var promptEl  = document.getElementById('sbGenPrompt_' + widgetId);
+            var btnEl     = document.getElementById('sbGenBtn_' + widgetId);
+            var statusEl  = document.getElementById('sbGenStatus_' + widgetId);
+            var promptText = promptEl ? promptEl.value.trim() : '';
+            if (!promptText) { if (statusEl) statusEl.textContent = 'Enter a prompt first.'; return; }
+
+            if (btnEl)    { btnEl.disabled = true; btnEl.textContent = 'Generating…'; }
+            if (statusEl) statusEl.textContent = 'Contacting AI…';
+
+            var imgModel = localStorage.getItem('mbt_ai_image_model') || 'flux';
+            var assistant = window.mBTAssistant || null;
+
+            function onDataUrl(dataUrl) {
+                /* Downscale to 1024x576 before storing */
+                var img = new Image();
+                img.onload = function() {
+                    var canvas = document.createElement('canvas');
+                    canvas.width = 1024; canvas.height = 576;
+                    canvas.getContext('2d').drawImage(img, 0, 0, 1024, 576);
+                    var scaled = canvas.toDataURL('image/jpeg', 0.85);
+                    self.updateData(docId, 'additional.' + widgetId, scaled);
+                    mBTME.close('sbFrameEditor_' + widgetId);
+                    self._refreshWidget(docId, widgetId);
+                };
+                img.src = dataUrl;
+            }
+
+            function onError(msg) {
+                if (btnEl)    { btnEl.disabled = false; btnEl.textContent = 'Generate'; }
+                if (statusEl) statusEl.textContent = 'Error: ' + (msg || 'generation failed');
+            }
+
+            if (assistant && typeof assistant.callImageGen === 'function') {
+                assistant.callImageGen({ prompt: promptText, model: imgModel, aspectRatio: '16:9' })
+                    .then(function(dataUrl) { onDataUrl(dataUrl); })
+                    .catch(function(err) { onError(err.message); });
+            } else {
+                /* Pollinations direct fallback */
+                var polModel = (imgModel && imgModel !== 'pollinations') ? '&model=' + encodeURIComponent(imgModel) : '';
+                var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) +
+                    '?width=1024&height=576&nologo=true&seed=' + Date.now() + polModel;
+                fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
+                    var rd = new FileReader();
+                    rd.onload = function(e) { onDataUrl(e.target.result); };
+                    rd.readAsDataURL(blob);
+                }).catch(function() { onError('Network error. Check connection.'); });
+            }
         },
 
         // --- Batch 2: Logistics Widgets (Transport, MudMap, Footer) ---
@@ -11082,7 +11168,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.19', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.21', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
