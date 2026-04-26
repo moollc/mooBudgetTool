@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.04</title>
+    <title>mooBudgetTool v23.19</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -151,39 +151,43 @@
     <script src="./src/scripts/engine/opfs.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
     <!-- Tier 5B: WebAssembly Conflict Diffing Engine (Phase 63) -->
-    <script type="module">
-        import init, * as mbtWasm from './src/core/wasm_node/pkg/mbt_wasm.js';
-        init().then(function () {
-            window.mBTWasm = mbtWasm;
-        }).catch(function (err) {
-            console.warn('WASM init failed (file:// protocol limitation). Diff will use JS fallback:', err);
-            /* Assign JS shim in case WASM fails to load */
-            window.mBTWasm = {
-                diff_sections: function (payloadJson) {
-                    try {
-                        var payload = JSON.parse(payloadJson);
-                        var conflicts = [];
-                        Object.keys(payload.remote.sections || {}).forEach(function (secName) {
-                            var local = (payload.local.sections || {})[secName];
-                            var remote = payload.remote.sections[secName];
-                            if (!local || JSON.stringify(local) !== JSON.stringify(remote)) {
-                                conflicts.push({
-                                    section_id: remote.id || secName,
-                                    section_name: secName,
-                                    conflict_type: local ? 'item_changed' : 'section_missing',
-                                    local_item_count: local ? (local.items || []).length : 0,
-                                    remote_item_count: (remote.items || []).length
+    <script src="./src/core/wasm_node/pkg/mbt_wasm.js"></script>
+    <script>
+        (function () {
+            if (window.mBT_wasm && window.mBT_wasm.init) {
+                window.mBT_wasm.init().then(function () {
+                    window.mBTWasm = window.mBT_wasm;
+                }).catch(function (err) {
+                    console.warn('WASM init failed (file:// protocol limitation). Diff will use JS fallback:', err);
+                    /* Assign JS shim in case WASM fails to load */
+                    window.mBTWasm = {
+                        diff_sections: function (payloadJson) {
+                            try {
+                                var payload = JSON.parse(payloadJson);
+                                var conflicts = [];
+                                Object.keys(payload.remote.sections || {}).forEach(function (secName) {
+                                    var local = (payload.local.sections || {})[secName];
+                                    var remote = payload.remote.sections[secName];
+                                    if (!local || JSON.stringify(local) !== JSON.stringify(remote)) {
+                                        conflicts.push({
+                                            section_id: remote.id || secName,
+                                            section_name: secName,
+                                            conflict_type: local ? 'item_changed' : 'section_missing',
+                                            local_item_count: local ? (local.items || []).length : 0,
+                                            remote_item_count: (remote.items || []).length
+                                        });
+                                    }
                                 });
+                                return JSON.stringify(conflicts);
+                            } catch (e) {
+                                console.error('JS diff_sections fallback error:', e);
+                                return '[]';
                             }
-                        });
-                        return JSON.stringify(conflicts);
-                    } catch (e) {
-                        console.error('JS diff_sections fallback error:', e);
-                        return '[]';
-                    }
-                }
-            };
-        });
+                        }
+                    };
+                });
+            }
+        })();
     </script>
     <script data-name="BMC-Widget" data-id="jaysonmy" data-description="Support mooBudget development!" data-message=""
         data-color="#FFDD00" data-position="Right" data-x_margin="18" data-y_margin="18"
@@ -379,7 +383,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.04";
+    var APP_VERSION = "23.19";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -427,11 +431,14 @@
     var _preUI = (window.mBT && window.mBT.ui) || {};
     var _preFeatures = (window.mBT && window.mBT.features) || {};
     var _preRegistry = (window.mBT && window.mBT.registry) || {};
+    var _preLE = (window.mBT && window.mBT.le) || {};
+
     window.mBT = {
         config: { version: APP_VERSION },
         core: {},    // Tier 1 (Kernel)
         data: {},    // Tier 2
         logic: {},    // Tier 3
+        le: _preLE,   // Phase 172: Preserving logic engine from mbtle.js
         ui: _preUI,
         features: _preFeatures,  // Tier 5 -- preserved across hoist for modular pre-registration
         registry: _preRegistry,  // Phase 137 Stabilization: global registry hoisted from IIFE scope
@@ -532,6 +539,12 @@
                 : Promise.resolve();
 
             return openGateP.then(function () {
+                /* Phase 172.1: Force-refresh regional rate averages once to pick up opengate.js updates */
+                if (localStorage.getItem('mbt_rates_v2') !== 'fixed_0426') {
+                    localStorage.removeItem('moo_og_rate_averages');
+                    localStorage.setItem('mbt_rates_v2', 'fixed_0426');
+                }
+
                 /* 3.7 Phase 69: Immunity Protocol + OPFS Bootstrap */
                 if (typeof mBTOPFS === 'undefined') return Promise.resolve();
                 return mBTOPFS.requestPersistence().then(function () {
@@ -2361,10 +2374,13 @@
                     var avgData = averages[key];
 
                     if (avgData && avgData.avg_rate > 0) {
-                        /* PRIMARY: Substitute the researched rate for this region.
-                           Also stamp the native currency so the dashboard currency
-                           selector knows what to convert from when displaying. */
-                        item.rate = Math.round(avgData.avg_rate * 100) / 100;
+                        /* PRIMARY: Substitute the researched rate for this region. 
+                           Convert from researched currency (e.g. GBP) to budget base (e.g. JMD). */
+                        var baseCurr = (budget && budget.currency) || 'JMD';
+                        var convertedRate = (avgData.currency && avgData.currency !== baseCurr && window.mBT && mBT.le && mBT.le.convertCurrency) ? 
+                                            mBT.le.convertCurrency(avgData.avg_rate, avgData.currency, baseCurr) : 
+                                            avgData.avg_rate;
+                        item.rate = Math.round(convertedRate * 100) / 100;
                         if (avgData.currency) item.rateCurrency = avgData.currency;
                         item.rateSource = avgData.source || 'default';
                     } else {
@@ -2788,6 +2804,16 @@
             var toRate = rates[to] || 1;
             return (parseFloat(val) || 0) / fromRate * toRate;
         },
+        /* Reverse conversion: from displayCurrency back to budget base currency */
+        deconvert: function (val) {
+            var from = (budget && budget.currency) || 'JMD';
+            var to = displayCurrency || 'JMD';
+            if (from === to) return parseFloat(val) || 0;
+            var rates = this._getRates();
+            var fromRate = rates[from] || 1;
+            var toRate = rates[to] || 1;
+            return (parseFloat(val) || 0) / toRate * fromRate;
+        },
         isLocked: function () {
             return localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true';
         },
@@ -2841,13 +2867,17 @@
         if (field === 'description') item.description = value;
         else if (field === 'quantity') item.quantity = parseFloat(value) || 0;
         else if (field === 'rate') {
-            item.rate = parseFloat(value) || 0;
+            var rawVal = parseFloat(value) || 0;
+            item.rate = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
             /* Manual rate override re-anchors the regional baseRate so future region
              * switches scale from this user-intended value. */
             if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
         }
         else if (field === 'unit') item.unit = value;
-        else if (field === 'actual') item.actual = parseFloat(value) || 0;
+        else if (field === 'actual') {
+            var rawVal = parseFloat(value) || 0;
+            item.actual = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
+        }
         /* Phase 77: actuarial fields */
         else if (field === 'actualQuantity') {
             item.actualQuantity = parseFloat(value) || 0;
@@ -2952,22 +2982,122 @@
     // Logic Resolution: Helpers for global settings accessed by mBT.features.settings
     function getProjectDateFormat() { return localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD'; }
     function getProjectNameSeparator() { return localStorage.getItem(projectNameSeparatorKey) || ' '; }
-    function hardResetApp() {
-        mBTME.confirm("System Flush", "This will wipe the Offline Cache to pull the latest app update. Your Budgets, Contacts, and Cloud Auth are shielded. Continue?", function () {
+    /* --- Data integrity repair: runs before cache wipe, never deletes data ---
+       Fixes: missing arrays/objects, NaN numeric fields, duplicate item IDs,
+       missing required item fields, then re-reconciles and saves. */
+    function _repairBudgetData() {
+        if (!window.budget) return { sections: 0, items: 0, dupes: 0, nanFixes: 0 };
+        var b = window.budget;
+        var stats = { sections: 0, items: 0, dupes: 0, nanFixes: 0 };
 
-            // Phase 82: PWA Toolset Wipe
+        /* 1. Top-level structural defaults */
+        if (!b.sections || typeof b.sections !== 'object' || Array.isArray(b.sections)) {
+            b.sections = {};
+            stats.sections++;
+        }
+        if (!Array.isArray(b.fringes))       b.fringes       = [];
+        if (!Array.isArray(b.documents))     b.documents     = [];
+        if (!Array.isArray(b.attachments))   b.attachments   = [];
+        if (!Array.isArray(b.activityLog))   b.activityLog   = [];
+        if (!Array.isArray(b.fundingSources)) b.fundingSources = [];
+        if (!b.aiContext || typeof b.aiContext !== 'object') b.aiContext = { chat: [], analysis: '' };
+        if (!Array.isArray(b.aiContext.chat)) b.aiContext.chat = [];
+        if (!b.settings || typeof b.settings !== 'object') b.settings = {};
+        if (!b.jurisdiction || typeof b.jurisdiction !== 'object') b.jurisdiction = {};
+        if (!b.ledgers || typeof b.ledgers !== 'object') b.ledgers = {};
+        if (!Array.isArray(b.ledgers.pos)) b.ledgers.pos = [];
+        if (!Array.isArray(b.ledgers.pettyCash)) b.ledgers.pettyCash = [];
+        if (typeof b.ledgers.poCounter !== 'number') b.ledgers.poCounter = 1;
+        if (typeof b.contingencyPercentage !== 'number' || isNaN(b.contingencyPercentage)) { b.contingencyPercentage = 10; stats.nanFixes++; }
+        if (typeof b.salesTaxPercentage    !== 'number' || isNaN(b.salesTaxPercentage))    { b.salesTaxPercentage    = 0;  stats.nanFixes++; }
+        if (typeof b.discountPercentage    !== 'number' || isNaN(b.discountPercentage))    { b.discountPercentage    = 0;  stats.nanFixes++; }
+
+        /* 2. Section + item sweep */
+        var seenItemIds = {};
+        var secKeys = Object.keys(b.sections);
+        for (var si = 0; si < secKeys.length; si++) {
+            var sec = b.sections[secKeys[si]];
+            if (!sec || typeof sec !== 'object') { b.sections[secKeys[si]] = { name: secKeys[si], isOpen: true, items: [] }; stats.sections++; continue; }
+            if (!Array.isArray(sec.items)) { sec.items = []; stats.sections++; }
+            if (typeof sec.isOpen === 'undefined') sec.isOpen = true;
+            if (!sec.name) sec.name = secKeys[si];
+
+            for (var ii = 0; ii < sec.items.length; ii++) {
+                var item = sec.items[ii];
+                if (!item || typeof item !== 'object') { sec.items.splice(ii--, 1); continue; }
+
+                /* Ensure unique ID */
+                if (!item.id) { item.id = 'item_' + Date.now() + '_' + ii + '_' + Math.random().toString(36).slice(2, 5); stats.dupes++; }
+                if (seenItemIds[item.id]) { item.id = 'item_' + Date.now() + '_' + ii + '_' + Math.random().toString(36).slice(2, 5); stats.dupes++; }
+                seenItemIds[item.id] = true;
+
+                /* Required string fields */
+                if (typeof item.description !== 'string') item.description = '';
+                if (typeof item.unit        !== 'string') item.unit        = 'Day';
+                if (typeof item.notes       !== 'string') item.notes       = '';
+
+                /* Numeric fields — NaN → safe default */
+                var numFields = [['quantity', 1], ['rate', 0], ['multiplier', 1], ['actual', 0],
+                                 ['actualQuantity', 0], ['actualRate', 0], ['committedCost', 0]];
+                for (var nf = 0; nf < numFields.length; nf++) {
+                    var fname = numFields[nf][0], fdef = numFields[nf][1];
+                    var parsed = parseFloat(item[fname]);
+                    if (isNaN(parsed)) { item[fname] = fdef; stats.nanFixes++; }
+                    else item[fname] = parsed;
+                }
+                if (item.multiplier < 1) item.multiplier = 1;
+                if (item.quantity   < 0) item.quantity   = 0;
+                if (item.rate       < 0) item.rate       = 0;
+
+                /* Boolean flags */
+                if (typeof item.qualifying !== 'boolean') item.qualifying = false;
+
+                /* stageData: ensure object, and each stage entry has numeric fields */
+                if (!item.stageData || typeof item.stageData !== 'object') item.stageData = {};
+                var stageKeys = Object.keys(item.stageData);
+                for (var sk = 0; sk < stageKeys.length; sk++) {
+                    var sd = item.stageData[stageKeys[sk]];
+                    if (!sd || typeof sd !== 'object') { delete item.stageData[stageKeys[sk]]; continue; }
+                    if (isNaN(parseFloat(sd.days)))       sd.days       = 0;
+                    if (isNaN(parseFloat(sd.rate)))       sd.rate       = 0;
+                    if (isNaN(parseFloat(sd.multiplier))) sd.multiplier = 1;
+                }
+
+                stats.items++;
+            }
+        }
+
+        /* 3. Re-reconcile to recompute all totals from clean data */
+        if (window.mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+
+        /* 4. Persist */
+        if (typeof saveBudget === 'function') saveBudget();
+
+        return stats;
+    }
+
+    function hardResetApp() {
+        mBTME.confirm("Fix Bugs + Refresh", "This will:\n1. Repair any corrupted data fields in your current budget\n2. Wipe the app cache to pull the latest version\n\nYour budgets, contacts, and cloud auth are never touched. Continue?", function () {
+
+            /* Step 1: data integrity repair on the live budget */
+            var stats = _repairBudgetData();
+            var repairMsg = 'Data repair complete — ' + stats.items + ' items checked, ' +
+                stats.nanFixes + ' field(s) corrected, ' + stats.dupes + ' duplicate ID(s) resolved.';
+            console.info('[mBT] ' + repairMsg);
+
+            /* Step 2: PWA cache wipe */
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.getRegistrations().then(function (registrations) {
-                    for (var registration of registrations) { registration.unregister(); }
+                    for (var i = 0; i < registrations.length; i++) { registrations[i].unregister(); }
                 });
             }
             if ('caches' in window) {
                 caches.keys().then(function (names) {
-                    for (var name of names) { caches.delete(name); }
+                    for (var i = 0; i < names.length; i++) { caches.delete(names[i]); }
                 });
             }
 
-            // Allow async destruction queues to execute
+            /* Step 3: reload after queues flush */
             setTimeout(function () { window.location.reload(true); }, 800);
         });
     }
@@ -3227,8 +3357,8 @@
                     if (input && document.activeElement !== input) input.value = val;
                 };
                 updateInput('quantity', item.quantity);
-                updateInput('rate', toDisp(item.rate).toFixed(2));
-                updateInput('actual', toDisp(item.actual).toFixed(2));
+                updateInput('rate', toDisp(_conv(item.rate)).toFixed(2));
+                updateInput('actual', toDisp(_conv(item.actual)).toFixed(2));
             });
         });
     };
@@ -6103,7 +6233,7 @@
                     var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
                     self.updateData(docId, 'additional.' + widgetId, dataUrl);
                     /* Re-open editor so preview refreshes with new image */
-                    mBTME.close('sbFrameEditor_' + widgetId + 'Modal');
+                    mBTME.close('sbFrameEditor_' + widgetId);
                     self.openFrameEditor(docId, widgetId);
                 };
                 img.src = e.target.result;
@@ -6123,7 +6253,7 @@
                     doc.content.data.frameState[widgetId].offsetY = 0;
                 }
                 self._triggerSave();
-                mBTME.close('sbFrameEditor_' + widgetId + 'Modal');
+                mBTME.close('sbFrameEditor_' + widgetId);
                 self._refreshWidget(docId, widgetId);
             });
         },
@@ -7916,15 +8046,16 @@
                     '</button>' +
                     '</div>' +
                     '<div class="text-[9px] text-slate-400 font-medium px-1">Last cloud sync: ' + lastSyncLabel + '</div>' +
-                    '<div class="flex items-center gap-2">' +
+                    '<div class="flex items-center gap-2 w-full shrink-0 z-10">' +
                     '<div class="relative flex-1">' +
                     '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
                     '<div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">' + mBTAssets.search + '</div>' +
                     '</div>' +
-                    '<select onchange="mBT.features.settings.setRateRegion(this.value)" aria-label="Rate region" title="Rate region multiplier" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all text-slate-600">' +
-                    Object.keys(mBTOG.RATE_REGIONS).map(function (r) {
-                        return '<option value="' + r + '"' + (mBTOG.settings.location === r ? ' selected' : '') + '>' + r + (mBTOG.RATE_REGIONS[r] !== 1 ? ' x' + mBTOG.RATE_REGIONS[r] : ' (Base)') + '</option>';
-                    }).join('') +
+                    '<select onchange="mBT.features.settings.setRateRegion(this.value)" aria-label="Rate region" title="Rate region" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all text-slate-600">' +
+                    (mBTOG && mBTOG.RATE_REGIONS ? Object.keys(mBTOG.RATE_REGIONS).map(function (r) {
+                        var currentLocation = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                        return '<option value="' + r + '"' + (currentLocation === r ? ' selected' : '') + '>' + r + (mBTOG.RATE_REGIONS[r] === 1 ? ' (Base)' : '') + '</option>';
+                    }).join('') : '') +
                     '</select>' +
                     '</div>' +
                     '</div>' +
@@ -7934,23 +8065,37 @@
                         var avgs = {};
                         try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
                         var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                        var mult = (mBTOG.settings && mBTOG.settings.regionMultiplier) || 1;
                         return mBTOG.rates.map(function (r) {
                             var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
                             var avg = avgs[key];
-                            var sub = mBTLE.format.currency(r.rate) + ' / ' + r.unit;
+                            var finalRate = (avg && avg.avg_rate > 0) ? 
+                                            ((avg.currency && avg.currency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) ? mBT.le.convertCurrency(avg.avg_rate, avg.currency, 'JMD') : avg.avg_rate) : 
+                                            (r.rate * mult);
+                            var sub = mBTLE.format.currency(finalRate) + ' / ' + r.unit;
                             if (avg && avg.contributor_count > 0) {
-                                sub += ' . Avg: ' + mBTLE.format.currency(avg.avg_rate) + ' (' + avg.contributor_count + ')';
+                                sub += ' . Avg: ' + mBTLE.format.currency(finalRate) + ' (' + avg.contributor_count + ')';
                             }
                             return RenderEngine.ui.listRow({
                                 id: r.id || r.description,
                                 icon: mBTAssets.money,
                                 title: r.description,
                                 subtitle: sub,
-                                classes: 'border-b border-slate-50'
+                                classes: 'border-b border-slate-50',
+                                actions: [{ icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + finalRate + ", '" + r.unit + "')" }]
                             });
                         }).join('');
                     })() +
                     '</div>' +
+                    /* Phase 172: Regional Rate Citations Footer */
+                    (function () {
+                        var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                        var citation = (mBTOG && typeof mBTOG._getRegionIntelligence === 'function') ? mBTOG._getRegionIntelligence(region) : '';
+                        if (!citation) return '';
+                        return '<div class="p-3 bg-blue-50/50 border-t border-blue-100 shrink-0">' +
+                                '<p id="dbRateIntelFooter" class="text-[8px] font-black uppercase tracking-widest text-blue-600 leading-relaxed">' + esc(citation) + '</p>' +
+                               '</div>';
+                    })() +
                     '</div>';
             }
             if (subTab === 'templates') {
@@ -8084,21 +8229,44 @@
 
         // --- 4. Internal Logic & Listeners ---
         _attachListeners: function (tab, subTab) {
+            if (tab === 'ai') {
+                var _imgProv = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+                if (window.mBT_UI_Settings_refreshImgHint) window.mBT_UI_Settings_refreshImgHint(_imgProv);
+            }
             if (tab === 'database' && subTab === 'lineItems') {
                 var mult = mBTOG.settings.regionMultiplier;
-                var regionLabel = mBTOG.settings.location !== 'Jamaica' ? ' (' + mBTOG.settings.location + ' \u00D7' + mult + ')' : '';
+                var region = (mBTOG.settings && mBTOG.settings.location) || 'Jamaica';
+                var _intel = (window.mBTOG && typeof mBTOG._getRegionIntelligence === 'function') ? mBTOG._getRegionIntelligence(region) : '';
+                if (_intel) {
+                    var _footerEl = document.getElementById('dbRateIntelFooter');
+                    if (_footerEl) _footerEl.textContent = _intel;
+                }
                 mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, function (r) {
+                    var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+                    var avgs = {};
+                    try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
+                    var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+                    var avg = avgs[key];
+
+                    var isResearched = (avg && avg.avg_rate > 0);
                     var isCommunity = r.source === 'community';
+                    var finalRate = isResearched ? 
+                                    ((avg.currency && avg.currency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) ? mBT.le.convertCurrency(avg.avg_rate, avg.currency, 'JMD') : avg.avg_rate) : 
+                                    (r.rate * mult);
+                    var label = isCommunity ? ' [Community]' : (isResearched ? ' [Research]' : (region !== 'Jamaica' ? ' [Est.]' : ''));
+
                     return RenderEngine.ui.listRow({
                         id: r.id || r.description,
                         icon: mBTAssets.money,
                         title: r.description,
-                        subtitle: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(r.rate * mult) : r.rate * mult) + ' / ' + r.unit + regionLabel,
+                        subtitle: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(finalRate) : finalRate) + ' / ' + r.unit + label,
                         classes: 'border-b border-slate-50',
-                        actions: isCommunity ? [
+                        actions: [
+                            { icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + finalRate + ", '" + r.unit + "')" }
+                        ].concat(isCommunity ? [
                             { icon: mBTAssets.check, title: 'Approve', color: 'emerald', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'approve')" },
                             { icon: mBTAssets.close, title: 'Disapprove', color: 'rose', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'disapprove')" }
-                        ] : []
+                        ] : [])
                     });
                 });
             }
@@ -8317,7 +8485,7 @@
             if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
             if (typeof render === 'function') render();
             /* Re-render the lineItems tab to reflect updated multiplier */
-            mBT.features.settings.renderSubTab('database', 'lineItems');
+            this.open('database', 'lineItems');
             mBTME.alert('Region Updated', 'Rates rescaled to ' + region + '.');
         },
 
@@ -8338,6 +8506,34 @@
                 mBTME.alert("Contributing Active", "Your anonymized rate data will be contributed to the Open Gate community database. Thank you.");
             }
             this.open('database', 'lineItems');
+        },
+
+        addRateToBudget: function (desc, rate, unit) {
+            var sectionNames = Object.keys(budget.sections || {});
+            if (sectionNames.length === 0) return mBTME.alert("Error", "No sections in budget.");
+            var sectionName = sectionNames[0]; // Default to first section
+            var section = budget.sections[sectionName];
+            
+            // SNAPSHOT TRIGGER
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added " + desc + " from Database");
+
+            var _mult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc }) : 1;
+            var newItem = {
+                id: 'item_' + Date.now(),
+                description: desc,
+                quantity: 1,
+                unit: unit || 'Day',
+                baseRate: _mult ? (rate / _mult) : rate, // Correctly anchor baseRate so it survives region switches
+                rate: rate,
+                multiplier: 1,
+                actual: 0,
+                crew: { name: '', phone: '', email: '' },
+                rateType: 'negotiable'
+            };
+            section.items.push(newItem);
+            if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
+            if (typeof render === 'function') render();
+            mBTME.alert("Success", desc + " added to " + sectionName);
         },
 
         toggleContactSharing: function (val) {
@@ -8559,7 +8755,6 @@
 
                 var amt = rawAmt * multiplier;
                 var cash = rawCash * multiplier;
-
                 totalSecured += amt;
                 totalLiquid += cash;
 
@@ -8572,14 +8767,15 @@
             }
             /* Phase 107: totalCap acts as physics ceiling; fall back to grandTotal when unset */
             var totalCap = (budget.targetLock && budget.targetLock.totalCap > 0) ? budget.targetLock.totalCap : 0;
-            var reference = totalCap > 0 ? totalCap : grandTotal;
+            var referenceRaw = totalCap > 0 ? totalCap : grandTotal;
+            var reference = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(referenceRaw) : referenceRaw;
 
             /* Phase 107.11: Deduplicated 3-tier HUD -- Secured = Confirmed (includes its liquid), Pipeline = Pending + LOI, Gap = remainder */
             var pipeline = sumPending + sumLOI;
             var gap = reference - (sumConfirmed + pipeline);
             var pct = reference > 0 ? Math.min(100, Math.max(0, Math.round(((sumConfirmed + pipeline) / reference) * 100))) : 0;
             var fullyFunded = reference > 0 && gap <= 0;
-            var isInsolvent = totalCap > 0 && grandTotal > totalCap;
+            var isInsolvent = reference > 0 && (sumConfirmed + pipeline) > reference;
 
             var gapColor = isInsolvent ? 'text-rose-600' : (fullyFunded ? 'text-emerald-600' : 'text-rose-500');
 
@@ -8902,15 +9098,8 @@
             if (!budget) return;
             if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
             var val  = parseFloat(rawVal) || 0;
-            var prev = budget.targetLock.totalCap || 0;
             /* Warn when replacing an existing cap -- change cascades to Stages and every stage segment cap */
-            if (prev > 0 && val !== prev) {
-                var ok = window.confirm('Changing the Budget Cap will update every stage cap in Stages and throughout the budget. Continue?');
-                if (!ok) {
-                    mBT.features.funding.updateCard();
-                    return;
-                }
-            }
+            /* Phase 180: Remove blocking confirm for smoother HUD experience */
             budget.targetLock.totalCap = val;
             saveBudget();
             if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -10893,7 +11082,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.04', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.19', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};

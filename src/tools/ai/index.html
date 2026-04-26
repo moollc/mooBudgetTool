@@ -105,10 +105,7 @@
         justify-content:unset;
         flex-direction:row;
       }
-      #asst-sidebar.sidebar-collapsed #ctx-panel > header .chev{
-        margin-left:auto;
-        margin-top:0;
-        transform:rotate(-90deg);
+        transform:rotate(180deg);
       }
       #asst-sidebar .asst-section{border-radius:10px}
     }
@@ -148,11 +145,22 @@
     body.embedded .asst-tokmeter{font-size:.65rem;color:#e0e7ff;background:rgba(255,255,255,0.12);padding:2px 8px;border-radius:999px;font-variant-numeric:tabular-nums}
 
     /* Mobile: stack sidebar above main when embedded, collapse both auto-sections */
-    @media (max-width:640px){
-        body.embedded .asst-body{flex-direction:column}
-        body.embedded #asst-sidebar{flex:0 0 auto;width:100%}
-        body.embedded #bsCards{grid-template-columns:repeat(2,minmax(0,1fr))}
         body.embedded #asst-sidebar .asst-section{border-radius:8px}
+    }
+
+    /* Phase 182 — Desktop "Fatly" Fix (Embedded Mode) */
+    @media (min-width: 768px) {
+        body.embedded #asst-sidebar.sidebar-collapsed {
+            flex: 0 0 32px !important;
+            width: 32px !important;
+            min-width: 32px !important;
+        }
+        body.embedded #asst-sidebar.sidebar-collapsed #ctx-panel > header {
+            writing-mode: vertical-rl !important;
+            text-orientation: mixed !important;
+            padding: 14px 8px !important;
+            height: auto !important;
+        }
     }
   </style>
 </head>
@@ -481,8 +489,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var sources = mBTAssistant.getSources();
         if (!sources.length) { list.innerHTML = ''; return; }
         list.innerHTML = sources.map(function(s) {
-            return '<div class="src-card">' +
-                '<button class="src-card-remove" onclick="removeSource(\'' + s.id + '\')" title="Remove">&#x2715;</button>' +
+            return '<div class="src-card" onclick="editSource(\'' + s.id + '\')" title="Click to edit" style="cursor:pointer">' +
+                '<button class="src-card-remove" onclick="event.stopPropagation();removeSource(\'' + s.id + '\')" title="Remove">&#x2715;</button>' +
                 '<div class="src-card-title">' + esc(s.title) + '</div>' +
                 '<div class="src-card-preview">' + esc(s.text.substring(0, 120)) + (s.text.length > 120 ? '…' : '') + '</div>' +
                 '</div>';
@@ -503,36 +511,50 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Modal state */
     var _srcModalFile = null;
+    var _srcEditingId = null;
 
-    function openSourceModal() {
+    function openSourceModal(editId, editTitle, editText) {
         _srcModalFile = null;
+        _srcEditingId = editId || null;
+        var isEdit = !!editId;
         var overlay = document.createElement('div');
         overlay.id = 'src-modal-overlay';
         overlay.className = 'src-modal-overlay';
         overlay.innerHTML =
             '<div class="src-modal">' +
-            '<div class="src-modal-title">Add Source</div>' +
-            '<textarea id="src-modal-text" placeholder="Paste or type your content here — treatment, script, notes, brief…" rows="6"></textarea>' +
-            '<label class="src-modal-dropzone" id="src-modal-dz" ondragover="srcDzOver(event)" ondragleave="srcDzLeave(event)" ondrop="srcDzDrop(event)">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
-            '<span id="src-dz-label">Drop a file or <u>browse</u></span>' +
-            '<span style="font-size:.68rem;color:#9ca3af">.txt .md .pdf .doc .docx</span>' +
-            '<input type="file" id="src-modal-file" accept=".txt,.md,.pdf,.doc,.docx" style="display:none" onchange="srcFileChosen(this)">' +
-            '</label>' +
+            '<div class="src-modal-title">' + (isEdit ? 'Edit Source' : 'Add Source') + '</div>' +
+            '<textarea id="src-modal-text" placeholder="Paste or type your content here — treatment, script, notes, brief…" rows="6">' + (isEdit ? esc(editText || '') : '') + '</textarea>' +
+            (isEdit ? '' :
+                '<label class="src-modal-dropzone" id="src-modal-dz" ondragover="srcDzOver(event)" ondragleave="srcDzLeave(event)" ondrop="srcDzDrop(event)">' +
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+                '<span id="src-dz-label">Drop a file or <u>browse</u></span>' +
+                '<span style="font-size:.68rem;color:#9ca3af">.txt .md .pdf .doc .docx</span>' +
+                '<input type="file" id="src-modal-file" accept=".txt,.md,.pdf,.doc,.docx" style="display:none" onchange="srcFileChosen(this)">' +
+                '</label>'
+            ) +
             '<div class="src-modal-actions">' +
             '<button class="src-btn-cancel" onclick="closeSourceModal()">Cancel</button>' +
-            '<button class="src-btn-save" onclick="saveSourceFromModal()">Add Source</button>' +
+            '<button class="src-btn-save" onclick="saveSourceFromModal()">' + (isEdit ? 'Save Changes' : 'Add Source') + '</button>' +
             '</div>' +
             '</div>';
         overlay.addEventListener('click', function(e) { if (e.target === overlay) closeSourceModal(); });
         document.body.appendChild(overlay);
-        setTimeout(function() { var t = dom.getElementById('src-modal-text'); if (t) t.focus(); }, 50);
+        setTimeout(function() { var t = dom.getElementById('src-modal-text'); if (t) { t.focus(); if (isEdit) { t.setSelectionRange(t.value.length, t.value.length); } } }, 50);
+    }
+
+    function editSource(id) {
+        var sources = mBTAssistant.getSources();
+        var s = null;
+        for (var i = 0; i < sources.length; i++) { if (sources[i].id === id) { s = sources[i]; break; } }
+        if (!s) return;
+        openSourceModal(s.id, s.title, s.text);
     }
 
     function closeSourceModal() {
         var el = dom.getElementById('src-modal-overlay');
         if (el) el.remove();
         _srcModalFile = null;
+        _srcEditingId = null;
     }
 
     function saveSourceFromModal() {
@@ -542,7 +564,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!text) return;
         var firstLine = text.split('\n')[0].replace(/^#+\s*/, '').substring(0, 50) || 'Source';
         var title = _srcModalFile ? _srcModalFile.name : firstLine;
-        mBTAssistant.addSource(title, text);
+        if (_srcEditingId) {
+            mBTAssistant.updateSource(_srcEditingId, title, text);
+        } else {
+            mBTAssistant.addSource(title, text);
+        }
         renderSourceCards();
         updateSourceBadge();
         closeSourceModal();

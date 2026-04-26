@@ -223,116 +223,171 @@
             };
             var storedLmEndpoint = localStorage.getItem('mbt_lmstudio_endpoint') || localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1';
             var storedLmModel = localStorage.getItem('mbt_lmstudio_model') || localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || '';
-            var storedOrModel = localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini';
-            var storedGeminiModel = localStorage.getItem('mbt_gemini_model') || 'gemini-2.5-flash';
+            /* Cached model lists — populated by Fetch, stored as JSON arrays */
+            var cachedChatModels = (function () {
+                try { return JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) { return []; }
+            })();
+            var storedChatModel = localStorage.getItem('mbt_ai_chat_model_' + provider) || '';
+            /* Image gen: independent provider */
+            var storedImgProvider = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+            var storedImgModel    = localStorage.getItem('mbt_ai_image_model') || '';
+            var cachedImgModels = (function () {
+                try { return JSON.parse(localStorage.getItem('mbt_cached_img_models_' + storedImgProvider) || '[]'); } catch (e) { return []; }
+            })();
+            
+            /* Pre-fetch Pollinations models if not cached; seed fallback list if API fails */
+            if (storedImgProvider === 'pollinations' && cachedImgModels.length === 0) {
+                fetch('https://image.pollinations.ai/models')
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
+                            return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
+                        });
+                        var models = _mergePollinationModels(raw);
+                        localStorage.setItem('mbt_cached_img_models_pollinations', JSON.stringify(models));
+                    }).catch(function () {
+                        localStorage.setItem('mbt_cached_img_models_pollinations', JSON.stringify(POLLINATIONS_FALLBACK_MODELS));
+                    });
+            }
+
+            /* Build cached chat model options for current provider */
+            var chatModelOpts = cachedChatModels.length
+                ? cachedChatModels.map(function (m) {
+                    var id = (typeof m === 'object') ? (m.id || m) : m;
+                    var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
+                    return '<option value="' + id + '"' + (storedChatModel === id ? ' selected' : '') + '>' + label + '</option>';
+                  }).join('')
+                : (storedChatModel ? '<option value="' + storedChatModel + '" selected>' + storedChatModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
+
+            /* Build cached image model options for current image provider */
+            var imgModelOpts = cachedImgModels.length
+                ? cachedImgModels.map(function (m) {
+                    var id = (typeof m === 'object') ? (m.id || m) : m;
+                    var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
+                    return '<option value="' + id + '"' + (storedImgModel === id ? ' selected' : '') + '>' + label + '</option>';
+                  }).join('')
+                : (storedImgModel ? '<option value="' + storedImgModel + '" selected>' + storedImgModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
-                            '<div class="flex justify-between items-start mb-3">' +
+                        '<div class="p-4 bg-slate-900 rounded-3xl border border-black shadow-2xl text-white">' +
+                            '<div class="flex justify-between items-start mb-2">' +
                                 '<div>' +
-                                    '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Assistant</h3>' +
-                                    '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Configure Provider Access</p>' +
+                                    '<h3 class="text-[11px] font-black uppercase tracking-tighter text-blue-400">Assistant Engine</h3>' +
+                                    '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Zero-Stain AI Integration</p>' +
                                 '</div>' +
-                                '<div class="text-slate-700">' + mBTAssets.sparkle + '</div>' +
+                                '<div class="text-slate-700 opacity-50">' + mBTAssets.sparkle + '</div>' +
                             '</div>' +
                             '<div class="space-y-3">' +
+                                '<!-- Row 1: Chat Engine -->' +
+                                '<div id="chatEngineSect" class="space-y-3">' +
+                                    '<div class="flex items-center gap-2 mb-1">' +
+                                        '<div class="w-1 h-3 bg-blue-500 rounded-full"></div>' +
+                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Chat & Logic Engine</h4>' +
+                                    '</div>' +
+                                    '<div class="grid grid-cols-2 gap-4">' +
+                                        '<div id="chatProviderDiv">' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Provider</label>' +
+                                            '<select id="aiProviderSelect" onchange="window.mBT_UI_Settings_handleProviderChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' +
+                                                '<option value="gemini" '     + (provider === 'gemini'     ? 'selected' : '') + '>Gemini</option>' +
+                                                '<option value="openai" '     + (provider === 'openai'     ? 'selected' : '') + '>OpenAI</option>' +
+                                                '<option value="deepseek" '   + (provider === 'deepseek'   ? 'selected' : '') + '>DeepSeek</option>' +
+                                                '<option value="grok" '       + (provider === 'grok'       ? 'selected' : '') + '>Grok</option>' +
+                                                '<option value="anthropic" '  + (provider === 'anthropic'  ? 'selected' : '') + '>Claude</option>' +
+                                                '<option value="openrouter" ' + (provider === 'openrouter' ? 'selected' : '') + '>OpenRouter</option>' +
+                                                '<option value="lmstudio" '   + (provider === 'lmstudio'   ? 'selected' : '') + '>LM Studio</option>' +
+                                            '</select>' +
+                                        '</div>' +
+                                        '<div id="chatKeyDiv" style="display:' + (provider === 'lmstudio' ? 'none' : 'block') + '">' +
+                                            '<div class="flex justify-between items-center mb-1.5 px-1">' +
+                                                '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Key</label>' +
+                                                '<a id="apiKeyLink" href="' + (keyLinks[provider] || '#') + '" target="_blank" class="text-[8px] font-black text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors">Keys &rarr;</a>' +
+                                            '</div>' +
+                                            '<input type="password" id="apiKeyInput" value="' + mBT.features.ai.getStoredApiKey(provider) + '" onblur="window.mBT_UI_Settings_autoFetchModelsOnKeyBlur()" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="sk-..">' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    '<!-- LM Studio Local Overrides -->' +
+                                    '<div id="lmstudioFields" style="display:' + (provider === 'lmstudio' ? 'block' : 'none') + '" class="grid grid-cols-2 gap-4">' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Endpoint URL</label>' +
+                                            '<input type="text" id="lmEndpointInput" value="' + storedLmEndpoint + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="http://localhost:1234/v1">' +
+                                        '</div>' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model ID</label>' +
+                                            '<input type="text" id="lmModelInput" value="' + storedLmModel + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="local-model">' +
+                                        '</div>' +
+                                    '</div>' +
+
+                                    '<div>' +
+                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Chat Model</label>' +
+                                        '<select id="chatModelSelect" onchange="window.mBT_UI_Settings_handleChatModelChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' +
+                                            chatModelOpts +
+                                        '</select>' +
+                                    '</div>' +
+                                '</div>' +
+
+                                '<div class="h-px bg-slate-800/50"></div>' +
+
+                                '<!-- Row 2: Image Engine -->' +
+                                '<div id="imageEngineSect" class="space-y-3">' +
+                                    '<div class="flex items-center gap-2 mb-1">' +
+                                        '<div class="w-1 h-3 bg-violet-500 rounded-full"></div>' +
+                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Visual Generation</h4>' +
+                                    '</div>' +
+                                    '<div class="grid grid-cols-2 gap-4">' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-violet-400 uppercase tracking-widest mb-1.5 ml-1">Provider</label>' +
+                                            '<select id="imgProviderSelect" onchange="window.mBT_UI_Settings_handleImgProviderChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-violet-600/50 cursor-pointer transition-all">' +
+                                                '<option value="pollinations" ' + (storedImgProvider === 'pollinations' ? 'selected' : '') + '>Pollinations (Free)</option>' +
+                                                '<option value="gemini" '       + (storedImgProvider === 'gemini'       ? 'selected' : '') + '>Gemini Imagen</option>' +
+                                                '<option value="openai" '       + (storedImgProvider === 'openai'       ? 'selected' : '') + '>DALL-E 3</option>' +
+                                                '<option value="openrouter" '   + (storedImgProvider === 'openrouter'   ? 'selected' : '') + '>OpenRouter</option>' +
+                                            '</select>' +
+                                            '<div id="imgProviderHint" class="text-[8px] text-slate-500 italic mt-1 ml-1">' +
+                                                (storedImgProvider === 'pollinations' ? 'No API key required — using free Pollinations service' : 
+                                                 storedImgProvider === provider ? 'Will use chat provider\'s API key if left blank' :
+                                                 'Enter an independent API key for this provider') +
+                                            '</div>' +
+                                        '</div>' +
+                                        '<div>' +
+                                            '<div class="flex justify-between items-center mb-1.5 px-1">' +
+                                                '<label class="block text-[8px] font-black text-violet-400 uppercase tracking-widest">Image API Key</label>' +
+                                                '<a id="imgApiKeyLink" href="' + (KEY_DASHBOARDS[storedImgProvider] || '#') + '" target="_blank" class="text-[8px] font-black text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors" style="display:' + (storedImgProvider === 'pollinations' ? 'none' : 'inline') + '">Keys &rarr;</a>' +
+                                            '</div>' +
+                                            '<input type="password" id="imgApiKeyInput" value="' + mBT.features.ai.getStoredImageApiKey(storedImgProvider) + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-violet-600/50 transition-all" placeholder="sk-..">' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div>' +
+                                        '<div class="flex justify-between items-center mb-1.5 px-1">' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Image Model</label>' +
+                                            '<button id="fetchImgModelsBtn" onclick="window.mBT_UI_Settings_fetchImgModels()" class="text-[7px] font-black text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors bg-transparent border-none cursor-pointer p-0">Fetch</button>' +
+                                        '</div>' +
+                                        '<select id="imgModelSelect" onchange="window.mBT_UI_Settings_handleImgModelChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-violet-600/50 cursor-pointer transition-all">' +
+                                            imgModelOpts +
+                                        '</select>' +
+                                    '</div>' +
+                                '</div>' +
+
+                                '<div class="h-px bg-slate-800/50"></div>' +
+
+                                '<!-- System Context -->' +
                                 '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Active Provider</label>' +
-                                    '<select id="aiProviderSelect" onchange="' +
-                                        'var p=this.value;' +
-                                        'mBT.features.ai.saveSelectedProvider(p);' +
-                                        'var map=' + JSON.stringify(keyLinks).replace(/"/g, "'") + ';' +
-                                        'var link=document.getElementById(\'apiKeyLink\');' +
-                                        'link.href=map[p]||\'#\';' +
-                                        'link.style.visibility=(p===\'lmstudio\')?\'hidden\':\'visible\';' +
-                                        'document.getElementById(\'apiKeyInput\').value=mBT.features.ai.getStoredApiKey(p);' +
-                                        'document.getElementById(\'lmstudioFields\').style.display=(p===\'lmstudio\')?\'block\':\'none\';' +
-                                        'document.getElementById(\'openrouterFields\').style.display=(p===\'openrouter\')?\'block\':\'none\';' +
-                                        'document.getElementById(\'geminiFields\').style.display=(p===\'gemini\')?\'block\':\'none\';' +
-                                        'document.getElementById(\'apiCredRow\').style.display=(p===\'lmstudio\')?\'none\':\'block\';' +
-                                    '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">' +
-                                        '<option value="gemini" ' + (provider === 'gemini' ? 'selected' : '') + '>Google Gemini API</option>' +
-                                        '<option value="openai" ' + (provider === 'openai' ? 'selected' : '') + '>OpenAI API</option>' +
-                                        '<option value="deepseek" ' + (provider === 'deepseek' ? 'selected' : '') + '>DeepSeek API</option>' +
-                                        '<option value="grok" ' + (provider === 'grok' ? 'selected' : '') + '>Grok (xAI) API</option>' +
-                                        '<option value="anthropic" ' + (provider === 'anthropic' ? 'selected' : '') + '>Anthropic (Claude)</option>' +
-                                        '<option value="openrouter" ' + (provider === 'openrouter' ? 'selected' : '') + '>OpenRouter</option>' +
-                                        '<option value="lmstudio" ' + (provider === 'lmstudio' ? 'selected' : '') + '>LM Studio (Local)</option>' +
-                                    '</select>' +
+                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">System Persona & Constraints</label>' +
+                                    '<textarea id="aiSystemPromptInput" class="w-full bg-slate-800 text-white border-none rounded-xl p-4 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-600/50 resize-none h-14 placeholder-slate-700 transition-all" placeholder="e.g. Focus strictly on film production logistics. Use JMD rates.">' + storedPrompt + '</textarea>' +
                                 '</div>' +
-                                '<div id="apiCredRow" style="display:' + (provider === 'lmstudio' ? 'none' : 'block') + '">' +
-                                    '<div class="flex justify-between items-center mb-1.5">' +
-                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Credentials</label>' +
-                                        '<a id="apiKeyLink" href="' + (keyLinks[provider] || '#') + '" target="_blank" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest flex items-center gap-1 transition-colors">Get API Key <span>&rarr;</span></a>' +
+
+                                '<div class="flex items-center justify-between py-1">' +
+                                    '<div class="flex items-center gap-3">' +
+                                        '<div class="relative flex items-center">' +
+                                            '<input type="checkbox" id="aiContextToggle" ' + (saveHistory ? 'checked' : '') + ' onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:\'\'}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">' +
+                                            '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
+                                        '</div>' +
+                                        '<label for="aiContextToggle" class="text-[9px] font-black text-slate-400 uppercase tracking-widest cursor-pointer">Persistent Context</label>' +
                                     '</div>' +
-                                    '<input type="password" id="apiKeyInput" value="' + mBT.features.ai.getStoredApiKey(provider) + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="sk-..">' +
                                 '</div>' +
-                                '<div id="lmstudioFields" style="display:' + (provider === 'lmstudio' ? 'block' : 'none') + '">' +
-                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Local Endpoint URL</label>' +
-                                    '<input type="text" id="lmEndpointInput" value="' + storedLmEndpoint + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500 mb-2" placeholder="http://localhost:1234/v1/chat/completions">' +
-                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Model ID</label>' +
-                                    '<input type="text" id="lmModelInput" value="' + storedLmModel + '" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500" placeholder="local-model">' +
-                                '</div>' +
-                                '<div id="openrouterFields" style="display:' + (provider === 'openrouter' ? 'block' : 'none') + '">' +
-                                    '<div class="flex justify-between items-center mb-1.5">' +
-                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
-                                        '<button onclick="mBT_fetchORModels()" class="text-[9px] font-bold text-violet-400 hover:text-violet-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
-                                    '</div>' +
-                                    '<select id="orModelSelect" onchange="localStorage.setItem(\'mbt_openrouter_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer">' +
-                                        '<option value="' + storedOrModel + '" selected>' + storedOrModel + '</option>' +
-                                    '</select>' +
-                                    '<p class="text-[8px] text-slate-600 mt-1.5 font-bold">Enter your API key above, then click Fetch Models to load the full catalogue.</p>' +
-                                '</div>' +
-                                '<div id="geminiFields" style="display:' + (provider === 'gemini' ? 'block' : 'none') + '">' +
-                                    '<div class="flex justify-between items-center mb-1.5">' +
-                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
-                                        '<button onclick="mBT_fetchGeminiModels()" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors">Fetch Models &rarr;</button>' +
-                                    '</div>' +
-                                    '<select id="geminiModelSelect" onchange="localStorage.setItem(\'mbt_gemini_model\',this.value)" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">' +
-                                        '<option value="' + storedGeminiModel + '" selected>' + storedGeminiModel + '</option>' +
-                                    '</select>' +
-                                    '<p class="text-[8px] text-slate-600 mt-1.5 font-bold">Enter your API key above, then click Fetch Models to load available Gemini models.</p>' +
-                                '</div>' +
-                                '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Persona &amp; Constraints</label>' +
-                                    '<textarea id="aiSystemPromptInput" class="w-full bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] outline-none focus:ring-1 focus:ring-blue-500 resize-none h-16 placeholder-slate-600" placeholder="e.g. Be sarcastic. Focus only on Below The Line. Use JMD currency symbol.">' + storedPrompt + '</textarea>' +
-                                '</div>' +
-                                '<div class="flex items-center gap-3 py-0.5">' +
-                                    '<div class="relative flex items-center">' +
-                                        '<input type="checkbox" id="aiContextToggle" ' + (saveHistory ? 'checked' : '') + ' onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:\'\'}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>' +
-                                    '</div>' +
-                                    '<label for="aiContextToggle" class="text-[9px] font-bold text-slate-400 uppercase tracking-wide cursor-pointer select-none">Save Conversation Context</label>' +
-                                '</div>' +
-                                '<button id="saveApiKeyBtn" onclick="' +
-                                    'var p=document.getElementById(\'aiProviderSelect\').value;' +
-                                    'var k=document.getElementById(\'apiKeyInput\') ? document.getElementById(\'apiKeyInput\').value.trim() : \'\';' +
-                                    'var s=document.getElementById(\'aiSystemPromptInput\').value;' +
-                                    'mBT.features.ai.saveStoredApiKey(p,k);' +
-                                    'mBT.features.ai.saveSystemPrompt(s);' +
-                                    'mBT.features.ai.saveSelectedProvider(p);' +
-                                    'if(p===\'lmstudio\'){' +
-                                        'var ep=document.getElementById(\'lmEndpointInput\').value.trim();' +
-                                        'var md=document.getElementById(\'lmModelInput\').value.trim();' +
-                                        'if(ep) localStorage.setItem(\'mbt_lmstudio_endpoint\', ep);' +
-                                        'if(md) localStorage.setItem(\'mbt_lmstudio_model\', md);' +
-                                    '}' +
-                                    'if(p===\'openrouter\'){' +
-                                        'var orSel=document.getElementById(\'orModelSelect\');' +
-                                        'if(orSel&&orSel.value) localStorage.setItem(\'mbt_openrouter_model\', orSel.value);' +
-                                    '}' +
-                                    'if(!k && p!==\'lmstudio\') { mBTME.alert(\'No Key\', \'Enter an API key before synchronizing.\'); return; }' +
-                                    'var btn=document.getElementById(\'saveApiKeyBtn\');' +
-                                    'if(btn){ btn.textContent=\'Testing..\'; btn.disabled=true; }' +
-                                    'mBT.features.ai.callUnifiedAI(p, k, \'Reply with the single word: connected\', \'You are a connection test. Reply only with the word: connected\')' +
-                                    '.then(function(r){' +
-                                        'if(btn){ btn.textContent=\'Synchronize Link\'; btn.disabled=false; }' +
-                                        'mBTME.alert(\'Connected\', p.charAt(0).toUpperCase()+p.slice(1)+\' API key verified and saved.\');' +
-                                    '}).catch(function(e){' +
-                                        'if(btn){ btn.textContent=\'Synchronize Link\'; btn.disabled=false; }' +
-                                        'mBTME.alert(\'Connection Failed\', \'Could not reach \'+p+\'. Check your key and try again.\');' +
-                                    '});' +
-                                '" class="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg hover:bg-blue-500 transition-all mt-1">Synchronize Link</button>' +
+
+                                '<button id="saveApiKeyBtn" onclick="mBT_syncAIProvider()" class="w-full bg-blue-600 text-white py-2.5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-blue-500 active:scale-95 transition-all border-b-4 border-blue-800">Synchronize AI Link</button>' +
+                            '</div>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
@@ -408,7 +463,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.04';
+            var currentVersion = updateStatus.localVersion || 'v23.19';
 
             var statusMsg = '';
             if (isChecking) {
@@ -455,56 +510,496 @@
     };
 
 
-    /* --- Gemini Model Fetch Helper --- */
-    window.mBT_fetchGeminiModels = function () {
-        var keyEl = document.getElementById('apiKeyInput');
-        var sel   = document.getElementById('geminiModelSelect');
-        if (!keyEl || !sel) return;
-        var k = keyEl.value.trim();
-        if (!k) { if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Enter your Gemini API key first.'); return; }
-        sel.innerHTML = '<option disabled selected>Loading...</option>';
-        mBT.features.ai.fetchGeminiModels(k).then(function (models) {
-            var saved = localStorage.getItem('mbt_gemini_model') || 'gemini-2.5-flash';
-            var html = '';
-            for (var i = 0; i < models.length; i++) {
-                html += '<option value="' + models[i].id + '"' + (models[i].id === saved ? ' selected' : '') + '>' + (models[i].name || models[i].id) + '</option>';
+    /* --- Phase 180: UI Setting Event Handlers (Anti-Injection) --- */
+    window.mBT_UI_Settings_handleProviderChange = function (p) {
+        var keyLinks = {
+            'gemini':      'https://aistudio.google.com/app/apikey',
+            'openai':      'https://platform.openai.com/api-keys',
+            'deepseek':    'https://platform.deepseek.com/api_keys',
+            'grok':        'https://console.x.ai/',
+            'anthropic':   'https://console.anthropic.com/settings/keys',
+            'openrouter':  'https://openrouter.ai/keys',
+            'lmstudio':    '#'
+        };
+        mBT.features.ai.saveSelectedProvider(p);
+        var link = document.getElementById('apiKeyLink');
+        if (link) {
+            link.href = keyLinks[p] || '#';
+            link.style.visibility = (p === 'lmstudio') ? 'hidden' : 'visible';
+        }
+        var ki = document.getElementById('apiKeyInput');
+        if (ki) ki.value = mBT.features.ai.getStoredApiKey(p);
+
+        var apiRow = document.getElementById('apiCredRow');
+        var lmFields = document.getElementById('lmstudioFields');
+        if (apiRow) apiRow.style.display = (p === 'lmstudio') ? 'none' : 'block';
+        if (lmFields) lmFields.style.display = (p === 'lmstudio') ? 'block' : 'none';
+
+        var cached = [];
+        try { cached = JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + p) || '[]'); } catch (e) {}
+        var cSel = document.getElementById('chatModelSelect');
+        var saved = localStorage.getItem('mbt_ai_chat_model_' + p) || '';
+        if (cSel) {
+            if (cached.length) {
+                cSel.innerHTML = cached.map(function (m) {
+                    var id = m.id || m;
+                    var lbl = m.name || m.id || m;
+                    return '<option value="' + id + '"' + (saved === id ? ' selected' : '') + '>' + lbl + '</option>';
+                }).join('');
+            } else {
+                cSel.innerHTML = saved ? '<option value="' + saved + '" selected>' + saved + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
             }
-            if (!html) html = '<option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>';
-            sel.innerHTML = html;
-        }).catch(function (e) {
-            if (typeof mBTME !== 'undefined') mBTME.alert('Error', e.message);
-            sel.innerHTML = '<option value="gemini-2.5-flash" selected>gemini-2.5-flash</option>';
-        });
+        }
     };
 
-    /* --- OpenRouter Model Fetch Helper (avoids inline-onclick quote contamination) --- */
-    window.mBT_fetchORModels = function () {
-        var keyEl = document.getElementById('apiKeyInput');
-        var sel   = document.getElementById('orModelSelect');
-        if (!keyEl || !sel) return;
-        var k = keyEl.value.trim();
-        if (!k) { if (typeof mBTME !== 'undefined') mBTME.alert('Error', 'Enter your OpenRouter API key first.'); return; }
-        sel.innerHTML = '<option disabled selected>Loading...</option>';
-        mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
-            var saved = localStorage.getItem('mbt_openrouter_model') || 'openai/gpt-4o-mini';
-            var i, free = [], paid = [];
-            for (i = 0; i < models.length; i++) {
-                if (models[i].free) { free.push(models[i]); } else { paid.push(models[i]); }
+    window.mBT_UI_Settings_handleChatModelChange = function (m) {
+        var p = document.getElementById('aiProviderSelect').value;
+        localStorage.setItem('mbt_ai_chat_model_' + p, m);
+    };
+
+    window.mBT_UI_Settings_handleImgModelChange = function (m) {
+        localStorage.setItem('mbt_ai_image_model', m);
+    };
+    
+    /* Cost-tier sort for providers whose APIs return no pricing data */
+    function _tierSort(models, provider) {
+        function tier(id) {
+            var s = (id || '').toLowerCase();
+            if (provider === 'openai') {
+                if (s.indexOf('o3-mini') !== -1)          return 4;
+                if (s.indexOf('o3') !== -1)               return 6;
+                if (s.indexOf('o1-mini') !== -1)          return 5;
+                if (s.indexOf('o1') !== -1)               return 6;
+                if (s.indexOf('gpt-4o-mini') !== -1)      return 1;
+                if (s.indexOf('gpt-4o') !== -1)           return 2;
+                if (s.indexOf('gpt-4-turbo') !== -1)      return 3;
+                if (s.indexOf('gpt-4') !== -1)            return 3;
+                if (s.indexOf('gpt-3') !== -1)            return 0;
+                return 5;
             }
-            var html = '<optgroup label="Free Models">';
-            for (i = 0; i < free.length; i++) {
-                html += '<option value="' + free[i].id + '"' + (free[i].id === saved ? ' selected' : '') + '>' + (free[i].name || free[i].id) + '</option>';
+            if (provider === 'anthropic') {
+                if (s.indexOf('haiku') !== -1)  return 0;
+                if (s.indexOf('sonnet') !== -1) return 1;
+                if (s.indexOf('opus') !== -1)   return 2;
+                return 1;
             }
-            html += '</optgroup><optgroup label="Paid Models">';
-            for (i = 0; i < paid.length; i++) {
-                html += '<option value="' + paid[i].id + '"' + (paid[i].id === saved ? ' selected' : '') + '>' + (paid[i].name || paid[i].id) + '</option>';
+            if (provider === 'deepseek') {
+                if (s.indexOf('chat') !== -1)     return 0;
+                if (s.indexOf('reasoner') !== -1) return 1;
+                return 0;
             }
-            html += '</optgroup>';
-            sel.innerHTML = html;
-        }).catch(function (e) {
-            if (typeof mBTME !== 'undefined') mBTME.alert('Error', e.message);
-            sel.innerHTML = '<option value="openai/gpt-4o-mini" selected>openai/gpt-4o-mini</option>';
+            if (provider === 'grok') {
+                if (s.indexOf('grok-2') !== -1 && s.indexOf('mini') !== -1) return 0;
+                if (s.indexOf('grok-2') !== -1)  return 1;
+                if (s.indexOf('grok-3') !== -1 && s.indexOf('mini') !== -1) return 2;
+                if (s.indexOf('grok-3') !== -1)  return 3;
+                return 2;
+            }
+            return 99;
+        }
+        models.sort(function (a, b) {
+            var ta = tier(a.id), tb = tier(b.id);
+            if (ta !== tb) return ta - tb;
+            return (a.id || '').localeCompare(b.id || '');
         });
+    }
+
+    var KEY_DASHBOARDS = {
+        gemini:     'https://aistudio.google.com/app/apikey',
+        openai:     'https://platform.openai.com/api-keys',
+        openrouter: 'https://openrouter.ai/keys',
+        deepseek:   'https://platform.deepseek.com/api_keys',
+        grok:       'https://console.x.ai/',
+        anthropic:  'https://console.anthropic.com/settings/keys'
+    };
+
+    var POLLINATIONS_FALLBACK_MODELS = [
+        { id: 'flux',            name: 'Flux.1 Standard' },
+        { id: 'flux-realism',    name: 'Flux Realism' },
+        { id: 'flux-anime',      name: 'Flux Anime' },
+        { id: 'flux-3d',         name: 'Flux 3D Render' },
+        { id: 'flux-nanobanana', name: 'Flux NanoBanana' },
+        { id: 'flux-pixel',      name: 'Flux Pixel Art' },
+        { id: 'any-dark',        name: 'Any Dark' }
+    ];
+
+    /* Merge live API results with fallback list — API wins on duplicates,
+       fallback fills gaps (e.g. nanobanana missing from API response) */
+    function _mergePollinationModels(apiModels) {
+        var seen = {};
+        var merged = [];
+        for (var i = 0; i < apiModels.length; i++) {
+            var m = apiModels[i];
+            var id = (m.id || m.name || '').toLowerCase();
+            if (!id) continue;
+            seen[id] = true;
+            /* Improve display name: if name equals id (raw API string), capitalise words */
+            var name = m.name || m.id;
+            if (name === m.id) {
+                name = name.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+            }
+            merged.push({ id: m.id, name: name });
+        }
+        for (var j = 0; j < POLLINATIONS_FALLBACK_MODELS.length; j++) {
+            var f = POLLINATIONS_FALLBACK_MODELS[j];
+            if (!seen[f.id.toLowerCase()]) merged.push(f);
+        }
+        return merged;
+    }
+
+    function _refreshImgHint(ip) {
+        var hint = document.getElementById('imgProviderHint');
+        var link = document.getElementById('imgApiKeyLink');
+        var dbUrl = KEY_DASHBOARDS[ip] || '';
+        /* Update the Keys → link above the input */
+        if (link) {
+            link.href = dbUrl || '#';
+            link.style.display = (ip === 'pollinations' || !dbUrl) ? 'none' : 'inline';
+        }
+        if (!hint) return;
+        var chatProvider = document.getElementById('aiProviderSelect') ? document.getElementById('aiProviderSelect').value : '';
+        var chatKey = mBT.features.ai.getStoredApiKey(chatProvider);
+        var imgKey  = mBT.features.ai.getStoredImageApiKey(ip);
+        var html = '';
+        if (ip === 'pollinations') {
+            html = 'No API key required — using free Pollinations service';
+        } else {
+            html = 'API key required.';
+            if (ip === chatProvider && chatKey && !imgKey) {
+                html += ' &nbsp;<span onclick="window.mBT_UI_Settings_inheritChatKey()" class="text-violet-400 cursor-pointer underline">Inherit from chat</span>';
+            }
+        }
+        hint.innerHTML = html;
+    }
+
+    /* Expose for post-render call from _attachListeners */
+    window.mBT_UI_Settings_refreshImgHint = function (ip) { _refreshImgHint(ip); };
+
+    window.mBT_UI_Settings_inheritChatKey = function () {
+        var pSel = document.getElementById('aiProviderSelect');
+        var p = pSel ? pSel.value : 'gemini';
+        var chatKey = mBT.features.ai.getStoredApiKey(p);
+        var imgInput = document.getElementById('imgApiKeyInput');
+        if (imgInput && chatKey) {
+            imgInput.value = chatKey;
+            if (window.mBT_syncAIProvider) window.mBT_syncAIProvider();
+        }
+    };
+
+    /* Standalone image model fetch — works without a key for Pollinations */
+    window.mBT_UI_Settings_fetchImgModels = function () {
+        var ip   = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+        var iSel = document.getElementById('imgModelSelect');
+        var ik   = (document.getElementById('imgApiKeyInput') || {}).value || mBT.features.ai.getStoredImageApiKey(ip);
+        var btn  = document.getElementById('fetchImgModelsBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        var done = function () { if (btn) { btn.disabled = false; btn.textContent = 'Fetch'; } };
+        var p;
+        if (ip === 'pollinations') {
+            p = fetch('https://image.pollinations.ai/models')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
+                        return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
+                    });
+                    var models = _mergePollinationModels(raw);
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
+                }).catch(function () {
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(POLLINATIONS_FALLBACK_MODELS));
+                    _populateSelect(iSel, POLLINATIONS_FALLBACK_MODELS, 'mbt_ai_image_model', false);
+                });
+        } else if (ip === 'openrouter') {
+            p = mBT.features.ai.fetchOpenRouterModels(ik).then(function (models) {
+                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                _populateSelect(iSel, models, 'mbt_ai_image_model', true);
+            });
+        } else if (ip === 'gemini') {
+            p = mBT.features.ai.fetchGeminiModels(ik).then(function (models) {
+                var imgModels = models.filter(function (m) { return (m.id || '').indexOf('imagen') !== -1; });
+                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(imgModels));
+                _populateSelect(iSel, imgModels, 'mbt_ai_image_model', false);
+            });
+        } else if (ip === 'openai') {
+            p = fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + ik } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var items = (data.data || []).filter(function (m) { return (m.id || '').indexOf('dall-e') !== -1; });
+                    var models = items.map(function (m) { return { id: m.id, name: m.id }; });
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
+                });
+        } else {
+            p = Promise.resolve();
+        }
+        p.then(done).catch(done);
+    };
+
+    window.mBT_UI_Settings_handleImgProviderChange = function (ip) {
+        localStorage.setItem('mbt_ai_image_provider', ip);
+        _refreshImgHint(ip);
+        var ki = document.getElementById('imgApiKeyInput');
+        if (ki) ki.value = mBT.features.ai.getStoredImageApiKey(ip);
+
+        var cached = [];
+        try { cached = JSON.parse(localStorage.getItem('mbt_cached_img_models_' + ip) || '[]'); } catch (e) {}
+        var isel = document.getElementById('imgModelSelect');
+        var isaved = localStorage.getItem('mbt_ai_image_model') || '';
+        if (isel) {
+            if (cached.length) {
+                isel.innerHTML = cached.map(function (m) {
+                    var id = m.id || m;
+                    var lbl = m.name || m.id || m;
+                    return '<option value="' + id + '"' + (isaved === id ? ' selected' : '') + '>' + lbl + '</option>';
+                }).join('');
+            } else {
+                isel.innerHTML = isaved ? '<option value="' + isaved + '" selected>' + isaved + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
+            }
+        }
+    };
+
+    window.mBT_UI_Settings_autoFetchModelsOnKeyBlur = function () {
+        var keyEl = document.getElementById('apiKeyInput');
+        var pSel = document.getElementById('aiProviderSelect');
+        var p = pSel ? pSel.value : mBT.features.ai.getSelectedProvider();
+        var k = (keyEl && keyEl.value) ? keyEl.value.trim() : '';
+
+        if (!k || p === 'lmstudio') return;
+
+        var cSel = document.getElementById('chatModelSelect');
+        if (cSel) {
+            cSel.innerHTML = '<option value="" disabled>⏳ Fetching models...</option>';
+        }
+
+        var cachedKey = 'mbt_cached_chat_models_' + p;
+        var modelFetch;
+
+        function _populateSelect(sel, models, savedKey, groupByFree) {
+            if (!sel || !models || !models.length) return;
+            var saved = localStorage.getItem(savedKey) || '';
+            var html = '';
+            if (groupByFree) {
+                /* Sort by price ascending (free=$0 first), then alphabetical */
+                var sorted = models.slice().sort(function (a, b) {
+                    var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
+                    var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
+                    if (pa !== pb) return pa - pb;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
+                for (var j = 0; j < sorted.length; j++) {
+                    var m = sorted[j];
+                    var mid = m.id || m;
+                    var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
+                    html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
+                }
+            } else {
+                for (var i = 0; i < models.length; i++) {
+                    var id = models[i].id || models[i];
+                    var lbl = models[i].name || models[i].id || models[i];
+                    html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
+                }
+            }
+            sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
+        }
+
+        if (p === 'gemini') {
+            modelFetch = mBT.features.ai.fetchGeminiModels(k).then(function (models) {
+                localStorage.setItem(cachedKey, JSON.stringify(models));
+                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+            });
+        } else if (p === 'openrouter') {
+            modelFetch = mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
+                localStorage.setItem(cachedKey, JSON.stringify(models));
+                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, true);
+            });
+        } else {
+            var MODELS_URLS = {
+                'openai':    'https://api.openai.com/v1/models',
+                'deepseek':  'https://api.deepseek.com/models',
+                'grok':      'https://api.x.ai/v1/models',
+                'anthropic': 'https://api.anthropic.com/v1/models'
+            };
+            var modelsUrl = MODELS_URLS[p];
+            if (modelsUrl) {
+                var hdrs = { 'Authorization': 'Bearer ' + k };
+                if (p === 'anthropic') { hdrs['x-api-key'] = k; hdrs['anthropic-version'] = '2023-06-01'; delete hdrs['Authorization']; }
+                modelFetch = fetch(modelsUrl, { headers: hdrs })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        var items = data.models || data.data || [];
+                        var models = items.map(function (m) { return { id: m.id, name: m.display_name || m.id }; });
+                        _tierSort(models, p);
+                        localStorage.setItem(cachedKey, JSON.stringify(models));
+                        _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+                    });
+            } else {
+                modelFetch = Promise.resolve();
+            }
+        }
+        if (modelFetch) modelFetch.catch(function () {});
+    };
+
+    /* --- Unified AI Sync: tests connection, fetches + caches chat and image models, saves all --- */
+    window.mBT_syncAIProvider = function () {
+        var pSel  = document.getElementById('aiProviderSelect');
+        var keyEl = document.getElementById('apiKeyInput');
+        var sSel  = document.getElementById('aiSystemPromptInput');
+        var cSel  = document.getElementById('chatModelSelect');
+        var imgPS = document.getElementById('imgProviderSelect');
+        var iKeyEl = document.getElementById('imgApiKeyInput');
+        var iSel  = document.getElementById('imgModelSelect');
+        var btn   = document.getElementById('saveApiKeyBtn');
+
+        var p  = pSel  ? pSel.value  : mBT.features.ai.getSelectedProvider();
+        var k  = keyEl ? keyEl.value.trim() : '';
+        var s  = sSel  ? sSel.value  : '';
+        var ip = imgPS ? imgPS.value : (localStorage.getItem('mbt_ai_image_provider') || 'pollinations');
+        var ik = iKeyEl ? iKeyEl.value.trim() : '';
+
+        mBT.features.ai.saveSelectedProvider(p);
+        mBT.features.ai.saveStoredApiKey(p, k);
+        mBT.features.ai.saveSystemPrompt(s);
+        localStorage.setItem('mbt_ai_image_provider', ip);
+        mBT.features.ai.saveStoredImageApiKey(ip, ik);
+
+        if (p === 'lmstudio') {
+            var epEl = document.getElementById('lmEndpointInput');
+            var mdEl = document.getElementById('lmModelInput');
+            if (epEl && epEl.value.trim()) localStorage.setItem('mbt_lmstudio_endpoint', epEl.value.trim());
+            if (mdEl && mdEl.value.trim()) localStorage.setItem('mbt_lmstudio_model',    mdEl.value.trim());
+        }
+
+        if (!k && p !== 'lmstudio' && ip !== 'pollinations') {
+            if (typeof mBTME !== 'undefined') mBTME.alert('No Key', 'Enter an API key before synchronizing.');
+            return;
+        }
+
+        if (btn) { btn.textContent = 'Fetching..'; btn.disabled = true; }
+
+        function _populateSelect(sel, models, savedKey, groupByFree) {
+            if (!sel || !models || !models.length) return;
+            var saved = localStorage.getItem(savedKey) || '';
+            var html = '';
+            if (groupByFree) {
+                /* Sort by price ascending (free=$0 first), then alphabetical */
+                var sorted = models.slice().sort(function (a, b) {
+                    var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
+                    var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
+                    if (pa !== pb) return pa - pb;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
+                for (var j = 0; j < sorted.length; j++) {
+                    var m = sorted[j];
+                    var mid = m.id || m;
+                    var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
+                    html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
+                }
+            } else {
+                for (var i = 0; i < models.length; i++) {
+                    var id  = models[i].id  || models[i];
+                    var lbl = models[i].name || models[i].id || models[i];
+                    html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
+                }
+            }
+            sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
+        }
+
+        /* Fetch chat models for the chat provider */
+        var chatFetch;
+        if (p === 'gemini') {
+            chatFetch = mBT.features.ai.fetchGeminiModels(k).then(function (models) {
+                localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
+                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+            });
+        } else if (p === 'openrouter') {
+            chatFetch = mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
+                localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
+                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, true);
+            });
+        } else {
+            /* OpenAI, DeepSeek, Grok, Anthropic — all support /models endpoint */
+            var MODELS_URLS = {
+                'openai':    'https://api.openai.com/v1/models',
+                'deepseek':  'https://api.deepseek.com/models',
+                'grok':      'https://api.x.ai/v1/models',
+                'anthropic': 'https://api.anthropic.com/v1/models'
+            };
+            var modelsUrl = MODELS_URLS[p];
+            if (modelsUrl) {
+                var hdrs = { 'Authorization': 'Bearer ' + k };
+                if (p === 'anthropic') { hdrs['x-api-key'] = k; hdrs['anthropic-version'] = '2023-06-01'; delete hdrs['Authorization']; }
+                chatFetch = fetch(modelsUrl, { headers: hdrs })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        var items = data.models || data.data || [];
+                        var models = items.map(function (m) { return { id: m.id, name: m.display_name || m.id }; });
+                        _tierSort(models, p);
+                        localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
+                        _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+                    });
+            } else {
+                chatFetch = Promise.resolve();
+            }
+        }
+
+        /* Fetch image models for the image provider (uses independent key) */
+        var imgKey = ik || mBT.features.ai.getStoredImageApiKey(ip) || k;
+        var imgFetch;
+        if (ip === 'pollinations') {
+            imgFetch = fetch('https://image.pollinations.ai/models')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
+                        return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
+                    });
+                    var models = _mergePollinationModels(raw);
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
+                }).catch(function () {
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(POLLINATIONS_FALLBACK_MODELS));
+                    _populateSelect(iSel, POLLINATIONS_FALLBACK_MODELS, 'mbt_ai_image_model', false);
+                });
+        } else if (ip === 'openrouter') {
+            imgFetch = mBT.features.ai.fetchOpenRouterModels(imgKey).then(function (models) {
+                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                _populateSelect(iSel, models, 'mbt_ai_image_model', true);
+            });
+        } else if (ip === 'gemini') {
+            imgFetch = mBT.features.ai.fetchGeminiModels(imgKey).then(function (models) {
+                /* Filter to image-capable models only */
+                var imgModels = models.filter(function (m) { return (m.id || '').indexOf('imagen') !== -1; });
+                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(imgModels));
+                _populateSelect(iSel, imgModels, 'mbt_ai_image_model', false);
+            });
+        } else if (ip === 'openai') {
+            imgFetch = fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + imgKey } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var items = (data.data || []).filter(function (m) { return (m.id || '').indexOf('dall-e') !== -1; });
+                    var models = items.map(function (m) { return { id: m.id, name: m.id }; });
+                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
+                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
+                });
+        } else {
+            imgFetch = Promise.resolve();
+        }
+
+        Promise.all([chatFetch, imgFetch])
+            .then(function () {
+                /* Test connection with a lightweight chat call */
+                return mBT.features.ai.callUnifiedAI(p, k, 'Reply with the single word: connected', 'You are a connection test. Reply only with the word: connected');
+            })
+            .then(function () {
+                if (btn) { btn.textContent = 'Synchronize Link'; btn.disabled = false; }
+                /* Save selected models from populated selects */
+                if (cSel && cSel.value) localStorage.setItem('mbt_ai_chat_model_' + p, cSel.value);
+                if (iSel && iSel.value) localStorage.setItem('mbt_ai_image_model', iSel.value);
+                if (typeof mBTME !== 'undefined') mBTME.alert('Connected', p.charAt(0).toUpperCase() + p.slice(1) + ' verified. Models loaded.');
+            })
+            .catch(function () {
+                if (btn) { btn.textContent = 'Synchronize Link'; btn.disabled = false; }
+                if (typeof mBTME !== 'undefined') mBTME.alert('Connection Failed', 'Could not reach ' + p + '. Check your key and try again.');
+            });
     };
 
 })(window);

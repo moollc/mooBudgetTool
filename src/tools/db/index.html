@@ -2750,19 +2750,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       ['2','3'].map(function(v) { return '<option value="' + v + '"' + (String(d.columns || '3') === v ? ' selected' : '') + '>' + v + ' columns</option>'; }).join('') +
       '</select></div></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;align-items:center;justify-content:space-between;">Frames <button class="ed-add-btn" data-add="frames" style="margin:0;">+ Add Frame</button></div>';
+    var IE_OPTS = ['INT', 'EXT', 'INT/EXT'];
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#f8fafc;">' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:36px;">#</th>' +
+      '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:72px;">Int/Ext</th>' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:100px;">Shot Type</th>' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;width:110px;">Camera Move</th>' +
       '<th style="padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;color:#64748b;">Description</th>' +
       '<th style="padding:4px 6px;text-align:center;font-size:9px;text-transform:uppercase;color:#64748b;width:60px;">Image</th>' +
       '<th style="width:24px;"></th></tr></thead><tbody>';
     frames.forEach(function (f, i) {
+      var ieOpts = IE_OPTS.map(function(v) { return '<option value="' + esc(v) + '"' + (f.intExt === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('');
       var shotOpts = SHOT_TYPES.map(function(s) { return '<option value="' + esc(s) + '"' + (f.shotType === s ? ' selected' : '') + '>' + esc(s || '—') + '</option>'; }).join('');
       var camOpts = CAM_MOVES.map(function(c) { return '<option value="' + esc(c) + '"' + (f.camera === c ? ' selected' : '') + '>' + esc(c || '—') + '</option>'; }).join('');
       var imgPreview = f.image ? '<img src="' + esc(f.image) + '" style="max-width:100%;max-height:40px;object-fit:cover;border-radius:2px;cursor:pointer;" title="Click to change" onclick="window.promptStoryboardImage(' + i + ')" />' : '<button class="ed-add-btn" style="margin:0;font-size:8px;padding:2px 4px;" onclick="window.promptStoryboardImage(' + i + ')" type="button">Attach/Gen</button>';
       html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
         '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="num" value="' + esc(f.num || '') + '" style="width:30px;text-align:center;"></td>' +
+        '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="intExt">' + ieOpts + '</select></td>' +
         '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="shotType">' + shotOpts + '</select></td>' +
         '<td style="padding:4px 6px;"><select data-arr="frames" data-i="' + i + '" data-f="camera">' + camOpts + '</select></td>' +
         '<td style="padding:4px 6px;"><input data-arr="frames" data-i="' + i + '" data-f="description" value="' + esc(f.description || '') + '" placeholder="Action / notes…" style="width:100%;"></td>' +
@@ -3136,7 +3140,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       shootDays: { date: '', dayNum: '', location: '', crewCall: '', wrap: '', scenes: '', cast: '', pages: '', notes: '' },
       shots: { scene: '', shot: '', take: '', tc: '', description: '', costume: '', hair: '', makeup: '', props: '', timeOfDay: '', notes: '' },
       movementRows: { name: '', role: '', pickup: '', pickupTime: '', vehicle: '', destination: '', arrivalTime: '', notes: '' },
-      frames: { num: '', description: '', shotType: '', camera: '' }
+      frames: { num: '', intExt: 'INT', description: '', shotType: '', camera: '' }
     };
     /* DOOD cast shares the same 'cast' key but needs special handling for days sub-object */
     if (arrName === 'cast' && activeTemplateId === 'dood') {
