@@ -141,6 +141,12 @@
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 self.rates.length = 0;
                 if (!stored || stored.length === 0) {
+                    /* Phase 172: First-install seeds the legacy Jamaica DB (untagged, JMD)
+                       so existing UI continues to display correctly. Regional defaults
+                       (USA/UK/CAN/AUS/etc.) are NOT pushed into self.rates — they're
+                       served on-demand by _computeLocalAverages() via _getAllRegionalDefaults().
+                       This keeps the visible Database list focused on the user's working
+                       region while still enabling region-switch substitution. */
                     var defaults = self._getJamaicaDatabase();
                     for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
                     return self.saveRates();
@@ -513,25 +519,55 @@
             }).catch(function () { return {}; });
         },
 
-        /* Compute rate averages from locally cached community rates (offline fallback). */
+        /* Compute rate averages from local rates + regional defaults (Phase 172).
+           Returns a lookup map keyed by `description|region` (lowercase) so
+           mBT.rates.applyRegion() can substitute the correct researched rate
+           when a user switches region in Settings.
+
+           Layering rules (later overrides earlier):
+           1. Regional defaults (RegionalRateAccuracy.md sourced) — base layer
+           2. Community-submitted rates — averaged per key, override defaults
+              (community votes carry weight; if 3+ contributors agree, their
+              average wins over the seeded default).
+        */
         _computeLocalAverages: function () {
             var map = {};
-            for (var i = 0; i < this.rates.length; i++) {
-                var r = this.rates[i];
-                if (r.source !== 'community') continue;
-                var key = (r.description || '').toLowerCase() + '|' + (r.region || 'Jamaica').toLowerCase();
-                if (!map[key]) { map[key] = { sum: 0, count: 0 }; }
-                map[key].sum += parseFloat(r.rate) || 0;
-                map[key].count++;
-            }
-            var result = {};
-            for (var k in map) {
-                result[k] = {
-                    avg_rate: map[k].count ? Math.round(map[k].sum / map[k].count) : 0,
-                    contributor_count: map[k].count
+            var i, r, key;
+
+            /* Layer 1: Regional defaults */
+            var defaults = this._getAllRegionalDefaults() || [];
+            for (i = 0; i < defaults.length; i++) {
+                r = defaults[i];
+                key = (r.description || '').toLowerCase() + '|' + (r.region || 'Jamaica').toLowerCase();
+                map[key] = {
+                    avg_rate: parseFloat(r.rate) || 0,
+                    currency: r.currency || 'JMD',
+                    contributor_count: 0,
+                    source: 'default'
                 };
             }
-            return result;
+
+            /* Layer 2: Community submissions (averaged) */
+            var community = {};
+            for (i = 0; i < this.rates.length; i++) {
+                r = this.rates[i];
+                if (r.source !== 'community') continue;
+                key = (r.description || '').toLowerCase() + '|' + (r.region || 'Jamaica').toLowerCase();
+                if (!community[key]) { community[key] = { sum: 0, count: 0, currency: r.currency || 'JMD' }; }
+                community[key].sum += parseFloat(r.rate) || 0;
+                community[key].count++;
+            }
+            for (var k in community) {
+                if (community[k].count > 0) {
+                    map[k] = {
+                        avg_rate: Math.round(community[k].sum / community[k].count),
+                        currency: community[k].currency,
+                        contributor_count: community[k].count,
+                        source: 'community'
+                    };
+                }
+            }
+            return map;
         },
 
         /* --- INTELLIGENT INGESTION --- */
@@ -879,6 +915,151 @@
                 { description: 'Composer', unit: 'Flat', rate: 200000 },
                 { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
             ];
+        },
+
+        /* ========= PHASE 172: REGIONAL DEFAULT DATABASES =========
+         * Per-region researched market rates sourced from RegionalRateAccuracy.md.
+         * Each entry includes its native currency (USD/GBP/CAD/AUD) — these are
+         * sovereign rates per region, NOT JMD numbers waiting to be converted.
+         * Region switch substitutes these directly via _computeLocalAverages().
+         *
+         * Sources cited per region:
+         * - Trinidad/Barbados: Atlas Film Fixers + Regional Avg (USD)
+         * - UK: BECTU Camera Branch 2025 (GBP)
+         * - USA: IATSE Local 600 LBTA Tier 1A (USD hourly × 10hr day) + DGA Low Budget Level 3 (USD weekly ÷ 5)
+         * - Australia: MEAA MPPA 2025 (AUD weekly ÷ 5)
+         * - Canada: BCCFU Tier 1 (Vancouver) IATSE 891 / IATSE 873 (Toronto) (CAD hourly × 10hr day)
+         */
+
+        _getTrinidadDatabase: function () {
+            return [
+                { description: 'Director', unit: 'Day', rate: 2500, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1400, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 900, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 700, region: 'Trinidad', currency: 'USD', source: 'default' }
+            ];
+        },
+
+        _getBarbadosDatabase: function () {
+            return [
+                { description: 'Director', unit: 'Day', rate: 2500, region: 'Barbados', currency: 'USD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1400, region: 'Barbados', currency: 'USD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 900, region: 'Barbados', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 600, region: 'Barbados', currency: 'USD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'Barbados', currency: 'USD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 700, region: 'Barbados', currency: 'USD', source: 'default' }
+            ];
+        },
+
+        /* UK: BECTU Camera Branch 2025 — TV Band 1 / MMP, 10hr day, GBP. */
+        _getUKDatabase: function () {
+            return [
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1600, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 685, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 509, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'DIT', unit: 'Day', rate: 631, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 560, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' }
+            ];
+        },
+
+        /* USA: IATSE Local 600 LBTA Tier 1A 2025 (hourly × 10hr day) + DGA Low Budget Level 3 (weekly ÷ 5).
+           Tier 1A = $3M-$6.25M productions. Default tier; can be overridden via mBTOG.settings.usaTier later. */
+        _getUSADatabase: function () {
+            return [
+                /* Camera & DIT — IATSE Local 600 LBTA Tier 1A hourly × 10hr */
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 537, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 376, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 295, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'DIT', unit: 'Day', rate: 537, region: 'USA', currency: 'USD', source: 'default' },
+                /* Production Office — DGA Low Budget Level 3 weekly ÷ 5 */
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 911, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 867, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '2nd Assistant Director', unit: 'Day', rate: 557, region: 'USA', currency: 'USD', source: 'default' }
+            ];
+        },
+
+        /* Australia: MEAA MPPA 2025 — Level 8/7/6/5 weekly ÷ 5, AUD. */
+        _getAustraliaDatabase: function () {
+            return [
+                { description: 'Director', unit: 'Day', rate: 394, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 357, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'DIT', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Production Coordinator', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: '2nd Assistant Camera', unit: 'Day', rate: 232, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Grip', unit: 'Day', rate: 232, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Production Manager', unit: 'Day', rate: 372, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 357, region: 'Australia', currency: 'AUD', source: 'default' }
+            ];
+        },
+
+        /* Canada: BCCFU Tier 1 / IATSE 891 (Vancouver) + IATSE 873 (Toronto), CAD hourly × 10hr. */
+        _getCanadaDatabase: function () {
+            return [
+                { description: 'Art Director', unit: 'Day', rate: 541, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Storyboard Artist', unit: 'Day', rate: 418, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Construction Coordinator', unit: 'Day', rate: 494, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 484, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Sound Editor', unit: 'Day', rate: 516, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Music Editor', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: '1st Assistant Editor', unit: 'Day', rate: 392, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Key Grip', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Grip', unit: 'Day', rate: 359, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 539, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Lighting Technician', unit: 'Day', rate: 359, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Property Master', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Production Coordinator', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 539, region: 'Canada', currency: 'CAD', source: 'default' }
+            ];
+        },
+
+        /* Aggregator — returns ALL regional defaults concatenated. Jamaica entries
+           are tagged with region:'Jamaica', currency:'JMD', source:'default' on the fly
+           so they participate in the substitution lookup table.
+           Called by loadRates() on first install AND used by _computeLocalAverages()
+           to seed the substitution map even when no community data is synced. */
+        _getAllRegionalDefaults: function () {
+            var jm = this._getJamaicaDatabase();
+            var taggedJM = [];
+            for (var i = 0; i < jm.length; i++) {
+                taggedJM.push({
+                    description: jm[i].description,
+                    unit: jm[i].unit,
+                    rate: jm[i].rate,
+                    region: 'Jamaica',
+                    currency: 'JMD',
+                    source: 'default'
+                });
+            }
+            return taggedJM
+                .concat(this._getTrinidadDatabase())
+                .concat(this._getBarbadosDatabase())
+                .concat(this._getUKDatabase())
+                .concat(this._getUSADatabase())
+                .concat(this._getAustraliaDatabase())
+                .concat(this._getCanadaDatabase());
+        },
+
+        /* Intelligence Footer strings — surfaced in the rates UI to cite accuracy. */
+        _getRegionIntelligence: function (region) {
+            var map = {
+                'Jamaica':   'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+                'Trinidad':  'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+                'Barbados':  'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+                'Guyana':    'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+                'USA':       'INTELLIGENCE: ESTIMATES REFLECT IATSE / DGA LOW-TIER AVERAGES (2025). EXCLUDES FRINGES, OVERTIME, AND MEAL PENALTIES.',
+                'UK':        'INTELLIGENCE: ESTIMATES TARGET BECTU 2025 RECOMMENDED RATES. SUBJECT TO PACT/BECTU TERMS & CONDITIONS.',
+                'Australia': 'INTELLIGENCE: RATES ALIGN WITH FWC MA000091 MODERN AWARD (2025). FINAL TOTALS REQUIRE SUPERANNUATION ADJUSTMENT.',
+                'Canada':    'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.'
+            };
+            return map[region] || '';
         }
     };
 

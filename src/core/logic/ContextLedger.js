@@ -341,14 +341,28 @@
         return addBatch(items).then(function (added) { return added.length; });
     }
 
-    /* Ingest Treatment + Script + Attachments from localStorage keys used by the Assistant iframe */
+    /* Ingest Treatment + Script + Attachments.
+       Phase 175: reads from mBTAssistant.getSources() first (unified source store),
+       falls back to legacy localStorage keys for users upgrading from older builds. */
     function ingestSidebar() {
         var items = [];
         try {
-            var tr = localStorage.getItem('mbt_ai_treatment') || '';
-            if (tr.trim()) items.push({ type: 'treatment', id: 'treatment_active', name: 'Treatment', text: tr });
-            var sc = localStorage.getItem('mbt_ai_script') || '';
-            if (sc.trim()) items.push({ type: 'script', id: 'script_active', name: 'Script', text: sc });
+            if (window.mBTAssistant && typeof mBTAssistant.getSources === 'function') {
+                var srcs = mBTAssistant.getSources();
+                for (var si = 0; si < srcs.length; si++) {
+                    var s = srcs[si];
+                    if (s && (s.text || '').trim()) {
+                        items.push({ type: s.type || 'source', id: s.id || ('src_' + si), name: s.title || s.name || 'Source', text: s.text });
+                    }
+                }
+            }
+            /* Legacy fallback — covers builds before mBTAssistant migration */
+            if (!items.length) {
+                var tr = localStorage.getItem('mbt_ai_treatment') || '';
+                if (tr.trim()) items.push({ type: 'treatment', id: 'treatment_active', name: 'Treatment', text: tr });
+                var sc = localStorage.getItem('mbt_ai_script') || '';
+                if (sc.trim()) items.push({ type: 'script', id: 'script_active', name: 'Script', text: sc });
+            }
             var att = JSON.parse(localStorage.getItem('mbt_ai_attachments') || '{}');
             if (att.treatment && att.treatment.text) items.push({ type: 'attachment', id: 'att_treatment', name: att.treatment.name || 'treatment file', text: att.treatment.text, meta: { field: 'treatment' } });
             if (att.script && att.script.text) items.push({ type: 'attachment', id: 'att_script', name: att.script.name || 'script file', text: att.script.text, meta: { field: 'script' } });

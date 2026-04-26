@@ -25,108 +25,56 @@ window.mBTAIModule = {
         chatActionPrompt: 'ACTION CAPABILITY: When you identify a specific actionable budget change, output a JSON action block immediately before your explanation:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\nKeep explanations brief.'
     },
 
-    /* ── Storage Accessors ──────────────────────────────────────────────── */
-    /* Keys use unprefixed mbt_ namespace to avoid being parsed as budget data */
+    /* ── Storage Accessors (Phase 173: thin wrappers over mBTAssistant) ──
+       Legacy API kept intact so call sites in index.html, EventRouter, and
+       ui.settings.js don't need to change. All actual storage I/O now goes
+       through the mBTAssistant singleton — single source of truth. */
     getStoredApiKey: function (provider) {
+        if (window.mBTAssistant) return window.mBTAssistant.getApiKey(provider) || '';
         return localStorage.getItem('mbt_' + provider + '_api_key') || '';
     },
     saveStoredApiKey: function (provider, key) {
+        if (window.mBTAssistant) { window.mBTAssistant.setApiKey(provider, key); return; }
         localStorage.setItem('mbt_' + provider + '_api_key', key);
     },
     getSelectedProvider: function () {
+        if (window.mBTAssistant) return window.mBTAssistant.getProvider();
         var stored = localStorage.getItem('mbt_selected_ai_provider');
         if (stored) return stored;
-        /* Infer from endpoint: localhost = lmstudio */
         var endpoint = localStorage.getItem('mbt_ai_endpoint') || '';
         if (endpoint && endpoint.indexOf('localhost') > -1) return 'lmstudio';
         return 'gemini';
     },
     saveSelectedProvider: function (provider) {
+        if (window.mBTAssistant) { window.mBTAssistant.setProvider(provider); return; }
         localStorage.setItem('mbt_selected_ai_provider', provider);
     },
     getSystemPrompt:    function () { return localStorage.getItem((window.storageKeyPrefix || '') + 'aiSystemPrompt') || ''; },
     saveSystemPrompt:   function (val) { localStorage.setItem((window.storageKeyPrefix || '') + 'aiSystemPrompt', val); },
 
-    /* ── Centralized Intelligence Dispatcher ────────────────────────────── */
+    /* ── Centralized Intelligence Dispatcher ──────────────────────────────
+       Phase 173: collapsed to a thin wrapper over mBTAssistant.callChat().
+       The legacy (provider, apiKey) args are accepted but ignored — mBTAssistant
+       reads them from its own state (which is the SAME localStorage keys, so
+       behavior is identical). User constraint injection is preserved. */
     callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg) {
         var self = this;
         var userConstraints = self.getSystemPrompt();
         var baseInstruction = customSystemMsg || self.config.systemContext;
         var systemInstruction = userConstraints ? (baseInstruction + ' USER CONSTRAINTS: ' + userConstraints) : baseInstruction;
-        var promise;
 
-        if (provider === 'gemini') {
-            var _geminiModel = localStorage.getItem('mbt_gemini_model') || self.config.geminiModel;
-            var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + _geminiModel + ':generateContent?key=' + apiKey;
-            promise = fetch(gUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: systemInstruction }] } })
-            }).then(function (gRes) {
-                if (!gRes.ok) {
-                    return gRes.json().catch(function () { return {}; }).then(function (gErr) {
-                        throw new Error('Gemini Error ' + gRes.status + ': ' + (gErr.error && gErr.error.message ? gErr.error.message : gRes.statusText));
-                    });
-                }
-                return gRes.json();
-            }).then(function (gData) {
-                return (gData.candidates && gData.candidates[0] && gData.candidates[0].content && gData.candidates[0].content.parts && gData.candidates[0].content.parts[0] && gData.candidates[0].content.parts[0].text) || 'Assistant: No analysis generated.';
+        if (window.mBTAssistant && typeof window.mBTAssistant.callChat === 'function') {
+            return window.mBTAssistant.callChat({
+                userMessage:  prompt,
+                systemPrompt: systemInstruction
+            }).catch(function (error) {
+                console.error('mBT AI Failure:', error);
+                return 'Analysis Failed: ' + (error && error.message ? error.message : 'Unknown');
             });
-
-        } else if (provider === 'anthropic') {
-            promise = fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-                body: JSON.stringify({ model: self.config.claudeModel, max_tokens: 4096, system: systemInstruction, messages: [{ role: 'user', content: prompt }] })
-            }).then(function (aRes) {
-                if (!aRes.ok) {
-                    return aRes.json().catch(function () { return {}; }).then(function (aErr) {
-                        throw new Error('Anthropic Error ' + aRes.status + ': ' + (aErr.error && aErr.error.message ? aErr.error.message : aRes.statusText));
-                    });
-                }
-                return aRes.json();
-            }).then(function (aData) {
-                return (aData.content && aData.content[0] && aData.content[0].text) || 'Assistant: No analysis generated.';
-            });
-
-        } else {
-            var oUrl, oModel;
-            if (provider === 'openai')           { oUrl = 'https://api.openai.com/v1/chat/completions'; oModel = self.config.openAiModel; }
-            else if (provider === 'deepseek')    { oUrl = 'https://api.deepseek.com/chat/completions'; oModel = self.config.deepSeekModel; }
-            else if (provider === 'grok')        { oUrl = 'https://api.x.ai/v1/chat/completions';      oModel = self.config.grokModel; }
-            else if (provider === 'openrouter') {
-                oUrl   = self.config.openrouterEndpoint;
-                oModel = localStorage.getItem('mbt_openrouter_model') || self.config.openrouterModel;
-            }
-            else if (provider === 'lmstudio') {
-                oUrl   = localStorage.getItem('mbt_lmstudio_endpoint')
-                      || localStorage.getItem('mbt_ai_endpoint')
-                      || self.config.lmstudioEndpoint;
-                oUrl   = oUrl.replace(/\/chat\/completions$/, '').replace(/\/$/, '') + '/chat/completions';
-                oModel = localStorage.getItem('mbt_lmstudio_model') || self.config.lmstudioModel;
-            }
-
-            if (!oUrl) {
-                promise = Promise.reject(new Error('Provider \'' + provider + '\' not supported.'));
-            } else {
-                promise = fetch(oUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-                    body: JSON.stringify({ model: oModel, messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: prompt }] })
-                }).then(function (oRes) {
-                    if (!oRes.ok) {
-                        return oRes.json().catch(function () { return {}; }).then(function (oErr) {
-                            throw new Error(provider.toUpperCase() + ' Error ' + oRes.status + ': ' + (oErr.error && oErr.error.message ? oErr.error.message : oRes.statusText));
-                        });
-                    }
-                    return oRes.json();
-                }).then(function (oData) {
-                    return (oData.choices && oData.choices[0] && oData.choices[0].message && oData.choices[0].message.content) || 'Assistant: No analysis generated.';
-                });
-            }
         }
 
-        return promise.catch(function (error) {
+        /* Hard fallback if mBTAssistant ever fails to load — keeps tool from crashing */
+        return Promise.reject(new Error('mBTAssistant unavailable — AI service offline.')).catch(function (error) {
             console.error('mBT AI Failure:', error);
             return 'Analysis Failed: ' + error.message;
         });

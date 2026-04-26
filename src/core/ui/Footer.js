@@ -97,9 +97,9 @@
                 '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-white whitespace-nowrap transition-colors hidden md:block">Redo</span>',
                 '</button>',
 
-                /* Phase 77: Actuals mode toggle */
+                /* Phase 77: Actuals mode toggle — hidden by default, togglable via Settings → Manage HUD */
                 '<button id="actualsToggleBtn" data-pill-order="4" data-pill-side="right" aria-label="Actuals Mode"',
-                '    class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
+                '    class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
                 '    <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6 transition-colors" id="icon-actuals-toggle">',
                 '        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
                 '            <rect x="2" y="3" width="20" height="14" rx="2" />',
@@ -110,7 +110,7 @@
                 '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap transition-colors hidden md:block">Actuals</span>',
                 '</button>',
 
-                /* Phase 66: Search */
+                /* Phase 66: Search — hidden by default, togglable via Settings → Manage HUD */
                 '<button id="searchFooterBtn" data-pill-order="5" data-pill-side="right" data-action="command-palette" aria-label="Search"',
                 '    class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
                 '    <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">',
@@ -122,7 +122,7 @@
                 '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap hidden md:block">Search</span>',
                 '</button>',
 
-                /* Phase 73: Tools Drawer trigger */
+                /* Phase 73: Tools Drawer — hidden by default, togglable via Settings → Manage HUD */
                 '<button id="toolsDrawerBtn" data-pill-order="6" data-pill-side="right" aria-label="Tools"',
                 '    class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
                 '    <div class="text-slate-400 group-hover:text-teal-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">',
@@ -161,9 +161,9 @@
                 '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-amber-400 whitespace-nowrap hidden md:block">Support</span>',
                 '</button>',
 
-                /* Phase 87C: Help Button */
+                /* Phase 87C: Help Button — hidden by default, togglable via Settings → Manage HUD */
                 '<button id="footerHelpBtn" data-pill-order="10" data-pill-side="right" data-action="help-overlay" aria-label="Help"',
-                '    class="flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
+                '    class="hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
                 '    <div class="text-slate-400 group-hover:text-sky-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">',
                 '        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">',
                 '            <circle cx="12" cy="12" r="10" />',
@@ -174,9 +174,9 @@
                 '    <span class="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:text-sky-400 whitespace-nowrap hidden md:block">Help</span>',
                 '</button>',
 
-                /* Phase 92.1: Activity Feed trigger */
+                /* Phase 92.1: Activity Feed — hidden by default, togglable via Settings → Manage HUD */
                 '<button id="activityFeedBtn" data-pill-order="11" data-pill-side="right" data-action="activity-feed" aria-label="Activity Feed"',
-                '    class="relative flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
+                '    class="relative hidden flex flex-col items-center gap-0.5 group transition-all active:scale-90 justify-center px-1.5 py-1 flex-shrink-0">',
                 '    <div class="text-slate-400 group-hover:text-amber-400 [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-6 sm:[&>svg]:h-6">',
                 '        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">',
                 '            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />',
