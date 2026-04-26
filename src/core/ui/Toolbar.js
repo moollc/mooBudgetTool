@@ -192,7 +192,7 @@
 
                     STAGE_KEYS.forEach(function (k) {
                         var d = parseFloat((tl[k] && tl[k].days) || 0);
-                        inputsHtml += '<div class="flex flex-col items-center gap-0.5">' +
+                        inputsHtml += '<div class="flex flex-col items-center gap-0.5 shrink-0">' +
                             '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">' + STAGE_SHORT[k] + '</span>' +
                             '<div class="flex items-center bg-slate-100 rounded-md px-1.5 py-0.5 border-b border-slate-300">' +
                             '<input type="number" min="0" value="' + (d || '') + '" placeholder="0" ' +
@@ -217,7 +217,7 @@
                         segsHtml = '<div class="h-full w-full bg-slate-200 rounded-full"></div>';
                     }
 
-                    var workWeekHtml = '<div class="flex flex-col items-center gap-0.5 ml-auto">' +
+                    var workWeekHtml = '<div class="flex flex-col items-center gap-0.5 ml-auto shrink-0">' +
                         '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Work Week</span>' +
                         '<div class="flex items-center bg-slate-100 rounded-md overflow-hidden">' +
                         '<button onclick="mBT.features.funding.setWorkWeek(5)" class="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest transition-all ' + (workWeekVal === 5 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200') + '">5</button>' +
@@ -226,8 +226,11 @@
                         '</div>' +
                         '</div>';
 
-                    _stagesBar.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 pt-3 pb-2">' +
-                        '<div class="flex items-end flex-wrap gap-x-2 gap-y-2 mb-2">' + inputsHtml + workWeekHtml + '</div>' +
+                    _stagesBar.innerHTML = '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm px-4 pt-3 pb-2 overflow-hidden">' +
+                        '<div class="flex items-end flex-nowrap gap-x-3 mb-3 overflow-x-auto no-scrollbar">' + 
+                            '<div class="flex items-end gap-2 shrink-0">' + inputsHtml + '</div>' +
+                            workWeekHtml + 
+                        '</div>' +
                         '<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex cursor-pointer" onclick="mBT.ui.toolbar.handleSparklineTap()">' + segsHtml + '</div>' +
                         '</div>';
                 }

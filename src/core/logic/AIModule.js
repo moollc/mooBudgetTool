@@ -37,6 +37,14 @@ window.mBTAIModule = {
         if (window.mBTAssistant) { window.mBTAssistant.setApiKey(provider, key); return; }
         localStorage.setItem('mbt_' + provider + '_api_key', key);
     },
+    getStoredImageApiKey: function (provider) {
+        if (window.mBTAssistant && typeof window.mBTAssistant.getImageApiKey === 'function') return window.mBTAssistant.getImageApiKey(provider) || '';
+        return localStorage.getItem('mbt_img_' + provider + '_api_key') || '';
+    },
+    saveStoredImageApiKey: function (provider, key) {
+        if (window.mBTAssistant && typeof window.mBTAssistant.setImageApiKey === 'function') { window.mBTAssistant.setImageApiKey(provider, key); return; }
+        localStorage.setItem('mbt_img_' + provider + '_api_key', key);
+    },
     getSelectedProvider: function () {
         if (window.mBTAssistant) return window.mBTAssistant.getProvider();
         var stored = localStorage.getItem('mbt_selected_ai_provider');
@@ -438,12 +446,29 @@ window.mBTAIModule = {
                 var items = data.models || [];
                 for (var i = 0; i < items.length; i++) {
                     var m = items[i];
-                    if (!m.supportedGenerationMethods || m.supportedGenerationMethods.indexOf('generateContent') === -1) continue;
+                    var isChat = m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf('generateContent') !== -1;
+                    var isImage = (m.name || '').indexOf('imagen') !== -1;
+                    if (!isChat && !isImage) continue;
                     var id = (m.name || '').replace('models/', '');
                     if (!id) continue;
                     models.push({ id: id, name: m.displayName || id });
                 }
-                models.sort(function (a, b) { return (a.id || '').localeCompare(b.id || ''); });
+                /* Sort by known cost tier: flash-lite < flash < pro < ultra/deep-research/exp */
+                function _geminiTier(id) {
+                    var s = (id || '').toLowerCase();
+                    if (s.indexOf('deep-research') !== -1) return 5;
+                    if (s.indexOf('ultra') !== -1)         return 4;
+                    if (s.indexOf('pro-exp') !== -1 || s.indexOf('2.5-pro') !== -1) return 3;
+                    if (s.indexOf('pro') !== -1)           return 2;
+                    if (s.indexOf('flash-lite') !== -1)    return 0;
+                    if (s.indexOf('flash') !== -1)         return 1;
+                    return 3;
+                }
+                models.sort(function (a, b) {
+                    var ta = _geminiTier(a.id), tb = _geminiTier(b.id);
+                    if (ta !== tb) return ta - tb;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
                 return models;
             });
     },
@@ -457,11 +482,11 @@ window.mBTAIModule = {
         }).then(function (data) {
             var models = (data.data || []).map(function (m) {
                 var promptPrice = parseFloat((m.pricing && m.pricing.prompt) || '0');
-                return { id: m.id, name: m.name || m.id, free: promptPrice === 0 };
+                return { id: m.id, name: m.name || m.id, free: promptPrice === 0, price: promptPrice };
             });
+            /* Sort cheapest first: free ($0) at top, then ascending by prompt price */
             models.sort(function (a, b) {
-                /* Free models first, then alphabetical by id */
-                if (a.free !== b.free) return a.free ? -1 : 1;
+                if (a.price !== b.price) return a.price - b.price;
                 return (a.id || '').localeCompare(b.id || '');
             });
             return models;

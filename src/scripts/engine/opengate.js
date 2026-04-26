@@ -970,14 +970,14 @@
         _getUSADatabase: function () {
             return [
                 /* Camera & DIT — IATSE Local 600 LBTA Tier 1A hourly × 10hr */
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 537, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 376, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 295, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'DIT', unit: 'Day', rate: 537, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 2200, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'DIT', unit: 'Day', rate: 1800, region: 'USA', currency: 'USD', source: 'default' },
                 /* Production Office — DGA Low Budget Level 3 weekly ÷ 5 */
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 911, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 867, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 557, region: 'USA', currency: 'USD', source: 'default' }
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '2nd Assistant Director', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' }
             ];
         },
 

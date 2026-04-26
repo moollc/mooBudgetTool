@@ -150,6 +150,14 @@ var mBTAssistant = (function () {
     function getApiKey(provider) { return _get('mbt_' + (provider || getProvider()) + '_api_key'); }
     function setApiKey(provider, key) { _set('mbt_' + provider + '_api_key', key); }
 
+    function getImageApiKey(provider) {
+        var ip = provider || _get('mbt_ai_image_provider') || 'pollinations';
+        return _get('mbt_img_' + ip + '_api_key');
+    }
+    function setImageApiKey(provider, key) {
+        _set('mbt_img_' + provider + '_api_key', key);
+    }
+
     function getProviderLabel(provider) { return (ENDPOINTS[provider] || {}).label || provider; }
 
     /* =========================================================================
@@ -193,6 +201,16 @@ var mBTAssistant = (function () {
 
     function removeSource(id) {
         var sources = getSources().filter(function (s) { return s.id !== id; });
+        _store(K.SOURCES, sources);
+        _syncLegacyTreatment(sources);
+    }
+
+    function updateSource(id, title, text) {
+        var sources = getSources().map(function (s) {
+            if (s.id !== id) return s;
+            var firstLine = (text || '').split('\n')[0].replace(/^#+\s*/, '').slice(0, 60) || title || 'Source';
+            return { id: id, title: title || firstLine, text: (text || '').slice(0, 12000) };
+        });
         _store(K.SOURCES, sources);
         _syncLegacyTreatment(sources);
     }
@@ -379,9 +397,10 @@ var mBTAssistant = (function () {
 
     function callImageGen(options) {
         var prompt      = options.prompt || '';
-        var provider    = getProvider();
-        var apiKey      = getApiKey(provider);
-        var model       = options.model || _resolveImageModel(provider);
+        /* Image provider is independent from chat provider — reads its own key */
+        var provider    = _get('mbt_ai_image_provider') || getProvider();
+        var apiKey      = getImageApiKey(provider);
+        var model       = options.model || _get(K.MODEL_IMAGE) || ((IMAGE_ENDPOINTS[provider] || IMAGE_ENDPOINTS.pollinations).defaultModel);
         var aspectRatio = options.aspectRatio || '16:9';
         var ep          = IMAGE_ENDPOINTS[provider] || IMAGE_ENDPOINTS.pollinations;
 
@@ -494,6 +513,8 @@ var mBTAssistant = (function () {
         setProvider:         setProvider,
         getApiKey:           getApiKey,
         setApiKey:           setApiKey,
+        getImageApiKey:      getImageApiKey,
+        setImageApiKey:      setImageApiKey,
         getProviderLabel:    getProviderLabel,
         /* Chat models */
         getChatModel:        getChatModel,
@@ -516,6 +537,7 @@ var mBTAssistant = (function () {
         getSources:          getSources,
         addSource:           addSource,
         removeSource:        removeSource,
+        updateSource:        updateSource,
         clearSources:        clearSources,
         buildSourceContext:  buildSourceContext,
         /* Chat history */

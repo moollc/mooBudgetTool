@@ -2670,12 +2670,12 @@
                         director: '',
                         columns: '3',
                         frames: [
-                            { num: '1', description: '', shotType: 'WS', camera: '', audio: '' },
-                            { num: '2', description: '', shotType: 'MS', camera: '', audio: '' },
-                            { num: '3', description: '', shotType: 'CU', camera: '', audio: '' },
-                            { num: '4', description: '', shotType: '', camera: '', audio: '' },
-                            { num: '5', description: '', shotType: '', camera: '', audio: '' },
-                            { num: '6', description: '', shotType: '', camera: '', audio: '' }
+                            { num: '1', intExt: 'INT', description: '', shotType: 'WS', camera: '', audio: '' },
+                            { num: '2', intExt: 'EXT', description: '', shotType: 'MS', camera: '', audio: '' },
+                            { num: '3', intExt: 'INT', description: '', shotType: 'CU', camera: '', audio: '' },
+                            { num: '4', intExt: 'INT', description: '', shotType: '', camera: '', audio: '' },
+                            { num: '5', intExt: 'EXT', description: '', shotType: '', camera: '', audio: '' },
+                            { num: '6', intExt: 'INT', description: '', shotType: '', camera: '', audio: '' }
                         ]
                     };
                 },
@@ -2700,6 +2700,7 @@
                                 '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>') +
                             '</div>' +
                             '<div class="sb-meta">' +
+                                (f.intExt ? '<span class="sb-label" style="background:#f1f5f9;border-radius:2px;padding:0 3px;">' + esc(f.intExt) + '</span> ' : '') +
                                 (f.shotType ? '<span class="sb-label">Shot</span> ' + esc(f.shotType) + '<br>' : '') +
                                 (f.camera ? '<span class="sb-label">Camera</span> ' + esc(f.camera) + '<br>' : '') +
                                 (f.description ? '<div style="margin-top:3px;font-size:7pt;color:#475569;">' + esc(f.description) + '</div>' : '') +
