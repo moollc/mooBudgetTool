@@ -2468,8 +2468,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
     if (genStatus) genStatus.textContent = 'Contacting AI…';
 
-    /* Read selected model from dropdown */
-    var selectedModel = (document.getElementById('sb-gen-model') || {}).value || '';
+    /* Read selected model and active form factor */
+    var selectedModel  = (document.getElementById('sb-gen-model') || {}).value || '';
+    var activeFormFactor = f.formFactor || '16:9';
 
     /* Provider/key are read by mBTAssistant internally — no direct localStorage access needed.
        Phase 173: dropped legacy localStorage reads here; the delegate path below handles auth. */
@@ -2491,19 +2492,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        Falls back to Pollinations if the service is unavailable (standalone/offline). */
     var _assistant = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
     if (_assistant && typeof _assistant.callImageGen === 'function') {
-      _assistant.callImageGen({ prompt: promptText, model: selectedModel || '', aspectRatio: '16:9' })
-        .then(function(dataUrl) { downscaleImage(dataUrl, 1024, 576, 0.85, onSuccess); })
+      var _ffDims = { '16:9': [1024,576], '2.39:1': [1024,428], '4:3': [1024,768], '1:1': [1024,1024], '9:16': [576,1024] };
+      var _ffWH   = _ffDims[activeFormFactor] || _ffDims['16:9'];
+      _assistant.callImageGen({ prompt: promptText, model: selectedModel || '', aspectRatio: activeFormFactor })
+        .then(function(dataUrl) { downscaleImage(dataUrl, _ffWH[0], _ffWH[1], 0.85, onSuccess); })
         .catch(function(err) { onError(err.message); });
     } else {
       /* Pollinations fallback — no key required */
+      var _fbDims = { '16:9': [1024,576], '2.39:1': [1024,428], '4:3': [1024,768], '1:1': [1024,1024], '9:16': [576,1024] };
+      var _fbWH   = _fbDims[activeFormFactor] || _fbDims['16:9'];
       var _fbModel = (selectedModel && selectedModel !== 'pollinations') ? '&model=' + encodeURIComponent(selectedModel) : '';
-      var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=1024&height=576&nologo=true&seed=' + Date.now() + _fbModel;
+      var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) + '?width=' + _fbWH[0] + '&height=' + _fbWH[1] + '&nologo=true&seed=' + Date.now() + _fbModel;
       fetch(imgUrl).then(function(r) {
         if (!r.ok) throw new Error('Pollinations ' + r.status + ': blocked on localhost. Test from a deployed URL or switch to Gemini/OpenAI.');
         return r.blob();
       }).then(function(blob) {
         var rd = new FileReader();
-        rd.onload = function(evt) { downscaleImage(evt.target.result, 1024, 576, 0.85, onSuccess); };
+        rd.onload = function(evt) { downscaleImage(evt.target.result, _fbWH[0], _fbWH[1], 0.85, onSuccess); };
         rd.readAsDataURL(blob);
       }).catch(function(e) { onError(e.message || 'Network or CORS error. Check connection and try again.'); });
     }

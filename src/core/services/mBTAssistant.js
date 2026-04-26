@@ -395,6 +395,15 @@ var mBTAssistant = (function () {
        }
     ========================================================================= */
 
+    /* Map form factor id → { w, h, gemini, dalle } */
+    var _FF_MAP = {
+        '16:9':   { w: 1024, h: 576,  gemini: '16:9',  dalle: '1792x1024' },
+        '2.39:1': { w: 1024, h: 428,  gemini: '16:9',  dalle: '1792x1024' },
+        '4:3':    { w: 1024, h: 768,  gemini: '4:3',   dalle: '1024x1024' },
+        '1:1':    { w: 1024, h: 1024, gemini: '1:1',   dalle: '1024x1024' },
+        '9:16':   { w: 576,  h: 1024, gemini: '9:16',  dalle: '1024x1792' }
+    };
+
     function callImageGen(options) {
         var prompt      = options.prompt || '';
         /* Image provider is independent from chat provider — reads its own key */
@@ -402,6 +411,7 @@ var mBTAssistant = (function () {
         var apiKey      = getImageApiKey(provider);
         var model       = options.model || _get(K.MODEL_IMAGE) || ((IMAGE_ENDPOINTS[provider] || IMAGE_ENDPOINTS.pollinations).defaultModel);
         var aspectRatio = options.aspectRatio || '16:9';
+        var ff          = _FF_MAP[aspectRatio] || _FF_MAP['16:9'];
         var ep          = IMAGE_ENDPOINTS[provider] || IMAGE_ENDPOINTS.pollinations;
 
         if (!prompt) return Promise.reject(new Error('No prompt provided'));
@@ -413,7 +423,7 @@ var mBTAssistant = (function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     instances: [{ prompt: prompt }],
-                    parameters: { sampleCount: 1, aspectRatio: aspectRatio }
+                    parameters: { sampleCount: 1, aspectRatio: ff.gemini }
                 })
             })
             .then(function (r) {
@@ -434,7 +444,7 @@ var mBTAssistant = (function () {
             return fetch(ep.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-                body: JSON.stringify({ model: model, prompt: prompt, n: 1, size: '1024x1024', response_format: 'b64_json' })
+                body: JSON.stringify({ model: model, prompt: prompt, n: 1, size: ff.dalle, response_format: 'b64_json' })
             })
             .then(function (r) {
                 if (!r.ok) return r.text().then(function (t) { throw new Error('OpenAI DALL-E ' + r.status + ': ' + t.slice(0, 120)); });
@@ -476,7 +486,7 @@ var mBTAssistant = (function () {
 
         /* ---- Pollinations fallback (no key required) ---- */
         var _polModel = (model && model !== 'pollinations') ? '&model=' + encodeURIComponent(model) : '';
-        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=576&nologo=true&seed=' + Date.now() + _polModel)
+        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=' + ff.w + '&height=' + ff.h + '&nologo=true&seed=' + Date.now() + _polModel)
             .then(function (r) {
                 if (!r.ok) throw new Error('Pollinations ' + r.status + ': image generation failed. Try a different provider or test from a non-localhost URL.');
                 return r.blob();
