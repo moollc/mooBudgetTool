@@ -956,12 +956,17 @@
         /* UK: BECTU Camera Branch 2025 — TV Band 1 / MMP, 10hr day, GBP. */
         _getUKDatabase: function () {
             return [
+                { description: 'Director', unit: 'Day', rate: 1500, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Line Producer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 1600, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Art Director', unit: 'Day', rate: 600, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Camera Operator', unit: 'Day', rate: 685, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 509, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'DIT', unit: 'Day', rate: 631, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Gaffer', unit: 'Day', rate: 560, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' }
+                { description: 'Sound Mixer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 600, region: 'UK', currency: 'GBP', source: 'default' }
             ];
         },
 
@@ -969,6 +974,9 @@
            Tier 1A = $3M-$6.25M productions. Default tier; can be overridden via mBTOG.settings.usaTier later. */
         _getUSADatabase: function () {
             return [
+                { description: 'Director', unit: 'Day', rate: 4500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Line Producer', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
                 /* Camera & DIT — IATSE Local 600 LBTA Tier 1A hourly × 10hr */
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: 'Camera Operator', unit: 'Day', rate: 2200, region: 'USA', currency: 'USD', source: 'default' },
@@ -977,7 +985,9 @@
                 /* Production Office — DGA Low Budget Level 3 weekly ÷ 5 */
                 { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' }
+                { description: '2nd Assistant Director', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Art Director', unit: 'Day', rate: 1800, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' }
             ];
         },
 
