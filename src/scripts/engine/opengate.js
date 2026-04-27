@@ -977,12 +977,10 @@
                 { description: 'Director', unit: 'Day', rate: 4500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: 'Producer', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: 'Line Producer', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
-                /* Camera & DIT — IATSE Local 600 LBTA Tier 1A hourly × 10hr */
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: 'Camera Operator', unit: 'Day', rate: 2200, region: 'USA', currency: 'USD', source: 'default' },
                 { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
                 { description: 'DIT', unit: 'Day', rate: 1800, region: 'USA', currency: 'USD', source: 'default' },
-                /* Production Office — DGA Low Budget Level 3 weekly ÷ 5 */
                 { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
                 { description: '2nd Assistant Director', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
@@ -991,42 +989,30 @@
             ];
         },
 
-        /* Australia: MEAA MPPA 2025 — Level 8/7/6/5 weekly ÷ 5, AUD. */
-        _getAustraliaDatabase: function () {
+        /* Canada: BCCFU Tier 1 / IATSE 891 (2025). 12hr Day Est. CAD. */
+        _getCanadaDatabase: function () {
             return [
-                { description: 'Director', unit: 'Day', rate: 394, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 357, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 274, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'DIT', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Production Coordinator', unit: 'Day', rate: 251, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: '2nd Assistant Camera', unit: 'Day', rate: 232, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Grip', unit: 'Day', rate: 232, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Production Manager', unit: 'Day', rate: 372, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 357, region: 'Australia', currency: 'AUD', source: 'default' }
+                { description: 'Director', unit: 'Day', rate: 3500, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 3000, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Art Director', unit: 'Day', rate: 650, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 2800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 525, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Production Sound / Boom', unit: 'Day', rate: 650, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 580, region: 'Canada', currency: 'CAD', source: 'default' }
             ];
         },
 
-        /* Canada: BCCFU Tier 1 / IATSE 891 (Vancouver) + IATSE 873 (Toronto), CAD hourly × 10hr. */
-        _getCanadaDatabase: function () {
+        /* Australia: MEAA MPPA 2025 Market Averages. AUD. 
+           Reflects Level 10-8 market rates (not Award minimums). */
+        _getAustraliaDatabase: function () {
             return [
-                { description: 'Art Director', unit: 'Day', rate: 541, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Storyboard Artist', unit: 'Day', rate: 418, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Construction Coordinator', unit: 'Day', rate: 494, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 484, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Sound Editor', unit: 'Day', rate: 516, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Music Editor', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: '1st Assistant Editor', unit: 'Day', rate: 392, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Key Grip', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Grip', unit: 'Day', rate: 359, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 539, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Lighting Technician', unit: 'Day', rate: 359, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Property Master', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Production Coordinator', unit: 'Day', rate: 438, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 539, region: 'Canada', currency: 'CAD', source: 'default' }
+                { description: 'Director', unit: 'Day', rate: 2500, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 2000, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Art Director', unit: 'Day', rate: 1200, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 950, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 900, region: 'Australia', currency: 'AUD', source: 'default' }
             ];
         },
 
@@ -1053,8 +1039,8 @@
                 .concat(this._getBarbadosDatabase())
                 .concat(this._getUKDatabase())
                 .concat(this._getUSADatabase())
-                .concat(this._getAustraliaDatabase())
-                .concat(this._getCanadaDatabase());
+                .concat(this._getCanadaDatabase())
+                .concat(this._getAustraliaDatabase());
         },
 
         /* Intelligence Footer strings — surfaced in the rates UI to cite accuracy. */
