@@ -139,7 +139,7 @@
         loadRates: function () {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.04.27_v3';
+            var CURRENT_VERSION = '2026.04.27_v4';
             
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
@@ -851,6 +851,7 @@
                 { description: 'Screenwriter', unit: 'Flat', rate: 465000 }, /* $3000 USD */
                 { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
                 { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
+                { description: 'Casting Director', unit: 'Day', rate: 100000 }, /* ~$650 USD */
                 { description: 'Stunt Coordinator', unit: 'Day', rate: 77500 }, /* $500 USD */
                 /* Production Office */
                 { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 93000 }, /* $600 USD */
@@ -866,6 +867,9 @@
                 { description: 'Location Scout', unit: 'Day', rate: 54250 },
                 { description: 'Script Supervisor', unit: 'Day', rate: 62000 },
                 { description: 'Medic / Set Nurse', unit: 'Day', rate: 54250 },
+                { description: 'Production Accountant', unit: 'Day', rate: 85250 }, /* ~$550 USD */
+                { description: 'Still Photographer', unit: 'Day', rate: 69750 }, /* ~$450 USD */
+                { description: 'Publicist', unit: 'Day', rate: 77500 }, /* ~$500 USD */
                 { description: 'Security Guard', unit: 'Day', rate: 18600 },
                 { description: 'Craft Service', unit: 'Day', rate: 38750 },
                 { description: 'Catering (Per Head)', unit: 'Flat', rate: 3500 },
@@ -940,7 +944,8 @@
                 { description: 'Sound Mixer', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
                 { description: 'VFX Artist', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
                 { description: 'Sound Designer', unit: 'Flat', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'Trinidad', currency: 'USD', source: 'default' }
+                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Casting Director', unit: 'Day', rate: 650, region: 'Trinidad', currency: 'USD', source: 'default' }
             ];
         },
 
@@ -967,7 +972,8 @@
                 { description: 'VFX Artist', unit: 'Day', rate: 650, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Sound Designer', unit: 'Flat', rate: 500, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Music Supervisor', unit: 'Flat', rate: 600, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' }
+                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Casting Director', unit: 'Day', rate: 500, region: 'UK', currency: 'GBP', source: 'default' }
             ];
         },
 
@@ -1025,7 +1031,8 @@
                 { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' },
                 { description: 'Music Supervisor', unit: 'Flat', rate: 800, region: 'Canada', currency: 'CAD', source: 'default' },
                 { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Location Manager', unit: 'Day', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' }
+                { description: 'Location Manager', unit: 'Day', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Casting Director', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' }
             ];
         },
 
@@ -1042,7 +1049,8 @@
                 { description: 'VFX Artist', unit: 'Day', rate: 950, region: 'Australia', currency: 'AUD', source: 'default' },
                 { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Australia', currency: 'AUD', source: 'default' },
                 { description: 'Music Supervisor', unit: 'Flat', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' }
+                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Casting Director', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' }
             ];
         },
 

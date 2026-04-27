@@ -540,9 +540,9 @@
 
             return openGateP.then(function () {
                 /* Phase 172.1: Force-refresh regional rate averages once to pick up opengate.js updates */
-                if (localStorage.getItem('mbt_rates_v2') !== 'fixed_0427_v3') {
+                if (localStorage.getItem('mbt_rates_v2') !== 'fixed_0427_v4') {
                     localStorage.removeItem('moo_og_rate_averages');
-                    localStorage.setItem('mbt_rates_v2', 'fixed_0427_v3');
+                    localStorage.setItem('mbt_rates_v2', 'fixed_0427_v4');
                     // Force re-compute now
                     if (mBT.opengate && mBT.opengate._computeLocalAverages) mBT.opengate._computeLocalAverages();
                 }
