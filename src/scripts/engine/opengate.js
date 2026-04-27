@@ -138,20 +138,21 @@
 
         loadRates: function () {
             var self = this;
+            var DB_VERSION_KEY = 'mbt_og_db_version';
+            var CURRENT_VERSION = '2026.04.27_v3';
+            
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
-                self.rates.length = 0;
-                if (!stored || stored.length === 0) {
-                    /* Phase 172: First-install seeds the legacy Jamaica DB (untagged, JMD)
-                       so existing UI continues to display correctly. Regional defaults
-                       (USA/UK/CAN/AUS/etc.) are NOT pushed into self.rates — they're
-                       served on-demand by _computeLocalAverages() via _getAllRegionalDefaults().
-                       This keeps the visible Database list focused on the user's working
-                       region while still enabling region-switch substitution. */
-                    var defaults = self._getJamaicaDatabase();
-                    for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
-                    return self.saveRates();
-                }
-                for (var j = 0; j < stored.length; j++) { self.rates.push(stored[j]); }
+                return _lfGet(DB_VERSION_KEY).then(function (v) {
+                    self.rates.length = 0;
+                    /* If no data OR version mismatch, reseed with the new 2025 research baseline */
+                    if (!stored || stored.length === 0 || v !== CURRENT_VERSION) {
+                        var defaults = self._getJamaicaDatabase();
+                        for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
+                        _lfSet(DB_VERSION_KEY, CURRENT_VERSION);
+                        return self.saveRates();
+                    }
+                    for (var j = 0; j < stored.length; j++) { self.rates.push(stored[j]); }
+                });
             });
         },
 
@@ -836,84 +837,84 @@
             return [
                 /* Pre-Production */
                 { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
-                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 75000 },
-                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 150000 },
+                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 115000 }, /* ~$750 USD */
+                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 230000 }, /* ~$1500 USD */
                 { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
-                { description: 'Researcher', unit: 'Day', rate: 25000 },
-                { description: 'Concept Artist', unit: 'Day', rate: 40000 },
-                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 250000 },
+                { description: 'Researcher', unit: 'Day', rate: 38750 }, /* ~$250 USD */
+                { description: 'Concept Artist', unit: 'Day', rate: 55000 },
+                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 387500 }, /* ~$2500 USD */
                 /* Above-the-Line */
-                { description: 'Director', unit: 'Day', rate: 85000 },
+                { description: 'Director', unit: 'Day', rate: 285000 }, /* $1850 Midpoint * 155 */
                 { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
-                { description: 'Producer', unit: 'Day', rate: 75000 },
-                { description: 'Line Producer', unit: 'Day', rate: 65000 },
-                { description: 'Screenwriter', unit: 'Flat', rate: 350000 },
+                { description: 'Producer', unit: 'Day', rate: 155000 }, /* ~$1000 USD */
+                { description: 'Line Producer', unit: 'Day', rate: 115000 }, /* ~$750 USD */
+                { description: 'Screenwriter', unit: 'Flat', rate: 465000 }, /* $3000 USD */
                 { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
                 { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
-                { description: 'Stunt Coordinator', unit: 'Day', rate: 60000 },
+                { description: 'Stunt Coordinator', unit: 'Day', rate: 77500 }, /* $500 USD */
                 /* Production Office */
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 60000 },
-                { description: 'Production Coordinator', unit: 'Day', rate: 30000 },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 65000 },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 45000 },
-                { description: '2nd 2nd AD', unit: 'Day', rate: 25000 },
-                { description: 'Key PA', unit: 'Day', rate: 20000 },
-                { description: 'Set PA', unit: 'Day', rate: 15000 },
-                { description: 'Office PA', unit: 'Day', rate: 15000 },
-                { description: 'Truck PA', unit: 'Day', rate: 18000 },
-                { description: 'Location Manager', unit: 'Day', rate: 50000 },
-                { description: 'Location Scout', unit: 'Day', rate: 35000 },
-                { description: 'Script Supervisor', unit: 'Day', rate: 40000 },
-                { description: 'Medic / Set Nurse', unit: 'Day', rate: 35000 },
-                { description: 'Security Guard', unit: 'Day', rate: 12000 },
-                { description: 'Craft Service', unit: 'Day', rate: 25000 },
-                { description: 'Catering (Per Head)', unit: 'Flat', rate: 2500 },
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 93000 }, /* $600 USD */
+                { description: 'Production Coordinator', unit: 'Day', rate: 46500 }, /* $300 USD */
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 100000 }, /* $650 USD */
+                { description: '2nd Assistant Director', unit: 'Day', rate: 70000 },
+                { description: '2nd 2nd AD', unit: 'Day', rate: 38750 },
+                { description: 'Key PA', unit: 'Day', rate: 31000 },
+                { description: 'Set PA', unit: 'Day', rate: 23250 },
+                { description: 'Office PA', unit: 'Day', rate: 23250 },
+                { description: 'Truck PA', unit: 'Day', rate: 27900 },
+                { description: 'Location Manager', unit: 'Day', rate: 77500 },
+                { description: 'Location Scout', unit: 'Day', rate: 54250 },
+                { description: 'Script Supervisor', unit: 'Day', rate: 62000 },
+                { description: 'Medic / Set Nurse', unit: 'Day', rate: 54250 },
+                { description: 'Security Guard', unit: 'Day', rate: 18600 },
+                { description: 'Craft Service', unit: 'Day', rate: 38750 },
+                { description: 'Catering (Per Head)', unit: 'Flat', rate: 3500 },
                 /* Camera */
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 90000 },
-                { description: 'Camera Operator', unit: 'Day', rate: 60000 },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 45000 },
-                { description: '2nd Assistant Camera', unit: 'Day', rate: 35000 },
-                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 50000 },
-                { description: 'Steadicam Operator', unit: 'Day', rate: 70000 },
-                { description: 'Drone Operator', unit: 'Day', rate: 55000 },
-                { description: 'Camera Utility', unit: 'Day', rate: 25000 },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 178250 }, /* $1150 Midpoint * 155 */
+                { description: 'Camera Operator', unit: 'Day', rate: 93000 }, /* $600 USD */
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 62000 }, /* $400 Midpoint * 155 */
+                { description: '2nd Assistant Camera', unit: 'Day', rate: 46500 },
+                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 77500 },
+                { description: 'Steadicam Operator', unit: 'Day', rate: 108500 },
+                { description: 'Drone Operator', unit: 'Day', rate: 85250 },
+                { description: 'Camera Utility', unit: 'Day', rate: 38750 },
                 /* Lighting & Grip */
-                { description: 'Gaffer', unit: 'Day', rate: 55000 },
-                { description: 'Best Boy Electric', unit: 'Day', rate: 40000 },
-                { description: 'Electrician', unit: 'Day', rate: 30000 },
-                { description: 'Key Grip', unit: 'Day', rate: 50000 },
-                { description: 'Best Boy Grip', unit: 'Day', rate: 40000 },
-                { description: 'Dolly Grip', unit: 'Day', rate: 40000 },
-                { description: 'Grip', unit: 'Day', rate: 30000 },
-                { description: 'Generator Operator', unit: 'Day', rate: 35000 },
+                { description: 'Gaffer', unit: 'Day', rate: 73625 }, /* $475 Midpoint * 155 */
+                { description: 'Best Boy Electric', unit: 'Day', rate: 54250 },
+                { description: 'Electrician', unit: 'Day', rate: 46500 },
+                { description: 'Key Grip', unit: 'Day', rate: 73625 }, /* Matches Gaffer */
+                { description: 'Best Boy Grip', unit: 'Day', rate: 54250 },
+                { description: 'Dolly Grip', unit: 'Day', rate: 54250 },
+                { description: 'Grip', unit: 'Day', rate: 46500 },
+                { description: 'Generator Operator', unit: 'Day', rate: 54250 },
                 /* Sound */
-                { description: 'Sound Mixer', unit: 'Day', rate: 50000 },
-                { description: 'Boom Operator', unit: 'Day', rate: 35000 },
-                { description: 'Sound Utility', unit: 'Day', rate: 25000 },
+                { description: 'Sound Mixer', unit: 'Day', rate: 96875 }, /* $625 Midpoint * 155 */
+                { description: 'Boom Operator', unit: 'Day', rate: 54250 },
+                { description: 'Sound Utility', unit: 'Day', rate: 38750 },
                 /* Art & Wardrobe */
-                { description: 'Production Designer', unit: 'Day', rate: 65000 },
-                { description: 'Art Director', unit: 'Day', rate: 50000 },
-                { description: 'Set Decorator', unit: 'Day', rate: 45000 },
-                { description: 'Set Dresser', unit: 'Day', rate: 30000 },
-                { description: 'Props Master', unit: 'Day', rate: 45000 },
-                { description: 'Assistant Props', unit: 'Day', rate: 30000 },
-                { description: 'Costume Designer', unit: 'Day', rate: 55000 },
-                { description: 'Wardrobe Stylist', unit: 'Day', rate: 45000 },
-                { description: 'Wardrobe Assistant', unit: 'Day', rate: 25000 },
+                { description: 'Production Designer', unit: 'Day', rate: 100750 },
+                { description: 'Art Director', unit: 'Day', rate: 77500 },
+                { description: 'Set Decorator', unit: 'Day', rate: 69750 },
+                { description: 'Set Dresser', unit: 'Day', rate: 46500 },
+                { description: 'Props Master', unit: 'Day', rate: 69750 },
+                { description: 'Assistant Props', unit: 'Day', rate: 46500 },
+                { description: 'Costume Designer', unit: 'Day', rate: 85250 },
+                { description: 'Wardrobe Stylist', unit: 'Day', rate: 69750 },
+                { description: 'Wardrobe Assistant', unit: 'Day', rate: 38750 },
                 /* Hair & Makeup */
-                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 45000 },
-                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 45000 },
-                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 25000 },
+                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 69750 },
+                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 69750 },
+                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 38750 },
                 /* Post-Production */
-                { description: 'Post-Production Supervisor', unit: 'Week', rate: 200000 },
-                { description: 'Editor', unit: 'Day', rate: 50000 },
-                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 25000 },
-                { description: 'Colorist', unit: 'Hour', rate: 15000 },
-                { description: 'VFX Supervisor', unit: 'Day', rate: 70000 },
-                { description: 'VFX Artist', unit: 'Day', rate: 55000 },
-                { description: 'Sound Designer', unit: 'Flat', rate: 150000 },
-                { description: 'Composer', unit: 'Flat', rate: 200000 },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 100000 }
+                { description: 'Post-Production Supervisor', unit: 'Week', rate: 310000 },
+                { description: 'Editor', unit: 'Day', rate: 77500 },
+                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 38750 },
+                { description: 'Colorist', unit: 'Hour', rate: 23250 },
+                { description: 'VFX Supervisor', unit: 'Day', rate: 108500 },
+                { description: 'VFX Artist', unit: 'Day', rate: 85250 },
+                { description: 'Sound Designer', unit: 'Flat', rate: 232500 },
+                { description: 'Composer', unit: 'Flat', rate: 310000 },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 155000 }
             ];
         },
 
@@ -935,10 +936,11 @@
             return [
                 { description: 'Director', unit: 'Day', rate: 2500, region: 'Trinidad', currency: 'USD', source: 'default' },
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 1400, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 900, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
                 { description: 'Gaffer', unit: 'Day', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 700, region: 'Trinidad', currency: 'USD', source: 'default' }
+                { description: 'Sound Mixer', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'VFX Artist', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Sound Designer', unit: 'Flat', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
+                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'Trinidad', currency: 'USD', source: 'default' }
             ];
         },
 
@@ -958,61 +960,89 @@
             return [
                 { description: 'Director', unit: 'Day', rate: 1500, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Producer', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Line Producer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 1600, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Art Director', unit: 'Day', rate: 600, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 685, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 509, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'DIT', unit: 'Day', rate: 631, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 560, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 680, region: 'UK', currency: 'GBP', source: 'default' },
                 { description: 'Sound Mixer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 600, region: 'UK', currency: 'GBP', source: 'default' }
+                { description: 'Editor', unit: 'Day', rate: 750, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'VFX Artist', unit: 'Day', rate: 650, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Sound Designer', unit: 'Flat', rate: 500, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 600, region: 'UK', currency: 'GBP', source: 'default' },
+                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' }
             ];
         },
 
-        /* USA: IATSE Local 600 LBTA Tier 1A 2025 (hourly × 10hr day) + DGA Low Budget Level 3 (weekly ÷ 5).
-           Tier 1A = $3M-$6.25M productions. Default tier; can be overridden via mBTOG.settings.usaTier later. */
+        /* USA: IATSE Local 600 LBTA Tier 1A 2025 (11x Hourly for 10hr Day) + DGA Low Budget Level 3 (Weekly ÷ 5).
+           Reflects Tier 1A ($3M-$6.25M) verified union minimums. */
         _getUSADatabase: function () {
             return [
-                { description: 'Director', unit: 'Day', rate: 4500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Line Producer', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 3500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 2200, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'DIT', unit: 'Day', rate: 1800, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 2500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 1200, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Art Director', unit: 'Day', rate: 1800, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' }
+                { description: 'Director', unit: 'Day', rate: 900, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 800, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Line Producer', unit: 'Day', rate: 700, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 590, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Camera Operator', unit: 'Day', rate: 413, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 325, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'DIT', unit: 'Day', rate: 590, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 911, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 867, region: 'USA', currency: 'USD', source: 'default' },
+                { description: '2nd Assistant Director', unit: 'Day', rate: 557, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Key Grip', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Production Designer', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Art Director', unit: 'Day', rate: 544, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Wardrobe Stylist', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 533, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Assistant Editor', unit: 'Day', rate: 350, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'VFX Artist', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'VFX Supervisor', unit: 'Day', rate: 950, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Sound Designer', unit: 'Flat', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Cast - Lead', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Location Manager', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Catering (Per Head)', unit: 'Flat', rate: 45, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Script Supervisor', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Production Accountant', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Stunt Coordinator', unit: 'Day', rate: 1100, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Publicist', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Colorist', unit: 'Day', rate: 800, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
+                { description: 'Casting Director', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' }
             ];
         },
 
-        /* Canada: BCCFU Tier 1 / IATSE 891 (2025). 12hr Day Est. CAD. */
+        /* Canada: BCCFU Tier 1 / IATSE 891 / IATSE 873 (2025). (11x Hourly for 10hr Day). CAD. */
         _getCanadaDatabase: function () {
             return [
-                { description: 'Director', unit: 'Day', rate: 3500, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 3000, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Art Director', unit: 'Day', rate: 650, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 2800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 525, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Production Sound / Boom', unit: 'Day', rate: 650, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 580, region: 'Canada', currency: 'CAD', source: 'default' }
+                { description: 'Director', unit: 'Day', rate: 2200, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Gaffer', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Key Grip', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 1100, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'VFX Artist', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
+                { description: 'Location Manager', unit: 'Day', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' }
             ];
         },
 
-        /* Australia: MEAA MPPA 2025 Market Averages. AUD. 
-           Reflects Level 10-8 market rates (not Award minimums). */
+        /* Australia: MEAA MPPA 2025 Market Averages. (Weekly ÷ 5 for Day Rate). AUD. */
         _getAustraliaDatabase: function () {
             return [
                 { description: 'Director', unit: 'Day', rate: 2500, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 2000, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Art Director', unit: 'Day', rate: 1200, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Producer', unit: 'Day', rate: 2200, region: 'Australia', currency: 'AUD', source: 'default' },
                 { description: 'Director of Photography (DP)', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 950, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 900, region: 'Australia', currency: 'AUD', source: 'default' }
+                { description: 'Gaffer', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Key Grip', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Sound Mixer', unit: 'Day', rate: 1200, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Editor', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'VFX Artist', unit: 'Day', rate: 950, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Music Supervisor', unit: 'Flat', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
+                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' }
             ];
         },
 
