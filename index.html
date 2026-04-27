@@ -3985,22 +3985,37 @@
     // Logic Resolution: Modal for adding new line items from Open Gate.
     function showItemSelectorModal(sectionName) {
         // Define the commit handler globally for HTML access
-        window._commitAddItem = function (desc, rate, unit) {
+        window._commitAddItem = function (desc, rate, unit, sourceCurrency) {
             var section = budget.sections[sectionName];
             if (!section) return;
 
             // SNAPSHOT TRIGGER: Capture state before addition
             if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added Line Item");
 
-            var _manualRate = parseFloat(rate) || 0;
-            var _manualMult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc || 'New Item' }) : 1;
+            /* Anchor the item to its Jamaica Truth (baseRate). 
+               We find the Jamaica counterpart of this description in the OG database. */
+            var jamaicaBase = 0;
+            if (mBT.opengate && mBT.opengate.rates) {
+                var jmMatch = mBT.opengate.rates.find(function(r) { 
+                    return r.region === 'Jamaica' && r.description.toLowerCase() === (desc || '').toLowerCase(); 
+                });
+                if (jmMatch) jamaicaBase = jmMatch.rate;
+            }
+
+            /* If no Jamaica match, we back-derive from the multiplier. */
+            if (!jamaicaBase) {
+                var mult = (mBT.opengate && mBT.opengate.RATE_REGIONS) ? (mBT.opengate.RATE_REGIONS[currentRegion] || 1) : 1;
+                jamaicaBase = (parseFloat(rate) || 0) / mult;
+            }
+
             var newItem = {
                 id: 'item_' + Date.now(),
                 description: desc || 'New Item',
                 quantity: 1,
                 unit: unit || 'Day',
-                baseRate: _manualMult ? (_manualRate / _manualMult) : _manualRate,
-                rate: _manualRate,
+                baseRate: jamaicaBase,
+                rate: parseFloat(rate) || 0, // This is the regional rate from the database
+                rateCurrency: sourceCurrency || 'JMD',
                 multiplier: 1,
                 actual: 0,
                 crew: { name: '', phone: '', email: '' },
@@ -4028,10 +4043,29 @@
         function getRegionalRate(r) {
             var key = (r.description || '').toLowerCase() + '|' + currentRegion.toLowerCase();
             var avg = avgs[key];
-            var baseCurr = (budget && budget.currency) || 'JMD';
-            return (avg && avg.avg_rate > 0) ? 
-                   ((avg.currency && avg.currency !== baseCurr && window.mBT && mBT.le && mBT.le.convertCurrency) ? mBT.le.convertCurrency(avg.avg_rate, avg.currency, baseCurr) : avg.avg_rate) : 
-                   (r.rate * mult);
+            
+            // 1. If we have a researched market rate, use it directly.
+            if (avg && avg.avg_rate > 0) {
+                return { rate: avg.avg_rate, currency: avg.currency || 'USD' };
+            }
+
+            // 2. If no research exists, we apply the regional multiplier.
+            // We then convert that scaled JMD value into the REGION'S native currency for display.
+            var regionCurrency = 'JMD';
+            if (currentRegion === 'USA') regionCurrency = 'USD';
+            else if (currentRegion === 'UK') regionCurrency = 'GBP';
+            else if (currentRegion === 'Canada') regionCurrency = 'CAD';
+            else if (currentRegion === 'Australia') regionCurrency = 'AUD';
+            else if (currentRegion === 'Trinidad' || currentRegion === 'Barbados') regionCurrency = 'USD';
+
+            var scaledRateJMD = r.rate * mult;
+            
+            if (regionCurrency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) {
+                var rateInLocal = mBT.le.convertCurrency(scaledRateJMD, 'JMD', regionCurrency);
+                return { rate: rateInLocal, currency: regionCurrency };
+            }
+
+            return { rate: scaledRateJMD, currency: 'JMD' };
         }
 
         // Custom filter logic to preserve the 'Create Custom' button dynamically
@@ -4046,10 +4080,12 @@
                 '</button>';
 
             var listHtml = filtered.map(function (r) {
-                var regionalRate = getRegionalRate(r);
-                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + regionalRate + ', \'' + r.unit + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
+                var reg = getRegionalRate(r);
+                var displayStr = reg.rate.toLocaleString() + ' ' + reg.currency;
+
+                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + reg.rate + ', \'' + r.unit + '\', \'' + reg.currency + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
                     '<span class="text-[10px] font-bold text-slate-700 uppercase">' + r.description + '</span>' +
-                    '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + mBTLE.format.currency(regionalRate) + ' / ' + r.unit + '</span>' +
+                    '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + displayStr + ' / ' + r.unit + '</span>' +
                     '</button>';
             }).join('');
 
@@ -8178,20 +8214,40 @@
                         return mBTOG.rates.map(function (r) {
                             var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
                             var avg = avgs[key];
-                            var finalRate = (avg && avg.avg_rate > 0) ? 
-                                            ((avg.currency && avg.currency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) ? mBT.le.convertCurrency(avg.avg_rate, avg.currency, 'JMD') : avg.avg_rate) : 
-                                            (r.rate * mult);
-                            var sub = mBTLE.format.currency(finalRate) + ' / ' + r.unit;
-                            if (avg && avg.contributor_count > 0) {
-                                sub += ' . Avg: ' + mBTLE.format.currency(finalRate) + ' (' + avg.contributor_count + ')';
+                            
+                            var dispRate = r.rate * mult;
+                            var dispCurr = 'JMD';
+
+                            if (avg && avg.avg_rate > 0) {
+                                dispRate = avg.avg_rate;
+                                dispCurr = avg.currency || 'USD';
+                            } else {
+                                // For scaled rates, we convert the JMD result to the region's currency for display
+                                var regionCurrency = 'JMD';
+                                if (region === 'USA') regionCurrency = 'USD';
+                                else if (region === 'UK') regionCurrency = 'GBP';
+                                else if (region === 'Canada') regionCurrency = 'CAD';
+                                else if (region === 'Australia') regionCurrency = 'AUD';
+                                else if (region === 'Trinidad' || region === 'Barbados') regionCurrency = 'USD';
+
+                                if (regionCurrency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) {
+                                    dispRate = mBT.le.convertCurrency(r.rate * mult, 'JMD', regionCurrency);
+                                    dispCurr = regionCurrency;
+                                }
                             }
+
+                            var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + dispCurr + ' / ' + r.unit;
+                            if (avg && avg.contributor_count > 0) {
+                                sub += ' [Research: ' + avg.contributor_count + ']';
+                            }
+
                             return RenderEngine.ui.listRow({
                                 id: r.id || r.description,
                                 icon: mBTAssets.money,
                                 title: r.description,
                                 subtitle: sub,
                                 classes: 'border-b border-slate-50',
-                                actions: [{ icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + finalRate + ", '" + r.unit + "')" }]
+                                actions: [{ icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }]
                             });
                         }).join('');
                     })() +
@@ -8359,19 +8415,38 @@
 
                     var isResearched = (avg && avg.avg_rate > 0);
                     var isCommunity = r.source === 'community';
-                    var finalRate = isResearched ? 
-                                    ((avg.currency && avg.currency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) ? mBT.le.convertCurrency(avg.avg_rate, avg.currency, 'JMD') : avg.avg_rate) : 
-                                    (r.rate * mult);
+
+                    var dispRate = r.rate * mult;
+                    var dispCurr = 'JMD';
+
+                    if (isResearched) {
+                        dispRate = avg.avg_rate;
+                        dispCurr = avg.currency || 'USD';
+                    } else {
+                        var regionCurrency = 'JMD';
+                        if (region === 'USA') regionCurrency = 'USD';
+                        else if (region === 'UK') regionCurrency = 'GBP';
+                        else if (region === 'Canada') regionCurrency = 'CAD';
+                        else if (region === 'Australia') regionCurrency = 'AUD';
+                        else if (region === 'Trinidad' || region === 'Barbados') regionCurrency = 'USD';
+
+                        if (regionCurrency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) {
+                            dispRate = mBT.le.convertCurrency(r.rate * mult, 'JMD', regionCurrency);
+                            dispCurr = regionCurrency;
+                        }
+                    }
+
                     var label = isCommunity ? ' [Community]' : (isResearched ? ' [Research]' : (region !== 'Jamaica' ? ' [Est.]' : ''));
+                    var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + dispCurr + ' / ' + r.unit + label;
 
                     return RenderEngine.ui.listRow({
                         id: r.id || r.description,
                         icon: mBTAssets.money,
                         title: r.description,
-                        subtitle: mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(finalRate) : finalRate) + ' / ' + r.unit + label,
+                        subtitle: sub,
                         classes: 'border-b border-slate-50',
                         actions: [
-                            { icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + finalRate + ", '" + r.unit + "')" }
+                            { icon: mBTAssets.plus, title: 'Add to Budget', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }
                         ].concat(isCommunity ? [
                             { icon: mBTAssets.check, title: 'Approve', color: 'emerald', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'approve')" },
                             { icon: mBTAssets.close, title: 'Disapprove', color: 'rose', onClick: "mBTOGAPI.submitVote('" + (r.id || r.description) + "', 'disapprove')" }
@@ -8617,7 +8692,7 @@
             this.open('database', 'lineItems');
         },
 
-        addRateToBudget: function (desc, rate, unit) {
+        addRateToBudget: function (desc, rate, unit, sourceCurrency) {
             var sectionNames = Object.keys(budget.sections || {});
             if (sectionNames.length === 0) return mBTME.alert("Error", "No sections in budget.");
             var sectionName = sectionNames[0]; // Default to first section
@@ -8626,11 +8701,16 @@
             // SNAPSHOT TRIGGER
             if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added " + desc + " from Database");
 
+            var budgetCurr = (budget && budget.currency) || 'JMD';
+            var finalRate = (sourceCurrency && sourceCurrency !== budgetCurr && mBT.le && mBT.le.convertCurrency) ? 
+                             mBT.le.convertCurrency(rate, sourceCurrency, budgetCurr) : 
+                             rate;
+
             var _currentReg = (mBT.opengate && mBT.opengate.settings) ? mBT.opengate.settings.location : 'Jamaica';
             var _mult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc }, _currentReg) : 1;
             
             // Phase 172: Intelligently anchor baseRate
-            var baseRate = rate;
+            var baseRate = finalRate;
             var _og = window.mBT && mBT.opengate;
             if (_og && typeof _og._computeLocalAverages === 'function') {
                 var avgs = _og._computeLocalAverages() || {};
@@ -8638,10 +8718,10 @@
                 if (avgs[jamaicaKey] && avgs[jamaicaKey].avg_rate > 0) {
                     baseRate = avgs[jamaicaKey].avg_rate;
                 } else {
-                    baseRate = _mult ? (rate / _mult) : rate;
+                    baseRate = _mult ? (finalRate / _mult) : finalRate;
                 }
             } else {
-                baseRate = _mult ? (rate / _mult) : rate;
+                baseRate = _mult ? (finalRate / _mult) : finalRate;
             }
 
             var newItem = {
@@ -8650,7 +8730,8 @@
                 quantity: 1,
                 unit: unit || 'Day',
                 baseRate: baseRate,
-                rate: rate,
+                rate: finalRate,
+                rateCurrency: sourceCurrency || budgetCurr,
                 multiplier: 1,
                 actual: 0,
                 crew: { name: '', phone: '', email: '' },
