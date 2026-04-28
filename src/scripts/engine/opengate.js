@@ -98,12 +98,12 @@
 
     var _MASTER_CREW_INDEX = [
         { "description": "Director", "unit": "Day", "baseRate": 1200, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Colorist", "unit": "Hour", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 1.1, "Australia": 0.68 }, "intelligence": "High-end post-facility role. Rates often include suite rental." },
+        { "description": "Colorist", "unit": "Day", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 1.1, "Australia": 0.68 }, "intelligence": "Senior Freelance rate. Post-facility suites typically billed separately in Post-Production Extras." },
         { "description": "Producer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Executive Producer", "unit": "Day", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Line Producer", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
         { "description": "Screenwriter", "unit": "Flat", "baseRate": 4000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 }, "intelligence": "Bespoke creative role. Rates vary significantly by experience and credits." },
-        { "description": "Director of Photography (DP)", "unit": "Day", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Director of Photography (DP)", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 0.78, "Australia": 0.68 } },
         { "description": "Camera Operator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
         { "description": "1st Assistant Camera (Focus)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.82, "Australia": 0.68 } },
         { "description": "2nd Assistant Camera", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
@@ -127,7 +127,7 @@
         { "description": "Dolly Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.78, "Australia": 0.68 } },
         { "description": "Grip", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68 } },
         { "description": "Generator Operator", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Sound Mixer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Sound Mixer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
         { "description": "Boom Operator", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
         { "description": "Sound Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Production Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
@@ -136,17 +136,17 @@
         { "description": "Set Dresser", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Props Master", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
         { "description": "Assistant Props", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Costume Designer", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Costume Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
         { "description": "Wardrobe Stylist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Wardrobe Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Makeup Artist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
         { "description": "Hair Stylist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
         { "description": "Makeup/Hair Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Editor", "unit": "Day", "baseRate": 533, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Assistant Editor (AE)", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Editor", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Assistant Editor (AE)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.75, "Australia": 0.68 } },
         { "description": "Post-Production Supervisor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
         { "description": "VFX Artist", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "VFX Supervisor", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
+        { "description": "VFX Supervisor", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
         { "description": "Sound Designer", "unit": "Flat", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
         { "description": "Composer", "unit": "Flat", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 }, "intelligence": "Creative bespoke role. Rates usually include home-studio overhead." },
         { "description": "Music Supervisor", "unit": "Flat", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
@@ -193,6 +193,14 @@
         'Canada':    'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.'
     };
 
+    /* ========= MARKET TIER SCALARS (Phase 190) ========= */
+    var MARKET_TIERS = ['Standard', 'Indie', 'Studio'];
+    var MARKET_TIER_SCALARS = {
+        'Standard': 1.0,
+        'Indie': 0.7,   // 30% reduction
+        'Studio': 1.3   // 30% premium
+    };
+
     var mBTOG = {
         rates: [],
         contacts: [],
@@ -210,6 +218,8 @@
         })(),
 
         REGION_INTELLIGENCE: REGION_INTELLIGENCE,
+        MARKET_TIERS: MARKET_TIERS,
+        MARKET_TIER_SCALARS: MARKET_TIER_SCALARS,
 
         /**
          * ROLE_MULTIPLIERS (Parity Matrix)
@@ -250,6 +260,15 @@
                     /* Role-Specific Multiplier with a strict 1.0 fallback to prevent Drift. */
                     var mult = (role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0;
                     rate = role.baseRate * mult;
+                    
+                    /* Phase 190: Apply Market Tier Scalar (Indie/Standard/Studio) 
+                       ONLY to 'default' source rates. Community overrides remain atomic. */
+                    var currentTier = self.settings.getMarketTier();
+                    if (currentTier && currentTier !== 'Standard') {
+                        var scalar = MARKET_TIER_SCALARS[currentTier] || 1.0;
+                        rate = rate * scalar;
+                    }
+
                     if (region === 'Jamaica') rate = Math.round(rate * 155);
                     source = 'default';
                 }
@@ -311,6 +330,36 @@
                         detail: { location: newLoc, intelligence: mBTOG._getRegionIntelligence(newLoc) } 
                     }));
                     return newLoc;
+                });
+            },
+
+            /**
+             * getMarketTier()
+             * Returns the persisted tier or 'Standard' fallback.
+             */
+            getMarketTier: function () {
+                return localStorage.getItem('moo_og_market_tier') || 'Standard';
+            },
+
+            /**
+             * setMarketTier(newTier)
+             * Called by the Settings Modal. Updates tier and refreshes the rate projection.
+             */
+            setMarketTier: function (newTier) {
+                if (MARKET_TIERS.indexOf(newTier) === -1) return;
+                localStorage.setItem('moo_og_market_tier', newTier);
+                
+                var self = this;
+                return mBTOG.loadRates(true).then(function() {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'mbt:tool-action',
+                            action: 'og-tier-changed',
+                            payload: { tier: newTier }
+                        }, '*');
+                    }
+                    window.dispatchEvent(new CustomEvent('og:tier-changed', { detail: { tier: newTier } }));
+                    return newTier;
                 });
             }
         },
