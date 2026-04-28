@@ -438,10 +438,10 @@
         },
 
         /* --- CONTACTS ---
-         * mBTOG.contacts is a runtime cache of the canonical IndexedDB `contacts` store.
+         * mBTOG.contacts is a runtime cache of the canonical IndexedDB 'contacts' store.
          * All writes go through window.mBTStorage.saveContact().
          * mBTOG.contacts is refreshed from IndexedDB on init and after any write.
-         * Legacy localforage `moo_contacts` is migrated in on first load.
+         * Legacy localforage 'moo_contacts' is migrated in on first load.
          */
 
         loadContacts: function () {
@@ -787,7 +787,7 @@
         },
 
         /* Compute rate averages from local rates + regional defaults (Phase 172).
-           Returns a lookup map keyed by `description|region` (lowercase) so
+           Returns a lookup map keyed by 'description|region' (lowercase) so
            mBT.rates.applyRegion() can substitute the correct researched rate
            when a user switches region in Settings.
 

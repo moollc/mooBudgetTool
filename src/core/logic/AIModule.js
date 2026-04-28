@@ -45,6 +45,22 @@ window.mBTAIModule = {
         if (window.mBTAssistant && typeof window.mBTAssistant.setImageApiKey === 'function') { window.mBTAssistant.setImageApiKey(provider, key); return; }
         localStorage.setItem('mbt_img_' + provider + '_api_key', key);
     },
+    setImageModel: function (model) {
+        if (!model) return;
+        if (window.mBTAssistant && typeof window.mBTAssistant.setImageModel === 'function') {
+            window.mBTAssistant.setImageModel(model);
+        } else {
+            localStorage.setItem('mbt_ai_image_model', model);
+        }
+    },
+    fetchAvailableImageModels: function (provider) {
+        if (!provider) return Promise.resolve([]);
+        if (window.mBTAssistant && typeof window.mBTAssistant.fetchAvailableImageModels === 'function') {
+            return window.mBTAssistant.fetchAvailableImageModels(provider);
+        }
+        console.warn('mBTAssistant.fetchAvailableImageModels not available');
+        return Promise.resolve([]);
+    },
     getSelectedProvider: function () {
         if (window.mBTAssistant) return window.mBTAssistant.getProvider();
         var stored = localStorage.getItem('mbt_selected_ai_provider');

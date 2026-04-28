@@ -1,6 +1,6 @@
 /* =============================================================================
    mBTAssistant.js  —  Singleton AI service for mooBudgetTool
-   Phase 171A — ES5 strict, no const/let/arrow/spread/backticks
+   Phase 171A — ES5 strict, no block scope declarations, arrow fns, spread, or backticks
    =============================================================================
 
    ARCHITECTURE
@@ -169,6 +169,93 @@ var mBTAssistant = (function () {
 
     function getImageModel() { return _resolveImageModel(getProvider()); }
     function setImageModel(model) { _set(K.MODEL_IMAGE, model); }
+
+    function fetchAvailableImageModels(provider) {
+        if (!provider || typeof provider !== 'string') {
+            return Promise.resolve([]);
+        }
+        if (typeof getImageApiKey !== 'function') {
+            console.error('getImageApiKey function not available in mBTAssistant scope');
+            return Promise.resolve([]);
+        }
+        var ik = getImageApiKey(provider);
+
+        if (provider === 'pollinations') {
+            return fetch('https://image.pollinations.ai/models')
+                .then(function (r) {
+                    if (!r.ok) throw new Error('Failed to fetch Pollinations models: ' + r.status);
+                    return r.json();
+                })
+                .then(function (data) {
+                    var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
+                        return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
+                    });
+                    return raw.filter(function (m) { return m && m.id && String(m.id).trim(); });
+                })
+                .catch(function (err) {
+                    console.error('Pollinations model fetch failed:', err);
+                    return [];
+                });
+        }
+
+        if (provider === 'openai') {
+            if (!ik) return Promise.resolve([]);
+            return fetch('https://api.openai.com/v1/models', {
+                headers: { 'Authorization': 'Bearer ' + ik }
+            })
+            .then(function (r) {
+                if (!r.ok) throw new Error('OpenAI API error: ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                return (data.data || [])
+                    .filter(function (m) { return (m.id || '').indexOf('dall-e') !== -1; })
+                    .map(function (m) { return { id: m.id, name: m.id }; });
+            })
+            .catch(function (err) {
+                console.error('OpenAI model fetch failed:', err);
+                return [];
+            });
+        }
+
+        if (provider === 'gemini') {
+            if (!ik) return Promise.resolve([]);
+            var geminiService = window.mBTAIModule || (window.mBT && window.mBT.features && window.mBT.features.ai);
+            if (geminiService && typeof geminiService.fetchGeminiModels === 'function') {
+                return geminiService.fetchGeminiModels(ik)
+                    .then(function (models) {
+                        return (Array.isArray(models) ? models : [])
+                            .filter(function (m) {
+                                var id = (m.id || m || '').toLowerCase();
+                                return id.indexOf('imagen') !== -1;
+                            });
+                    })
+                    .catch(function (err) {
+                        console.error('Gemini Imagen fetch failed:', err);
+                        return [];
+                    });
+            }
+            console.warn('Gemini model bridge not available');
+            return Promise.resolve([]);
+        }
+
+        if (provider === 'openrouter') {
+            if (!ik) return Promise.resolve([]);
+            var routerService = window.mBTAIModule || (window.mBT && window.mBT.features && window.mBT.features.ai);
+            if (routerService && typeof routerService.fetchOpenRouterModels === 'function') {
+                return routerService.fetchOpenRouterModels(ik)
+                    .catch(function (err) {
+                        console.error('OpenRouter model fetch failed:', err);
+                        return [];
+                    });
+            }
+            console.warn('OpenRouter model fetch not available');
+            return Promise.resolve([]);
+        }
+
+        console.warn('Unknown image provider: ' + provider);
+        return Promise.resolve([]);
+    }
 
     /* Legacy per-provider model accessors (used by Settings UI) */
     function getGeminiModel()         { return _get(K.GEMINI_MODEL)    || 'gemini-2.5-flash'; }
@@ -542,8 +629,9 @@ var mBTAssistant = (function () {
         getLMStudioModel:    getLMStudioModel,
         setLMStudioModel:    setLMStudioModel,
         /* Image model */
-        getImageModel:       getImageModel,
-        setImageModel:       setImageModel,
+        getImageModel:              getImageModel,
+        setImageModel:              setImageModel,
+        fetchAvailableImageModels:  fetchAvailableImageModels,
         /* System prompt */
         getSystemPrompt:     getSystemPrompt,
         setSystemPrompt:     setSystemPrompt,

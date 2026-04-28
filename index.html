@@ -25,7 +25,12 @@
     </script>
     <!-- Phase 137.RESTORE_INTEGRATE: Absolute Utility Hoisting -->
     <script>
-        function toDisp(val) { return parseFloat(val) || 0; }
+        function toDisp(val) {
+            if (window.mBT && window.mBT.logic && window.mBT.logic.currency) {
+                return window.mBT.logic.currency.convert(val) || 0;
+            }
+            return parseFloat(val) || 0; 
+        }
         function esc(str) {
             var d = document.createElement('div');
             d.textContent = String(str || '');
