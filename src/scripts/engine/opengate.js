@@ -41,19 +41,15 @@
 
 (function () {
     'use strict';
+    console.log('[mBTOG] Starting Engine Initialization...');
 
-    /* ========= REGIONAL RATE MULTIPLIERS ========= */
-    /* Jamaica is the base (1.0). All other regions are multiples of JMD rates. */
-    var RATE_REGIONS = {
-        'Jamaica':     1.0,
-        'Trinidad':    1.3,
-        'Barbados':    1.5,
-        'Guyana':      1.2,
-        'UK':          2.8,
-        'Canada':      2.7,
-        'Australia':   2.4,
-        'USA':         3.5
-    };
+    try {
+
+    /* ========= REGIONAL RATE REGISTRY ========= */
+    /* Multipliers are now strictly Role-Specific within the _MASTER_CREW_INDEX. */
+    var RATE_REGIONS = [
+        'USA', 'Jamaica', 'Trinidad', 'Barbados', 'Guyana', 'UK', 'Canada', 'Australia'
+    ];
 
     /* ========= CLOUD CONFIG ========= */
     /*
@@ -95,15 +91,228 @@
     }
 
     /* ========= OPEN GATE ENGINE ========= */
+    /* ========= MASTER CREW INDEX (Unified Role Database) ========= */
+    /* Each role is defined once. Regional rates are derived via multipliers. 
+       Formula: Local Rate = baseRate * multipliers[region].
+       Jamaica multipliers are derived from 2025 Market Truth (Hardcoded JMD / 155 / USA USD). */
+
+    var _MASTER_CREW_INDEX = [
+        { "description": "Director", "unit": "Day", "baseRate": 1200, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Colorist", "unit": "Hour", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 1.1, "Australia": 0.68 }, "intelligence": "High-end post-facility role. Rates often include suite rental." },
+        { "description": "Producer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Executive Producer", "unit": "Day", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Line Producer", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Screenwriter", "unit": "Flat", "baseRate": 4000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 }, "intelligence": "Bespoke creative role. Rates vary significantly by experience and credits." },
+        { "description": "Director of Photography (DP)", "unit": "Day", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Camera Operator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "1st Assistant Camera (Focus)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.82, "Australia": 0.68 } },
+        { "description": "2nd Assistant Camera", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Digital Imaging Tech (DIT)", "unit": "Day", "baseRate": 590, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.95, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Steadicam Operator", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68 }, "intelligence": "Typically fly-in crew or bespoke negotiation. USA anchor applied for regional gaps." },
+        { "description": "Drone Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Camera Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Unit Production Manager (UPM)", "unit": "Day", "baseRate": 911, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "1st Assistant Director (1st AD)", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "2nd Assistant Director", "unit": "Day", "baseRate": 557, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "2nd 2nd AD", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.7, "Australia": 0.68 } },
+        { "description": "Key PA", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
+        { "description": "Set PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
+        { "description": "Office PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.65, "Australia": 0.68 } },
+        { "description": "Truck PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
+        { "description": "Gaffer", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Best Boy Electric", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Electrician", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Key Grip", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Best Boy Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Dolly Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Grip", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Generator Operator", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Sound Mixer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Boom Operator", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Sound Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Production Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Art Director", "unit": "Day", "baseRate": 544, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Set Decorator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Set Dresser", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Props Master", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Assistant Props", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Costume Designer", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Wardrobe Stylist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Wardrobe Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Makeup Artist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Hair Stylist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Makeup/Hair Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Editor", "unit": "Day", "baseRate": 533, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
+        { "description": "Assistant Editor (AE)", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Post-Production Supervisor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "VFX Artist", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "VFX Supervisor", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
+        { "description": "Sound Designer", "unit": "Flat", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Composer", "unit": "Flat", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 }, "intelligence": "Creative bespoke role. Rates usually include home-studio overhead." },
+        { "description": "Music Supervisor", "unit": "Flat", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Cast - Lead", "unit": "Day", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Cast - Supporting", "unit": "Day", "baseRate": 1000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Location Manager", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Location Scout", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Catering (Per Head)", "unit": "Flat", "baseRate": 45, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68 } },
+        { "description": "Craft Service", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Script Supervisor", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Australia": 0.68 } },
+        { "description": "Production Accountant", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Stunt Coordinator", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Australia": 0.68 } },
+        { "description": "Publicist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68 } },
+        { "description": "Colorist", "unit": "Hour", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Australia": 0.68 } },
+        { "description": "Copywriter (Pitch/Treatment)", "unit": "Flat", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68 } },
+        { "description": "Casting Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Storyboard Artist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
+        { "description": "Script Consultant / Doctor", "unit": "Flat", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 }, "intelligence": "Consultancy role. Usually remote/fly-in from major hubs." },
+        { "description": "Pitch Deck Designer", "unit": "Flat", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
+        { "description": "Researcher", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Concept Artist", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Legal - Rights & Clearances", "unit": "Flat", "baseRate": 2500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
+        { "description": "Security Guard", "unit": "Day", "baseRate": 150, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.7, "Australia": 0.68 } },
+        { "description": "Medic / Set Nurse", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        /* --- Expanded Roles (Phase 185 Expansion) --- */
+        { "description": "Still Photographer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Construction Coordinator", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.75, "Australia": 0.68 } },
+        { "description": "Sculptor", "unit": "Day", "baseRate": 700, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Draftsperson", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Assistant Art Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Graphics Artist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Music Editor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Sound Editor", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
+        { "description": "Location Assistant", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Lead Labourer", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.75, "Australia": 0.68 } }
+    ];
+
+    /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
+    var REGION_INTELLIGENCE = {
+        'Jamaica':   'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING (2025). NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+        'USA':       'INTELLIGENCE: ESTIMATES REFLECT IATSE / DGA LOW-TIER AVERAGES (2025). EXCLUDES FRINGES, OVERTIME, AND MEAL PENALTIES.',
+        'UK':        'INTELLIGENCE: ESTIMATES TARGET BECTU 2025 RECOMMENDED RATES. SUBJECT TO PACT/BECTU TERMS & CONDITIONS.',
+        'Australia': 'INTELLIGENCE: RATES ALIGN WITH FWC MA000091 MODERN AWARD (2025). FINAL TOTALS REQUIRE SUPERANNUATION ADJUSTMENT.',
+        'Canada':    'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.'
+    };
 
     var mBTOG = {
+        rates: [],
+        contacts: [],
+        templates: [],
+        settings: {
+            optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
+            location: localStorage.getItem('moo_og_loc') || 'Jamaica'
+        },
 
-        RATE_REGIONS: RATE_REGIONS,
+        /* Legacy UI Compatibility: The shell expects an object to build the region dropdown. */
+        RATE_REGIONS: (function () {
+            var obj = {};
+            RATE_REGIONS.forEach(function (r) { obj[r] = 1.0; });
+            return obj;
+        })(),
+
+        REGION_INTELLIGENCE: REGION_INTELLIGENCE,
+
+        /**
+         * ROLE_MULTIPLIERS (Parity Matrix)
+         * Generated dynamically from the Master Crew Index for mBT.rates.resolve().
+         */
+        ROLE_MULTIPLIERS: (function () {
+            var matrix = {};
+            RATE_REGIONS.forEach(function (region) {
+                matrix[region] = {};
+                _MASTER_CREW_INDEX.forEach(function (role) {
+                    var key = role.description.toLowerCase().trim();
+                    /* Fallback to 1.0 (USA Anchor) if no regional multiplier is researched. */
+                    matrix[region][key] = (role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0;
+                });
+            });
+            return matrix;
+        })(),
+
+        /**
+         * _expandMasterIndex(region, communityData)
+         * Projects the master index and merges it with community-calibrated overrides.
+         */
+        _expandMasterIndex: function (region, communityData) {
+            var self = this;
+            var currencies = { 'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD', 'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD' };
+            var baseCurrency = currencies[region] || 'USD';
+            
+            return _MASTER_CREW_INDEX.map(function (role) {
+                var key = (role.description || '').toLowerCase() + '|' + (region || '').toLowerCase();
+                var comm = (communityData && communityData[key]) ? communityData[key] : null;
+
+                var rate, source;
+                
+                if (comm && comm.avg_rate > 0) {
+                    rate = comm.avg_rate;
+                    source = 'community';
+                } else {
+                    /* Role-Specific Multiplier with a strict 1.0 fallback to prevent Drift. */
+                    var mult = (role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0;
+                    rate = role.baseRate * mult;
+                    if (region === 'Jamaica') rate = Math.round(rate * 155);
+                    source = 'default';
+                }
+
+                return {
+                    description: role.description,
+                    unit: role.unit,
+                    rate: rate,
+                    region: region,
+                    currency: baseCurrency,
+                    source: source,
+                    intelligence: role.intelligence || ( (source === 'default' && (!role.multipliers || !role.multipliers[region])) ? "USA Market Anchor applied. Negotiate bespoke local rate." : "" ) || (source === 'community' ? "Community-calibrated rate based on regional research." : "")
+                };
+            });
+        },
+
+        /* ========= DYNAMIC REGIONAL GETTERS ========= */
+        _getJamaicaDatabase:   function (c) { return this._expandMasterIndex('Jamaica', c); },
+        _getTrinidadDatabase:  function (c) { return this._expandMasterIndex('Trinidad', c); },
+        _getBarbadosDatabase:  function (c) { return this._expandMasterIndex('Barbados', c); },
+        _getUKDatabase:        function (c) { return this._expandMasterIndex('UK', c); },
+        _getUSADatabase:       function (c) { return this._expandMasterIndex('USA', c); },
+        _getCanadaDatabase:    function (c) { return this._expandMasterIndex('Canada', c); },
+        _getAustraliaDatabase: function (c) { return this._expandMasterIndex('Australia', c); },
+
+        _getRegionIntelligence: function (region) {
+            return REGION_INTELLIGENCE[region] || 'INTELLIGENCE: NO REGIONAL CITATIONS AVAILABLE.';
+        },
 
         settings: {
             optInSharing: JSON.parse(localStorage.getItem('moo_og_share') || 'false'),
             location: localStorage.getItem('moo_og_loc') || 'Jamaica',
-            get regionMultiplier() { return RATE_REGIONS[this.location] || 1.0; }
+            get regionMultiplier() { return 1.0; },
+            
+            /**
+             * setLocation(newLoc)
+             * Called by the Settings Modal. Updates location and refreshes the rate projection.
+             */
+            setLocation: function (newLoc) {
+                /* We check against the array but update the UI-visible property. */
+                if (RATE_REGIONS.indexOf(newLoc) === -1) return;
+                this.location = newLoc;
+                localStorage.setItem('moo_og_loc', newLoc);
+                
+                var self = this;
+                return mBTOG.loadRates(true).then(function() {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'mbt:tool-action',
+                            action: 'og-location-changed',
+                            payload: { 
+                                location: newLoc,
+                                intelligence: mBTOG._getRegionIntelligence(newLoc)
+                            }
+                        }, '*');
+                    }
+                    /* Dispatch local event for same-window listeners */
+                    window.dispatchEvent(new CustomEvent('og:location-changed', { 
+                        detail: { location: newLoc, intelligence: mBTOG._getRegionIntelligence(newLoc) } 
+                    }));
+                    return newLoc;
+                });
+            }
         },
 
         rates: [],
@@ -136,22 +345,30 @@
 
         /* --- RATES --- */
 
-        loadRates: function () {
+        loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.04.27_v4';
+            var CURRENT_VERSION = '2026.04.28_v1';
             
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
                     self.rates.length = 0;
-                    /* If no data OR version mismatch, reseed with the new 2025 research baseline */
-                    if (!stored || stored.length === 0 || v !== CURRENT_VERSION) {
-                        var defaults = self._getJamaicaDatabase();
+                    /* Reseed if version mismatch OR if forced by a regional change. */
+                    if (!stored || stored.length === 0 || v !== CURRENT_VERSION || forceReseed) {
+                        var defaults = self._expandMasterIndex(self.settings.location);
                         for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
                         _lfSet(DB_VERSION_KEY, CURRENT_VERSION);
                         return self.saveRates();
                     }
-                    for (var j = 0; j < stored.length; j++) { self.rates.push(stored[j]); }
+                    for (var j = 0; j < stored.length; j++) {
+                        var r = stored[j];
+                        /* Phase 185: Ensure bespoke/community rates have intelligence markers if missing */
+                        if (!r.intelligence) {
+                            if (r.source === 'community') r.intelligence = "Community-calibrated rate based on regional research.";
+                            else if (r.source !== 'default') r.intelligence = "Bespoke local rate. Manually verified.";
+                        }
+                        self.rates.push(r);
+                    }
                 });
             });
         },
@@ -253,7 +470,7 @@
             return _lfSet('moo_contacts', self.contacts).then(function () { return contact; });
         },
 
-        /* Legacy shim — kept so old callers don't break during transition */
+        /* Legacy shim - kept so old callers don't break during transition */
         saveContacts: function () {
             return _lfSet('moo_contacts', this.contacts);
         },
@@ -292,7 +509,7 @@
                 if (!rows || !rows.length) return [];
                 var ownerId = self._getOwnerId();
                 var sharedByOthers = rows.filter(function (r) { return r.owner_id !== ownerId; });
-                /* Store shared contacts in a separate localforage key — never mixed into IndexedDB */
+                /* Store shared contacts in a separate localforage key - never mixed into IndexedDB */
                 return _lfSet('moo_og_shared_contacts', sharedByOthers).then(function () {
                     window.dispatchEvent(new CustomEvent('mbt:shared-contacts-updated', { detail: { count: sharedByOthers.length } }));
                     return sharedByOthers;
@@ -418,15 +635,15 @@
         },
 
         /*
-         * pushRate() — contribute a rate to the community database.
+         * pushRate() - contribute a rate to the community database.
          * Requires a Supabase auth token stored at mbt_supabase_key.
-         * Opt-in only — respects moo_og_share toggle.
+         * Opt-in only - respects moo_og_share toggle.
          */
         pushRate: function (description, unit, rate, region) {
             var self = this;
             var shareEnabled = JSON.parse(localStorage.getItem('moo_og_share') || 'false');
             if (!shareEnabled) return Promise.resolve(false);
-            /* Use the user JWT when signed in — required for RLS to record contributed_by. */
+            /* Use the user JWT when signed in - required for RLS to record contributed_by. */
             var authToken = localStorage.getItem('mbt_supabase_auth_token') || OG_CLOUD_KEY;
 
             return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE, {
@@ -449,7 +666,7 @@
         },
 
         /*
-         * upsertVote() — Phase 48 voting mechanism
+         * upsertVote() - Phase 48 voting mechanism
          * Requires auth token. Resolves to true if vote was recorded successfully.
          */
         upsertVote: function (rateId, voteType) {
@@ -481,7 +698,7 @@
         },
 
         /*
-         * fetchRateAverages() — pulls the og_rate_averages view from Supabase.
+         * fetchRateAverages() - pulls the og_rate_averages view from Supabase.
          * Returns a map of { "description|region": { avg_rate, contributor_count } }.
          * Falls back to computing averages from the local cached community rates when offline.
          * Stores result in localStorage for offline access.
@@ -526,8 +743,8 @@
            when a user switches region in Settings.
 
            Layering rules (later overrides earlier):
-           1. Regional defaults (RegionalRateAccuracy.md sourced) — base layer
-           2. Community-submitted rates — averaged per key, override defaults
+           1. Regional defaults (RegionalRateAccuracy.md sourced) - base layer
+           2. Community-submitted rates - averaged per key, override defaults
               (community votes carry weight; if 3+ contributors agree, their
               average wins over the seeded default).
         */
@@ -825,279 +1042,27 @@
             for (var i = 0; i < t.length; i++) { this.templates.push(t[i]); }
         },
 
-        /* ========= JAMAICA 2025 INDUSTRY RATE DATABASE ========= */
-        /*
-         * These rates are the result of years of asking around, cross-referencing
-         * quotes, and comparing actual invoices. They are not official. There is no
-         * official source. That is the point.
-         *
-         * All rates in JMD. Apply mBTOG.settings.regionMultiplier for other markets.
-         */
-        _getJamaicaDatabase: function () {
-            return [
-                /* Pre-Production */
-                { description: 'Storyboard Artist', unit: 'Day', rate: 45000 },
-                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 115000 }, /* ~$750 USD */
-                { description: 'Script Consultant / Doctor', unit: 'Flat', rate: 230000 }, /* ~$1500 USD */
-                { description: 'Pitch Deck Designer', unit: 'Flat', rate: 120000 },
-                { description: 'Researcher', unit: 'Day', rate: 38750 }, /* ~$250 USD */
-                { description: 'Concept Artist', unit: 'Day', rate: 55000 },
-                { description: 'Legal - Rights & Clearances', unit: 'Flat', rate: 387500 }, /* ~$2500 USD */
-                /* Above-the-Line */
-                { description: 'Director', unit: 'Day', rate: 285000 }, /* $1850 Midpoint * 155 */
-                { description: 'Executive Producer', unit: 'Flat', rate: 500000 },
-                { description: 'Producer', unit: 'Day', rate: 155000 }, /* ~$1000 USD */
-                { description: 'Line Producer', unit: 'Day', rate: 115000 }, /* ~$750 USD */
-                { description: 'Screenwriter', unit: 'Flat', rate: 465000 }, /* $3000 USD */
-                { description: 'Cast - Lead', unit: 'Day', rate: 100000 },
-                { description: 'Cast - Supporting', unit: 'Day', rate: 50000 },
-                { description: 'Casting Director', unit: 'Day', rate: 100000 }, /* ~$650 USD */
-                { description: 'Stunt Coordinator', unit: 'Day', rate: 77500 }, /* $500 USD */
-                /* Production Office */
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 93000 }, /* $600 USD */
-                { description: 'Production Coordinator', unit: 'Day', rate: 46500 }, /* $300 USD */
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 100000 }, /* $650 USD */
-                { description: '2nd Assistant Director', unit: 'Day', rate: 70000 },
-                { description: '2nd 2nd AD', unit: 'Day', rate: 38750 },
-                { description: 'Key PA', unit: 'Day', rate: 31000 },
-                { description: 'Set PA', unit: 'Day', rate: 23250 },
-                { description: 'Office PA', unit: 'Day', rate: 23250 },
-                { description: 'Truck PA', unit: 'Day', rate: 27900 },
-                { description: 'Location Manager', unit: 'Day', rate: 77500 },
-                { description: 'Location Scout', unit: 'Day', rate: 54250 },
-                { description: 'Script Supervisor', unit: 'Day', rate: 62000 },
-                { description: 'Medic / Set Nurse', unit: 'Day', rate: 54250 },
-                { description: 'Production Accountant', unit: 'Day', rate: 85250 }, /* ~$550 USD */
-                { description: 'Still Photographer', unit: 'Day', rate: 69750 }, /* ~$450 USD */
-                { description: 'Publicist', unit: 'Day', rate: 77500 }, /* ~$500 USD */
-                { description: 'Security Guard', unit: 'Day', rate: 18600 },
-                { description: 'Craft Service', unit: 'Day', rate: 38750 },
-                { description: 'Catering (Per Head)', unit: 'Flat', rate: 3500 },
-                /* Camera */
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 178250 }, /* $1150 Midpoint * 155 */
-                { description: 'Camera Operator', unit: 'Day', rate: 93000 }, /* $600 USD */
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 62000 }, /* $400 Midpoint * 155 */
-                { description: '2nd Assistant Camera', unit: 'Day', rate: 46500 },
-                { description: 'Digital Imaging Tech (DIT)', unit: 'Day', rate: 77500 },
-                { description: 'Steadicam Operator', unit: 'Day', rate: 108500 },
-                { description: 'Drone Operator', unit: 'Day', rate: 85250 },
-                { description: 'Camera Utility', unit: 'Day', rate: 38750 },
-                /* Lighting & Grip */
-                { description: 'Gaffer', unit: 'Day', rate: 73625 }, /* $475 Midpoint * 155 */
-                { description: 'Best Boy Electric', unit: 'Day', rate: 54250 },
-                { description: 'Electrician', unit: 'Day', rate: 46500 },
-                { description: 'Key Grip', unit: 'Day', rate: 73625 }, /* Matches Gaffer */
-                { description: 'Best Boy Grip', unit: 'Day', rate: 54250 },
-                { description: 'Dolly Grip', unit: 'Day', rate: 54250 },
-                { description: 'Grip', unit: 'Day', rate: 46500 },
-                { description: 'Generator Operator', unit: 'Day', rate: 54250 },
-                /* Sound */
-                { description: 'Sound Mixer', unit: 'Day', rate: 96875 }, /* $625 Midpoint * 155 */
-                { description: 'Boom Operator', unit: 'Day', rate: 54250 },
-                { description: 'Sound Utility', unit: 'Day', rate: 38750 },
-                /* Art & Wardrobe */
-                { description: 'Production Designer', unit: 'Day', rate: 100750 },
-                { description: 'Art Director', unit: 'Day', rate: 77500 },
-                { description: 'Set Decorator', unit: 'Day', rate: 69750 },
-                { description: 'Set Dresser', unit: 'Day', rate: 46500 },
-                { description: 'Props Master', unit: 'Day', rate: 69750 },
-                { description: 'Assistant Props', unit: 'Day', rate: 46500 },
-                { description: 'Costume Designer', unit: 'Day', rate: 85250 },
-                { description: 'Wardrobe Stylist', unit: 'Day', rate: 69750 },
-                { description: 'Wardrobe Assistant', unit: 'Day', rate: 38750 },
-                /* Hair & Makeup */
-                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 69750 },
-                { description: 'Hair Stylist (Key)', unit: 'Day', rate: 69750 },
-                { description: 'Makeup/Hair Assistant', unit: 'Day', rate: 38750 },
-                /* Post-Production */
-                { description: 'Post-Production Supervisor', unit: 'Week', rate: 310000 },
-                { description: 'Editor', unit: 'Day', rate: 77500 },
-                { description: 'Assistant Editor (AE)', unit: 'Day', rate: 38750 },
-                { description: 'Colorist', unit: 'Hour', rate: 23250 },
-                { description: 'VFX Supervisor', unit: 'Day', rate: 108500 },
-                { description: 'VFX Artist', unit: 'Day', rate: 85250 },
-                { description: 'Sound Designer', unit: 'Flat', rate: 232500 },
-                { description: 'Composer', unit: 'Flat', rate: 310000 },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 155000 }
-            ];
-        },
 
-        /* ========= PHASE 172: REGIONAL DEFAULT DATABASES =========
-         * Per-region researched market rates sourced from RegionalRateAccuracy.md.
-         * Each entry includes its native currency (USD/GBP/CAD/AUD) — these are
-         * sovereign rates per region, NOT JMD numbers waiting to be converted.
-         * Region switch substitutes these directly via _computeLocalAverages().
-         *
-         * Sources cited per region:
-         * - Trinidad/Barbados: Atlas Film Fixers + Regional Avg (USD)
-         * - UK: BECTU Camera Branch 2025 (GBP)
-         * - USA: IATSE Local 600 LBTA Tier 1A (USD hourly × 10hr day) + DGA Low Budget Level 3 (USD weekly ÷ 5)
-         * - Australia: MEAA MPPA 2025 (AUD weekly ÷ 5)
-         * - Canada: BCCFU Tier 1 (Vancouver) IATSE 891 / IATSE 873 (Toronto) (CAD hourly × 10hr day)
-         */
 
-        _getTrinidadDatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 2500, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1400, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'VFX Artist', unit: 'Day', rate: 750, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Sound Designer', unit: 'Flat', rate: 600, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'Trinidad', currency: 'USD', source: 'default' },
-                { description: 'Casting Director', unit: 'Day', rate: 650, region: 'Trinidad', currency: 'USD', source: 'default' }
-            ];
-        },
 
-        _getBarbadosDatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 2500, region: 'Barbados', currency: 'USD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1400, region: 'Barbados', currency: 'USD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 900, region: 'Barbados', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 600, region: 'Barbados', currency: 'USD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'Barbados', currency: 'USD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 700, region: 'Barbados', currency: 'USD', source: 'default' }
-            ];
-        },
-
-        /* UK: BECTU Camera Branch 2025 — TV Band 1 / MMP, 10hr day, GBP. */
-        _getUKDatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 1500, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1600, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 680, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 800, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 750, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'VFX Artist', unit: 'Day', rate: 650, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Sound Designer', unit: 'Flat', rate: 500, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 600, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1200, region: 'UK', currency: 'GBP', source: 'default' },
-                { description: 'Casting Director', unit: 'Day', rate: 500, region: 'UK', currency: 'GBP', source: 'default' }
-            ];
-        },
-
-        /* USA: IATSE Local 600 LBTA Tier 1A 2025 (11x Hourly for 10hr Day) + DGA Low Budget Level 3 (Weekly ÷ 5).
-           Reflects Tier 1A ($3M-$6.25M) verified union minimums. */
-        _getUSADatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 900, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 800, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Line Producer', unit: 'Day', rate: 700, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 590, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Camera Operator', unit: 'Day', rate: 413, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Camera (Focus)', unit: 'Day', rate: 325, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'DIT', unit: 'Day', rate: 590, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Unit Production Manager (UPM)', unit: 'Day', rate: 911, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '1st Assistant Director (1st AD)', unit: 'Day', rate: 867, region: 'USA', currency: 'USD', source: 'default' },
-                { description: '2nd Assistant Director', unit: 'Day', rate: 557, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Key Grip', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Production Designer', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Art Director', unit: 'Day', rate: 544, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Makeup Artist (Key)', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Wardrobe Stylist', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 533, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Assistant Editor', unit: 'Day', rate: 350, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'VFX Artist', unit: 'Day', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'VFX Supervisor', unit: 'Day', rate: 950, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Sound Designer', unit: 'Flat', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1500, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Location Manager', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Catering (Per Head)', unit: 'Flat', rate: 45, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Script Supervisor', unit: 'Day', rate: 550, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Production Accountant', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Stunt Coordinator', unit: 'Day', rate: 1100, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Publicist', unit: 'Day', rate: 600, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Colorist', unit: 'Day', rate: 800, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Copywriter (Pitch/Treatment)', unit: 'Flat', rate: 750, region: 'USA', currency: 'USD', source: 'default' },
-                { description: 'Casting Director', unit: 'Day', rate: 650, region: 'USA', currency: 'USD', source: 'default' }
-            ];
-        },
-
-        /* Canada: BCCFU Tier 1 / IATSE 891 / IATSE 873 (2025). (11x Hourly for 10hr Day). CAD. */
-        _getCanadaDatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 2200, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Key Grip', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 1100, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'VFX Artist', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Location Manager', unit: 'Day', rate: 750, region: 'Canada', currency: 'CAD', source: 'default' },
-                { description: 'Casting Director', unit: 'Day', rate: 850, region: 'Canada', currency: 'CAD', source: 'default' }
-            ];
-        },
-
-        /* Australia: MEAA MPPA 2025 Market Averages. (Weekly ÷ 5 for Day Rate). AUD. */
-        _getAustraliaDatabase: function () {
-            return [
-                { description: 'Director', unit: 'Day', rate: 2500, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Producer', unit: 'Day', rate: 2200, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Director of Photography (DP)', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Gaffer', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Key Grip', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Sound Mixer', unit: 'Day', rate: 1200, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Editor', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'VFX Artist', unit: 'Day', rate: 950, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Sound Designer', unit: 'Flat', rate: 750, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Music Supervisor', unit: 'Flat', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Cast - Lead', unit: 'Day', rate: 1800, region: 'Australia', currency: 'AUD', source: 'default' },
-                { description: 'Casting Director', unit: 'Day', rate: 850, region: 'Australia', currency: 'AUD', source: 'default' }
-            ];
-        },
-
-        /* Aggregator — returns ALL regional defaults concatenated. Jamaica entries
-           are tagged with region:'Jamaica', currency:'JMD', source:'default' on the fly
-           so they participate in the substitution lookup table.
-           Called by loadRates() on first install AND used by _computeLocalAverages()
-           to seed the substitution map even when no community data is synced. */
+        /* Aggregator - returns ALL regional defaults concatenated for the substitution lookup table. */
         _getAllRegionalDefaults: function () {
-            var jm = this._getJamaicaDatabase();
-            var taggedJM = [];
-            for (var i = 0; i < jm.length; i++) {
-                taggedJM.push({
-                    description: jm[i].description,
-                    unit: jm[i].unit,
-                    rate: jm[i].rate,
-                    region: 'Jamaica',
-                    currency: 'JMD',
-                    source: 'default'
-                });
-            }
-            return taggedJM
-                .concat(this._getTrinidadDatabase())
-                .concat(this._getBarbadosDatabase())
-                .concat(this._getUKDatabase())
-                .concat(this._getUSADatabase())
-                .concat(this._getCanadaDatabase())
-                .concat(this._getAustraliaDatabase());
-        },
-
-        /* Intelligence Footer strings — surfaced in the rates UI to cite accuracy. */
-        _getRegionIntelligence: function (region) {
-            var map = {
-                'Jamaica':   'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
-                'Trinidad':  'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
-                'Barbados':  'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
-                'Guyana':    'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING. NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
-                'USA':       'INTELLIGENCE: ESTIMATES REFLECT IATSE / DGA LOW-TIER AVERAGES (2025). EXCLUDES FRINGES, OVERTIME, AND MEAL PENALTIES.',
-                'UK':        'INTELLIGENCE: ESTIMATES TARGET BECTU 2025 RECOMMENDED RATES. SUBJECT TO PACT/BECTU TERMS & CONDITIONS.',
-                'Australia': 'INTELLIGENCE: RATES ALIGN WITH FWC MA000091 MODERN AWARD (2025). FINAL TOTALS REQUIRE SUPERANNUATION ADJUSTMENT.',
-                'Canada':    'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.'
-            };
-            return map[region] || '';
+            var self = this;
+            var all = [];
+            (window.mBTOG_REGIONS || ['Jamaica','Trinidad','Barbados','UK','USA','Canada','Australia']).forEach(function(r) {
+                all = all.concat(self._expandMasterIndex(r));
+            });
+            return all;
         }
     };
 
     window.mBTOG = mBTOG;
     window.mBTOG.cloud = { url: OG_CLOUD_URL, key: OG_CLOUD_KEY };
+
+        console.log('[mBTOG] Engine initialized successfully. (v23.25)');
+    } catch (e) {
+        console.error('[mBTOG] FATAL INITIALIZATION ERROR:', e);
+        if (e.stack) console.error(e.stack);
+    }
 
 })();

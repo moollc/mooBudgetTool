@@ -256,7 +256,104 @@
     }
 
     window.mBT.features.settings = {
-        open: function () { populateSettings(); }
+        open: function () { populateSettings(); },
+
+        /* --- Community Rates cloud sync toggle --- */
+        toggleCloudSync: function (enabled) {
+            localStorage.setItem('moo_og_cloud_sync', JSON.stringify(!!enabled));
+            if (enabled && window.mBTOG && window.mBTOG.syncFromCloud) {
+                window.mBTOG.syncFromCloud().catch(function (e) {
+                    console.warn('[mBT] Cloud sync failed:', e);
+                });
+            }
+        },
+
+        /* --- Contact sharing opt-in toggle --- */
+        toggleContactSharing: function (enabled) {
+            localStorage.setItem('moo_og_share_contacts', JSON.stringify(!!enabled));
+        },
+
+        /* --- Profile save: reads form fields then delegates to mBTSync --- */
+        saveProfile: function () {
+            if (!window.mBTSync) { return; }
+            var nameEl   = document.getElementById('profileDisplayName');
+            var regionEl = document.getElementById('profileRegion');
+            var roleEl   = document.getElementById('profileRole');
+            var name   = nameEl   ? nameEl.value   : '';
+            var region = regionEl ? regionEl.value : 'Jamaica';
+            var role   = roleEl   ? roleEl.value   : '';
+            window.mBTSync.saveProfile(name, region, role).then(function () {
+                if (window.mBTME) { window.mBTME.alert('Profile', 'Profile saved.'); }
+            }).catch(function (e) {
+                if (window.mBTME) { window.mBTME.alert('Profile', 'Save failed: ' + (e && e.message || 'Unknown error')); }
+            });
+        },
+
+        /* --- Auth bridges --- */
+        cloudSignIn: function () {
+            if (!window.mBTSync) { return; }
+            var email = document.getElementById('cloudEmail');
+            var pass  = document.getElementById('cloudPassword');
+            var errEl = document.getElementById('cloudAuthError');
+            if (!email || !pass) { return; }
+            window.mBTSync.signIn(email.value, pass.value).then(function () {
+                window.mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (errEl) { errEl.textContent = e.message || 'Sign-in failed.'; errEl.classList.remove('hidden'); }
+            });
+        },
+
+        cloudSignUp: function () {
+            if (!window.mBTSync) { return; }
+            var user  = document.getElementById('cloudUsername');
+            var email = document.getElementById('cloudEmail');
+            var pass  = document.getElementById('cloudPassword');
+            var errEl = document.getElementById('cloudAuthError');
+            if (!email || !pass) { return; }
+            window.mBTSync.signUp(user ? user.value : '', email.value, pass.value).then(function () {
+                window.mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (errEl) { errEl.textContent = e.message || 'Sign-up failed.'; errEl.classList.remove('hidden'); }
+            });
+        },
+
+        cloudSignOut: function () {
+            if (!window.mBTSync) { return; }
+            window.mBTSync.signOut();
+            window.mBT.features.settings.open('cloud');
+        },
+
+        cloudSignInGoogle: function () {
+            if (!window.mBTSync) { return; }
+            window.mBTSync.signInWithGoogle().catch(function (e) {
+                console.warn('[mBT] Google sign-in failed:', e);
+            });
+        },
+
+        cloudForgotPassword: function () {
+            if (!window.mBTSync) { return; }
+            var email = document.getElementById('cloudEmail');
+            var errEl = document.getElementById('cloudAuthError');
+            if (!email) { return; }
+            window.mBTSync.forgotPassword(email.value).then(function () {
+                if (window.mBTME) { window.mBTME.alert('Password Reset', 'Recovery email sent.'); }
+                window.mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (errEl) { errEl.textContent = e.message || 'Reset failed.'; errEl.classList.remove('hidden'); }
+            });
+        },
+
+        cloudChangePassword: function () {
+            if (!window.mBTSync) { return; }
+            var passEl = document.getElementById('newPasswordInput');
+            if (!passEl || !passEl.value) { return; }
+            window.mBTSync.updatePassword(passEl.value).then(function () {
+                if (window.mBTME) { window.mBTME.alert('Security', 'Password updated.'); }
+                window.mBT.features.settings.open('cloud');
+            }).catch(function (e) {
+                if (window.mBTME) { window.mBTME.alert('Security', e.message || 'Update failed.'); }
+            });
+        }
     };
 
     // === Cloud Sync Actions ===

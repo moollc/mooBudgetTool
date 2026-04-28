@@ -6,6 +6,177 @@
 
 (function (window) {
     'use strict';
+
+    function renderDbView(subTab) {
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        var og = window.mBTOG || { rates: [], contacts: [], templates: [], settings: { location: 'Jamaica', optInSharing: false } };
+
+        if (subTab === 'contacts') {
+            var contacts = og.contacts || [];
+            var listContent = contacts.length ? contacts.map(function (c) {
+                return RenderEngine.ui.listRow({
+                    id: c.id || c.name,
+                    icon: mBTAssets.user,
+                    title: c.name || 'Unknown',
+                    subtitle: c.role || 'No Role',
+                    classes: 'border-b border-slate-50',
+                    actions: [{
+                        icon: mBTAssets.plus,
+                        title: 'Add to Budget',
+                        color: 'blue',
+                        onClick: "mBT.data.addCrewToBudget('" + esc(c.name) + "', '" + esc(c.role) + "')"
+                    }]
+                });
+            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.user, message: 'No Contacts Found' });
+
+            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                '<div class="p-3 bg-indigo-50 border-b border-indigo-100 flex flex-col gap-3 shrink-0 z-10">' +
+                    '<div class="flex justify-center gap-3 flex-wrap">' +
+                        '<button onclick="mBT.features.settings.openAddContactModal()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">' + (mBTAssets.plus || "") + ' Add</button>' +
+                        '<button onclick="document.getElementById(\'csvImportInput\').click()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">' + (mBTAssets.plus || "") + ' Import CSV</button>' +
+                    '</div>' +
+                    '<div class="relative">' +
+                        '<input type="text" id="contactsSearchInput" placeholder="SEARCH PERSONNEL.." class="w-full p-2.5 pr-10 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">' +
+                    '</div>' +
+                '</div>' +
+                '<div id="contactsListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">' + listContent + '</div>' +
+            '</div>';
+        }
+
+        if (subTab === 'lineItems') {
+            var region = (og.settings && og.settings.location) || 'Jamaica';
+            var isSharing = og.settings && og.settings.optInSharing;
+            var cloudSyncOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            var lastSyncRaw = localStorage.getItem('moo_og_last_sync');
+            var lastSyncLabel = lastSyncRaw ? new Date(lastSyncRaw).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+
+            var rates = og.rates || [];
+            var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+            var avgs = {};
+            try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
+
+            var rateRows = rates.length ? rates.map(function (r) {
+                var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+                var avg = avgs[key];
+                var dispRate = r.rate;
+                var dispCurr = r.currency || 'USD';
+
+                if (avg && avg.avg_rate > 0) {
+                    dispRate = avg.avg_rate;
+                    dispCurr = avg.currency || 'USD';
+                }
+
+                var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
+                if (avg && avg.contributor_count > 0) sub += ' [Research: ' + avg.contributor_count + ']';
+
+                return RenderEngine.ui.listRow({
+                    id: r.id || r.description,
+                    icon: mBTAssets.money,
+                    title: r.description,
+                    subtitle: sub,
+                    info: r.intelligence || '',
+                    classes: 'border-b border-slate-50',
+                    actions: [{ icon: mBTAssets.plus, title: 'Add', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }]
+                });
+            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
+
+            var regionOpts = (og.RATE_REGIONS ? Object.keys(og.RATE_REGIONS) : [])
+                .map(function (r) { return '<option value="' + r + '"' + (region === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+
+            var citation = (typeof og._getRegionIntelligence === 'function') ? og._getRegionIntelligence(region) : '';
+
+            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                '<div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 space-y-3 z-10">' +
+                    '<div class="flex gap-2">' +
+                        '<button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 shadow-sm flex items-center justify-center gap-2">' + mBTAssets.plus + ' Add Rate</button>' +
+                        '<button onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400') + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
+                        '<button onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400') + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
+                    '</div>' +
+                    '<div class="text-[9px] text-slate-400 font-medium px-1">Last sync: ' + lastSyncLabel + '</div>' +
+                    '<div class="flex items-center gap-2">' +
+                        '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); });" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
+                    '</div>' +
+                '</div>' +
+                '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">' + rateRows + '</div>' +
+                (citation ? '<div class="p-3 bg-blue-50/50 border-t border-blue-100 shrink-0"><p class="text-[8px] font-black uppercase tracking-widest text-blue-600 leading-relaxed">' + esc(citation) + '</p></div>' : '') +
+            '</div>';
+        }
+
+        if (subTab === 'templates') {
+            var templates = og.templates || [];
+            var tRows = templates.length ? templates.map(function (t) {
+                return '<div class="flex items-center gap-3 p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors">' +
+                    '<div class="flex-grow overflow-hidden min-w-0">' +
+                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + esc(t.label || t.name || 'Template') + '</div>' +
+                        '<div class="text-[9px] text-slate-400 font-bold truncate">' + esc(t.cat || 'General') + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('') : '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">No Templates</div>';
+
+            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                '<div class="p-3 bg-indigo-50 border-b border-indigo-100 shrink-0">' +
+                    '<input type="text" id="templateSearchInput" placeholder="Search Templates.." class="w-full p-2.5 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">' +
+                '</div>' +
+                '<div class="flex-grow overflow-y-auto no-scrollbar">' + tRows + '</div>' +
+            '</div>';
+        }
+
+        if (subTab === 'trash') {
+            var trashRaw = null;
+            try { trashRaw = JSON.parse(localStorage.getItem('moo_og_trash') || 'null'); } catch (e) {}
+            var trashItems = Array.isArray(trashRaw) ? trashRaw : [];
+            var trRows = trashItems.length ? trashItems.map(function (item, idx) {
+                return '<div class="flex items-center gap-3 p-3 border-b border-slate-50 hover:bg-rose-50 transition-colors">' +
+                    '<div class="flex-grow overflow-hidden min-w-0">' +
+                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + esc(item.description || item.name || 'Item') + '</div>' +
+                        '<div class="text-[9px] text-slate-400 font-bold truncate">' + esc(item.deletedAt ? new Date(item.deletedAt).toLocaleDateString() : '') + '</div>' +
+                    '</div>' +
+                    '<button onclick="(function(){var t=JSON.parse(localStorage.getItem(\'moo_og_trash\')||\'[]\');t.splice(' + idx + ',1);localStorage.setItem(\'moo_og_trash\',JSON.stringify(t));mBT.features.settings.open(\'database\',\'trash\');})()" class="shrink-0 px-2 py-1 text-[8px] font-black uppercase text-rose-400 hover:text-rose-600 transition-colors">Remove</button>' +
+                '</div>';
+            }).join('') : '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">Bin is Empty</div>';
+
+            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
+                '<div class="flex-grow overflow-y-auto no-scrollbar">' + trRows + '</div>' +
+            '</div>';
+        }
+
+        return '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">View Not Found</div>';
+    }
+
+    /* Re-renders only the rates list body — no modal reset */
+    function _mBTRefreshDbRates() {
+        var body = document.getElementById('dbListBody');
+        if (!body) return;
+        var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        var region = (og.settings && og.settings.location) || 'Jamaica';
+        var rates = og.rates || [];
+        var avgsRaw = localStorage.getItem('moo_og_rate_averages');
+        var avgs = {};
+        try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) {}
+        var rateRows = rates.length ? rates.map(function (r) {
+            var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
+            var avg = avgs[key];
+            var dispRate = r.rate;
+            var dispCurr = r.currency || 'USD';
+            if (avg && avg.avg_rate > 0) { dispRate = avg.avg_rate; dispCurr = avg.currency || 'USD'; }
+            var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
+            if (avg && avg.contributor_count > 0) sub += ' [Research: ' + avg.contributor_count + ']';
+            return RenderEngine.ui.listRow({
+                id: r.id || r.description,
+                icon: mBTAssets.money,
+                title: r.description,
+                subtitle: sub,
+                info: r.intelligence || '',
+                classes: 'border-b border-slate-50',
+                actions: [{ icon: mBTAssets.plus, title: 'Add', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }]
+            });
+        }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
+        body.innerHTML = rateRows;
+    }
+    window._mBTRefreshDbRates = _mBTRefreshDbRates;
+
     window.mBT_UI_Settings_getTabContent = function (tabName, subTab) {
         subTab = subTab || 'lineItems';
         function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -208,10 +379,13 @@
                         '</div>' +
                     '</div>';
         }
-        if (tabName === 'ai') {
-            var provider = mBT.features.ai.getSelectedProvider();
-            var saveHistory = (budget.aiContext && budget.aiContext.saveHistory != null) ? budget.aiContext.saveHistory : true;
-            var storedPrompt = mBT.features.ai.getSystemPrompt();
+           if (tabName === 'ai') {
+            var ma = window.mBTAssistant;
+            if (!ma) return '<div class="p-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest">AI Service Unavailable</div>';
+
+            var saveHistory = (budget && budget.aiContext && budget.aiContext.saveHistory) || false;
+            var provider = ma.getProvider();
+            var storedPrompt = ma.getSystemPrompt() || '';
             var keyLinks = {
                 'gemini':      'https://aistudio.google.com/app/apikey',
                 'openai':      'https://platform.openai.com/api-keys',
@@ -221,36 +395,19 @@
                 'openrouter':  'https://openrouter.ai/keys',
                 'lmstudio':    '#'
             };
-            var storedLmEndpoint = localStorage.getItem('mbt_lmstudio_endpoint') || localStorage.getItem(storageKeyPrefix + 'lmstudioEndpoint') || 'http://localhost:1234/v1';
-            var storedLmModel = localStorage.getItem('mbt_lmstudio_model') || localStorage.getItem(storageKeyPrefix + 'lmstudioModel') || '';
-            /* Cached model lists — populated by Fetch, stored as JSON arrays */
-            var cachedChatModels = (function () {
-                try { return JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) { return []; }
-            })();
-            var storedChatModel = localStorage.getItem('mbt_ai_chat_model_' + provider) || '';
-            /* Image gen: independent provider */
-            var storedImgProvider = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
-            var storedImgModel    = localStorage.getItem('mbt_ai_image_model') || '';
-            var cachedImgModels = (function () {
-                try { return JSON.parse(localStorage.getItem('mbt_cached_img_models_' + storedImgProvider) || '[]'); } catch (e) { return []; }
-            })();
-            
-            /* Pre-fetch Pollinations models if not cached; seed fallback list if API fails */
-            if (storedImgProvider === 'pollinations' && cachedImgModels.length === 0) {
-                fetch('https://image.pollinations.ai/models')
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
-                            return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
-                        });
-                        var models = _mergePollinationModels(raw);
-                        localStorage.setItem('mbt_cached_img_models_pollinations', JSON.stringify(models));
-                    }).catch(function () {
-                        localStorage.setItem('mbt_cached_img_models_pollinations', JSON.stringify(POLLINATIONS_FALLBACK_MODELS));
-                    });
-            }
 
-            /* Build cached chat model options for current provider */
+            var storedLmEndpoint = ma.getLMStudioEndpoint();
+            var storedLmModel = ma.getLMStudioModel();
+            
+            var cachedChatModels = [];
+            try { cachedChatModels = JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) {}
+            var storedChatModel = ma.getChatModel(provider);
+
+            var storedImgProvider = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+            var storedImgModel    = ma.getImageModel();
+            var cachedImgModels = [];
+            try { cachedImgModels = JSON.parse(localStorage.getItem('mbt_cached_img_models_' + storedImgProvider) || '[]'); } catch (e) {}
+
             var chatModelOpts = cachedChatModels.length
                 ? cachedChatModels.map(function (m) {
                     var id = (typeof m === 'object') ? (m.id || m) : m;
@@ -259,7 +416,6 @@
                   }).join('')
                 : (storedChatModel ? '<option value="' + storedChatModel + '" selected>' + storedChatModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
 
-            /* Build cached image model options for current image provider */
             var imgModelOpts = cachedImgModels.length
                 ? cachedImgModels.map(function (m) {
                     var id = (typeof m === 'object') ? (m.id || m) : m;
@@ -273,81 +429,62 @@
                             '<div class="flex justify-between items-start mb-2">' +
                                 '<div>' +
                                     '<h3 class="text-[11px] font-black uppercase tracking-tighter text-blue-400">Assistant Engine</h3>' +
-                                    '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Zero-Stain AI Integration</p>' +
+                                    '<p class="text-[9px] text-slate-500 font-bold mt-0.5">mBTAssistant v22.78</p>' +
                                 '</div>' +
                                 '<div class="text-slate-700 opacity-50">' + mBTAssets.sparkle + '</div>' +
                             '</div>' +
                             '<div class="space-y-3">' +
-                                '<!-- Row 1: Chat Engine -->' +
-                                '<div id="chatEngineSect" class="space-y-3">' +
+                                '<div class="space-y-3">' +
                                     '<div class="flex items-center gap-2 mb-1">' +
                                         '<div class="w-1 h-3 bg-blue-500 rounded-full"></div>' +
-                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Chat & Logic Engine</h4>' +
+                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Chat & Logic</h4>' +
                                     '</div>' +
                                     '<div class="grid grid-cols-2 gap-4">' +
-                                        '<div id="chatProviderDiv">' +
+                                        '<div>' +
                                             '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Provider</label>' +
                                             '<select id="aiProviderSelect" onchange="window.mBT_UI_Settings_handleProviderChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' +
-                                                '<option value="gemini" '     + (provider === 'gemini'     ? 'selected' : '') + '>Gemini</option>' +
-                                                '<option value="openai" '     + (provider === 'openai'     ? 'selected' : '') + '>OpenAI</option>' +
-                                                '<option value="deepseek" '   + (provider === 'deepseek'   ? 'selected' : '') + '>DeepSeek</option>' +
-                                                '<option value="grok" '       + (provider === 'grok'       ? 'selected' : '') + '>Grok</option>' +
-                                                '<option value="anthropic" '  + (provider === 'anthropic'  ? 'selected' : '') + '>Claude</option>' +
-                                                '<option value="openrouter" ' + (provider === 'openrouter' ? 'selected' : '') + '>OpenRouter</option>' +
-                                                '<option value="lmstudio" '   + (provider === 'lmstudio'   ? 'selected' : '') + '>LM Studio</option>' +
+                                                Object.keys(ma.ENDPOINTS).map(function(p){ return '<option value="'+p+'"'+(provider===p?' selected':'')+'>'+ma.getProviderLabel(p)+'</option>'; }).join('') +
                                             '</select>' +
                                         '</div>' +
-                                        '<div id="chatKeyDiv" style="display:' + (provider === 'lmstudio' ? 'none' : 'block') + '">' +
-                                            '<div class="flex justify-between items-center mb-1.5 px-1">' +
-                                                '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">API Key</label>' +
-                                                '<a id="apiKeyLink" href="' + (keyLinks[provider] || '#') + '" target="_blank" class="text-[8px] font-black text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors">Keys &rarr;</a>' +
-                                            '</div>' +
-                                            '<input type="password" id="apiKeyInput" value="' + mBT.features.ai.getStoredApiKey(provider) + '" onblur="window.mBT_UI_Settings_autoFetchModelsOnKeyBlur()" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="sk-..">' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model</label>' +
+                                            '<select id="chatModelSelect" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' + chatModelOpts + '</select>' +
                                         '</div>' +
                                     '</div>' +
-
-                                    '<!-- LM Studio Local Overrides -->' +
-                                    '<div id="lmstudioFields" style="display:' + (provider === 'lmstudio' ? 'block' : 'none') + '" class="grid grid-cols-2 gap-4">' +
-                                        '<div>' +
-                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Endpoint URL</label>' +
-                                            '<input type="text" id="lmEndpointInput" value="' + storedLmEndpoint + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="http://localhost:1234/v1">' +
-                                        '</div>' +
-                                        '<div>' +
-                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model ID</label>' +
-                                            '<input type="text" id="lmModelInput" value="' + storedLmModel + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="local-model">' +
-                                        '</div>' +
-                                    '</div>' +
-
                                     '<div>' +
-                                        '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Chat Model</label>' +
-                                        '<select id="chatModelSelect" onchange="window.mBT_UI_Settings_handleChatModelChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' +
-                                            chatModelOpts +
-                                        '</select>' +
+                                        '<div class="flex justify-between items-center mb-1.5 px-1">' +
+                                            '<label class="text-[8px] font-black text-slate-500 uppercase tracking-widest">API Key</label>' +
+                                            (keyLinks[provider] ? '<a href="' + keyLinks[provider] + '" target="_blank" class="text-[8px] font-black text-blue-400 uppercase tracking-widest hover:underline">Get Key \u2197</a>' : '') +
+                                        '</div>' +
+                                        '<input type="password" id="apiKeyInput" value="' + ma.getApiKey(provider) + '" onblur="window.mBT_UI_Settings_autoFetchModelsOnKeyBlur()" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-600/50 transition-all" placeholder="sk-..">' +
                                     '</div>' +
                                 '</div>' +
-
-                                '<div class="h-px bg-slate-800/50"></div>' +
-
-                                '<!-- Row 2: Image Engine -->' +
-                                '<div id="imageEngineSect" class="space-y-3">' +
+                                '<div id="lmStudioExtra" class="' + (provider === 'lmstudio' ? '' : 'hidden') + ' space-y-3 pt-2 border-t border-slate-800">' +
+                                    '<div class="grid grid-cols-2 gap-4">' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Local Endpoint</label>' +
+                                            '<input type="text" id="lmEndpointInput" value="' + esc(storedLmEndpoint) + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-1 focus:ring-slate-700" placeholder="http://..">' +
+                                        '</div>' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model Name</label>' +
+                                            '<input type="text" id="lmModelInput" value="' + esc(storedLmModel) + '" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-mono outline-none focus:ring-1 focus:ring-slate-700" placeholder="local-model">' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="space-y-3 pt-4 border-t border-slate-800">' +
                                     '<div class="flex items-center gap-2 mb-1">' +
                                         '<div class="w-1 h-3 bg-violet-500 rounded-full"></div>' +
-                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Visual Generation</h4>' +
+                                        '<h4 class="text-[9px] font-black uppercase tracking-widest text-slate-400">Visual Engine (Image Gen)</h4>' +
                                     '</div>' +
                                     '<div class="grid grid-cols-2 gap-4">' +
                                         '<div>' +
-                                            '<label class="block text-[8px] font-black text-violet-400 uppercase tracking-widest mb-1.5 ml-1">Provider</label>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Provider</label>' +
                                             '<select id="imgProviderSelect" onchange="window.mBT_UI_Settings_handleImgProviderChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-violet-600/50 cursor-pointer transition-all">' +
-                                                '<option value="pollinations" ' + (storedImgProvider === 'pollinations' ? 'selected' : '') + '>Pollinations (Free)</option>' +
-                                                '<option value="gemini" '       + (storedImgProvider === 'gemini'       ? 'selected' : '') + '>Gemini Imagen</option>' +
-                                                '<option value="openai" '       + (storedImgProvider === 'openai'       ? 'selected' : '') + '>DALL-E 3</option>' +
-                                                '<option value="openrouter" '   + (storedImgProvider === 'openrouter'   ? 'selected' : '') + '>OpenRouter</option>' +
+                                                '<option value="pollinations"' + (storedImgProvider === 'pollinations' ? ' selected' : '') + '>Pollinations (Free)</option>' +
+                                                '<option value="openai"' + (storedImgProvider === 'openai' ? ' selected' : '') + '>OpenAI DALL-E</option>' +
+                                                '<option value="gemini"' + (storedImgProvider === 'gemini' ? ' selected' : '') + '>Google Imagen</option>' +
+                                                '<option value="openrouter"' + (storedImgProvider === 'openrouter' ? ' selected' : '') + '>OpenRouter</option>' +
                                             '</select>' +
-                                            '<div id="imgProviderHint" class="text-[8px] text-slate-500 italic mt-1 ml-1">' +
-                                                (storedImgProvider === 'pollinations' ? 'No API key required — using free Pollinations service' : 
-                                                 storedImgProvider === provider ? 'Will use chat provider\'s API key if left blank' :
-                                                 'Enter an independent API key for this provider') +
-                                            '</div>' +
                                         '</div>' +
                                         '<div>' +
                                             '<div class="flex justify-between items-center mb-1.5 px-1">' +
@@ -437,10 +574,11 @@
             var dbSubTab = subTab || 'contacts';
             var dbTabs = [
                 { id: 'contacts', label: 'Contacts' },
+                { id: 'lineItems', label: 'Rates' },
                 { id: 'templates', label: 'Templates' },
                 { id: 'trash', label: 'Bin' }
             ];
-            var nav = '<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl overflow-hidden select-none">' +
+            var nav = '<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl select-none">' +
                 dbTabs.map(function (t) {
                     var isActive = t.id === dbSubTab;
                     var cls = isActive ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50';
@@ -448,10 +586,10 @@
                 }).join('') +
                 '</div>';
 
-            return '<div class="flex flex-col h-full p-4 pb-0 overflow-hidden space-y-3">' +
+            return '<div class="flex flex-col h-full p-4 pb-0 space-y-2">' +
                     nav +
-                    '<div class="flex-grow flex flex-col relative overflow-hidden min-h-0">' +
-                        this.renderDbView(dbSubTab) +
+                    '<div class="flex-grow flex flex-col min-h-0 overflow-hidden">' +
+                        renderDbView(dbSubTab) +
                     '</div>' +
                 '</div>';
         }
@@ -463,7 +601,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.23';
+            var currentVersion = updateStatus.localVersion || 'v23.33';
 
             var statusMsg = '';
             if (isChecking) {
@@ -850,23 +988,26 @@
         var iSel  = document.getElementById('imgModelSelect');
         var btn   = document.getElementById('saveApiKeyBtn');
 
-        var p  = pSel  ? pSel.value  : mBT.features.ai.getSelectedProvider();
+        var ma = window.mBTAssistant;
+        if (!ma) return;
+
+        var p  = pSel  ? pSel.value  : ma.getProvider();
         var k  = keyEl ? keyEl.value.trim() : '';
         var s  = sSel  ? sSel.value  : '';
         var ip = imgPS ? imgPS.value : (localStorage.getItem('mbt_ai_image_provider') || 'pollinations');
         var ik = iKeyEl ? iKeyEl.value.trim() : '';
 
-        mBT.features.ai.saveSelectedProvider(p);
-        mBT.features.ai.saveStoredApiKey(p, k);
-        mBT.features.ai.saveSystemPrompt(s);
+        ma.setProvider(p);
+        ma.setApiKey(p, k);
+        ma.setSystemPrompt(s);
         localStorage.setItem('mbt_ai_image_provider', ip);
-        mBT.features.ai.saveStoredImageApiKey(ip, ik);
+        ma.setImageApiKey(ip, ik);
 
         if (p === 'lmstudio') {
             var epEl = document.getElementById('lmEndpointInput');
             var mdEl = document.getElementById('lmModelInput');
-            if (epEl && epEl.value.trim()) localStorage.setItem('mbt_lmstudio_endpoint', epEl.value.trim());
-            if (mdEl && mdEl.value.trim()) localStorage.setItem('mbt_lmstudio_model',    mdEl.value.trim());
+            if (epEl && epEl.value.trim()) ma.setLMStudioEndpoint(epEl.value.trim());
+            if (mdEl && mdEl.value.trim()) ma.setLMStudioModel(mdEl.value.trim());
         }
 
         if (!k && p !== 'lmstudio' && ip !== 'pollinations') {
@@ -1002,4 +1143,5 @@
             });
     };
 
+    window.mBT_UI_Settings_renderDbView = renderDbView;
 })(window);
