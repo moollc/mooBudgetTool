@@ -95,7 +95,17 @@
                     '<div class="text-[9px] text-slate-400 font-medium px-1">Last sync: ' + lastSyncLabel + '</div>' +
                     '<div class="flex items-center gap-2">' +
                         '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
-                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); });" class="shrink-0 p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
+                        '<div class="flex gap-1 shrink-0">' +
+                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' +
+                                (function() {
+                                    var currentTier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
+                                    return ['Standard', 'Indie', 'Studio'].map(function(t) {
+                                        return '<option value="' + t + '"' + (currentTier === t ? ' selected' : '') + '>' + t + '</option>';
+                                    }).join('');
+                                })() +
+                            '</select>' +
+                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">' + rateRows + '</div>' +
