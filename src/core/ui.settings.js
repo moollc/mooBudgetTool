@@ -706,7 +706,12 @@
     };
 
     window.mBT_UI_Settings_handleImgModelChange = function (m) {
+        if (!m) return;
         localStorage.setItem('mbt_ai_image_model', m);
+        var ma = window.mBTAssistant || (window.mBT && window.mBT.features && window.mBT.features.ai);
+        if (ma && typeof ma.setImageModel === 'function') {
+            ma.setImageModel(m);
+        }
     };
     
     /* Cost-tier sort for providers whose APIs return no pricing data */
@@ -834,75 +839,123 @@
         }
     };
 
-    /* Standalone image model fetch — works without a key for Pollinations */
+    /* Standalone image model fetch — routes through mBTAssistant service */
     window.mBT_UI_Settings_fetchImgModels = function () {
-        var ip   = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+        var ip  = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
         var iSel = document.getElementById('imgModelSelect');
-        var ik   = (document.getElementById('imgApiKeyInput') || {}).value || mBT.features.ai.getStoredImageApiKey(ip);
         var btn  = document.getElementById('fetchImgModelsBtn');
         if (btn) { btn.disabled = true; btn.textContent = '...'; }
         var done = function () { if (btn) { btn.disabled = false; btn.textContent = 'Fetch'; } };
-        var p;
-        if (ip === 'pollinations') {
-            p = fetch('https://image.pollinations.ai/models')
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    var raw = (Array.isArray(data) ? data : (data.models || [])).map(function (m) {
-                        return typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.name || m.id };
-                    });
-                    var models = _mergePollinationModels(raw);
-                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
-                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
-                }).catch(function () {
+
+        var ma = window.mBTAssistant || (window.mBT && window.mBT.features && window.mBT.features.ai);
+        if (!ma || typeof ma.fetchAvailableImageModels !== 'function') {
+            console.warn('mBTAssistant.fetchAvailableImageModels not available');
+            if (iSel) iSel.innerHTML = '<option value="" disabled selected>Service unavailable</option>';
+            done();
+            return;
+        }
+
+        var fetchPromise;
+        try {
+            fetchPromise = ma.fetchAvailableImageModels(ip);
+        } catch (e) {
+            console.error('Exception calling fetchAvailableImageModels:', e);
+            if (iSel) iSel.innerHTML = '<option value="" disabled selected>Error fetching models</option>';
+            done();
+            return;
+        }
+
+        if (!fetchPromise || typeof fetchPromise.then !== 'function') {
+            console.error('[mBT] fetchAvailableImageModels did not return a Promise');
+            if (iSel) iSel.innerHTML = '<option value="" disabled selected>Service Error</option>';
+            done();
+            return;
+        }
+
+        fetchPromise.then(function (models) {
+            if (!Array.isArray(models) || models.length === 0) {
+                /* Pollinations: fall back to merged fallback list on empty result */
+                if (ip === 'pollinations') {
                     localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(POLLINATIONS_FALLBACK_MODELS));
                     _populateSelect(iSel, POLLINATIONS_FALLBACK_MODELS, 'mbt_ai_image_model', false);
-                });
-        } else if (ip === 'openrouter') {
-            p = mBT.features.ai.fetchOpenRouterModels(ik).then(function (models) {
-                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
-                _populateSelect(iSel, models, 'mbt_ai_image_model', true);
+                } else {
+                    if (iSel) iSel.innerHTML = '<option value="" disabled selected>No models found</option>';
+                }
+                done();
+                return;
+            }
+
+            /* Pollinations: merge API results with fallback list so curated names are preserved */
+            var finalModels = (ip === 'pollinations') ? _mergePollinationModels(models) : models;
+
+            var validModels = finalModels.filter(function (m) {
+                var id = m.id || m;
+                return id && String(id).trim().length > 0;
             });
-        } else if (ip === 'gemini') {
-            p = mBT.features.ai.fetchGeminiModels(ik).then(function (models) {
-                var imgModels = models.filter(function (m) { return (m.id || '').indexOf('imagen') !== -1; });
-                localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(imgModels));
-                _populateSelect(iSel, imgModels, 'mbt_ai_image_model', false);
-            });
-        } else if (ip === 'openai') {
-            p = fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + ik } })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    var items = (data.data || []).filter(function (m) { return (m.id || '').indexOf('dall-e') !== -1; });
-                    var models = items.map(function (m) { return { id: m.id, name: m.id }; });
-                    localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(models));
-                    _populateSelect(iSel, models, 'mbt_ai_image_model', false);
-                });
-        } else {
-            p = Promise.resolve();
-        }
-        p.then(done).catch(done);
+
+            if (validModels.length === 0) {
+                if (iSel) iSel.innerHTML = '<option value="" disabled selected>No valid models</option>';
+                done();
+                return;
+            }
+
+            localStorage.setItem('mbt_cached_img_models_' + ip, JSON.stringify(validModels));
+            _populateSelect(iSel, validModels, 'mbt_ai_image_model', ip === 'openrouter');
+            done();
+        }).catch(function (err) {
+            console.error('Failed to fetch image models:', err);
+            if (iSel) iSel.innerHTML = '<option value="" disabled selected>Error fetching models</option>';
+            done();
+        });
     };
 
     window.mBT_UI_Settings_handleImgProviderChange = function (ip) {
+        if (!ip) return;
         localStorage.setItem('mbt_ai_image_provider', ip);
-        _refreshImgHint(ip);
+
+        if (typeof _refreshImgHint === 'function') {
+            _refreshImgHint(ip);
+        } else if (typeof window.mBT_UI_Settings_refreshImgHint === 'function') {
+            window.mBT_UI_Settings_refreshImgHint(ip);
+        }
+
         var ki = document.getElementById('imgApiKeyInput');
-        if (ki) ki.value = mBT.features.ai.getStoredImageApiKey(ip);
+        var ma = window.mBTAssistant || (window.mBT && window.mBT.features && window.mBT.features.ai);
+        if (ki && ma && typeof ma.getStoredImageApiKey === 'function') {
+            ki.value = ma.getStoredImageApiKey(ip);
+        }
 
         var cached = [];
         try { cached = JSON.parse(localStorage.getItem('mbt_cached_img_models_' + ip) || '[]'); } catch (e) {}
+
         var isel = document.getElementById('imgModelSelect');
         var isaved = localStorage.getItem('mbt_ai_image_model') || '';
+        var selectedModel = isaved;
+
         if (isel) {
             if (cached.length) {
+                var modelExists = cached.some(function (m) {
+                    return (m.id || m) === isaved;
+                });
+                if (!modelExists && cached.length > 0) {
+                    var firstId = cached[0].id || cached[0];
+                    selectedModel = (firstId && String(firstId).trim()) ? firstId : '';
+                }
                 isel.innerHTML = cached.map(function (m) {
                     var id = m.id || m;
                     var lbl = m.name || m.id || m;
-                    return '<option value="' + id + '"' + (isaved === id ? ' selected' : '') + '>' + lbl + '</option>';
+                    return '<option value="' + id + '"' + (selectedModel === id ? ' selected' : '') + '>' + lbl + '</option>';
                 }).join('');
+                if (selectedModel) {
+                    localStorage.setItem('mbt_ai_image_model', selectedModel);
+                }
             } else {
-                isel.innerHTML = isaved ? '<option value="' + isaved + '" selected>' + isaved + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
+                isel.innerHTML = selectedModel ? '<option value="' + selectedModel + '" selected>' + selectedModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
             }
+        }
+
+        if (ma && typeof ma.setImageModel === 'function' && selectedModel) {
+            ma.setImageModel(selectedModel);
         }
     };
 
