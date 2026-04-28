@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.33</title>
+    <title>mooBudgetTool v23.35</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -383,7 +383,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.33";
+    var APP_VERSION = "23.35";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -1000,6 +1000,60 @@
                 }).join('');
             }
         },
+
+        // --- C.2 Template Undo/Redo Engine (Phase 191) ---
+        _undoRedo: (function() {
+            var state = { undo: [], redo: [], maxHistorySize: 50, captureTimeout: null };
+            function captureSnapshot(template) {
+                if (!template || typeof template !== 'object') return null;
+                return {
+                    id: template.id || null, name: template.name || '', description: template.description || '',
+                    structure: JSON.parse(JSON.stringify(template.structure || [])),
+                    metadata: JSON.parse(JSON.stringify(template.metadata || {})),
+                    timestamp: Date.now()
+                };
+            }
+            function restoreSnapshot(template, snapshot) {
+                if (!template || !snapshot) return false;
+                try {
+                    template.id = snapshot.id; template.name = snapshot.name; template.description = snapshot.description;
+                    template.structure = JSON.parse(JSON.stringify(snapshot.structure));
+                    template.metadata = JSON.parse(JSON.stringify(snapshot.metadata));
+                    return true;
+                } catch (e) { return false; }
+            }
+            function fire() { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('mbtTemplateHistoryChanged')); }
+            return {
+                init: function() { state.undo = []; state.redo = []; state.captureTimeout = null; return true; },
+                push: function(template, desc) {
+                    if (!template) return false; clearTimeout(state.captureTimeout);
+                    var snapshot = captureSnapshot(template); if (!snapshot) return false;
+                    snapshot.description = desc || 'Edit'; state.undo.push(snapshot); state.redo = [];
+                    if (state.undo.length > state.maxHistorySize) state.undo.shift();
+                    fire(); return true;
+                },
+                pushDebounced: function(template, desc, delay) {
+                    if (!template) return; delay = delay || 1000; clearTimeout(state.captureTimeout);
+                    state.captureTimeout = setTimeout(function() { this.push(template, desc); }.bind(this), delay);
+                },
+                undo: function(template) {
+                    if (!this.canUndo() || !template) return false;
+                    var current = captureSnapshot(template), previous = state.undo.pop(); if (!previous) return false;
+                    state.redo.push(current); var success = restoreSnapshot(template, previous);
+                    if (success) fire(); return success;
+                },
+                redo: function(template) {
+                    if (!this.canRedo() || !template) return false;
+                    var current = captureSnapshot(template), next = state.redo.pop(); if (!next) return false;
+                    state.undo.push(current); var success = restoreSnapshot(template, next);
+                    if (success) fire(); return success;
+                },
+                canUndo: function() { return state && state.undo.length > 0; },
+                canRedo: function() { return state && state.redo.length > 0; },
+                clear: function() { state.undo = []; state.redo = []; clearTimeout(state.captureTimeout); fire(); return true; },
+                getState: function() { return { undoCount: state.undo.length, redoCount: state.redo.length }; }
+            };
+        })(),
 
         /* --- STORAGE & PERSISTENCE ---
            Phase 69: mBTOPFS added as primary tier for prodBudget_v5_* keys. Dual-write keeps
@@ -2884,6 +2938,7 @@
         else if (field === 'rate') {
             var rawVal = parseFloat(value) || 0;
             item.rate = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
+            item.rateSource = 'manual'; // Phase 191 Guard
             /* Manual rate override re-anchors the regional baseRate so future region
              * switches scale from this user-intended value. */
             if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
@@ -3679,8 +3734,14 @@
             var total = opts.total || '';
             var isOpen = opts.isOpen !== false;
             var content = opts.content || '';
+            var isLocked = opts.isLocked || false;
             var safeName = this.esc(name);
             var rawId = name.replace(/"/g, '&quot;');
+            
+            var secLockIcon = isLocked ? ((typeof mBTAssets !== "undefined" && mBTAssets.lock) ? mBTAssets.lock : '🔒') : ((typeof mBTAssets !== "undefined" && mBTAssets.link) ? mBTAssets.link : '🔗');
+            var secLockTitle = isLocked ? 'Unlock all rates in this category' : 'Lock all rates in this category';
+            var secLockColor = isLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-rose-500';
+
             return '<div class="mb-3 bg-white shadow-sm border border-slate-100">' +
                 '<div class="sticky-section-header relative min-h-[40px] bg-slate-50 border-b border-slate-100 select-none group z-30">' +
                 '<div class="px-4 py-2.5 flex justify-between items-center cursor-pointer z-40 active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="' + rawId + '">' +
@@ -3688,6 +3749,9 @@
                 '<h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">' + safeName + '</h2>' +
                 '</div>' +
                 '<div class="flex items-center gap-1.5 flex-shrink-0">' +
+                '<button type="button" onclick="event.stopPropagation(); window.lockSectionRates(\'' + rawId + '\');" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
+                '<span class="scale-75">' + secLockIcon + '</span>' +
+                '</button>' +
                 '<span data-section-cap-badge="' + safeName + '" class="hidden text-[8px] font-black text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none pointer-events-none"></span>' +
                 '<span data-section-total="' + safeName + '" class="text-sm font-black text-blue-600 font-mono pointer-events-none">' + total + '</span>' +
                 '<button data-action="section-cap" data-id="' + rawId + '" title="Set section spending cap" class="pointer-events-auto w-5 h-5 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors rounded">' +
@@ -3937,7 +4001,9 @@
                 '</button>' +
                 '</div>';
 
-            return mBT.ui.render.section({ name: name, total: mBTLE.format.currency(section.total), isOpen: section.isOpen, content: bodyContent });
+            var isLocked = (section.items && section.items.length > 0) && section.items.every(function (it) { return it.rateType === 'fixed'; });
+
+            return mBT.ui.render.section({ name: name, total: mBTLE.format.currency(section.total), isOpen: section.isOpen, content: bodyContent, isLocked: isLocked });
         }).join('');
     }
 
@@ -11290,6 +11356,29 @@
                 btn.title = isLocked ? 'Locked: Rate is fixed' : 'Linked: Rate follows region';
             }
         });
+
+        /* Phase 191: Per-Category Mass Locking */
+        window.lockSectionRates = function (secName) {
+            if (!window.budget || !window.budget.sections) return;
+            var section = window.budget.sections[secName];
+            if (!section || !section.items || !Array.isArray(section.items)) return;
+
+            var allLocked = section.items.every(function (item) {
+                return item.rateType === 'fixed';
+            });
+            var newRateType = allLocked ? 'negotiable' : 'fixed';
+
+            section.items.forEach(function (item) {
+                item.rateType = newRateType;
+                if (newRateType === 'fixed') {
+                    item.rateSource = 'manual'; // Lock to manual
+                }
+            });
+
+            if (window.saveBudget) window.saveBudget();
+            if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+            if (window.render) window.render();
+        };
 
         /* Lock all rates in every section at once */
         window.lockAllRates = function () {
