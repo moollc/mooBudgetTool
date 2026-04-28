@@ -43,6 +43,7 @@
     body.compact #preview-toolbar .tab-bar { min-height: unset; }
     #topbar button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
     #topbar button:hover { background: rgba(255,255,255,0.2); }
+    #topbar button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
     #topbar-title { font-size: 12px; font-weight: 700; color: #94a3b8; }
     #topbar-project { font-size: 12px; font-weight: 700; color: #e2e8f0; margin-left: auto; }
 
@@ -250,6 +251,14 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
     </button>
     <span id="topbar-title">Document Builder</span>
+    <button id="btn-db-undo" disabled title="Undo (Ctrl+Z)" onclick="dbUndo();">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+      Undo
+    </button>
+    <button id="btn-db-redo" disabled title="Redo (Ctrl+Y)" onclick="dbRedo();">
+      Redo
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+    </button>
     <span id="topbar-project"></span>
   </div>
   <div id="workspace">
@@ -531,10 +540,69 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   dispatchFocus();
   window.addEventListener('focus', dispatchFocus);
 
+  /* ======== mBTDB Undo/Redo Engine ======== */
+  var dbUndoStack = [];
+  var dbRedoStack = [];
+  var DB_MAX_HISTORY = 50;
+  var dbUndoDebounceTimer = null;
+
+  function dbCaptureSnapshot() {
+    return JSON.parse(JSON.stringify(editorData));
+  }
+
+  function dbPushUndo() {
+    clearTimeout(dbUndoDebounceTimer);
+    dbUndoDebounceTimer = setTimeout(function () {
+      dbUndoStack.push(dbCaptureSnapshot());
+      if (dbUndoStack.length > DB_MAX_HISTORY) dbUndoStack.shift();
+      dbRedoStack = [];
+      dbUpdateUndoUI();
+    }, 600);
+  }
+
+  function dbUndo() {
+    if (!dbUndoStack.length) return;
+    dbRedoStack.push(dbCaptureSnapshot());
+    var prev = dbUndoStack.pop();
+    editorData = prev;
+    saveEditorData();
+    buildEditor(activeTemplateId);
+    dbUpdateUndoUI();
+  }
+
+  function dbRedo() {
+    if (!dbRedoStack.length) return;
+    dbUndoStack.push(dbCaptureSnapshot());
+    var next = dbRedoStack.pop();
+    editorData = next;
+    saveEditorData();
+    buildEditor(activeTemplateId);
+    dbUpdateUndoUI();
+  }
+
+  function dbUpdateUndoUI() {
+    var undoBtn = dom.getElementById('btn-db-undo');
+    var redoBtn = dom.getElementById('btn-db-redo');
+    if (undoBtn) undoBtn.disabled = dbUndoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = dbRedoStack.length === 0;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      dbUndo();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      dbRedo();
+    }
+  });
+
   /* Phase 73B: receive undo/redo routing from parent monolith */
   window.addEventListener('message', function(e) {
     if (!e.data || e.data.type !== 'mbt:tool-action') return;
-    /* mBTDB has no internal undo/redo stack — no-op, wired for future use */
+    if (e.data.action === 'undo') dbUndo();
+    if (e.data.action === 'redo') dbRedo();
   });
 
   /* ======== Back Button ======== */
@@ -1592,6 +1660,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   function saveEditorData() {
+    dbPushUndo();
     markUnsaved();
     updatePreflight();
     clearTimeout(saveTimer);
