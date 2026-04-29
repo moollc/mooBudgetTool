@@ -1772,8 +1772,8 @@
     // Logic Resolution: Ensures all existing calls in Tier 3-6 continue to function.
     window.mBTState = mBT.data.state;
     window.mBTStorage = mBT.data.storage;
-    window.saveBudget = function () {
-        if (typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
+    window.saveBudget = function (silent) {
+        if (!silent && typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
         var result = mBT.data.save.apply(mBT.data, arguments);
         /* Phase 149.2: Mirror save into Context Ledger (dedup by content hash, cheap when idle) */
         try {
@@ -2068,6 +2068,13 @@
         inp.style.backgroundColor = '';
         inp.style.pointerEvents = '';
         inp.title = '';
+    });
+
+    window.addEventListener('mbtOG:regionChanged', function (evt) {
+        var region = evt.detail && evt.detail.region;
+        if (window.budget && window.budget._rateCache) window.budget._rateCache = null;
+        if (window.mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+        if (typeof render === 'function') render();
     });
 
     /* --- Task 4 + Phase 92: Broadcast typing lock/release and activity status ---
@@ -2932,6 +2939,15 @@
     }
 
     // Logic Resolution: Core budget item updater (Restored)
+    var _renderDebounceTimer = null;
+    function _debounceRender() {
+        if (_renderDebounceTimer) clearTimeout(_renderDebounceTimer);
+        _renderDebounceTimer = setTimeout(function () {
+            if (typeof render === 'function') render();
+            _renderDebounceTimer = null;
+        }, 100);
+    }
+
     function handleUpdate(sectionName, itemId, field, value, context) {
         var section = budget.sections[sectionName];
         if (!section) return;
@@ -2965,12 +2981,9 @@
         else if (field === 'actualDate') item.actualDate = value;
         else if (field === 'committedCost') item.committedCost = parseFloat(value) || 0;
 
-        // Deficiency 1 Fix: Single-Source of Truth
-        // We rely on the Proxy (Tier 2) to trigger Global Math & Persistence (debounced).
-        // We ONLY call paint() here for instant, non-blocking visual feedback on the active row.
-        if (typeof mBT.ui.paint === 'function') {
-            requestAnimationFrame(function () { return mBT.ui.paint(); });
-        }
+        saveBudget(true);
+        if (window.mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+        _debounceRender();
     }
 
     function balanceStageSliders(changedKey, newValue) {
@@ -8547,6 +8560,7 @@
             var self = this;
             if (window.mBTOG && mBTOG.settings && mBTOG.settings.setLocation) {
                 mBTOG.settings.setLocation(region).then(function() {
+                    window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { detail: { region: region } }));
                     mBTME.alert('Region Updated', 'Rates rescaled to ' + region + '.');
                 });
             } else {
@@ -8776,7 +8790,9 @@
             mBTSync.saveProfile(name, region, role).then(function () {
                 /* Sync region into OpenGate settings so multiplier is correct. */
                 if (window.mBTOG && mBTOG.settings && mBTOG.settings.setLocation) {
-                    mBTOG.settings.setLocation(region);
+                    mBTOG.settings.setLocation(region).then(function () {
+                        window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { detail: { region: region } }));
+                    });
                 } else if (window.mBTOG && mBTOG.settings) {
                     mBTOG.settings.location = region; 
                     localStorage.setItem('moo_og_loc', region); 

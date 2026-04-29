@@ -800,6 +800,34 @@
         return merged;
     }
 
+    /* Shared helper — called by fetchImgModels AND syncAIProvider (and any future handler) */
+    function _populateSelect(sel, models, savedKey, groupByFree) {
+        if (!sel || !models || !models.length) return;
+        var saved = localStorage.getItem(savedKey) || '';
+        var html = '';
+        if (groupByFree) {
+            var sorted = models.slice().sort(function (a, b) {
+                var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
+                var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
+                if (pa !== pb) return pa - pb;
+                return (a.id || '').localeCompare(b.id || '');
+            });
+            for (var j = 0; j < sorted.length; j++) {
+                var m = sorted[j];
+                var mid = m.id || m;
+                var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
+                html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
+            }
+        } else {
+            for (var i = 0; i < models.length; i++) {
+                var id  = models[i].id  || models[i];
+                var lbl = models[i].name || models[i].id || models[i];
+                html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
+            }
+        }
+        sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
+    }
+
     function _refreshImgHint(ip) {
         var hint = document.getElementById('imgProviderHint');
         var link = document.getElementById('imgApiKeyLink');
@@ -975,34 +1003,6 @@
         var cachedKey = 'mbt_cached_chat_models_' + p;
         var modelFetch;
 
-        function _populateSelect(sel, models, savedKey, groupByFree) {
-            if (!sel || !models || !models.length) return;
-            var saved = localStorage.getItem(savedKey) || '';
-            var html = '';
-            if (groupByFree) {
-                /* Sort by price ascending (free=$0 first), then alphabetical */
-                var sorted = models.slice().sort(function (a, b) {
-                    var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
-                    var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
-                    if (pa !== pb) return pa - pb;
-                    return (a.id || '').localeCompare(b.id || '');
-                });
-                for (var j = 0; j < sorted.length; j++) {
-                    var m = sorted[j];
-                    var mid = m.id || m;
-                    var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
-                    html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
-                }
-            } else {
-                for (var i = 0; i < models.length; i++) {
-                    var id = models[i].id || models[i];
-                    var lbl = models[i].name || models[i].id || models[i];
-                    html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
-                }
-            }
-            sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
-        }
-
         if (p === 'gemini') {
             modelFetch = mBT.features.ai.fetchGeminiModels(k).then(function (models) {
                 localStorage.setItem(cachedKey, JSON.stringify(models));
@@ -1079,34 +1079,6 @@
         }
 
         if (btn) { btn.textContent = 'Fetching..'; btn.disabled = true; }
-
-        function _populateSelect(sel, models, savedKey, groupByFree) {
-            if (!sel || !models || !models.length) return;
-            var saved = localStorage.getItem(savedKey) || '';
-            var html = '';
-            if (groupByFree) {
-                /* Sort by price ascending (free=$0 first), then alphabetical */
-                var sorted = models.slice().sort(function (a, b) {
-                    var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
-                    var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
-                    if (pa !== pb) return pa - pb;
-                    return (a.id || '').localeCompare(b.id || '');
-                });
-                for (var j = 0; j < sorted.length; j++) {
-                    var m = sorted[j];
-                    var mid = m.id || m;
-                    var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
-                    html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
-                }
-            } else {
-                for (var i = 0; i < models.length; i++) {
-                    var id  = models[i].id  || models[i];
-                    var lbl = models[i].name || models[i].id || models[i];
-                    html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
-                }
-            }
-            sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
-        }
 
         /* Fetch chat models for the chat provider */
         var chatFetch;
