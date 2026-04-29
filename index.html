@@ -6479,6 +6479,9 @@
                     canvas.getContext('2d').drawImage(img, 0, 0, 1024, 576);
                     var scaled = canvas.toDataURL('image/jpeg', 0.85);
                     self.updateData(docId, 'additional.' + widgetId, scaled);
+                    window.dispatchEvent(new CustomEvent('mbtImageGenerated', {
+                        detail: { model: imgModel, docId: docId, widgetId: widgetId, timestamp: Date.now() }
+                    }));
                     mBTME.close('sbFrameEditor_' + widgetId);
                     self._refreshWidget(docId, widgetId);
                 };
@@ -6495,11 +6498,12 @@
                     .then(function(dataUrl) { onDataUrl(dataUrl); })
                     .catch(function(err) { onError(err.message); });
             } else {
-                /* Pollinations direct fallback */
+                /* Pollinations direct fallback — Phase 193: cache-busting seed per request */
                 var polModel = (imgModel && imgModel !== 'pollinations') ? '&model=' + encodeURIComponent(imgModel) : '';
+                var cacheBuster = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
                 var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) +
-                    '?width=1024&height=576&nologo=true&seed=' + Date.now() + polModel;
-                fetch(imgUrl).then(function(r) { return r.blob(); }).then(function(blob) {
+                    '?width=1024&height=576&nologo=true&seed=' + cacheBuster + polModel;
+                fetch(imgUrl, { cache: 'no-store' }).then(function(r) { return r.blob(); }).then(function(blob) {
                     var rd = new FileReader();
                     rd.onload = function(e) { onDataUrl(e.target.result); };
                     rd.readAsDataURL(blob);
