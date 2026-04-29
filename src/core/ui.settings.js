@@ -1179,4 +1179,17 @@
     };
 
     window.mBT_UI_Settings_renderDbView = renderDbView;
+
+    /* Phase 193: Keep imgModelSelect in sync after storyboard generates an image.
+       Storyboard dispatches 'mbtImageGenerated' with the model that was actually used. */
+    window.addEventListener('mbtImageGenerated', function (evt) {
+        var model = evt.detail && evt.detail.model;
+        if (!model) return;
+        var modelSel = document.getElementById('imgModelSelect');
+        if (modelSel) {
+            modelSel.value = model;
+            localStorage.setItem('mbt_ai_image_model', model);
+        }
+    });
+
 })(window);

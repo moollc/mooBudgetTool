@@ -507,7 +507,7 @@ var mBTAssistant = (function () {
         if (provider === 'gemini') {
             return fetch(ep.url + model + ':predict?key=' + apiKey, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' },
                 body: JSON.stringify({
                     instances: [{ prompt: prompt }],
                     parameters: { sampleCount: 1, aspectRatio: ff.gemini }
@@ -530,7 +530,7 @@ var mBTAssistant = (function () {
         if (provider === 'openai') {
             return fetch(ep.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' },
                 body: JSON.stringify({ model: model, prompt: prompt, n: 1, size: ff.dalle, response_format: 'b64_json' })
             })
             .then(function (r) {
@@ -550,7 +550,7 @@ var mBTAssistant = (function () {
         if (provider === 'openrouter') {
             return fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.origin, 'X-Title': 'mooBudgetTool' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey, 'HTTP-Referer': window.location.origin, 'X-Title': 'mooBudgetTool', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' },
                 body: JSON.stringify({
                     model: model,
                     messages: [{ role: 'user', content: prompt }]
@@ -571,9 +571,10 @@ var mBTAssistant = (function () {
             });
         }
 
-        /* ---- Pollinations fallback (no key required) ---- */
+        /* ---- Pollinations fallback (no key required) — Phase 193: cache-busting seed ---- */
         var _polModel = (model && model !== 'pollinations') ? '&model=' + encodeURIComponent(model) : '';
-        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=' + ff.w + '&height=' + ff.h + '&nologo=true&seed=' + Date.now() + _polModel)
+        var _polSeed = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        return fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=' + ff.w + '&height=' + ff.h + '&nologo=true&seed=' + _polSeed + _polModel, { cache: 'no-store' })
             .then(function (r) {
                 if (!r.ok) throw new Error('Pollinations ' + r.status + ': image generation failed. Try a different provider or test from a non-localhost URL.');
                 return r.blob();
