@@ -329,6 +329,9 @@
                     window.dispatchEvent(new CustomEvent('og:location-changed', { 
                         detail: { location: newLoc, intelligence: mBTOG._getRegionIntelligence(newLoc) } 
                     }));
+                    window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { 
+                        detail: { location: newLoc } 
+                    }));
                     return newLoc;
                 });
             },
@@ -1108,7 +1111,7 @@
     window.mBTOG = mBTOG;
     window.mBTOG.cloud = { url: OG_CLOUD_URL, key: OG_CLOUD_KEY };
 
-        console.log('[mBTOG] Engine initialized successfully. (v23.25)');
+        console.log('[mBTOG] Engine initialized successfully. (v23.35)');
     } catch (e) {
         console.error('[mBTOG] FATAL INITIALIZATION ERROR:', e);
         if (e.stack) console.error(e.stack);

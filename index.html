@@ -2945,7 +2945,7 @@
         _renderDebounceTimer = setTimeout(function () {
             if (typeof render === 'function') render();
             _renderDebounceTimer = null;
-        }, 100);
+        }, 250);
     }
 
     function handleUpdate(sectionName, itemId, field, value, context) {
@@ -4800,6 +4800,19 @@
     window.mBTME = mBT.ui.modal;
 
     /* mBTPublisher engine loaded from src/scripts/engine/publisher.js */
+
+    /* Phase 196: Per-widget debounce timer for frame zoom/pan snapshots */
+    var _mBTDBFrameSnapshotTimer = {};
+    function _mBTDBDebouncedFrameSnapshot(widgetId, actionLabel) {
+        if (_mBTDBFrameSnapshotTimer[widgetId]) clearTimeout(_mBTDBFrameSnapshotTimer[widgetId]);
+        _mBTDBFrameSnapshotTimer[widgetId] = setTimeout(function () {
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined') {
+                mBT.data.recorder.snapshot(actionLabel);
+            }
+            delete _mBTDBFrameSnapshotTimer[widgetId];
+        }, 300);
+    }
+
     /* ========= v19.54 mBTDB: ASSISTANT BUILDER ENGINE ========= */
     window.mBTDB = {
         config: {
@@ -6282,6 +6295,8 @@
             var fs = doc.content.data.frameState[widgetId] || { scale: 1, offsetX: 0, offsetY: 0 };
             fs.scale = Math.max(0.3, Math.min(5, (fs.scale || 1) + delta));
             doc.content.data.frameState[widgetId] = fs;
+            /* Phase 196: Debounced snapshot — rapid clicks cluster into one undo step */
+            _mBTDBDebouncedFrameSnapshot(widgetId, 'Adjust Frame Zoom');
             this._triggerSave();
             var img = document.getElementById('sbFramePreviewImg');
             if (img) img.style.transform = 'scale(' + fs.scale + ') translate(' + fs.offsetX + 'px,' + fs.offsetY + 'px)';
@@ -6293,6 +6308,10 @@
             if (!doc) return;
             if (!doc.content.data.frameState) doc.content.data.frameState = {};
             doc.content.data.frameState[widgetId] = { scale: 1, offsetX: 0, offsetY: 0, formFactor: (doc.content.data.frameState[widgetId] || {}).formFactor || '16:9' };
+            /* Phase 196: Immediate snapshot — discrete user action */
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                mBT.data.recorder.snapshot('Reset Frame Transform');
+            }
             this._triggerSave();
             var img = document.getElementById('sbFramePreviewImg');
             if (img) img.style.transform = 'scale(1) translate(0px,0px)';
@@ -6748,6 +6767,11 @@
             // Invalidate Cache
             if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
 
+            /* Phase 196: Snapshot BEFORE mutation — each metadata change is a discrete undo point */
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                mBT.data.recorder.snapshot('Edit: ' + path);
+            }
+
             var parts = path.split('.');
             var target = doc.content.data;
             for (var i = 0; i < parts.length - 1; i++) { if (!target[parts[i]]) target[parts[i]] = {}; target = target[parts[i]]; }
@@ -6763,6 +6787,7 @@
             var doc = budget.documents.find(function (d) { return d.id === docId; });
             if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
 
+            /* Phase 196: NO snapshot here — oninput (frequent). Snapshot fires on commit via updateData (onchange). */
             var parts = path.split('.');
             var target = doc.content.data;
             for (var i = 0; i < parts.length - 1; i++) { if (!target[parts[i]]) target[parts[i]] = {}; target = target[parts[i]]; }
@@ -6790,6 +6815,11 @@
             // Invalidate Cache
             if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
 
+            /* Phase 196: Snapshot BEFORE row addition */
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                mBT.data.recorder.snapshot('Add Row: ' + section);
+            }
+
             if (!doc.content.data[section]) doc.content.data[section] = [];
             var newRow = presetData || { id: Date.now() };
             if (!presetData) {
@@ -6815,6 +6845,11 @@
             // Invalidate Cache
             if (this.state._cache && this.state._cache.docId === docId) this.state._cache = null;
 
+            /* Phase 196: Snapshot BEFORE row deletion */
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                mBT.data.recorder.snapshot('Delete Row: ' + section);
+            }
+
             doc.content.data[section].splice(index, 1);
             this._triggerSave();
 
@@ -6825,27 +6860,36 @@
             else this.renderFrame();
         },
         deleteWidget: function (id) {
+            var self = this;
             mBTME.confirm("Delete Widget", "Remove this block from layout?", function () {
-                var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
+                var doc = budget.documents.find(function (d) { return d.id === self.state.currentDocId; });
+                /* Phase 196: Snapshot BEFORE deletion — context preserved via self */
+                if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                    mBT.data.recorder.snapshot('Delete Widget');
+                }
                 var el = document.querySelector('.grid-stack-item[gs-id="' + id + '"]');
-                if (el) this.state.grid.removeWidget(el);
+                if (el) self.state.grid.removeWidget(el);
                 doc.content.widgets = doc.content.widgets.filter(function (w) { return w.id !== id; });
-                this._triggerSave();
+                self._triggerSave();
             });
         },
         addWidget: function () {
             var select = document.getElementById('mBTDB_WidgetSelect');
             if (!select) return;
             var type = select.value;
-            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; });
-            var w = { id: type + '_' + Date.now(), type, w: 6, h: 4, autoPosition: true, label: type.toUpperCase() };
+            var doc = budget.documents.find(function (d) { return d.id === this.state.currentDocId; }.bind(this));
+            var w = { id: type + '_' + Date.now(), type: type, w: 6, h: 4, autoPosition: true, label: type.toUpperCase() };
+            /* Phase 196: Snapshot BEFORE structural mutation (atomic) */
+            if (mBT.data && mBT.data.recorder && typeof budget !== 'undefined' && budget.projectName) {
+                mBT.data.recorder.snapshot('Add Widget: ' + type);
+            }
             var html = this._generateWidgetHTML(w, doc);
             var node = this.state.grid.addWidget({ w: 6, h: 4, content: html, id: w.id, autoPosition: true });
             w.x = node.gridstackNode.x; w.y = node.gridstackNode.y;
             doc.content.widgets.push(w);
             this._triggerSave();
             // Logic Fix: Ensure canvas initializes immediately after adding
-            if (type === 'mudmap') setTimeout(function () { return this._initMudMaps(); }, 50);
+            if (type === 'mudmap') setTimeout(function () { return this._initMudMaps(); }.bind(this), 50);
         },
         _autoResizeWidget: function (widgetId) {
             // Batch 3.2: Deprecated.
