@@ -74,6 +74,7 @@
             </div>
         </div>
         <div class="flex items-center gap-3">
+            <span id="unsaved-indicator" style="opacity:0;transition:opacity 0.2s;" class="text-[8px] font-black text-amber-400 uppercase tracking-widest">&#9679; Unsaved</span>
             <div class="flex flex-col items-end">
                 <span id="active-project-name" class="text-white text-[10px] font-black uppercase tracking-tight opacity-90">—</span>
                 <span class="text-slate-500 text-[8px] font-bold uppercase tracking-widest">mBT Stages</span>
@@ -295,6 +296,52 @@
 
         /* ========= Logic Engine (ported from mBT-Old.html L2233–L2421) ========= */
 
+        /* Phase 195: Strip timezone offset so browser locale can't shift the day boundary */
+        function _normalizeDate(d) {
+            var date = new Date(d);
+            return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+        }
+
+        /* Phase 195: IO helpers — debounced save + unsaved state indicator */
+        var _mBTStagesSaveTimeout = null;
+        function _mBTStagesDebouncedSave() {
+            if (_mBTStagesSaveTimeout) clearTimeout(_mBTStagesSaveTimeout);
+            var indicator = document.getElementById('unsaved-indicator');
+            if (indicator) indicator.style.opacity = '1';
+            _mBTStagesSaveTimeout = setTimeout(function () {
+                mBTStages.save();
+                var ind = document.getElementById('unsaved-indicator');
+                if (ind) ind.style.opacity = '0';
+            }, 500);
+        }
+
+        /* Phase 195: Single source-of-truth cost formula (quantity + TZ-normalised days) */
+        function _calculateItemCost(item, stageKey, b) {
+            var sd = item.stageData && item.stageData[stageKey];
+            if (!sd) return 0;
+            var workWeek  = (b.settings && b.settings.workWeek) || 5;
+            var blackouts = b.blackoutDays || [];
+            var starts    = getStageStartDates(b);
+            var grossDays = parseFloat(sd.days) || 0;
+            var payable   = starts[stageKey]
+                ? computeWorkingDays(grossDays, _normalizeDate(starts[stageKey]), workWeek, blackouts)
+                : grossDays;
+            var multiplier = (sd.multiplier === undefined || sd.multiplier === null || sd.multiplier === '')
+                ? 1 : (parseFloat(sd.multiplier) || 0);
+            var qty = parseFloat(item.quantity) || 1;
+            return payable * (parseFloat(sd.rate || item.rate) || 0) * multiplier * qty;
+        }
+
+        /* Phase 195: Surgical refresh — updates one item's cost span + Vitals without card rebuild */
+        function _mBTStagesSurgicalRefresh(itemId, stageKey) {
+            var item = mBTStages._findItem(itemId);
+            if (!item || !item.stageData || !item.stageData[stageKey]) return;
+            var cost = _calculateItemCost(item, stageKey, mBTStages.state.project);
+            var costSpan = document.querySelector('[data-cost-for="' + itemId + '"]');
+            if (costSpan) costSpan.textContent = fmt(cost);
+            if (typeof mBTStages.renderVitals === 'function') mBTStages.renderVitals();
+        }
+
         /* --- Compute payable working days within a date range --- */
         function computeWorkingDays(grossDays, startDate, workWeek, blackouts) {
             if (!workWeek || workWeek >= 7) return grossDays;
@@ -352,18 +399,14 @@
                 runwayDays: 0
             };
 
-            /* Per-stage cost sums from stageData — uses payable working days */
+            /* Phase 195: Per-stage cost via source-of-truth formula (quantity + TZ-normalised) */
             var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
             Object.values(b.sections || {}).forEach(function(sec) {
                 (sec.items || []).forEach(function(item) {
                     if (!item.stageData) return;
                     KEYS.forEach(function(k) {
-                        var sd = item.stageData[k];
-                        if (sd) {
-                            var grossDays = parseFloat(sd.days) || 0;
-                            var payable = stageStarts[k] ? computeWorkingDays(grossDays, stageStarts[k], workWeek, blackouts) : grossDays;
-                            var _m = (sd.multiplier === undefined || sd.multiplier === null || sd.multiplier === '') ? 1 : (parseFloat(sd.multiplier) || 0);
-                            result.stageTotals[k] += payable * (parseFloat(sd.rate || item.rate) || 0) * _m;
+                        if (item.stageData[k]) {
+                            result.stageTotals[k] += _calculateItemCost(item, k, b);
                         }
                     });
                 });
@@ -888,13 +931,10 @@
                 return items.map(function(entry) {
                     var item = entry.item;
                     var sd   = item.stageData[stageKey];
-                    var grossDays   = parseFloat(sd.days) || 0;
-                    var payableDays = _starts[stageKey]
-                        ? computeWorkingDays(grossDays, _starts[stageKey], _workWeek, _blackouts)
-                        : grossDays;
                     var _sdMult = (sd.multiplier === undefined || sd.multiplier === null || sd.multiplier === '') ? 1 : (parseFloat(sd.multiplier) || 0);
                     var _multActive = Math.abs(_sdMult - 1) > 0.0001;
-                    var cost = payableDays * (parseFloat(sd.rate || item.rate) || 0) * _sdMult;
+                    /* Phase 195: Source-of-truth formula (quantity + TZ-normalised days) */
+                    var cost = _calculateItemCost(item, stageKey, b);
                     return '<div class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm stage-item group cursor-grab active:cursor-grabbing" data-id="' + esc(item.id) + '">' +
                         '<div class="flex justify-between items-start mb-2">' +
                             '<div class="min-w-0 flex-grow pr-2">' +
@@ -920,7 +960,7 @@
                             '</div>' +
                             '<div class="ml-auto text-right">' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Cost</label>' +
-                                '<span class="text-[10px] font-black text-slate-800 font-mono">' + fmt(cost) + '</span>' +
+                                '<span class="text-[10px] font-black text-slate-800 font-mono" data-cost-for="' + esc(item.id) + '">' + fmt(cost) + '</span>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
@@ -991,13 +1031,13 @@
                 }
             },
 
+            /* Phase 195: Surgical refresh + debounced save — preserves mobile input focus */
             updateItemDays: function(itemId, stageKey, val) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
                     item.stageData[stageKey].days = parseFloat(val) || 0;
-                    this.renderVitals();
-                    this.renderStageCards();
-                    this.save();
+                    _mBTStagesSurgicalRefresh(itemId, stageKey);
+                    _mBTStagesDebouncedSave();
                 }
             },
 
@@ -1005,19 +1045,18 @@
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
                     item.stageData[stageKey].rate = parseFloat(val) || 0;
-                    this.renderVitals();
-                    this.renderStageCards();
-                    this.save();
+                    _mBTStagesSurgicalRefresh(itemId, stageKey);
+                    _mBTStagesDebouncedSave();
                 }
             },
 
+            /* Multiplier saves immediately — rare input, high persistence value */
             updateItemMultiplier: function(itemId, stageKey, val) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
                     var _raw = (val === '' || val === null || val === undefined) ? 1 : parseFloat(val);
                     item.stageData[stageKey].multiplier = isNaN(_raw) ? 1 : _raw;
-                    this.renderVitals();
-                    this.renderStageCards();
+                    _mBTStagesSurgicalRefresh(itemId, stageKey);
                     this.save();
                 }
             },
