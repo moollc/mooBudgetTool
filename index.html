@@ -5654,7 +5654,7 @@
 
             // Champion Layout Masthead (3-Column Grid)
             var html = '<div class="flex justify-between items-end border-b-4 border-black pb-2 mb-2">' +
-                '<input ' + lock + ' value="' + (d.meta.productionTitle || 'UNTITLED PROJECT') + '" onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">' +
+                '<input ' + lock + ' value="' + (d.meta.productionTitle || 'UNTITLED PROJECT') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">' +
                 '<div class="text-right shrink-0">' +
                 '<div class="text-2xl font-black">CALL SHEET</div>' +
                 '<div class="flex gap-4 text-xs font-bold mt-1">' +
@@ -5672,14 +5672,14 @@
                 '<span>' + this.icons.mapPin + '</span>' +
                 '</div>' +
                 '<div class="flex-grow space-y-1">' +
-                '<textarea ' + lock + ' onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.address\',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address..">' + (d.production.address || '') + '</textarea>' +
+                '<textarea ' + lock + ' oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.address\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.address\',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address..">' + (d.production.address || '') + '</textarea>' +
                 '<div class="grid grid-cols-[auto_1fr] gap-x-2 items-center">' +
-                '<span class="font-bold">PH:</span> <input ' + lock + ' value="' + (d.production.phone || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.phone\',this.value)" class="w-full" placeholder="Office Phone">' +
-                '<span class="font-bold">EMAIL:</span> <input ' + lock + ' value="' + (d.production.email || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.email\',this.value)" class="w-full" placeholder="production@email.com">' +
+                '<span class="font-bold">PH:</span> <input ' + lock + ' value="' + (d.production.phone || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.phone\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.phone\',this.value)" class="w-full" placeholder="Office Phone">' +
+                '<span class="font-bold">EMAIL:</span> <input ' + lock + ' value="' + (d.production.email || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.email\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.email\',this.value)" class="w-full" placeholder="production@email.com">' +
                 '</div>' +
                 '<div class="flex gap-2 pt-1 border-t border-slate-100 mt-1">' +
-                '<div class="flex-1"><span class="font-bold">WIFI:</span> <input ' + lock + ' value="' + (d.production.wifi || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.wifi\',this.value)" class="w-16" placeholder="Network"></div>' +
-                '<div class="flex-1"><span class="font-bold">PASS:</span> <input ' + lock + ' value="' + (d.production.pass || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.pass\',this.value)" class="w-16" placeholder="Password"></div>' +
+                '<div class="flex-1"><span class="font-bold">WIFI:</span> <input ' + lock + ' value="' + (d.production.wifi || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.wifi\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.wifi\',this.value)" class="w-16" placeholder="Network"></div>' +
+                '<div class="flex-1"><span class="font-bold">PASS:</span> <input ' + lock + ' value="' + (d.production.pass || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.pass\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.pass\',this.value)" class="w-16" placeholder="Password"></div>' +
                 '</div>' +
                 '</div>' +
                 '</div>' +
@@ -5707,12 +5707,12 @@
                 '<div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mb-2 hidden">' +
                 '<span class="font-bold">PRODUCER:</span>' +
                 '<div class="flex items-center gap-1">' +
-                '<input ' + lock + ' value="' + (d.agency.producer || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.producer\',this.value)" class="w-full" placeholder="Name">' +
+                '<input ' + lock + ' value="' + (d.agency.producer || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'agency.producer\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.producer\',this.value)" class="w-full" placeholder="Name">' +
                 (d.agency.producer ? '<button onclick="mBTDB.openContactByName(\'' + d.agency.producer + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
                 '</div>' +
                 '<span class="font-bold">CREATIVE:</span>' +
                 '<div class="flex items-center gap-1">' +
-                '<input ' + lock + ' value="' + (d.agency.creative || '') + '" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.creative\',this.value)" class="w-full" placeholder="Name">' +
+                '<input ' + lock + ' value="' + (d.agency.creative || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'agency.creative\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.creative\',this.value)" class="w-full" placeholder="Name">' +
                 (d.agency.creative ? '<button onclick="mBTDB.openContactByName(\'' + d.agency.creative + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
                 '</div>' +
                 '</div>' +
@@ -11244,7 +11244,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.33', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.38', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
