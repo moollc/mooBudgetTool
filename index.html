@@ -510,6 +510,29 @@
 
         /* --- System Bootstrap (Phase 94.1: ES5 .then() conversion) --- */
         init: function () {
+            /* Phase 192B: Global typing state guard — attach EARLY before any promises */
+            (function () {
+                document.addEventListener('focusin', function (e) {
+                    if (e.target && e.target.tagName === 'INPUT') {
+                        e.target.dataset.typing = 'true';
+                    }
+                }, true);
+                document.addEventListener('focusout', function (e) {
+                    if (e.target && e.target.tagName === 'INPUT') {
+                        delete e.target.dataset.typing;
+                    }
+                }, true);
+                document.addEventListener('input', function (e) {
+                    if (e.target && e.target.tagName === 'INPUT') {
+                        e.target.dataset.typing = 'true';
+                        if (e.target._typingTimeout) clearTimeout(e.target._typingTimeout);
+                        e.target._typingTimeout = setTimeout(function () {
+                            delete e.target.dataset.typing;
+                        }, 3000);
+                    }
+                }, true);
+            })();
+
             /* 0. Render Footer Nav (Phase 100.1: extracted component) */
             if (mBT.ui && mBT.ui.footer && typeof mBT.ui.footer.render === 'function') {
                 mBT.ui.footer.render();
@@ -579,7 +602,7 @@
                 /* 5. Persistence Recovery */
 
                 /* Phase 194: Config consolidation helpers */
-                function consolidateConfigKeys() {
+                var consolidateConfigKeys = function () {
                     if (typeof localforage === 'undefined') return Promise.resolve();
                     var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
                     var METADATA_KEY = _pfx + '$METADATA';
@@ -615,7 +638,7 @@
                             if (keysToDelete.length > 0) console.log('[Phase 194] Cleaned up ' + keysToDelete.length + ' orphaned config keys');
                         });
                     }).catch(function (e) { console.warn('[Phase 194] Config consolidation error:', e); return Promise.resolve(); });
-                }
+                };
 
                 var mBTConfigStore = (function () {
                     var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
@@ -3520,7 +3543,11 @@
                 }
                 var updateInput = function (field, val) {
                     var input = document.querySelector('input[data-id="' + item.id + '"][data-field="' + field + '"]');
-                    if (input && document.activeElement !== input) input.value = val;
+                    if (input) {
+                        if (input.dataset.typing === 'true') return;
+                        if (document.activeElement === input) return;
+                        input.value = val;
+                    }
                 };
                 updateInput('quantity', item.quantity);
                 updateInput('rate', toDisp(_conv(item.rate)).toFixed(2));
