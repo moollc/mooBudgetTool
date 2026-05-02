@@ -578,6 +578,80 @@
 
                 /* 5. Persistence Recovery */
 
+                /* Phase 194: Config consolidation helpers */
+                function consolidateConfigKeys() {
+                    if (typeof localforage === 'undefined') return Promise.resolve();
+                    var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                    var METADATA_KEY = _pfx + '$METADATA';
+                    var CONFIG_SUFFIXES = ['aiSystemPrompt','SELECTAIPROVIDER','AISYSTEMPROMPT','currency','rates','ratesLocked','ratesLockedSnap','lastLoaded','auto_fetch_rates','chatModel','imageModel'];
+                    return localforage.getItem(METADATA_KEY).then(function (existingMetadata) {
+                        var metadata = existingMetadata || {};
+                        if (metadata.migration_v194_done === true) return Promise.resolve();
+                        var keysToDelete = [];
+                        return localforage.keys().then(function (keys) {
+                            var consolidatePromises = (keys || []).map(function (k) {
+                                if (k.indexOf(_pfx) !== 0) return Promise.resolve();
+                                var suffix = k.slice(_pfx.length);
+                                if (suffix === '$METADATA' || suffix[0] === '$') return Promise.resolve();
+                                var isConfigKey = CONFIG_SUFFIXES.indexOf(suffix) !== -1;
+                                if (isConfigKey) {
+                                    return localforage.getItem(k).then(function (value) {
+                                        metadata[suffix] = value;
+                                        keysToDelete.push(k);
+                                    }).catch(function () { keysToDelete.push(k); });
+                                } else {
+                                    return localforage.getItem(k).then(function (data) {
+                                        if (!data || typeof data !== 'object' || !data.sections) keysToDelete.push(k);
+                                    }).catch(function () { keysToDelete.push(k); });
+                                }
+                            });
+                            return Promise.all(consolidatePromises);
+                        }).then(function () {
+                            metadata.migration_v194_done = true;
+                            return localforage.setItem(METADATA_KEY, metadata);
+                        }).then(function () {
+                            return Promise.all(keysToDelete.map(function (k) { return localforage.removeItem(k).catch(function () {}); }));
+                        }).then(function () {
+                            if (keysToDelete.length > 0) console.log('[Phase 194] Cleaned up ' + keysToDelete.length + ' orphaned config keys');
+                        });
+                    }).catch(function (e) { console.warn('[Phase 194] Config consolidation error:', e); return Promise.resolve(); });
+                }
+
+                var mBTConfigStore = (function () {
+                    var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                    var METADATA_KEY = _pfx + '$METADATA';
+                    var _cache = null;
+                    var _loading = null;
+                    function _ensureLoaded() {
+                        if (_cache !== null) return Promise.resolve(_cache);
+                        if (_loading) return _loading;
+                        _loading = localforage.getItem(METADATA_KEY).then(function (m) {
+                            _cache = m || {}; _loading = null; return _cache;
+                        }).catch(function (e) {
+                            console.warn('[Phase 194] mBTConfigStore load error:', e);
+                            _cache = {}; _loading = null; return _cache;
+                        });
+                        return _loading;
+                    }
+                    return {
+                        get: function (key, defaultVal) {
+                            return _ensureLoaded().then(function (m) { return m[key] !== undefined ? m[key] : defaultVal; });
+                        },
+                        set: function (key, value) {
+                            return _ensureLoaded().then(function (m) {
+                                m[key] = value;
+                                return localforage.setItem(METADATA_KEY, m);
+                            }).catch(function (e) { console.warn('[Phase 194] mBTConfigStore set error:', e); });
+                        },
+                        getSync: function (key, defaultVal) {
+                            if (_cache === null) { console.warn('[Phase 194] mBTConfigStore.getSync() called before _ensureLoaded()'); return defaultVal; }
+                            return _cache[key] !== undefined ? _cache[key] : defaultVal;
+                        },
+                        _ensureLoaded: _ensureLoaded,
+                        clear: function () { _cache = null; _loading = null; return localforage.removeItem(METADATA_KEY); }
+                    };
+                })();
+
                 /* --- Phase 64: Anonymous Session Tagging --- */
                 var urlParams = new URLSearchParams(window.location.search);
                 var inviteToken = urlParams.get('invite');
@@ -604,10 +678,14 @@
                     try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch(e) { return raw; }
                 })();
 
-                /* Resolve project list -- supports both Promise and Array returns */
-                var listP = (typeof getProjectList === 'function')
-                    ? Promise.resolve().then(function () { return getProjectList(); }).catch(function (e) { console.warn('Project list unavailable:', e); return []; })
-                    : Promise.resolve([]);
+                /* Phase 194: Config consolidation + store init before project list load */
+                var listP = consolidateConfigKeys()
+                    .then(function () { return mBTConfigStore._ensureLoaded(); })
+                    .then(function () {
+                        return (typeof getProjectList === 'function')
+                            ? Promise.resolve().then(function () { return getProjectList(); }).catch(function (e) { console.warn('Project list unavailable:', e); return []; })
+                            : Promise.resolve([]);
+                    });
 
                 return listP.then(function (projectList) {
                     if (!projectToLoad || projectList.indexOf(projectToLoad) === -1) {
@@ -5783,11 +5861,11 @@
                 '<div class="px-2 py-1 border-b border-black flex justify-center items-center gap-4 bg-slate-50">' +
                 '<div class="flex items-center gap-1">' +
                 '<span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SUN</span>' +
-                '<input type="text" ' + lock + ' value="' + (sunrise || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[0]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="06:00">' +
+                '<input type="text" ' + lock + ' value="' + esc(sunrise || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[0]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="06:00">' +
                 '</div>' +
                 '<div class="flex items-center gap-1">' +
                 '<span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SET</span>' +
-                '<input type="text" ' + lock + ' value="' + (sunset || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[1]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">' +
+                '<input type="text" ' + lock + ' value="' + esc(sunset || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[1]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">' +
                 '</div>' +
                 '</div>';
             
@@ -11747,12 +11825,21 @@
                 var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
                 localforage.keys().then(function (keys) {
                     _budgetCache = [];
-                    (keys || []).forEach(function (k) {
+                    var validatePromises = (keys || []).map(function (k) {
                         if (k.indexOf(_pfx) === 0) {
-                            var name = k.slice(_pfx.length);
-                            if (name) _budgetCache.push({ id: 'budget_' + name, type: 'budget', label: name, desc: 'Saved project', budgetKey: k });
+                            return localforage.getItem(k).then(function (data) {
+                                if (data && typeof data === 'object' && data.sections) {
+                                    var name = k.slice(_pfx.length);
+                                    if (name) {
+                                        _budgetCache.push({ id: 'budget_' + name, type: 'budget', label: name, desc: 'Saved project', budgetKey: k });
+                                    }
+                                }
+                            }).catch(function () { /* skip on read error */ });
+                        } else {
+                            return Promise.resolve();
                         }
                     });
+                    return Promise.all(validatePromises);
                 }).catch(function () { _budgetCache = []; });
             }
 
