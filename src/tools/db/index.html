@@ -1668,6 +1668,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var key = storageKey(activeTemplateId);
       localforage.setItem(key, editorData).then(function () {
         hasUnsaved = false;
+        if (activeTemplateId === 'crewDealMemo' && editorData.status === 'Sent') {
+          injectGhostItem();
+        }
         var dot = dom.getElementById('unsaved-dot');
         var ind = dom.getElementById('save-indicator');
         if (dot) dot.style.display = 'none';
@@ -3277,7 +3280,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         id: editorData.memoId,
         description: editorData.role || 'Deal Memo',
         crew: { name: editorData.employeeName || '' },
-        memoStatus: 'Pending',
+        memoStatus: 'Pending', /* unchanged — re-inject on save keeps ghost in sync; readonly removed from budget editor fields */
         memoId: editorData.memoId,
         quantity: 1,
         rate: parseFloat(editorData.rate) || 0,

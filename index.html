@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.40</title>
+    <title>mooBudgetTool v23.42</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -388,7 +388,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.40";
+    var APP_VERSION = "23.42";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3993,7 +3993,7 @@
                 _multChip +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                '<input type="number" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="quantity" value="' + item.quantity + '" onchange="handleLineItemUpdate(this)" class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
+                '<input type="number" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="quantity" value="' + item.quantity + '" onchange="handleLineItemUpdate(this)" class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0">' +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<select data-id="' + safeId + '" data-section="' + safeSection + '" data-field="unit" class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center" ' + (item.memoStatus === 'Pending' ? 'disabled' : '') + '>' +
@@ -4009,7 +4009,7 @@
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<div class="flex items-center gap-1 justify-end md:justify-start">' +
                 '<span class="text-[8px] font-black text-slate-300 pointer-events-none">' + (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD') + '</span>' +
-                '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="rate" value="' + toDisp(item.rate).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
+                '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="rate" value="' + toDisp(item.rate).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0">' +
                 (item.rateSource && item.rateSource !== 'scaled' ? '<span title="Verified OpenGate Market Rate" class="text-[8px] text-emerald-500 font-black">✓</span>' : '') +
                 '</div>' +
                 '</td>' +
@@ -11386,7 +11386,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.40', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.42', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -12065,7 +12065,7 @@
                 var grouped = {};
                 for (var ti = 0; ti < TYPE_ORDER.length; ti++) grouped[TYPE_ORDER[ti]] = [];
 
-                var providers = (mBT.palette && mBT.palette._providers) || [];
+                var providers = (window.mBT && mBT.palette && mBT.palette._providers) ? mBT.palette._providers : [];
                 for (var pi = 0; pi < providers.length; pi++) {
                     var pResults = providers[pi].query(q);
                     for (var ri = 0; ri < pResults.length; ri++) {
