@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.39</title>
+    <title>mooBudgetTool v23.40</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -388,7 +388,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.39";
+    var APP_VERSION = "23.40";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -1915,6 +1915,43 @@
     window.handleImportFile = mBT.data.importFile.bind(mBT.data);
     window.getProjectList = mBT.data.getList.bind(mBT.data);
     window.pushToHistory = mBT.data.pushHistory.bind(mBT.data);
+
+    /* Phase 192C: Sync line item fields back to model on blur (fixes mobile rate/qty resets) */
+    window.handleLineItemUpdate = function (input) {
+        var id = input.dataset.id;
+        var section = input.dataset.section;
+        var field = input.dataset.field;
+        var value = input.value;
+
+        if (!window.budget || !window.budget.sections || !window.budget.sections[section]) { return; }
+
+        var items = window.budget.sections[section].items || [];
+        var item = null;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].id === id) { item = items[i]; break; }
+        }
+        if (!item) { return; }
+
+        if (field === 'quantity') {
+            var q = parseInt(value, 10);
+            item.quantity = (isNaN(q) || value === '') ? 1 : q;
+        } else if (field === 'rate' || field === 'actual' || field === 'actualQuantity' || field === 'actualRate') {
+            var v = parseFloat(value);
+            if (isNaN(v) || value === '') { v = 0; }
+            if (v < 0) { v = 0; }
+            v = Math.round(v * 100) / 100;
+            item[field] = v;
+        }
+
+        try {
+            if (typeof window.mBTLE !== 'undefined' && typeof window.mBTLE.reconcile === 'function') {
+                window.mBTLE.reconcile();
+            }
+        } catch (err) { /* reconcile failure must not block save+paint */ }
+
+        if (typeof window.saveBudget === 'function') { window.saveBudget(true); }
+        if (window.mBT && window.mBT.ui && typeof window.mBT.ui.paint === 'function') { window.mBT.ui.paint(); }
+    };
 
     // --- 5. Global Aliases for Migrated Globals ---
     /* window.mBTOG is set by src/scripts/engine/opengate.js -- mBT.opengate points to the same object */
@@ -3956,7 +3993,7 @@
                 _multChip +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                '<input type="number" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="quantity" value="' + item.quantity + '" class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
+                '<input type="number" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="quantity" value="' + item.quantity + '" onchange="handleLineItemUpdate(this)" class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<select data-id="' + safeId + '" data-section="' + safeSection + '" data-field="unit" class="w-16 bg-transparent border-none text-[11px] md:text-xs font-black uppercase tracking-tighter text-slate-400 focus:ring-0 cursor-pointer p-0 text-center" ' + (item.memoStatus === 'Pending' ? 'disabled' : '') + '>' +
@@ -3972,7 +4009,7 @@
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<div class="flex items-center gap-1 justify-end md:justify-start">' +
                 '<span class="text-[8px] font-black text-slate-300 pointer-events-none">' + (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD') + '</span>' +
-                '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="rate" value="' + toDisp(item.rate).toFixed(2) + '" class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
+                '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="rate" value="' + toDisp(item.rate).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0" ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
                 (item.rateSource && item.rateSource !== 'scaled' ? '<span title="Verified OpenGate Market Rate" class="text-[8px] text-emerald-500 font-black">✓</span>' : '') +
                 '</div>' +
                 '</td>' +
@@ -3983,16 +4020,16 @@
             if (isActuals) {
                 html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">' + mBTLE.format.currency(item.committedCost || 0) + '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualQuantity" value="' + toDisp(item.actualQuantity || 0).toFixed(2) + '" class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
+                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualQuantity" value="' + toDisp(item.actualQuantity || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualRate" value="' + toDisp(item.actualRate || 0).toFixed(2) + '" class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
+                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualRate" value="' + toDisp(item.actualRate || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">' + mBTLE.format.currency(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)))) + '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="' + safeId + '">' + mBTLE.format.currency(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))) + '</td>';
             } else {
                 html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actual" value="' + toDisp(item.actual || 0).toFixed(2) + '" class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
+                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actual" value="' + toDisp(item.actual || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs ' + hideVar + '" data-variance-id="' + safeId + '">' + (isMobile ? formatAbbreviated(variance, displayCurrency) : mBTLE.format.currency(variance)) + '</td>';
             }
@@ -11349,7 +11386,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.38', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.40', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
