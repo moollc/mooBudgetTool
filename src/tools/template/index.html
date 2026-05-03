@@ -117,6 +117,34 @@
     </div>
   </div>
 
+  <!-- Edit Blueprint Modal (Phase 192A) -->
+  <div id="edit-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col h-[85vh]">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+        <div>
+          <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-900 leading-tight">Edit Blueprint Structure</h3>
+          <p class="text-[8px] text-slate-400 mt-0.5">Edit headings and line items. Ctrl+Z to undo, Ctrl+Y to redo.</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="mBTTemplateManager.undo()" title="Undo (Ctrl+Z)" class="p-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded flex items-center justify-center transition-colors">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          </button>
+          <button onclick="mBTTemplateManager.redo()" title="Redo (Ctrl+Y)" class="p-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded flex items-center justify-center transition-colors">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 14l5-5-5-5"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+          </button>
+          <button onclick="document.getElementById('edit-modal').classList.add('hidden')" class="p-1 text-slate-400 hover:text-slate-600 rounded flex items-center justify-center transition-colors">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="edit-modal-content" class="flex-1 overflow-y-auto p-4 space-y-4 text-left"></div>
+      <div class="p-4 border-t border-slate-100 flex gap-2 flex-shrink-0">
+        <button id="edit-save" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors">Save Blueprint</button>
+        <button onclick="document.getElementById('edit-modal').classList.add('hidden')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Snackbar -->
   <div id="snackbar" class="hidden fixed bottom-6 left-1/2 z-50 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-5 py-3 rounded-2xl shadow-2xl snack-in"></div>
 
@@ -297,6 +325,10 @@
                                 'class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[9px] font-black uppercase tracking-widest py-2 rounded-xl transition-colors">' +
                                 'Apply' +
                             '</button>' +
+                            '<button data-edit-key="' + esc(key) + '" ' +
+                                'class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-colors">' +
+                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+                            '</button>' +
                             '<button data-delete-key="' + esc(key) + '" ' +
                                 'class="bg-red-50 hover:bg-red-100 text-red-500 text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-colors">' +
                                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
@@ -430,6 +462,247 @@
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
 
+        /* =====================================================================
+           PHASE 192A: Template Editor Engine
+           ===================================================================== */
+
+        var editorHistory = { past: [], future: [] };
+        var editingState = { templateKey: null, templateData: null };
+
+        function pushHistoryBeforeMutate() {
+            if (editingState.templateData) {
+                editorHistory.past.push(JSON.parse(JSON.stringify(editingState.templateData)));
+                editorHistory.future = [];
+            }
+        }
+
+        function editorUndo() {
+            if (editorHistory.past.length === 0) return;
+            if (editingState.templateData) {
+                editorHistory.future.push(JSON.parse(JSON.stringify(editingState.templateData)));
+            }
+            editingState.templateData = editorHistory.past.pop();
+            renderEditorModalContent();
+        }
+
+        function editorRedo() {
+            if (editorHistory.future.length === 0) return;
+            if (editingState.templateData) {
+                editorHistory.past.push(JSON.parse(JSON.stringify(editingState.templateData)));
+            }
+            editingState.templateData = editorHistory.future.pop();
+            renderEditorModalContent();
+        }
+
+        function renderEditorModalContent() {
+            var el = document.getElementById('edit-modal-content');
+            if (!el || !editingState.templateData) return;
+
+            var structure = Array.isArray(editingState.templateData.structure) ? editingState.templateData.structure : [];
+            var html = '';
+
+            structure.forEach(function (sec, sIdx) {
+                html += '<div class="border border-slate-100 rounded-xl p-3 space-y-3 bg-slate-50/50">' +
+                    '<div class="flex items-center justify-between">' +
+                        '<div class="flex-1 flex items-center gap-2">' +
+                            '<span class="text-[8px] font-black uppercase tracking-widest text-slate-400">Heading:</span>' +
+                            '<input type="text" maxlength="100" value="' + esc(sec.name || '') + '" onchange="mBTTemplateManager.updateSectionHeading(' + sIdx + ', this.value)" class="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 focus:ring-2 focus:ring-violet-500 outline-none font-bold" />' +
+                        '</div>' +
+                        '<button onclick="mBTTemplateManager.deleteSection(' + sIdx + ')" class="p-1 hover:bg-red-50 text-red-400 hover:text-red-500 rounded transition-colors shrink-0 ml-2">' +
+                            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="space-y-1.5 pl-4 border-l-2 border-slate-200">';
+
+                var items = Array.isArray(sec.items) ? sec.items : [];
+                items.forEach(function (item, iIdx) {
+                    var desc = typeof item === 'string' ? item : (item.description || '');
+                    html += '<div class="flex items-center justify-between gap-2 bg-white px-2 py-1.5 border border-slate-100 rounded-lg">' +
+                        '<input type="text" maxlength="200" value="' + esc(desc) + '" onchange="mBTTemplateManager.updateItemName(' + sIdx + ', ' + iIdx + ', this.value)" class="flex-1 text-[11px] font-medium text-slate-700 focus:ring-1 focus:ring-violet-500 outline-none border-none p-0" />' +
+                        '<button onclick="mBTTemplateManager.deleteItem(' + sIdx + ', ' + iIdx + ')" class="p-0.5 text-slate-300 hover:text-red-400 transition-colors">' +
+                            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                        '</button>' +
+                    '</div>';
+                });
+
+                html += '<button onclick="mBTTemplateManager.addItem(' + sIdx + ')" class="mt-2 flex items-center gap-1 text-[9px] font-black text-violet-600 hover:text-violet-700 uppercase tracking-widest px-2 py-1 border border-dashed border-violet-200 hover:border-violet-400 rounded-lg bg-white/60 transition-all w-full justify-center">' +
+                    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+                    'Add Line Item' +
+                '</button>';
+
+                html += '</div></div>';
+            });
+
+            html += '<button onclick="mBTTemplateManager.addSection()" class="flex items-center gap-2 text-[10px] font-black text-violet-700 hover:text-violet-800 uppercase tracking-widest px-3 py-2.5 bg-violet-50 hover:bg-violet-100 border border-violet-200/50 rounded-xl transition-all w-full justify-center">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+                'Add Section' +
+            '</button>';
+
+            el.innerHTML = html;
+        }
+
+        function validateCompleteBlueprint(data) {
+            if (!data || !Array.isArray(data.structure)) {
+                return { valid: false, error: 'Blueprint must have a valid structure' };
+            }
+            for (var sIdx = 0; sIdx < data.structure.length; sIdx++) {
+                var sec = data.structure[sIdx];
+                if (!sec.name || !sec.name.trim()) {
+                    return { valid: false, error: 'Section ' + (sIdx + 1) + ' heading cannot be empty' };
+                }
+                if (!Array.isArray(sec.items) || sec.items.length === 0) {
+                    return { valid: false, error: 'Section "' + sec.name + '" must have at least one line item' };
+                }
+                for (var iIdx = 0; iIdx < sec.items.length; iIdx++) {
+                    var item = sec.items[iIdx];
+                    var desc = typeof item === 'string' ? item : (item.description || '');
+                    if (!desc || !desc.trim()) {
+                        return { valid: false, error: 'Line item in section "' + sec.name + '" cannot be empty' };
+                    }
+                }
+            }
+            return { valid: true };
+        }
+
+        function openEditor(key) {
+            loadCustomTemplates().then(function (custom) {
+                var t = custom[key];
+                if (!t) return;
+                editingState.templateKey = key;
+                editingState.templateData = JSON.parse(JSON.stringify(t));
+
+                if (!editingState.templateData.structure || !Array.isArray(editingState.templateData.structure)) {
+                    editingState.templateData.structure = [];
+                }
+
+                editorHistory.past = [];
+                editorHistory.future = [];
+
+                renderEditorModalContent();
+                wireSaveButton();
+
+                var editModal = document.getElementById('edit-modal');
+                if (editModal) editModal.classList.remove('hidden');
+            });
+        }
+
+        function wireSaveButton() {
+            var saveBtn = document.getElementById('edit-save');
+            if (!saveBtn || saveBtn._wired) return;
+            saveBtn._wired = true;
+            saveBtn.addEventListener('click', function () {
+                if (!editingState.templateKey || !editingState.templateData) return;
+
+                var validation = validateCompleteBlueprint(editingState.templateData);
+                if (!validation.valid) {
+                    snack(validation.error);
+                    return;
+                }
+
+                saveCustomTemplate(editingState.templateKey, editingState.templateData)
+                    .then(function () {
+                        snack('Blueprint saved.');
+                        document.getElementById('edit-modal').classList.add('hidden');
+                        renderCustom();
+                    })
+                    .catch(function (err) {
+                        var errorMsg = (err && err.message) ? err.message : 'Unknown error';
+                        snack('Failed to save: ' + errorMsg);
+                        console.error('Blueprint save failed:', err);
+                    });
+            });
+        }
+
+        function editorUpdateSectionHeading(sIdx, value) {
+            var t = editingState.templateData;
+            if (t && t.structure && t.structure[sIdx]) {
+                var trimmed = String(value || '').trim();
+                if (!trimmed) { console.warn('Section name cannot be empty'); return; }
+                pushHistoryBeforeMutate();
+                t.structure[sIdx].name = trimmed.substring(0, 100);
+            }
+        }
+
+        function editorDeleteSection(sIdx) {
+            var t = editingState.templateData;
+            if (t && t.structure && t.structure[sIdx] !== undefined) {
+                pushHistoryBeforeMutate();
+                t.structure.splice(sIdx, 1);
+                renderEditorModalContent();
+            }
+        }
+
+        function editorAddSection() {
+            var t = editingState.templateData;
+            if (t) {
+                pushHistoryBeforeMutate();
+                if (!Array.isArray(t.structure)) t.structure = [];
+                t.structure.push({ id: 'sec_' + Date.now(), name: 'New Section', items: [] });
+                renderEditorModalContent();
+            }
+        }
+
+        function editorUpdateItemName(sIdx, iIdx, value) {
+            var t = editingState.templateData;
+            if (t && t.structure && t.structure[sIdx]) {
+                var items = t.structure[sIdx].items;
+                if (items && items[iIdx] !== undefined) {
+                    var trimmed = String(value || '').trim();
+                    if (!trimmed) { console.warn('Item name cannot be empty'); return; }
+                    pushHistoryBeforeMutate();
+                    if (typeof items[iIdx] === 'string') {
+                        items[iIdx] = trimmed.substring(0, 200);
+                    } else {
+                        items[iIdx].description = trimmed.substring(0, 200);
+                    }
+                }
+            }
+        }
+
+        function editorDeleteItem(sIdx, iIdx) {
+            var t = editingState.templateData;
+            if (t && t.structure && t.structure[sIdx]) {
+                var items = t.structure[sIdx].items;
+                if (items && items[iIdx] !== undefined) {
+                    pushHistoryBeforeMutate();
+                    items.splice(iIdx, 1);
+                    renderEditorModalContent();
+                }
+            }
+        }
+
+        function editorAddItem(sIdx) {
+            var t = editingState.templateData;
+            if (t && t.structure && t.structure[sIdx]) {
+                pushHistoryBeforeMutate();
+                if (!Array.isArray(t.structure[sIdx].items)) t.structure[sIdx].items = [];
+                t.structure[sIdx].items.push({
+                    id: 'item_' + Date.now(),
+                    description: 'New Item',
+                    quantity: 1,
+                    rate: 0,
+                    unit: 'Flat',
+                    multiplier: 1,
+                    actual: 0
+                });
+                renderEditorModalContent();
+            }
+        }
+
+        /* Keyboard shortcut listener (only active when modal is open) */
+        window.addEventListener('keydown', function (e) {
+            var isCtrlOrMeta = e.ctrlKey || e.metaKey;
+            var editModal = document.getElementById('edit-modal');
+            if (!isCtrlOrMeta || !editModal || editModal.classList.contains('hidden')) return;
+            if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                editorUndo();
+            } else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) {
+                e.preventDefault();
+                editorRedo();
+            }
+        });
+
         /* --- Wire all events (delegated) --- */
         function wireEvents() {
             /* Back button */
@@ -517,6 +790,12 @@
                     return;
                 }
 
+                var editBtn = e.target.closest('[data-edit-key]');
+                if (editBtn) {
+                    openEditor(editBtn.dataset.editKey);
+                    return;
+                }
+
                 var delBtn = e.target.closest('[data-delete-key]');
                 if (delBtn) {
                     var key = delBtn.dataset.deleteKey;
@@ -553,7 +832,17 @@
             wireEvents();
         }
 
-        return { init: init };
+        return {
+            init: init,
+            undo: editorUndo,
+            redo: editorRedo,
+            updateSectionHeading: editorUpdateSectionHeading,
+            deleteSection: editorDeleteSection,
+            addSection: editorAddSection,
+            updateItemName: editorUpdateItemName,
+            deleteItem: editorDeleteItem,
+            addItem: editorAddItem
+        };
     })();
 
     mBTTemplateManager.init();
