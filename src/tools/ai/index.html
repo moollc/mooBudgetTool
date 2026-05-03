@@ -473,7 +473,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var context    = null;
     var llmHistory = [];   /* [{role, content}] for LLM session */
 
-    var _llmProjectKey  = 'default'; /* updated from budget-sync postMessage */
+    var _llmProjectKey      = 'default'; /* updated from budget-sync postMessage */
+    var _contextGeneration  = 0;        /* incremented on every project switch to invalidate stale async context */
 
     /* --- XSS-safe helper --- */
     function esc(str) {
@@ -687,10 +688,15 @@ window.openSourceModal   = openSourceModal;
         if (!cards) return;
         if (btn) btn.disabled = true;
         cards.innerHTML = '<div class="bs-card bs-card--loading col-span-2 text-center text-xs text-gray-400 py-4">Refreshing&hellip;</div>';
+        _contextGeneration++;
+        var _refreshGen = _contextGeneration;
 
         window.mBTAIContext.getCurrentProjectContext()
             .then(function (ctx) {
+                if (_refreshGen !== _contextGeneration) return; /* stale — project switched mid-request */
                 context = ctx;
+                _llmProjectKey = (ctx && ctx.projectId != null ? ctx.projectId : null) ||
+                                 (ctx && ctx._budgetDoc && ctx._budgetDoc.id) || 'default';
                 var doc = (ctx && ctx._budgetDoc) || null;
                 return loadActiveBudgetDoc(ctx && ctx.projectName, doc).then(function (resolvedDoc) {
                     paintProjectKnowledge(ctx, resolvedDoc);
@@ -883,6 +889,10 @@ window.openSourceModal   = openSourceModal;
         var payload = e.data.payload || e.data;
         var newCtx = payload.context || context;
         context = newCtx;
+        _contextGeneration++;
+        _llmProjectKey = (payload.budgetDoc && payload.budgetDoc.id) ||
+                         (newCtx && newCtx.projectId != null ? newCtx.projectId : null) ||
+                         'default';
         paintProjectKnowledge(newCtx, payload.budgetDoc || null);
         renderBudgetStateCards(newCtx, payload.budgetDoc || null);
         /* Keep version badge in sync with monolith */
@@ -1008,9 +1018,15 @@ window.openSourceModal   = openSourceModal;
                       lower.indexOf('exec') === 0  ? 'executive' :
                       lower.indexOf('help') === 0  ? 'help'      : 'budget';
 
+        _contextGeneration++;
+        var _cmdGen = _contextGeneration;
+
         window.mBTAIContext.getCurrentProjectContext()
             .then(function (ctx) {
+                if (_cmdGen !== _contextGeneration) return; /* stale — project switched mid-request */
                 context = ctx;
+                _llmProjectKey = (ctx && ctx.projectId != null ? ctx.projectId : null) ||
+                                 (ctx && ctx._budgetDoc && ctx._budgetDoc.id) || 'default';
                 var response = dispatchCommand(command, ctx);
                 removeTyping(typingId);
                 addMessage(response, 'ai');
@@ -1493,9 +1509,14 @@ window.openSourceModal   = openSourceModal;
             window.parent.postMessage({ type: 'mbt:tool-action', action: 'SYNC_FUNDING_SOURCE' }, '*');
         }
 
+        var _initGen = _contextGeneration;
+
         window.mBTAIContext.getCurrentProjectContext()
             .then(function (ctx) {
+                if (_initGen !== _contextGeneration) return; /* stale — project switched before init resolved */
                 context = ctx;
+                _llmProjectKey = (ctx && ctx.projectId != null ? ctx.projectId : null) ||
+                                 (ctx && ctx._budgetDoc && ctx._budgetDoc.id) || 'default';
                 paintProjectKnowledge(ctx, ctx._budgetDoc || null);
                 dom.getElementById('aiStatus').textContent = 'Ready';
                 restoreLLMHistory();

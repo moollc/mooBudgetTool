@@ -458,7 +458,7 @@
                                         '</div>' +
                                         '<div>' +
                                             '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model</label>' +
-                                            '<select id="chatModelSelect" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' + chatModelOpts + '</select>' +
+                                            '<select id="chatModelSelect" onchange="window.mBT_UI_Settings_handleChatModelChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' + chatModelOpts + '</select>' +
                                         '</div>' +
                                     '</div>' +
                                     '<div>' +
@@ -611,7 +611,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.40';
+            var currentVersion = updateStatus.localVersion || 'v23.42';
 
             var statusMsg = '';
             if (isChecking) {
@@ -701,8 +701,14 @@
     };
 
     window.mBT_UI_Settings_handleChatModelChange = function (m) {
-        var p = document.getElementById('aiProviderSelect').value;
-        localStorage.setItem('mbt_ai_chat_model_' + p, m);
+        try {
+            if (!m || !String(m).trim()) { console.warn('[Settings] Chat model value is empty; ignoring.'); return; }
+            var pSel = document.getElementById('aiProviderSelect');
+            var p = pSel ? pSel.value : 'openai';
+            localStorage.setItem('mbt_ai_chat_model_' + p, String(m).trim());
+        } catch (err) {
+            console.error('[Settings] Failed to persist chat model:', err);
+        }
     };
 
     window.mBT_UI_Settings_handleImgModelChange = function (m) {
