@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.42</title>
+    <title>mooBudgetTool v23.43</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -388,7 +388,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.42";
+    var APP_VERSION = "23.43";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -1437,6 +1437,50 @@
                 var mm = String(now.getMonth() + 1).padStart(2, '0');
                 var dd = String(now.getDate()).padStart(2, '0');
 
+                /* Phase 194: Read wizard inputs — user values override template defaults */
+                var _wizName = document.getElementById('wiz-name');
+                var _wizCur  = document.getElementById('wiz-currency');
+                var _wizDate = document.getElementById('wiz-date');
+                var _wizDays = document.getElementById('wiz-days');
+
+                var _wizNameVal  = (_wizName && _wizName.value && _wizName.value.trim()) || '';
+                var _wizCurVal   = (_wizCur  && _wizCur.value)  || '';
+                var _wizDateVal  = (_wizDate && _wizDate.value) || '';
+                var _wizDaysVal  = (_wizDays && _wizDays.value && parseInt(_wizDays.value, 10)) || null;
+
+                /* Validate wizard form if it is present and user has entered a name */
+                if (_wizNameVal) {
+                    if (_wizNameVal.length < 2 || _wizNameVal.length > 100) {
+                        mBTME.alert('Validation Error', 'Project name must be 2–100 characters.');
+                        return;
+                    }
+                    if (!/^[a-zA-Z0-9 \-()–—]+$/.test(_wizNameVal)) {
+                        mBTME.alert('Validation Error', 'Project name contains invalid characters.');
+                        return;
+                    }
+                    if (!_wizCurVal) {
+                        mBTME.alert('Validation Error', 'Please select a currency.');
+                        var _cErr = document.getElementById('wiz-currency-err');
+                        if (_cErr) { _cErr.textContent = 'Select a currency'; _cErr.style.display = 'block'; }
+                        if (_wizCur) _wizCur.focus();
+                        return;
+                    }
+                    if (!_wizDateVal) {
+                        mBTME.alert('Validation Error', 'Please enter a start date.');
+                        return;
+                    }
+                    var _selDate = new Date(_wizDateVal + 'T00:00:00');
+                    var _nowDate = new Date(); _nowDate.setHours(0,0,0,0);
+                    if (_selDate < _nowDate) {
+                        mBTME.alert('Validation Error', 'Start date must be today or later.');
+                        return;
+                    }
+                    if (_wizDaysVal !== null && (_wizDaysVal < 1 || _wizDaysVal > 365)) {
+                        mBTME.alert('Validation Error', 'Production days must be between 1 and 365.');
+                        return;
+                    }
+                }
+
                 var dateFmt = localStorage.getItem(projectDateFormatKey) || 'YYYYMMDD';
                 var dateStr = dateFmt === 'MMDDYYYY' ? (mm + dd + yyyy) : (yyyy + mm + dd);
 
@@ -1519,7 +1563,9 @@
                 }
 
                 /* --- Collision Detection: find a unique project name --- */
-                var proposedName = baseLabel + sep + dateStr;
+                /* Phase 194: User-entered name takes precedence; fall back to template label + date */
+                var proposedName = _wizNameVal || (baseLabel + sep + dateStr);
+                var _proposedBase = proposedName;
 
                 /* Recursive .then() loop to check name uniqueness */
                 var findUniqueName = function (name, counter) {
@@ -1527,7 +1573,7 @@
                         if (!existing && !localStorage.getItem(storageKeyPrefix + name)) {
                             return name;
                         }
-                        var next = proposedName + '_' + counter;
+                        var next = _proposedBase + '_' + counter;
                         return findUniqueName(next, counter + 1);
                     });
                 };
@@ -1536,7 +1582,7 @@
                     var newBudget = {
                         projectName: uniqueName,
                         company: 'Independent',
-                        startDate: new Date().toISOString().split('T')[0],
+                        startDate: _wizDateVal || new Date().toISOString().split('T')[0],
                         sections: sections,
                         grandTotal: 0,
                         subtotal: 0,
@@ -1557,7 +1603,8 @@
                         jurisdiction: { name: '', incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
                         ledgers: { poCounter: 1, pos: [], pettyCash: [] },
                         actualsMode: false,
-                        currency: displayCurrency
+                        currency: _wizCurVal || displayCurrency,
+                        productionDays: _wizDaysVal
                     };
 
                     budget = mBT.data.state.wrap(newBudget);
@@ -4511,6 +4558,9 @@
     /* --- Phase 94.2: ES5 .then() conversion of showNewProjectModal --- */
     /* Phase 116: Assistant Hub styling -- 4-col grid, premium dark branding, rates toggle polish */
     window.showNewProjectModal = function () {
+        /* Phase 194: Wizard form state \u2014 reset on each open */
+        var _wizardState = { isDirty: false, isValid: false };
+
         /* Show modal immediately with loading skeleton, then swap content once blueprints load */
         var skeleton = '<div class="p-8 bg-slate-50 flex items-center justify-center min-h-[300px]">' +
             '<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Blueprints\u2026</div></div>';
@@ -4586,6 +4636,46 @@
                 '</div>' +
                 '</label></div>';
 
+            /* Phase 194: Wizard form HTML injected before blueprint grid */
+            var wizardFormHtml =
+                '<div id="wiz-form" style="margin-bottom:14px;padding:12px 14px;background:rgba(255,255,255,0.65);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.07);border-radius:10px;">' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+                /* Project Name */
+                '<div>' +
+                '<label for="wiz-name" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Project Name <span style="color:#ef4444;">*</span></label>' +
+                '<input type="text" id="wiz-name" placeholder="e.g., Jamaican Indie Series" maxlength="100" autocomplete="off" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
+                '<div id="wiz-name-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '</div>' +
+                /* Currency */
+                '<div>' +
+                '<label for="wiz-currency" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Currency <span style="color:#ef4444;">*</span></label>' +
+                '<select id="wiz-currency" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';">' +
+                '<option value="">-- Select --</option>' +
+                '<option value="JMD">JMD (Jamaica Dollar)</option>' +
+                '<option value="USD">USD (US Dollar)</option>' +
+                '<option value="EUR">EUR (Euro)</option>' +
+                '<option value="GBP">GBP (British Pound)</option>' +
+                '<option value="CAD">CAD (Canadian Dollar)</option>' +
+                '</select>' +
+                '<div id="wiz-currency-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '</div>' +
+                '</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                /* Start Date */
+                '<div>' +
+                '<label for="wiz-date" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Start Date <span style="color:#ef4444;">*</span></label>' +
+                '<input type="date" id="wiz-date" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
+                '<div id="wiz-date-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '</div>' +
+                /* Production Days */
+                '<div>' +
+                '<label for="wiz-days" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Prod. Days <span style="color:#9ca3af;font-weight:400;">(optional)</span></label>' +
+                '<input type="number" id="wiz-days" placeholder="e.g., 5" min="1" max="365" autocomplete="off" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
+                '<div id="wiz-days-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+
             var content =
                 '<div class="p-4 bg-gradient-to-b from-slate-50 to-white flex flex-col">' +
                 '<div class="text-center mb-3 shrink-0">' +
@@ -4593,7 +4683,8 @@
                 '<img src="./assets/cow-192.png" class="w-6 h-6 object-contain" alt="mBT">' +
                 '<h2 class="text-base font-black uppercase tracking-tighter text-slate-900">mBT</h2>' +
                 '</div>' +
-                '<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Select a blueprint to initialize budget</p></div>' +
+                '<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Set up your project, then pick a blueprint</p></div>' +
+                wizardFormHtml +
                 toggleHtml +
                 '<div class="overflow-y-auto pr-1">' +
                 '<div class="mb-2 flex items-center gap-3">' +
@@ -4616,6 +4707,114 @@
             var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
             if (modalBody) modalBody.innerHTML = content;
             else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-xl', { hideHeader: true, noPadding: true }); }
+
+            /* Phase 194: Wire wizard form defaults + validation after DOM is ready */
+            var _wName = document.getElementById('wiz-name');
+            var _wCur  = document.getElementById('wiz-currency');
+            var _wDate = document.getElementById('wiz-date');
+            var _wDays = document.getElementById('wiz-days');
+
+            /* Set defaults */
+            if (_wDate) { var _td = new Date(); _wDate.value = _td.getFullYear() + '-' + ('0'+(_td.getMonth()+1)).slice(-2) + '-' + ('0'+_td.getDate()).slice(-2); }
+            if (_wCur && typeof displayCurrency !== 'undefined' && displayCurrency) { _wCur.value = displayCurrency; }
+
+            var _wizShowErr = function (elId, msg) {
+                var el = document.getElementById(elId);
+                if (!el) return;
+                el.textContent = msg || '';
+                el.style.display = msg ? 'block' : 'none';
+            };
+            var _wizSetInvalid = function (input, invalid) {
+                if (input) input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+            };
+
+            var _wizValidate = function () {
+                var ok = true;
+                /* Name */
+                var nameVal = (_wName && _wName.value && _wName.value.trim()) || '';
+                if (!nameVal) {
+                    _wizShowErr('wiz-name-err', 'Project name is required'); _wizSetInvalid(_wName, true); ok = false;
+                } else if (nameVal.length < 2 || nameVal.length > 100) {
+                    _wizShowErr('wiz-name-err', 'Must be 2–100 characters'); _wizSetInvalid(_wName, true); ok = false;
+                } else if (!/^[a-zA-Z0-9 \-()–—]+$/.test(nameVal)) {
+                    _wizShowErr('wiz-name-err', 'Letters, numbers, spaces, hyphens, parentheses only'); _wizSetInvalid(_wName, true); ok = false;
+                } else {
+                    _wizShowErr('wiz-name-err', ''); _wizSetInvalid(_wName, false);
+                }
+                /* Currency */
+                var curVal = _wCur && _wCur.value;
+                if (!curVal) {
+                    _wizShowErr('wiz-currency-err', 'Select a currency'); _wizSetInvalid(_wCur, true); ok = false;
+                } else {
+                    _wizShowErr('wiz-currency-err', ''); _wizSetInvalid(_wCur, false);
+                }
+                /* Date */
+                var dateVal = _wDate && _wDate.value;
+                if (!dateVal) {
+                    _wizShowErr('wiz-date-err', 'Start date is required'); _wizSetInvalid(_wDate, true); ok = false;
+                } else {
+                    var _sel = new Date(dateVal + 'T00:00:00');
+                    var _now = new Date(); _now.setHours(0,0,0,0);
+                    if (_sel < _now) {
+                        _wizShowErr('wiz-date-err', 'Date must be today or later'); _wizSetInvalid(_wDate, true); ok = false;
+                    } else {
+                        _wizShowErr('wiz-date-err', ''); _wizSetInvalid(_wDate, false);
+                    }
+                }
+                /* Days (optional) */
+                var daysVal = _wDays && _wDays.value;
+                if (daysVal) {
+                    var _d = parseInt(daysVal, 10);
+                    if (isNaN(_d) || _d < 1 || _d > 365) {
+                        _wizShowErr('wiz-days-err', '1–365 only'); _wizSetInvalid(_wDays, true); ok = false;
+                    } else {
+                        _wizShowErr('wiz-days-err', ''); _wizSetInvalid(_wDays, false);
+                    }
+                } else {
+                    _wizShowErr('wiz-days-err', ''); _wizSetInvalid(_wDays, false);
+                }
+                _wizardState.isValid = ok;
+                return ok;
+            };
+
+            /* Attach listeners */
+            if (_wName) { _wName.addEventListener('input', function () { _wizardState.isDirty = true; _wizValidate(); }); }
+            if (_wCur)  { _wCur.addEventListener('change', function () { _wizardState.isDirty = true; _wizValidate(); }); }
+            if (_wDate) { _wDate.addEventListener('change', function () { _wizardState.isDirty = true; _wizValidate(); }); }
+            if (_wDays) { _wDays.addEventListener('input', function () { _wizardState.isDirty = true; _wizValidate(); }); }
+
+            /* Run initial validation silently to set isValid state without displaying errors */
+            _wizardState.isValid = (function () {
+                var nameOk = !!(  _wName && _wName.value && _wName.value.trim().length >= 2 && /^[a-zA-Z0-9 \-()–—]+$/.test(_wName.value.trim()) );
+                var curOk  = !!( _wCur && _wCur.value );
+                var dateOk = (function () {
+                    if (!_wDate || !_wDate.value) return false;
+                    var _s = new Date(_wDate.value + 'T00:00:00'); var _n = new Date(); _n.setHours(0,0,0,0); return _s >= _n;
+                }());
+                var daysOk = !_wDays || !_wDays.value || (function () { var _v = parseInt(_wDays.value, 10); return !isNaN(_v) && _v >= 1 && _v <= 365; }());
+                return nameOk && curOk && dateOk && daysOk;
+            }());
+
+            /* Keyboard: Enter on any field triggers create if form is valid (name field is a common submit point) */
+            var _wizFields = [_wName, _wCur, _wDate, _wDays];
+            _wizFields.forEach(function (f) {
+                if (!f) return;
+                f.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        if (_wizValidate()) {
+                            /* Trigger the first blueprint button as default, or blank create */
+                            var firstBtn = modalBody && modalBody.querySelector('button[onclick*="newProject"]');
+                            if (firstBtn) firstBtn.click();
+                        } else {
+                            var firstInvalid = modalBody && modalBody.querySelector('[aria-invalid="true"]');
+                            if (firstInvalid) firstInvalid.focus();
+                        }
+                    }
+                });
+            });
+
+            /* Store state ref on the modal body element so newProject() can read it */
+            if (modalBody) modalBody._wizardState = _wizardState;
         });
     };
 
@@ -11386,7 +11585,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.42', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.43', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
