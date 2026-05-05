@@ -890,9 +890,19 @@ window.openSourceModal   = openSourceModal;
         var newCtx = payload.context || context;
         context = newCtx;
         _contextGeneration++;
+        var _oldProjectKey = _llmProjectKey;
         _llmProjectKey = (payload.budgetDoc && payload.budgetDoc.id) ||
                          (newCtx && newCtx.projectId != null ? newCtx.projectId : null) ||
                          'default';
+        /* Phase 193.2: Purge stale chat bubbles on project switch */
+        if (_oldProjectKey !== _llmProjectKey) {
+            var llmMsgEl = document.getElementById('llmMessages');
+            if (llmMsgEl) {
+                llmMsgEl.innerHTML = '';
+                llmHistory = [];
+                restoreLLMHistory();
+            }
+        }
         paintProjectKnowledge(newCtx, payload.budgetDoc || null);
         renderBudgetStateCards(newCtx, payload.budgetDoc || null);
         /* Keep version badge in sync with monolith */
