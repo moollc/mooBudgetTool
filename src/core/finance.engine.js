@@ -98,7 +98,7 @@ window.mBT_Finance = (function () {
                 _validateItem(item);
 
                 /* --- Stage Aggregation (Phase 90.RC): uses computeWorkingDays for payable days --- */
-                if (item.stageData && Object.keys(item.stageData).length > 0) {
+                if (item.stageData && Object.keys(item.stageData).length > 0 && item.rateType !== 'fixed') {
                     var stageSumCost = 0;
                     var stageSumDays = 0;
                     Object.keys(item.stageData).forEach(function (stageKey) {

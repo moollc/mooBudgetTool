@@ -48,7 +48,9 @@
     /* ========= REGIONAL RATE REGISTRY ========= */
     /* Multipliers are now strictly Role-Specific within the _MASTER_CREW_INDEX. */
     var RATE_REGIONS = [
-        'USA', 'Jamaica', 'Trinidad', 'Barbados', 'Guyana', 'UK', 'Canada', 'Australia'
+        'USA', 'Jamaica', 'Trinidad', 'Barbados', 'Guyana', 'UK', 'Canada', 'Australia',
+        /* Phase 197 — Regional Expansion */
+        'India', 'Thailand', 'Philippines', 'Vietnam', 'Poland', 'Mexico', 'Brazil', 'Colombia', 'South Africa'
     ];
 
     /* ========= CLOUD CONFIG ========= */
@@ -62,6 +64,16 @@
     var OG_CLOUD_KEY = 'sb_publishable_1e5RuNmbdBzqC_n_-dFYHw_gBJzA73k';
     var OG_TABLE     = 'og_community_rates';
     var OG_SYNC_KEY  = 'moo_og_last_sync';
+
+    /* ========= CURRENCY MAP (Phase 197) ========= */
+    /* Single source of truth for region->currency lookups. Used by _expandMasterIndex and calculateRate. */
+    var OG_CURRENCIES = {
+        'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD',
+        'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD',
+        /* Phase 197 — Regional Expansion */
+        'India': 'INR', 'Thailand': 'THB', 'Philippines': 'PHP', 'Vietnam': 'VND',
+        'Poland': 'PLN', 'Mexico': 'MXN', 'Brazil': 'BRL', 'Colombia': 'COP', 'South Africa': 'ZAR'
+    };
 
     /* ========= STORAGE HELPERS ========= */
     /* Use localforage directly, works in both Budget Editor and App Shell. */
@@ -97,100 +109,110 @@
        Jamaica multipliers are derived from 2025 Market Truth (Hardcoded JMD / 155 / USA USD). */
 
     var _MASTER_CREW_INDEX = [
-        { "description": "Director", "unit": "Day", "baseRate": 1200, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Colorist", "unit": "Day", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 1.1, "Australia": 0.68 }, "intelligence": "Senior Freelance rate. Post-facility suites typically billed separately in Post-Production Extras." },
-        { "description": "Producer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Executive Producer", "unit": "Day", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Line Producer", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Screenwriter", "unit": "Flat", "baseRate": 4000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 }, "intelligence": "Bespoke creative role. Rates vary significantly by experience and credits." },
-        { "description": "Director of Photography (DP)", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Camera Operator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "1st Assistant Camera (Focus)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.82, "Australia": 0.68 } },
-        { "description": "2nd Assistant Camera", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Digital Imaging Tech (DIT)", "unit": "Day", "baseRate": 590, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.95, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Steadicam Operator", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68 }, "intelligence": "Typically fly-in crew or bespoke negotiation. USA anchor applied for regional gaps." },
-        { "description": "Drone Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Camera Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Unit Production Manager (UPM)", "unit": "Day", "baseRate": 911, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "1st Assistant Director (1st AD)", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "2nd Assistant Director", "unit": "Day", "baseRate": 557, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "2nd 2nd AD", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.7, "Australia": 0.68 } },
-        { "description": "Key PA", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
-        { "description": "Set PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
-        { "description": "Office PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.65, "Australia": 0.68 } },
-        { "description": "Truck PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68 } },
-        { "description": "Gaffer", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Best Boy Electric", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Electrician", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Key Grip", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Best Boy Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Dolly Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Grip", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Generator Operator", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Sound Mixer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Boom Operator", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Sound Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Production Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Art Director", "unit": "Day", "baseRate": 544, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Set Decorator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Set Dresser", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Props Master", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Assistant Props", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Costume Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Wardrobe Stylist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Wardrobe Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Makeup Artist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Hair Stylist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Makeup/Hair Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Editor", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68 } },
-        { "description": "Assistant Editor (AE)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Post-Production Supervisor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "VFX Artist", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "VFX Supervisor", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
-        { "description": "Sound Designer", "unit": "Flat", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Composer", "unit": "Flat", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 }, "intelligence": "Creative bespoke role. Rates usually include home-studio overhead." },
-        { "description": "Music Supervisor", "unit": "Flat", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Cast - Lead", "unit": "Day", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Cast - Supporting", "unit": "Day", "baseRate": 1000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Location Manager", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Location Scout", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Catering (Per Head)", "unit": "Flat", "baseRate": 45, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68 } },
-        { "description": "Craft Service", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Script Supervisor", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Australia": 0.68 } },
-        { "description": "Production Accountant", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Stunt Coordinator", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Australia": 0.68 } },
-        { "description": "Publicist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68 } },
-        { "description": "Colorist", "unit": "Hour", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Australia": 0.68 } },
-        { "description": "Copywriter (Pitch/Treatment)", "unit": "Flat", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68 } },
-        { "description": "Casting Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Storyboard Artist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68 } },
-        { "description": "Script Consultant / Doctor", "unit": "Flat", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 }, "intelligence": "Consultancy role. Usually remote/fly-in from major hubs." },
-        { "description": "Pitch Deck Designer", "unit": "Flat", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
-        { "description": "Researcher", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Concept Artist", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Legal - Rights & Clearances", "unit": "Flat", "baseRate": 2500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68 } },
-        { "description": "Security Guard", "unit": "Day", "baseRate": 150, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.7, "Australia": 0.68 } },
-        { "description": "Medic / Set Nurse", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
+        { "description": "Director", "unit": "Day", "baseRate": 1200, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68, "India": 0.40, "Thailand": 0.60, "Philippines": 0.66, "Vietnam": 0.74, "Poland": 0.92, "Mexico": 0.54, "Brazil": 0.60, "Colombia": 0.40, "South Africa": 0.58 } },
+        { "description": "Colorist", "unit": "Day", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 1.1, "Australia": 0.68, "India": 0.38, "Thailand": 0.24, "Philippines": 0.19, "Vietnam": 0.30, "Poland": 0.61, "Mexico": 0.42, "Brazil": 0.46, "Colombia": 0.31, "South Africa": 0.51 }, "intelligence": "Senior Freelance rate. Post-facility suites typically billed separately in Post-Production Extras." },
+        { "description": "Producer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.60, "Philippines": 0.63, "Vietnam": 0.71, "Poland": 0.89, "Mexico": 0.53, "Brazil": 0.63, "Colombia": 0.42, "South Africa": 0.58 } },
+        { "description": "Executive Producer", "unit": "Day", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Line Producer", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Screenwriter", "unit": "Flat", "baseRate": 4000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Bespoke creative role. Rates vary significantly by experience and credits." },
+        { "description": "Director of Photography (DP)", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Canada": 0.78, "Australia": 0.68, "India": 0.40, "Thailand": 0.45, "Philippines": 0.65, "Vietnam": 0.62, "Poland": 0.94, "Mexico": 0.55, "Brazil": 0.63, "Colombia": 0.42, "South Africa": 0.65 } },
+        { "description": "Camera Operator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "1st Assistant Camera (Focus)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.82, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "2nd Assistant Camera", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Digital Imaging Tech (DIT)", "unit": "Day", "baseRate": 590, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.95, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Steadicam Operator", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Typically fly-in crew or bespoke negotiation. USA anchor applied for regional gaps." },
+        { "description": "Drone Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Camera Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Unit Production Manager (UPM)", "unit": "Day", "baseRate": 911, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "1st Assistant Director (1st AD)", "unit": "Day", "baseRate": 867, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "2nd Assistant Director", "unit": "Day", "baseRate": 557, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "2nd 2nd AD", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.7, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Key PA", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Set PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Office PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.65, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Truck PA", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Gaffer", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 0.35, "Thailand": 0.33, "Philippines": 0.29, "Vietnam": 0.29, "Poland": 0.68, "Mexico": 0.46, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Best Boy Electric", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Electrician", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Key Grip", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Best Boy Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Dolly Grip", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.78, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Grip", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Generator Operator", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Sound Mixer", "unit": "Day", "baseRate": 950, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 0.35, "Thailand": 0.38, "Philippines": 0.16, "Vietnam": 0.31, "Poland": 0.58, "Mexico": 0.34, "Brazil": 0.38, "Colombia": 0.26, "South Africa": 0.41 } },
+        { "description": "Boom Operator", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Sound Utility", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Production Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Art Director", "unit": "Day", "baseRate": 544, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Set Decorator", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Set Dresser", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Props Master", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Assistant Props", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Costume Designer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Wardrobe Stylist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Wardrobe Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Makeup Artist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Hair Stylist (Key)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Makeup/Hair Assistant", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Editor", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 0.40, "Thailand": 0.39, "Philippines": 0.29, "Vietnam": 0.48, "Poland": 0.78, "Mexico": 0.47, "Brazil": 0.53, "Colombia": 0.35, "South Africa": 0.54 } },
+        { "description": "Assistant Editor (AE)", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.75, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Post-Production Supervisor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "VFX Artist", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "VFX Supervisor", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68, "India": 0.40, "Thailand": 0.39, "Philippines": 0.28, "Vietnam": 0.50, "Poland": 0.69, "Mexico": 0.45, "Brazil": 0.52, "Colombia": 0.36, "South Africa": 0.49 } },
+        { "description": "Sound Designer", "unit": "Flat", "baseRate": 900, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Composer", "unit": "Flat", "baseRate": 3000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Creative bespoke role. Rates usually include home-studio overhead." },
+        { "description": "Music Supervisor", "unit": "Flat", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Cast - Lead", "unit": "Day", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Cast - Supporting", "unit": "Day", "baseRate": 1000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Location Manager", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Location Scout", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Catering (Per Head)", "unit": "Flat", "baseRate": 45, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Craft Service", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Script Supervisor", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Production Accountant", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Stunt Coordinator", "unit": "Day", "baseRate": 1100, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Publicist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Colorist", "unit": "Hour", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.2, "Australia": 0.68, "India": 0.38, "Thailand": 0.24, "Philippines": 0.19, "Vietnam": 0.30, "Poland": 0.61, "Mexico": 0.42, "Brazil": 0.46, "Colombia": 0.31, "South Africa": 0.51 } },
+        { "description": "Copywriter (Pitch/Treatment)", "unit": "Flat", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Casting Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Storyboard Artist", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.77, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Script Consultant / Doctor", "unit": "Flat", "baseRate": 1500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Consultancy role. Usually remote/fly-in from major hubs." },
+        { "description": "Pitch Deck Designer", "unit": "Flat", "baseRate": 800, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Researcher", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Concept Artist", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Legal - Rights & Clearances", "unit": "Flat", "baseRate": 2500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Security Guard", "unit": "Day", "baseRate": 150, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.7, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Medic / Set Nurse", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         /* --- Expanded Roles (Phase 185 Expansion) --- */
-        { "description": "Still Photographer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Construction Coordinator", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.75, "Australia": 0.68 } },
-        { "description": "Sculptor", "unit": "Day", "baseRate": 700, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Draftsperson", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Assistant Art Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Graphics Artist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Music Editor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Sound Editor", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68 } },
-        { "description": "Location Assistant", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68 } },
-        { "description": "Lead Labourer", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.75, "Australia": 0.68 } }
+        { "description": "Still Photographer", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Construction Coordinator", "unit": "Day", "baseRate": 850, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Sculptor", "unit": "Day", "baseRate": 700, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Draftsperson", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Assistant Art Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Graphics Artist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Music Editor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Sound Editor", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Location Assistant", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Lead Labourer", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
     var REGION_INTELLIGENCE = {
-        'Jamaica':   'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING (2025). NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
-        'USA':       'INTELLIGENCE: ESTIMATES REFLECT IATSE / DGA LOW-TIER AVERAGES (2025). EXCLUDES FRINGES, OVERTIME, AND MEAL PENALTIES.',
-        'UK':        'INTELLIGENCE: ESTIMATES TARGET BECTU 2025 RECOMMENDED RATES. SUBJECT TO PACT/BECTU TERMS & CONDITIONS.',
-        'Australia': 'INTELLIGENCE: RATES ALIGN WITH FWC MA000091 MODERN AWARD (2025). FINAL TOTALS REQUIRE SUPERANNUATION ADJUSTMENT.',
-        'Canada':    'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.'
+        'Jamaica':      'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING (2025). NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
+        'USA':          'INTELLIGENCE: ESTIMATES REFLECT IATSE / DGA LOW-TIER AVERAGES (2025). EXCLUDES FRINGES, OVERTIME, AND MEAL PENALTIES.',
+        'UK':           'INTELLIGENCE: ESTIMATES TARGET BECTU 2025 RECOMMENDED RATES. SUBJECT TO PACT/BECTU TERMS & CONDITIONS.',
+        'Australia':    'INTELLIGENCE: RATES ALIGN WITH FWC MA000091 MODERN AWARD (2025). FINAL TOTALS REQUIRE SUPERANNUATION ADJUSTMENT.',
+        'Canada':       'INTELLIGENCE: ESTIMATES REFLECT BCCFU TIER 1 & IATSE 873 (2025). LOCAL PROVINCIAL TAX INCENTIVES NOT APPLIED.',
+        /* Phase 197 — Regional Expansion */
+        'India':        'INTELLIGENCE: RATES DERIVED FROM MUMBAI/BOLLYWOOD INDUSTRY DATA (2025). NO FORMAL NATIONAL UNION SCALES. STATE INCENTIVES VARY (0-25%). FFO PROVIDES SINGLE-WINDOW CLEARANCE FOR FOREIGN PRODUCTIONS.',
+        'Thailand':     'INTELLIGENCE: RATES FROM THAILAND FILM OFFICE & CPA INDUSTRY STANDARDS (2025). 20-30% CASH REBATE AVAILABLE WITH MINIMUM SPEND THB 50M (~$1.43M USD). MUST USE THAI CREW/SERVICES FOR QUALIFYING SPEND.',
+        'Philippines':  'INTELLIGENCE: RATES FROM MANILA PRODUCTION SURVEYS (2025). GAFFER SCALAR (0.29) & SOUND MIXER (0.16) ACCURATELY REFLECT EXTREMELY COMPETITIVE DOMESTIC FREELANCE MARKET. KIT FEES ARE ADDITIONAL.',
+        'Vietnam':      'INTELLIGENCE: RATES FROM HO CHI MINH CITY & HANOI FREELANCE/AGENCY DATA (2025). NO FORMAL CASH REBATE. IMPORT DUTY EXEMPTIONS ON EQUIPMENT. CONTENT REVIEW REQUIRED FOR FOREIGN PRODUCTIONS.',
+        'Poland':       'INTELLIGENCE: RATES FROM WARSAW FILM INDUSTRY DATA (2025). 30% PFI CASH REBATE WITH LOW MINIMUM SPEND (100K PLN / ~$26K USD). CULTURAL TEST REQUIRED.',
+        'Mexico':       'INTELLIGENCE: RATES FROM MEXICO CITY PRODUCTION DATA (2025). 7.5% FIDECINE TAX INCENTIVE (CAPPED FUND). PROXIMITY TO US MAKES USD PREFERRED PAYMENT CURRENCY.',
+        'Brazil':       'INTELLIGENCE: RATES FROM SAO PAULO/RIO DATA (2025). 20-35% ANCINE TAX REBATE. COMPLEX TAX SYSTEM. REQUIRES BRAZILIAN CO-PRODUCER.',
+        'Colombia':     'INTELLIGENCE: RATES FROM BOGOTA PRODUCTION DATA (2025). 40% FDC CASH REBATE — BEST INCENTIVE IN LATIN AMERICA. NO STRICT MINIMUM SPEND.',
+        'South Africa': 'INTELLIGENCE: RATES FROM CAPE TOWN & JOHANNESBURG DATA (2025). 35-50% SAFP&TR REBATE WITH LOW MINIMUM SPEND (R1M / ~$54K USD). MAJOR INTERNATIONAL PRODUCTION HUB.'
     };
 
     /* ========= MARKET TIER SCALARS (Phase 190) ========= */
@@ -216,6 +238,8 @@
             RATE_REGIONS.forEach(function (r) { obj[r] = 1.0; });
             return obj;
         })(),
+
+        currencies: OG_CURRENCIES,
 
         REGION_INTELLIGENCE: REGION_INTELLIGENCE,
         MARKET_TIERS: MARKET_TIERS,
@@ -244,7 +268,7 @@
          */
         _expandMasterIndex: function (region, communityData) {
             var self = this;
-            var currencies = { 'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD', 'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD' };
+            var currencies = OG_CURRENCIES;
             var baseCurrency = currencies[region] || 'USD';
             
             return _MASTER_CREW_INDEX.map(function (role) {
@@ -312,6 +336,7 @@
                 if (RATE_REGIONS.indexOf(newLoc) === -1) return;
                 this.location = newLoc;
                 localStorage.setItem('moo_og_loc', newLoc);
+                localStorage.setItem('mbt_profile_region', newLoc);
                 
                 var self = this;
                 return mBTOG.loadRates(true).then(function() {
@@ -1097,11 +1122,81 @@
 
 
 
+        /* Phase 194.2: Jurisdiction auto-defaults by region */
+        getJurisdictionByRegion: function (region) {
+            var jMap = {
+                'Jamaica':   { name: 'Jamaica (20% Production Rebate)', incentiveRate: 20, minSpend: 50000 },
+                'UK':        { name: 'UK (Film Tax Relief)',             incentiveRate: 25, minSpend: 0 },
+                'Canada':    { name: 'Canada (CPTC)',                    incentiveRate: 25, minSpend: 0 },
+                'USA':       { name: 'USA (Varies by State)',            incentiveRate: 0,  minSpend: 0 },
+                'Australia': { name: 'Australia (PDV Offset)',           incentiveRate: 20, minSpend: 0 },
+                'Trinidad':  { name: 'Trinidad',                         incentiveRate: 0,  minSpend: 0 },
+                'Barbados':  { name: 'Barbados',                         incentiveRate: 0,  minSpend: 0 },
+                'Guyana':    { name: 'Guyana',                           incentiveRate: 0,  minSpend: 0 },
+                /* Phase 197 — Regional Expansion */
+                'India':        { name: 'India (State-Based Incentives)',     incentiveRate: 0,    minSpend: 50000,   intelligence: 'No national rebate. State-level varies 0-25%. FFO provides single-window clearance.' },
+                'Thailand':     { name: 'Thailand (Film Rebate)',              incentiveRate: 20,   minSpend: 1430000, intelligence: 'Up to 30% with higher spend. Minimum THB 50M (~$1.43M). Must use Thai crew/services.' },
+                'Philippines':  { name: 'Philippines (FDI Film Incentive)',    incentiveRate: 20,   minSpend: 0,       intelligence: 'Up to 20% on local spend. Gaffer (0.29) and Sound Mixer (0.16) verified with FDCP day rates.' },
+                'Vietnam':      { name: 'Vietnam (Limited Incentives)',        incentiveRate: 0,    minSpend: 0,       intelligence: 'No formal cash rebate. Import duty exemptions on equipment only.' },
+                'Poland':       { name: 'Poland (PFI Cash Rebate)',            incentiveRate: 30,   minSpend: 26000,   intelligence: '30% cash rebate. Low minimum (100K PLN / ~$26K). Cultural test required.' },
+                'Mexico':       { name: 'Mexico (Fidecine Tax Incentive)',     incentiveRate: 7.5,  minSpend: 0,       intelligence: '7.5% rebate via capped fund. Applications compete for allocation.' },
+                'Brazil':       { name: 'Brazil (ANCINE Tax Rebate)',          incentiveRate: 20,   minSpend: 100000,  intelligence: '20-35% ANCINE rebate. Requires Brazilian co-producer.' },
+                'Colombia':     { name: 'Colombia (FDC Cash Rebate)',          incentiveRate: 40,   minSpend: 0,       intelligence: '40% FDC rebate. Best incentive in LATAM. No strict minimum.' },
+                'South Africa': { name: 'South Africa (SAFP&TR Rebate)',       incentiveRate: 35,   minSpend: 54000,   intelligence: '35-50% rebate scaled by budget size. Low minimum (R1M / ~$54K).' }
+            };
+            return jMap[region] || { name: region, incentiveRate: 0, minSpend: 0 };
+        },
+
+        /* Phase 194.2: Single-role rate calculator — wraps master index, no double-scaling */
+        calculateRate: function (roleDescription, region, tier) {
+            var self = this;
+            var d = roleDescription.toLowerCase().trim();
+            var r = region || self.settings.location;
+            var t = tier || self.settings.getMarketTier();
+
+            if (!r || !t) return null;
+
+            /* Find role in Master Index */
+            var role = null;
+            for (var i = 0; i < _MASTER_CREW_INDEX.length; i++) {
+                if (_MASTER_CREW_INDEX[i].description.toLowerCase() === d) {
+                    role = _MASTER_CREW_INDEX[i];
+                    break;
+                }
+            }
+            if (!role) return null;
+
+            /* Currency map */
+            var currencies = OG_CURRENCIES;
+            var currency = currencies[r] || 'USD';
+
+            /* Step 1: Apply regional multiplier */
+            var mult = (role.multipliers && role.multipliers[r]) ? role.multipliers[r] : 1.0;
+            var regionalRate = role.baseRate * mult;
+
+            /* Step 2: Jamaica JMD conversion before tier scaling */
+            if (r === 'Jamaica') {
+                regionalRate = Math.round(regionalRate * 155);
+            }
+
+            /* Step 3: Apply tier scalar (Indie: 0.7, Standard: 1.0, Studio: 1.3) */
+            var scalar = MARKET_TIER_SCALARS[t] || 1.0;
+            var finalRate = Math.round(regionalRate * scalar);
+
+            return {
+                rate: finalRate,
+                unit: role.unit || 'Day',
+                currency: currency,
+                baseRate: role.baseRate,
+                source: 'master_index'
+            };
+        },
+
         /* Aggregator - returns ALL regional defaults concatenated for the substitution lookup table. */
         _getAllRegionalDefaults: function () {
             var self = this;
             var all = [];
-            (window.mBTOG_REGIONS || ['Jamaica','Trinidad','Barbados','UK','USA','Canada','Australia']).forEach(function(r) {
+            (window.mBTOG_REGIONS || RATE_REGIONS).forEach(function(r) {
                 all = all.concat(self._expandMasterIndex(r));
             });
             return all;
