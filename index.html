@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.44</title>
+    <title>mooBudgetTool v23.46</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -31,6 +31,12 @@
             }
             return parseFloat(val) || 0; 
         }
+        function fromDisp(val) {
+            if (window.mBT && window.mBT.logic && window.mBT.logic.currency) {
+                return window.mBT.logic.currency.deconvert(val) || 0;
+            }
+            return parseFloat(val) || 0; 
+        }
         function esc(str) {
             var d = document.createElement('div');
             d.textContent = String(str || '');
@@ -38,6 +44,7 @@
         }
         window.esc = esc;
         window.toDisp = toDisp;
+        window.fromDisp = fromDisp;
         /* Phase 137 Stabilization: Hoist registries to prevent ReferenceErrors in external consumers */
         window.mBT = window.mBT || {};
         window.mBT.registry = {
@@ -388,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.44";
+    var APP_VERSION = "23.49";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -1437,16 +1444,20 @@
                 var mm = String(now.getMonth() + 1).padStart(2, '0');
                 var dd = String(now.getDate()).padStart(2, '0');
 
-                /* Phase 194: Read wizard inputs — user values override template defaults */
-                var _wizName = document.getElementById('wiz-name');
-                var _wizCur  = document.getElementById('wiz-currency');
-                var _wizDate = document.getElementById('wiz-date');
-                var _wizDays = document.getElementById('wiz-days');
+                /* Phase 194.2: Read wizard inputs — Region/Tier added */
+                var _wizName   = document.getElementById('wiz-name');
+                var _wizCur    = document.getElementById('wiz-currency');
+                var _wizDate   = document.getElementById('wiz-date');
+                var _wizDays   = document.getElementById('wiz-days');
+                var _wizRegion = document.getElementById('wiz-region');
+                var _wizTier   = document.getElementById('wiz-tier');
 
-                var _wizNameVal  = (_wizName && _wizName.value && _wizName.value.trim()) || '';
-                var _wizCurVal   = (_wizCur  && _wizCur.value)  || '';
-                var _wizDateVal  = (_wizDate && _wizDate.value) || '';
-                var _wizDaysVal  = (_wizDays && _wizDays.value && parseInt(_wizDays.value, 10)) || null;
+                var _wizNameVal   = (_wizName   && _wizName.value   && _wizName.value.trim()) || '';
+                var _wizCurVal    = (_wizCur    && _wizCur.value)    || '';
+                var _wizDateVal   = (_wizDate   && _wizDate.value)   || '';
+                var _wizDaysVal   = (_wizDays   && _wizDays.value    && parseInt(_wizDays.value, 10)) || null;
+                var _wizRegionVal = (_wizRegion && _wizRegion.value) || (window.mBTOG ? mBTOG.settings.location : 'Jamaica');
+                var _wizTierVal   = (_wizTier   && _wizTier.value)   || (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
 
                 /* Validate wizard form if it is present and user has entered a name */
                 if (_wizNameVal) {
@@ -1491,32 +1502,56 @@
                 var sections = {};
                 var baseLabel = 'Project';
 
-                /* 1. System Templates (Tier 1) */
+                /* 1. System Templates (Tier 1) — Phase 194.2: rates from mBTOG calculator */
                 if (typeof BUDGET_TEMPLATES !== 'undefined' && BUDGET_TEMPLATES[type]) {
                     var tmpl = BUDGET_TEMPLATES[type];
                     baseLabel = tmpl.label;
-                    var rateDb = (withRates && typeof mBT.opengate !== 'undefined' && mBT.opengate.rates) ? mBT.opengate.rates : [];
+
+                    /* Read wizard selections; fall back to OG defaults if wizard not present */
+                    var wizRegEl  = document.getElementById('wiz-region');
+                    var wizTierEl = document.getElementById('wiz-tier');
+                    var wizCurEl  = document.getElementById('wiz-currency');
+                    var wizReg    = wizRegEl  ? wizRegEl.value  : (window.mBTOG ? mBTOG.settings.location : 'Jamaica');
+                    var wizTier   = wizTierEl ? wizTierEl.value : (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
+                    var wizCur    = wizCurEl  ? wizCurEl.value  : wizReg;
+
+                    /* Resolve jurisdiction defaults */
+                    var defaultJurisdiction = (window.mBTOG && typeof mBTOG.getJurisdictionByRegion === 'function')
+                        ? mBTOG.getJurisdictionByRegion(wizReg)
+                        : { name: wizReg, incentiveRate: 0, minSpend: 0 };
+
                     tmpl.structure.forEach(function (s) {
                         sections[s.name] = {
                             id: s.id,
                             isOpen: true,
                             items: s.items.map(function (desc, idx) {
-                                var match = null;
-                                for (var ri = 0; ri < rateDb.length; ri++) {
-                                    if (rateDb[ri] && rateDb[ri].description && desc && rateDb[ri].description.toLowerCase() === desc.toLowerCase()) { match = rateDb[ri]; break; }
+                                var rateData = null;
+                                if (withRates && window.mBTOG && typeof mBTOG.calculateRate === 'function') {
+                                    rateData = mBTOG.calculateRate(desc, wizReg, wizTier);
                                 }
-                                var _baseR = match ? (parseFloat(match.rate) || 0) : 0;
-                                var currentRegionMult = (typeof mBT.rates !== 'undefined' && mBT.rates.resolve) ? mBT.rates.resolve({description: desc}) : 1;
+                                if (!rateData) {
+                                    rateData = { rate: 0, unit: 'Day', currency: 'USD', baseRate: 0 };
+                                }
+
+                                /* Convert to display currency if different */
+                                var finalRate = rateData.rate;
+                                if (rateData.currency !== wizCur && window.mBTLE && typeof mBTLE.convertCurrency === 'function') {
+                                    finalRate = mBTLE.convertCurrency(rateData.rate, rateData.currency, wizCur);
+                                }
+
                                 return {
                                     id: 'item_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
                                     description: desc,
                                     quantity: 1,
-                                    unit: match ? match.unit : 'Day',
-                                    baseRate: _baseR,
-                                    rate: match ? Math.round(_baseR * currentRegionMult) : 0,
+                                    unit: rateData.unit || 'Day',
+                                    baseRate: rateData.baseRate,
+                                    rate: Math.round(finalRate),
                                     multiplier: 1,
                                     actual: 0,
                                     rateType: 'negotiable',
+                                    rateSource: withRates ? 'opengate' : 'none',
+                                    tier: wizTier,
+                                    region: wizReg,
                                     crew: {}
                                 };
                             })
@@ -1600,11 +1635,19 @@
                         projectLocation: '',
                         projectCompany: '',
                         shootDate: '',
-                        jurisdiction: { name: '', incentiveRate: 0, minSpend: 0, atlSections: ['Story', 'Producer', 'Cast'] },
+                        jurisdiction: (function() {
+                            var j = (window.mBTOG && typeof mBTOG.getJurisdictionByRegion === 'function')
+                                ? mBTOG.getJurisdictionByRegion(_wizRegionVal)
+                                : { name: _wizRegionVal, incentiveRate: 0, minSpend: 0 };
+                            j.atlSections = j.atlSections || ['Story', 'Producer', 'Cast'];
+                            return j;
+                        })(),
                         ledgers: { poCounter: 1, pos: [], pettyCash: [] },
                         actualsMode: false,
                         currency: _wizCurVal || displayCurrency,
-                        productionDays: _wizDaysVal
+                        productionDays: _wizDaysVal,
+                        region: _wizRegionVal,
+                        productionTier: _wizTierVal
                     };
 
                     budget = mBT.data.state.wrap(newBudget);
@@ -1980,14 +2023,23 @@
         if (!item) { return; }
 
         if (field === 'quantity') {
-            var q = parseInt(value, 10);
+            var q = parseFloat(value);
             item.quantity = (isNaN(q) || value === '') ? 1 : q;
-        } else if (field === 'rate' || field === 'actual' || field === 'actualQuantity' || field === 'actualRate') {
+        } else if (field === 'actualQuantity') {
+            var aq = parseFloat(value);
+            item.actualQuantity = (isNaN(aq) || value === '') ? 0 : aq;
+        } else if (field === 'rate' || field === 'actual' || field === 'actualRate') {
             var v = parseFloat(value);
             if (isNaN(v) || value === '') { v = 0; }
             if (v < 0) { v = 0; }
-            v = Math.round(v * 100) / 100;
+            v = fromDisp(v);
+            v = Math.round(v * 10000) / 10000;
             item[field] = v;
+            if (field === 'rate') {
+                item.rateType = 'negotiable'; // Phase 198: Keeps alternative rate edits dynamic
+                item.rateSource = 'custom';
+                if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
+            }
         }
 
         try {
@@ -2256,7 +2308,7 @@
     });
 
     window.addEventListener('mbtOG:regionChanged', function (evt) {
-        var region = evt.detail && evt.detail.region;
+        var region = evt.detail && (evt.detail.region || evt.detail.location);
         if (window.budget && window.budget._rateCache) window.budget._rateCache = null;
         if (window.mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
         if (typeof render === 'function') render();
@@ -2610,6 +2662,9 @@
             if (typeof budget === 'undefined' || !budget || !budget.sections) return;
             var currentReg = (window.mBTOG && mBTOG.settings) ? mBTOG.settings.location : 'Jamaica';
 
+            /* Phase 198: Stamp baselines BEFORE switching region so any defaults have anchors. */
+            stampBaselines();
+
             /* Pull researched market rates from OpenGate (keyed by description|region). */
             var averages = {};
             var _og = window.mBT && mBT.opengate;
@@ -2624,37 +2679,46 @@
                 var items = (secs[sk] && secs[sk].items) || [];
                 for (var i = 0; i < items.length; i++) {
                     var item = items[i];
-                    
-                    /* Phase 182.1: Skip updates for locked/fixed rates to prevent regional overrides */
+
+                    // 1. IF LOCKED: Preserve rate completely (skip region updates).
                     if (item.rateType === 'fixed') continue;
 
-                    /* Anchor baseRate to the OLD region BEFORE switching, so manual overrides survive. */
-                    ensureBase(item, currentReg);
-
+                    // 2. IF UNLOCKED: Attempt smart database lookup first by descriptor (description).
                     var key = (item.description || '').toLowerCase() + '|' + newRegion.toLowerCase();
                     var avgData = averages[key];
 
                     if (avgData && avgData.avg_rate > 0) {
-                        /* PRIMARY: Substitute the researched rate for this region. 
-                           Convert from researched currency (e.g. GBP) to budget base (e.g. JMD). */
+                        // PRIMARY: Apply the researched database rate directly for this region.
                         var baseCurr = (budget && budget.currency) || 'JMD';
-                        var convertedRate = (avgData.currency && avgData.currency !== baseCurr && window.mBT && mBT.le && mBT.le.convertCurrency) ? 
-                                            mBT.le.convertCurrency(avgData.avg_rate, avgData.currency, baseCurr) : 
-                                            avgData.avg_rate;
-                        item.rate = Math.round(convertedRate * 100) / 100;
-                        if (avgData.currency) item.rateCurrency = avgData.currency;
+                        var convertedRate = (avgData.currency && avgData.currency !== baseCurr && window.mBT && mBT.le && mBT.le.convertCurrency) ?
+                            mBT.le.convertCurrency(avgData.avg_rate, avgData.currency, baseCurr) :
+                            avgData.avg_rate;
+                        item.rate = Math.round(convertedRate * 10000) / 10000;
+                        if (avgData.currency) item.rateCurrency = baseCurr;
                         item.rateSource = avgData.source || 'default';
+                        // Re-anchor baseRate to match the new database-derived rate.
+                        var ogMult = resolve(item, newRegion);
+                        item.baseRate = ogMult ? (convertedRate / ogMult) : convertedRate;
                     } else {
-                        /* FALLBACK: No research data — math scaling (legacy behavior). */
+                        // FALLBACK: Not in database. Scale custom decoupled baseRate by regional multiplier.
+                        ensureBase(item, currentReg);
                         var mult = resolve(item, newRegion);
-                        item.rate = Math.round((parseFloat(item.baseRate) || 0) * mult * 100) / 100;
+                        var baseCurr = (budget && budget.currency) || 'JMD';
+                        var scaledUSD = (parseFloat(item.baseRate) || 0) * mult;
+                        var convertedRate = (baseCurr !== 'USD' && window.mBT && mBT.le && mBT.le.convertCurrency) ?
+                            mBT.le.convertCurrency(scaledUSD, 'USD', baseCurr) :
+                            scaledUSD;
+                        item.rate = Math.round(convertedRate * 10000) / 10000;
                         item.rateSource = 'scaled';
+                        item.rateCurrency = baseCurr;
                     }
                 }
             });
 
-            /* Phase 182: Trigger full budget re-calculation and UI update */
-            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+            // Trigger full budget recalculation and UI update.
+            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') {
+                try { mBTLE.reconcile(); } catch (err) { console.error('Reconciliation error', err); }
+            }
             if (typeof render === 'function') render();
             if (typeof saveBudget === 'function') saveBudget();
         }
@@ -2725,10 +2789,14 @@
                     var currencyCode = code || displayCurrency || 'JMD';
                     var cfg = _currencies[currencyCode] || _currencies['USD'];
                     var dp = (budget && budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
-                    return new Intl.NumberFormat(cfg.locale, {
-                        style: 'currency', currency: currencyCode, currencyDisplay: 'narrowSymbol',
+                    var formatted = new Intl.NumberFormat(cfg.locale, {
+                        style: 'currency', currency: currencyCode, currencyDisplay: (currencyCode === 'JMD' ? 'symbol' : 'narrowSymbol'),
                         minimumFractionDigits: dp, maximumFractionDigits: dp
                     }).format(value);
+                    if (currencyCode === 'JMD' && formatted.indexOf('$') !== -1) {
+                        formatted = formatted.replace('$', 'J$');
+                    }
+                    return formatted;
                 }
             },
 
@@ -3068,7 +3136,8 @@
             var rates = this._getRates();
             var fromRate = rates[from] || 1;
             var toRate = rates[to] || 1;
-            return (parseFloat(val) || 0) / fromRate * toRate;
+            var res = (parseFloat(val) || 0) / fromRate * toRate;
+            return Math.round(res * 10000) / 10000;
         },
         /* Reverse conversion: from displayCurrency back to budget base currency */
         deconvert: function (val) {
@@ -3078,7 +3147,8 @@
             var rates = this._getRates();
             var fromRate = rates[from] || 1;
             var toRate = rates[to] || 1;
-            return (parseFloat(val) || 0) / toRate * fromRate;
+            var res = (parseFloat(val) || 0) / toRate * fromRate;
+            return Math.round(res * 10000) / 10000;
         },
         isLocked: function () {
             return localStorage.getItem(storageKeyPrefix + 'ratesLocked') === 'true';
@@ -3143,8 +3213,10 @@
         else if (field === 'quantity') item.quantity = parseFloat(value) || 0;
         else if (field === 'rate') {
             var rawVal = parseFloat(value) || 0;
-            item.rate = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
-            item.rateSource = 'manual'; // Phase 191 Guard
+            var dec = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
+            item.rate = Math.round(dec * 10000) / 10000;
+            item.rateType = 'negotiable'; // Phase 198: Decoupled but unlocked; lock is explicit user action
+            item.rateSource = 'custom';
             /* Manual rate override re-anchors the regional baseRate so future region
              * switches scale from this user-intended value. */
             if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
@@ -3152,7 +3224,8 @@
         else if (field === 'unit') item.unit = value;
         else if (field === 'actual') {
             var rawVal = parseFloat(value) || 0;
-            item.actual = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
+            var dec = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
+            item.actual = Math.round(dec * 10000) / 10000;
         }
         /* Phase 77: actuarial fields */
         else if (field === 'actualQuantity') {
@@ -3634,8 +3707,10 @@
                     }
                 };
                 updateInput('quantity', item.quantity);
-                updateInput('rate', toDisp(_conv(item.rate)).toFixed(2));
-                updateInput('actual', toDisp(_conv(item.actual)).toFixed(2));
+                updateInput('rate', toDisp(item.rate).toFixed(2));
+                updateInput('actual', toDisp(item.actual || 0).toFixed(2));
+                updateInput('actualQuantity', parseFloat(item.actualQuantity || 0).toFixed(2));
+                updateInput('actualRate', toDisp(item.actualRate || 0).toFixed(2));
             });
         });
     };
@@ -4067,7 +4142,7 @@
             if (isActuals) {
                 html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">' + mBTLE.format.currency(item.committedCost || 0) + '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualQuantity" value="' + toDisp(item.actualQuantity || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
+                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualQuantity" value="' + (parseFloat(item.actualQuantity) || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                     '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualRate" value="' + toDisp(item.actualRate || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
@@ -4332,20 +4407,21 @@
             var key = (r.description || '').toLowerCase() + '|' + currentRegion.toLowerCase();
             var avg = avgs[key];
             
+            var currenciesMap = {
+                'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD',
+                'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD',
+                'India': 'INR', 'Thailand': 'THB', 'Philippines': 'PHP', 'Vietnam': 'VND',
+                'Poland': 'PLN', 'Mexico': 'MXN', 'Brazil': 'BRL', 'Colombia': 'COP', 'South Africa': 'ZAR'
+            };
+            var regionCurrency = currenciesMap[currentRegion] || 'USD';
+
             // 1. If we have a researched market rate, use it directly.
             if (avg && avg.avg_rate > 0) {
-                return { rate: avg.avg_rate, currency: avg.currency || 'USD' };
+                return { rate: avg.avg_rate, currency: avg.currency || regionCurrency };
             }
 
             // 2. If no research exists, we apply the regional multiplier.
             // We then convert that scaled JMD value into the REGION'S native currency for display.
-            var regionCurrency = 'JMD';
-            if (currentRegion === 'USA') regionCurrency = 'USD';
-            else if (currentRegion === 'UK') regionCurrency = 'GBP';
-            else if (currentRegion === 'Canada') regionCurrency = 'CAD';
-            else if (currentRegion === 'Australia') regionCurrency = 'AUD';
-            else if (currentRegion === 'Trinidad' || currentRegion === 'Barbados') regionCurrency = 'USD';
-
             var scaledRateJMD = r.rate * mult;
             
             if (regionCurrency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) {
@@ -4636,42 +4712,63 @@
                 '</div>' +
                 '</label></div>';
 
-            /* Phase 194: Wizard form HTML injected before blueprint grid */
+            /* Phase 194.2: Wizard form — Region/Tier added; rates auto-resolve from mBTOG */
+            var _ogRegions = (window.mBTOG && mBTOG.RATE_REGIONS) ? Object.keys(mBTOG.RATE_REGIONS) : ['Jamaica', 'USA', 'UK', 'Canada', 'Australia', 'Trinidad', 'Barbados', 'Guyana'];
+            var _ogTiers   = (window.mBTOG && mBTOG.MARKET_TIERS)  ? mBTOG.MARKET_TIERS : ['Standard', 'Indie', 'Studio'];
+            var _ogLoc     = (window.mBTOG && mBTOG.settings && mBTOG.settings.location) ? mBTOG.settings.location : 'Jamaica';
+            var _ogTier    = (window.mBTOG && mBTOG.settings && typeof mBTOG.settings.getMarketTier === 'function') ? mBTOG.settings.getMarketTier() : 'Standard';
+            var _regOpts   = _ogRegions.map(function(r) { return '<option value="' + r + '"' + (r === _ogLoc ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+            var _tierOpts  = _ogTiers.map(function(t)  { return '<option value="' + t + '"' + (t === _ogTier ? ' selected' : '') + '>' + t + '</option>'; }).join('');
+            var _selStyle  = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;';
+            var _inpStyle  = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;';
+            var _lblStyle  = 'display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;';
+            var _errStyle  = 'font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;';
+            var _focusOn   = 'this.style.borderColor=\'#6366f1\';';
+            var _focusOff  = 'this.style.borderColor=\'#e5e7eb\';';
+
             var wizardFormHtml =
                 '<div id="wiz-form" style="margin-bottom:14px;padding:12px 14px;background:rgba(255,255,255,0.65);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.07);border-radius:10px;">' +
+                /* Row 1: Project Name + Region */
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
-                /* Project Name */
                 '<div>' +
-                '<label for="wiz-name" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Project Name <span style="color:#ef4444;">*</span></label>' +
-                '<input type="text" id="wiz-name" placeholder="e.g., Jamaican Indie Series" maxlength="100" autocomplete="off" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
-                '<div id="wiz-name-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '<label for="wiz-name" style="' + _lblStyle + '">Project Name <span style="color:#ef4444;">*</span></label>' +
+                '<input type="text" id="wiz-name" placeholder="e.g., Jamaican Indie Series" maxlength="100" autocomplete="off" aria-required="true" style="' + _inpStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '" />' +
+                '<div id="wiz-name-err" style="' + _errStyle + '"></div>' +
                 '</div>' +
-                /* Currency */
                 '<div>' +
-                '<label for="wiz-currency" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Currency <span style="color:#ef4444;">*</span></label>' +
-                '<select id="wiz-currency" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';">' +
-                '<option value="">-- Select --</option>' +
+                '<label for="wiz-region" style="' + _lblStyle + '">Production Region <span style="color:#ef4444;">*</span></label>' +
+                '<select id="wiz-region" aria-required="true" style="' + _selStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '">' + _regOpts + '</select>' +
+                '<div id="wiz-region-err" style="' + _errStyle + '"></div>' +
+                '</div>' +
+                '</div>' +
+                /* Row 2: Production Tier + Currency (display only) */
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+                '<div>' +
+                '<label for="wiz-tier" style="' + _lblStyle + '">Production Tier <span style="color:#ef4444;">*</span></label>' +
+                '<select id="wiz-tier" aria-required="true" style="' + _selStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '">' + _tierOpts + '</select>' +
+                '</div>' +
+                '<div>' +
+                '<label for="wiz-currency" style="' + _lblStyle + '">Display Currency</label>' +
+                '<select id="wiz-currency" style="' + _selStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '">' +
                 '<option value="JMD">JMD (Jamaica Dollar)</option>' +
                 '<option value="USD">USD (US Dollar)</option>' +
-                '<option value="EUR">EUR (Euro)</option>' +
                 '<option value="GBP">GBP (British Pound)</option>' +
                 '<option value="CAD">CAD (Canadian Dollar)</option>' +
+                '<option value="EUR">EUR (Euro)</option>' +
+                '<option value="AUD">AUD (Australian Dollar)</option>' +
                 '</select>' +
-                '<div id="wiz-currency-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
                 '</div>' +
                 '</div>' +
+                /* Row 3: Start Date + Prod Days */
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-                /* Start Date */
                 '<div>' +
-                '<label for="wiz-date" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Start Date <span style="color:#ef4444;">*</span></label>' +
-                '<input type="date" id="wiz-date" aria-required="true" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
-                '<div id="wiz-date-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '<label for="wiz-date" style="' + _lblStyle + '">Start Date <span style="color:#ef4444;">*</span></label>' +
+                '<input type="date" id="wiz-date" aria-required="true" style="' + _inpStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '" />' +
+                '<div id="wiz-date-err" style="' + _errStyle + '"></div>' +
                 '</div>' +
-                /* Production Days */
                 '<div>' +
-                '<label for="wiz-days" style="display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;">Prod. Days <span style="color:#9ca3af;font-weight:400;">(optional)</span></label>' +
-                '<input type="number" id="wiz-days" placeholder="e.g., 5" min="1" max="365" autocomplete="off" aria-invalid="false" style="display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;" onfocus="this.style.borderColor=\'#6366f1\';" onblur="this.style.borderColor=\'#e5e7eb\';" />' +
-                '<div id="wiz-days-err" style="font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;"></div>' +
+                '<label for="wiz-days" style="' + _lblStyle + '">Prod. Days <span style="color:#9ca3af;font-weight:400;">(optional)</span></label>' +
+                '<input type="number" id="wiz-days" placeholder="e.g., 5" min="1" max="365" autocomplete="off" style="' + _inpStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '" />' +
                 '</div>' +
                 '</div>' +
                 '</div>';
@@ -7655,12 +7752,10 @@
             }, 600);
         },
 
-        /* Phase 116: Hub tile trigger -- maps lowercase hub key to BUDGET_TEMPLATES title-case key */
+        /* Phase 194.2: Hub tile keys now match BUDGET_TEMPLATES keys directly (all lowercase) */
         applyFromHub: function (templateName) {
             var withRates = !!(document.getElementById('mbtHubRatesToggle') || { checked: true }).checked;
-            var KEY_MAP = { commercial: 'Commercial', documentary: 'Documentary', live_stream: 'Live Stream', music_video: 'Music Video' };
-            var tmplKey = KEY_MAP[templateName] || templateName;
-            mBT.features.blueprints.applyTemplate(tmplKey, withRates, true);
+            mBT.features.blueprints.applyTemplate(templateName, withRates, true);
         },
 
         /* Phase 116 Step 2: Programmatic bridge -- called by Hub tiles and postMessage handler */
@@ -8716,22 +8811,23 @@
                         var isResearched = (avg && avg.avg_rate > 0);
                         var isCommunity = r.source === 'community';
 
-                        var regionCurrency = 'JMD';
-                        if (region === 'USA') regionCurrency = 'USD';
-                        else if (region === 'UK') regionCurrency = 'GBP';
-                        else if (region === 'Canada') regionCurrency = 'CAD';
-                        else if (region === 'Australia') regionCurrency = 'AUD';
-                        else if (region === 'Trinidad' || region === 'Barbados') regionCurrency = 'USD';
+                        var currenciesMap = {
+                            'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD',
+                            'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD',
+                            'India': 'INR', 'Thailand': 'THB', 'Philippines': 'PHP', 'Vietnam': 'VND',
+                            'Poland': 'PLN', 'Mexico': 'MXN', 'Brazil': 'BRL', 'Colombia': 'COP', 'South Africa': 'ZAR'
+                        };
+                        var regionCurrency = currenciesMap[region] || 'USD';
 
-                        var dispRate = r.rate * mult;
+                        var dispRate = (parseFloat(r.rate) || 0) * (parseFloat(mult) || 1);
                         var dispCurr = regionCurrency;
                         if (isResearched) {
-                            dispRate = avg.avg_rate;
+                            dispRate = parseFloat(avg.avg_rate) || 0;
                             dispCurr = avg.currency || regionCurrency;
                         } else if (regionCurrency !== 'JMD') {
                             var exchangeRate = (window.mBT && mBT.le && mBT.le.CURRENCY_RATES && mBT.le.CURRENCY_RATES['USD'])
                                 ? (mBT.le.CURRENCY_RATES['USD']['JMD'] || 155) : 155;
-                            dispRate = (r.rate * mult) / exchangeRate;
+                            dispRate = ((parseFloat(r.rate) || 0) * (parseFloat(mult) || 1)) / (parseFloat(exchangeRate) || 155);
                         }
 
                         var label = isCommunity ? ' [Community]' : (isResearched ? ' [Research]' : (region !== 'Jamaica' ? ' [Est.]' : ''));
@@ -8747,7 +8843,7 @@
                                 icon: mBTAssets.plus,
                                 title: 'Add to Budget',
                                 color: 'blue',
-                                onClick: 'mBT.features.settings.addRateToBudget(\'' + (r.id || '') + '\', \'' + ((r.description || '').replace(/'/g, "\\'")) + '\')'
+                                onClick: 'mBT.features.settings.addRateToBudget(\'' + ((r.description || '').replace(/'/g, "\\'")) + '\', ' + (parseFloat(r.rate) || 0) + ', \'' + (r.unit || 'day') + '\', \'USD\')'
                             }]
                         });
                     });
@@ -8949,6 +9045,7 @@
             var self = this;
             if (window.mBTOG && mBTOG.settings && mBTOG.settings.setLocation) {
                 mBTOG.settings.setLocation(region).then(function() {
+                    if (mBT.rates && mBT.rates.applyRegion) mBT.rates.applyRegion(region);
                     window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { detail: { region: region } }));
                     mBTME.alert('Region Updated', 'Rates rescaled to ' + region + '.');
                 });
@@ -8956,6 +9053,7 @@
                 /* Fallback if engine not loaded */
                 mBTOG.settings.location = region;
                 localStorage.setItem('moo_og_loc', region);
+                localStorage.setItem('mbt_profile_region', region);
                 if (mBT.rates && mBT.rates.applyRegion) mBT.rates.applyRegion(region);
                 this.open('database', 'lineItems');
                 mBTME.alert('Region Updated', 'Rates rescaled to ' + region + '.');
@@ -11585,7 +11683,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.44', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.46', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -12526,6 +12624,10 @@
                 if (['discountPercentage', 'contingencyPercentage', 'salesTaxPercentage'].includes(input.id)) {
                     budget[input.id] = parseFloat(input.value) || 0;
                     if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                    return;
+                }
+                /* L30 Guard: Do not process numeric fields during active typing 'input' events */
+                if (input.type === 'number' || ['quantity', 'rate', 'actual', 'actualQuantity', 'actualRate', 'committedCost'].includes(input.dataset.field)) {
                     return;
                 }
                 if (input.dataset.field) {

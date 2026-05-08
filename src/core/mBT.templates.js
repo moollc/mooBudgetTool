@@ -101,49 +101,96 @@ var PAYMENT_SERVICES = [
 ];
 
 /* --- 6. Budget Templates (Industry Standard Structures) --- */
+/* Phase 194.2: Expanded from 4 to 8 types. All role names match mBTOG master index keys exactly. */
 var BUDGET_TEMPLATES = {
-    'Commercial': {
+    'commercial': {
         icon: 'film',
-        label: 'TV Commercial',
-        desc: 'Standard TVC structure. High-end crew, talent fees, and heavy post-production.',
+        label: 'Commercial (TVC)',
+        desc: 'High-end structure for brand campaigns. Deep talent/crew and heavy markup.',
         structure: [
-            { id: 'atl', name: 'Above The Line', items: ['Director', 'Producer', 'Copywriter (Pitch/Treatment)', 'Casting Director'] },
-            { id: 'prod', name: 'Production', items: ['Director of Photography (DP)', 'Camera Operator', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist (Key)', 'Production Designer', 'Wardrobe Stylist'] },
-            { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Sound Designer', 'Music Supervisor'] },
-            { id: 'other', name: 'Logistics & Talent', items: ['Cast - Lead', 'Location Manager', 'Catering (Per Head)', 'Equipment Rental', 'Insurance'] }
+            { id: 'atl', name: 'Above The Line (Creative)', items: ['Director', 'Producer', 'Director of Photography (DP)', 'Screenwriter'] },
+            { id: 'btl_pre', name: 'BTL: Pre-Production', items: ['Line Producer', '1st Assistant Director (1st AD)', 'Location Scout', 'Casting Director', 'Storyboard Artist'] },
+            { id: 'btl_prod', name: 'BTL: Production Crew', items: ['Camera Operator', '1st Assistant Camera (Focus)', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist (Key)', 'Production Designer', 'Set PA'] },
+            { id: 'btl_post', name: 'BTL: Post-Production', items: ['Editor', 'Colorist', 'VFX Supervisor', 'Sound Designer', 'Music Supervisor'] },
+            { id: 'logistics', name: 'Logistics & Fees', items: ['Catering (Per Head)', 'Location Manager', 'Security Guard'] }
         ]
     },
-    'Documentary': {
-        icon: 'camera',
-        label: 'Documentary',
-        desc: 'Run-and-gun optimized. Prioritizes travel, field logistics, research, and archival licensing.',
-        structure: [
-            { id: 'atl', name: 'Creative & Research', items: ['Director', 'Producer', 'Researcher', 'Subject Consultant'] },
-            { id: 'prod', name: 'Field Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Fixer/Local Producer', 'Drone Operator'] },
-            { id: 'travel', name: 'Travel & Logistics', items: ['Flights', 'Accommodation', 'Per Diems', 'Vehicle Rental', 'Carnets/Visas'] },
-            { id: 'post', name: 'Post & Archive', items: ['Editor', 'Transcription', 'Archival Researcher', 'Archival Licensing', 'Colorist'] }
-        ]
-    },
-    'Live Stream': {
-        icon: 'zap',
-        label: 'Live Broadcast',
-        desc: 'Multi-cam setup. Focus on bandwidth redundancy, switching hardware, and technical operators.',
-        structure: [
-            { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Stream Technician', 'Camera Operator', 'Camera Operator', 'Sound Mixer', 'Graphics Op'] },
-            { id: 'gear', name: 'Hardware & Rigging', items: ['Switcher/Encoder', 'Cameras (3-Cam Kit)', 'Comms System', 'Bonded Cellular', 'Lighting Package'] },
-            { id: 'conn', name: 'Connectivity', items: ['Dedicated Internet Line', '4G/5G Backup Data', 'IT Support'] },
-            { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] }
-        ]
-    },
-    'Music Video': {
+    'music_video': {
         icon: 'music',
         label: 'Music Video',
-        desc: 'Visual-first production. Heavy art direction, performance staging, and cinematic color grading.',
+        desc: 'Visual-first production. Heavy art direction, performance staging, and grading.',
         structure: [
-            { id: 'atl', name: 'Creative & Direction', items: ['Director', 'Producer', 'Cinematographer', 'Art Director', 'Choreographer'] },
-            { id: 'prod', name: 'Production', items: ['Camera Operator', 'Gaffer', 'Key Grip', 'Dolly Grip', 'Steadicam Op', 'Makeup Artist', 'Stylist'] },
-            { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Title/Motion Graphics'] },
-            { id: 'other', name: 'Location & Logistics', items: ['Location Manager', 'Set Design', 'Props', 'Catering', 'Transport'] }
+            { id: 'atl', name: 'Creative & Direction', items: ['Director', 'Producer', 'Director of Photography (DP)', 'Art Director'] },
+            { id: 'btl_prod', name: 'Production', items: ['Gaffer', 'Key Grip', 'Steadicam Operator', 'Makeup Artist (Key)', 'Wardrobe Stylist', 'Set PA'] },
+            { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Music Editor'] },
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager', 'Cast - Supporting'] }
+        ]
+    },
+    'documentary': {
+        icon: 'camera',
+        label: 'Documentary',
+        desc: 'Run-and-gun optimized. Focus on research, field logistics, and archival.',
+        structure: [
+            { id: 'atl', name: 'Creative & Research', items: ['Director', 'Producer', 'Researcher', 'Screenwriter'] },
+            { id: 'btl_prod', name: 'Field Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Drone Operator', 'Set PA'] },
+            { id: 'btl_post', name: 'Post & Archive', items: ['Editor', 'Archival Researcher', 'Colorist', 'Sound Designer'] },
+            { id: 'travel', name: 'Travel & Logistics', items: ['Fixer/Local Producer', 'Security Guard', 'Catering (Per Head)'] }
+        ]
+    },
+    'feature_film': {
+        icon: 'video',
+        label: 'Feature Film',
+        desc: 'Comprehensive studio/indie structure for long-form narrative projects.',
+        structure: [
+            { id: 'atl', name: 'ATL: Creative & Talent', items: ['Director', 'Producer', 'Executive Producer', 'Cast - Lead', 'Screenwriter'] },
+            { id: 'btl_pre', name: 'BTL: Pre-Pro & Legal', items: ['Line Producer', 'Unit Production Manager (UPM)', '1st Assistant Director (1st AD)', 'Production Accountant', 'Legal - Rights & Clearances'] },
+            { id: 'btl_prod', name: 'BTL: Principal Photography', items: ['Director of Photography (DP)', '1st Assistant Camera (Focus)', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Production Designer', 'Script Supervisor', 'Still Photographer'] },
+            { id: 'btl_post', name: 'BTL: Post-Production', items: ['Post-Production Supervisor', 'Editor', 'Colorist', 'Composer', 'VFX Supervisor'] },
+            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)', 'Medic / Set Nurse', 'Security Guard'] }
+        ]
+    },
+    'short_film': {
+        icon: 'scissors',
+        label: 'Short Film',
+        desc: 'Lean narrative structure. Prioritizes key creative roles and festival finishing.',
+        structure: [
+            { id: 'atl', name: 'Direction & Talent', items: ['Director', 'Producer', 'Cast - Lead'] },
+            { id: 'btl_prod', name: 'Production Crew', items: ['Director of Photography (DP)', 'Sound Mixer', 'Gaffer', 'Key Grip', 'Set PA'] },
+            { id: 'btl_post', name: 'Post & Finishing', items: ['Editor', 'Colorist', 'Sound Designer'] },
+            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)'] }
+        ]
+    },
+    'corporate_video': {
+        icon: 'briefcase',
+        label: 'Corporate / Brand Film',
+        desc: 'Clean, professional structure for internal or B2B communications.',
+        structure: [
+            { id: 'atl', name: 'Project Management', items: ['Producer', 'Director', 'Copywriter (Pitch/Treatment)'] },
+            { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Set PA'] },
+            { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'Music Editor'] },
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] }
+        ]
+    },
+    'event_coverage': {
+        icon: 'zap',
+        label: 'Event Coverage / Live',
+        desc: 'Multi-cam setup. Focus on switching, connectivity, and rapid turnaround.',
+        structure: [
+            { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Camera Operator', 'Sound Mixer', 'Digital Imaging Tech (DIT)'] },
+            { id: 'gear', name: 'Hardware & Connectivity', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
+            { id: 'post', name: 'Quick Turnaround', items: ['Editor', 'Colorist'] },
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] }
+        ]
+    },
+    'web_series': {
+        icon: 'layout',
+        label: 'Scripted Web Series',
+        desc: 'Optimized for episodic content. Balanced for volume and digital distribution.',
+        structure: [
+            { id: 'atl', name: 'Showrunners & Talent', items: ['Executive Producer', 'Director', 'Cast - Lead', 'Screenwriter'] },
+            { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', '1st Assistant Camera (Focus)', 'Sound Mixer', 'Gaffer', 'Set PA'] },
+            { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Music Editor'] },
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager'] }
         ]
     }
 };

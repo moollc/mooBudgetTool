@@ -279,14 +279,6 @@ var validateStage = function(data) {
   return errors;
 };
 
-// === PRODUCTION TYPE CONSTANTS ===
-
-var PRODUCTION_TYPES = {
-  indie:      { label: 'Indie',      crewScale: 0.6, equipScale: 0.5 },
-  commercial: { label: 'Commercial', crewScale: 1.0, equipScale: 1.0 },
-  feature:    { label: 'Feature',    crewScale: 1.5, equipScale: 1.8 },
-};
-
 /* Per-role stage presence: true = present in that stage */
 var ROLE_STAGE_PRESENCE = {
   director:          { prePro: true,  principal: true,  post: false },
@@ -327,7 +319,6 @@ window.mBT.le = {
   CURRENCY_LOCALES: CURRENCY_LOCALES,
   CURRENCY_RATES: CURRENCY_RATES,
   PRECISION: PRECISION,
-  PRODUCTION_TYPES: PRODUCTION_TYPES,
   ROLE_STAGE_PRESENCE: ROLE_STAGE_PRESENCE,
   formatCurrency: formatCurrency,
   formatValue: formatValue,
