@@ -4,26 +4,23 @@
 
 mBT is a Progressive Web App for film producers, line producers, and production managers. It runs entirely from a single folder — no internet required after the first load, no installation, no subscriptions.
 
-![mBT Dashboard](screenshots/mBT-dashboard.png)
+![mBT Dashboard](docs/img/dashboard.png)
 
 ---
 
 ## Quick Start
 
-**Option A — Direct (simplest):**
-1. Download or clone this repository
-2. Open `dist/index.html` in Chrome, Edge, or Firefox
-3. That's it — no server, no build step
+1. Clone or download this repository
+2. Serve the folder with any static file server:
 
-**Option B — From source:**
-1. Clone the repo
-2. Open `src/core/index.html` in a browser
-3. Or run `scripts/bundle.bat` (Windows) to build a clean `dist/`
+   ```
+   npx http-server . -p 3000
+   ```
 
-**Option C — Install as PWA:**
-1. Open `dist/index.html` in Chrome
-2. Browser menu → "Install app" / "Add to Home Screen"
-3. Launches as a standalone app, fully offline
+3. Open `http://localhost:3000/index.html` — the Budget Editor
+4. Optional — install as a PWA: browser menu → "Install app" / "Add to Home Screen". Launches as a standalone app, fully offline.
+
+Opening `index.html` directly from disk works for a quick look, but offline caching (service worker) and PWA install require serving over HTTP.
 
 ---
 
@@ -93,20 +90,16 @@ mBT/
 │   ├── config/             # AI config, Supabase config
 │   ├── services/           # AI context, patterns, reports, sync
 │   └── lib/                # Vendored libraries (offline, no CDN)
-├── dist/                   # Built release (run bundle.bat to rebuild)
 ├── docs/
 │   └── supabase/           # Schema + self-host setup guide
-└── scripts/
-    ├── bundle.bat           # CMD bundler - packages dist/
-    ├── bundle.ps1           # PowerShell bundler - same + strips dev files
-    └── validate-naming.bat  # Checks mBT namespace prefix on all tools
+└── tests/                  # Math/storage test suites + browser runner
 ```
 
 **Stack:** Vanilla JS. No framework, no package.json, no build tools required to run. Libraries (jsPDF, html2pdf, XLSX, localforage, Tailwind, Supabase) are vendored in `src/lib/`.
 
 **Data:** Budget Editor uses `localforage` with key prefix `prodBudget_v5_*`. App Shell uses IndexedDB (`mBTMonolithDB`). Optional Supabase sync via Row Level Security policies (see `docs/supabase/`).
 
-**Naming convention:** All JS namespace objects must be prefixed with `mBT` (e.g. `mBTCalendar`, `mBTStageStudio`, `mBTLE`). Run `scripts\validate-naming.bat` to audit.
+**Naming convention:** All JS namespace objects must be prefixed with `mBT` (e.g. `mBTCalendar`, `mBTStageStudio`, `mBTLE`).
 
 ---
 
@@ -167,24 +160,6 @@ Requires IndexedDB API. Works on Android Chrome, iOS Safari, and desktop browser
 
 ---
 
-## Scripts
-
-All scripts auto-locate the project root, so they work from any directory.
-
-| Script | What it does |
-|--------|-------------|
-| `scripts\bundle.bat` | Packages app into `dist/`. Copies source, assets, service worker. Verifies 5 critical paths. Use from Command Prompt. |
-| `scripts\bundle.ps1` | Same as above but also strips dev-only files from dist, checks 10 paths, color output. Use from PowerShell. |
-| `scripts\validate-naming.bat` | Audits `src/tools/*/index.html` for `mBT` namespace prefix. Reports PASS/FAIL/WARN per tool. |
-
-```bat
-scripts\bundle.bat
-```
-
-Output goes to `dist/`. Double-click `dist/index.html` to run.
-
----
-
 ## Contributing
 
 mBT is open-source under the MIT license. Issues and PRs welcome.
@@ -193,7 +168,7 @@ mBT is open-source under the MIT license. Issues and PRs welcome.
 - No framework dependencies, vanilla JS only
 - No CDN references, all libs must be in `src/lib/`
 - `var`/`function` not `const`/`let`/`=>` (codebase consistency)
-- All JS namespace objects prefixed with `mBT` (e.g. `mBTCalendar`, not `CAL`). Run `scripts\validate-naming.bat` to check.
+- All JS namespace objects prefixed with `mBT` (e.g. `mBTCalendar`, not `CAL`)
 - XSS: all user-controlled strings through `esc()` before DOM insertion
 - No emoji in UI, inline SVGs only
 - No hardcoded API keys, read from `localStorage`

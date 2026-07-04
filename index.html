@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.46</title>
+    <title>mooBudgetTool v23.50</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -29,13 +29,13 @@
             if (window.mBT && window.mBT.logic && window.mBT.logic.currency) {
                 return window.mBT.logic.currency.convert(val) || 0;
             }
-            return parseFloat(val) || 0; 
+            return parseFloat(val) || 0;
         }
         function fromDisp(val) {
             if (window.mBT && window.mBT.logic && window.mBT.logic.currency) {
                 return window.mBT.logic.currency.deconvert(val) || 0;
             }
-            return parseFloat(val) || 0; 
+            return parseFloat(val) || 0;
         }
         function esc(str) {
             var d = document.createElement('div');
@@ -163,11 +163,11 @@
     <script src="./src/scripts/engine/opfs.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
     <!-- Tier 5B: WebAssembly Conflict Diffing Engine (Phase 63) -->
-    <script src="./src/core/wasm_node/pkg/mbt_wasm.js"></script>
+    <script src="./src/core/wasm/mbt_wasm.js"></script>
     <script>
         (function () {
             if (window.mBT_wasm && window.mBT_wasm.init) {
-                window.mBT_wasm.init().then(function () {
+                window.mBT_wasm.init({ module_or_path: './src/core/wasm/mbt_wasm_bg.wasm' }).then(function () {
                     window.mBTWasm = window.mBT_wasm;
                 }).catch(function (err) {
                     console.warn('WASM init failed (file:// protocol limitation). Diff will use JS fallback:', err);
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.49";
+    var APP_VERSION = "23.50";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -560,6 +560,11 @@
                 if (mBT.ui && typeof mBT.ui.refresh === 'function') {
                     mBT.ui.refresh();
                 }
+                // Phase 199: Broadcast reconcile signal to active tool iframes (Stages, Calendar)
+                var iframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                if (iframe && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+                }
             });
 
             /* 2. Document Identity */
@@ -613,7 +618,7 @@
                     if (typeof localforage === 'undefined') return Promise.resolve();
                     var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
                     var METADATA_KEY = _pfx + '$METADATA';
-                    var CONFIG_SUFFIXES = ['aiSystemPrompt','SELECTAIPROVIDER','AISYSTEMPROMPT','currency','rates','ratesLocked','ratesLockedSnap','lastLoaded','auto_fetch_rates','chatModel','imageModel'];
+                    var CONFIG_SUFFIXES = ['aiSystemPrompt', 'SELECTAIPROVIDER', 'AISYSTEMPROMPT', 'currency', 'rates', 'ratesLocked', 'ratesLockedSnap', 'lastLoaded', 'auto_fetch_rates', 'chatModel', 'imageModel'];
                     return localforage.getItem(METADATA_KEY).then(function (existingMetadata) {
                         var metadata = existingMetadata || {};
                         if (metadata.migration_v194_done === true) return Promise.resolve();
@@ -640,7 +645,7 @@
                             metadata.migration_v194_done = true;
                             return localforage.setItem(METADATA_KEY, metadata);
                         }).then(function () {
-                            return Promise.all(keysToDelete.map(function (k) { return localforage.removeItem(k).catch(function () {}); }));
+                            return Promise.all(keysToDelete.map(function (k) { return localforage.removeItem(k).catch(function () { }); }));
                         }).then(function () {
                             if (keysToDelete.length > 0) console.log('[Phase 194] Cleaned up ' + keysToDelete.length + ' orphaned config keys');
                         });
@@ -702,10 +707,10 @@
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
 
-                var projectToLoad = (function() {
+                var projectToLoad = (function () {
                     var raw = localStorage.getItem(storageKeyPrefix + 'lastLoaded');
                     if (!raw) return null;
-                    try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch(e) { return raw; }
+                    try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch (e) { return raw; }
                 })();
 
                 /* Phase 194: Config consolidation + store init before project list load */
@@ -1115,7 +1120,7 @@
         },
 
         // --- C.2 Template Undo/Redo Engine (Phase 191) ---
-        _undoRedo: (function() {
+        _undoRedo: (function () {
             var state = { undo: [], redo: [], maxHistorySize: 50, captureTimeout: null };
             function captureSnapshot(template) {
                 if (!template || typeof template !== 'object') return null;
@@ -1137,34 +1142,34 @@
             }
             function fire() { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('mbtTemplateHistoryChanged')); }
             return {
-                init: function() { state.undo = []; state.redo = []; state.captureTimeout = null; return true; },
-                push: function(template, desc) {
+                init: function () { state.undo = []; state.redo = []; state.captureTimeout = null; return true; },
+                push: function (template, desc) {
                     if (!template) return false; clearTimeout(state.captureTimeout);
                     var snapshot = captureSnapshot(template); if (!snapshot) return false;
                     snapshot.description = desc || 'Edit'; state.undo.push(snapshot); state.redo = [];
                     if (state.undo.length > state.maxHistorySize) state.undo.shift();
                     fire(); return true;
                 },
-                pushDebounced: function(template, desc, delay) {
+                pushDebounced: function (template, desc, delay) {
                     if (!template) return; delay = delay || 1000; clearTimeout(state.captureTimeout);
-                    state.captureTimeout = setTimeout(function() { this.push(template, desc); }.bind(this), delay);
+                    state.captureTimeout = setTimeout(function () { this.push(template, desc); }.bind(this), delay);
                 },
-                undo: function(template) {
+                undo: function (template) {
                     if (!this.canUndo() || !template) return false;
                     var current = captureSnapshot(template), previous = state.undo.pop(); if (!previous) return false;
                     state.redo.push(current); var success = restoreSnapshot(template, previous);
                     if (success) fire(); return success;
                 },
-                redo: function(template) {
+                redo: function (template) {
                     if (!this.canRedo() || !template) return false;
                     var current = captureSnapshot(template), next = state.redo.pop(); if (!next) return false;
                     state.undo.push(current); var success = restoreSnapshot(template, next);
                     if (success) fire(); return success;
                 },
-                canUndo: function() { return state && state.undo.length > 0; },
-                canRedo: function() { return state && state.redo.length > 0; },
-                clear: function() { state.undo = []; state.redo = []; clearTimeout(state.captureTimeout); fire(); return true; },
-                getState: function() { return { undoCount: state.undo.length, redoCount: state.redo.length }; }
+                canUndo: function () { return state && state.undo.length > 0; },
+                canRedo: function () { return state && state.redo.length > 0; },
+                clear: function () { state.undo = []; state.redo = []; clearTimeout(state.captureTimeout); fire(); return true; },
+                getState: function () { return { undoCount: state.undo.length, redoCount: state.redo.length }; }
             };
         })(),
 
@@ -1445,19 +1450,19 @@
                 var dd = String(now.getDate()).padStart(2, '0');
 
                 /* Phase 194.2: Read wizard inputs — Region/Tier added */
-                var _wizName   = document.getElementById('wiz-name');
-                var _wizCur    = document.getElementById('wiz-currency');
-                var _wizDate   = document.getElementById('wiz-date');
-                var _wizDays   = document.getElementById('wiz-days');
+                var _wizName = document.getElementById('wiz-name');
+                var _wizCur = document.getElementById('wiz-currency');
+                var _wizDate = document.getElementById('wiz-date');
+                var _wizDays = document.getElementById('wiz-days');
                 var _wizRegion = document.getElementById('wiz-region');
-                var _wizTier   = document.getElementById('wiz-tier');
+                var _wizTier = document.getElementById('wiz-tier');
 
-                var _wizNameVal   = (_wizName   && _wizName.value   && _wizName.value.trim()) || '';
-                var _wizCurVal    = (_wizCur    && _wizCur.value)    || '';
-                var _wizDateVal   = (_wizDate   && _wizDate.value)   || '';
-                var _wizDaysVal   = (_wizDays   && _wizDays.value    && parseInt(_wizDays.value, 10)) || null;
+                var _wizNameVal = (_wizName && _wizName.value && _wizName.value.trim()) || '';
+                var _wizCurVal = (_wizCur && _wizCur.value) || '';
+                var _wizDateVal = (_wizDate && _wizDate.value) || '';
+                var _wizDaysVal = (_wizDays && _wizDays.value && parseInt(_wizDays.value, 10)) || null;
                 var _wizRegionVal = (_wizRegion && _wizRegion.value) || (window.mBTOG ? mBTOG.settings.location : 'Jamaica');
-                var _wizTierVal   = (_wizTier   && _wizTier.value)   || (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
+                var _wizTierVal = (_wizTier && _wizTier.value) || (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
 
                 /* Validate wizard form if it is present and user has entered a name */
                 if (_wizNameVal) {
@@ -1481,7 +1486,7 @@
                         return;
                     }
                     var _selDate = new Date(_wizDateVal + 'T00:00:00');
-                    var _nowDate = new Date(); _nowDate.setHours(0,0,0,0);
+                    var _nowDate = new Date(); _nowDate.setHours(0, 0, 0, 0);
                     if (_selDate < _nowDate) {
                         mBTME.alert('Validation Error', 'Start date must be today or later.');
                         return;
@@ -1508,12 +1513,12 @@
                     baseLabel = tmpl.label;
 
                     /* Read wizard selections; fall back to OG defaults if wizard not present */
-                    var wizRegEl  = document.getElementById('wiz-region');
+                    var wizRegEl = document.getElementById('wiz-region');
                     var wizTierEl = document.getElementById('wiz-tier');
-                    var wizCurEl  = document.getElementById('wiz-currency');
-                    var wizReg    = wizRegEl  ? wizRegEl.value  : (window.mBTOG ? mBTOG.settings.location : 'Jamaica');
-                    var wizTier   = wizTierEl ? wizTierEl.value : (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
-                    var wizCur    = wizCurEl  ? wizCurEl.value  : wizReg;
+                    var wizCurEl = document.getElementById('wiz-currency');
+                    var wizReg = wizRegEl ? wizRegEl.value : (window.mBTOG ? mBTOG.settings.location : 'Jamaica');
+                    var wizTier = wizTierEl ? wizTierEl.value : (window.mBTOG && typeof mBTOG.settings.getMarketTier === 'function' ? mBTOG.settings.getMarketTier() : 'Standard');
+                    var wizCur = wizCurEl ? wizCurEl.value : wizReg;
 
                     /* Resolve jurisdiction defaults */
                     var defaultJurisdiction = (window.mBTOG && typeof mBTOG.getJurisdictionByRegion === 'function')
@@ -1635,7 +1640,7 @@
                         projectLocation: '',
                         projectCompany: '',
                         shootDate: '',
-                        jurisdiction: (function() {
+                        jurisdiction: (function () {
                             var j = (window.mBTOG && typeof mBTOG.getJurisdictionByRegion === 'function')
                                 ? mBTOG.getJurisdictionByRegion(_wizRegionVal)
                                 : { name: _wizRegionVal, incentiveRate: 0, minSpend: 0 };
@@ -1895,7 +1900,7 @@
                                 /* Restore contacts into mBTOG if available */
                                 if (hasContacts && window.mBTOG && typeof mBTOG.saveContacts === 'function') {
                                     mBTOG.contacts = json.contacts;
-                                    writes.push(mBTOG.saveContacts().catch(function () {}));
+                                    writes.push(mBTOG.saveContacts().catch(function () { }));
                                 }
 
                                 Promise.all(writes).then(function () {
@@ -2024,7 +2029,30 @@
 
         if (field === 'quantity') {
             var q = parseFloat(value);
-            item.quantity = (isNaN(q) || value === '') ? 1 : q;
+            var newQty = (isNaN(q) || value === '') ? 1 : q;
+            item.quantity = newQty;
+            // Phase 199: Proportionally scale stage days on manual quantity edit
+            if (item.stageData && Object.keys(item.stageData).length > 0) {
+                var stageKeys = Object.keys(item.stageData);
+                if (stageKeys.length === 1) {
+                    item.stageData[stageKeys[0]].days = newQty;
+                } else {
+                    var sum = 0;
+                    stageKeys.forEach(function (sk) { sum += parseFloat(item.stageData[sk].days) || 0; });
+                    if (sum > 0) {
+                        var scale = newQty / sum;
+                        stageKeys.forEach(function (sk) {
+                            var d = parseFloat(item.stageData[sk].days) || 0;
+                            item.stageData[sk].days = Math.round(d * scale * 10000) / 10000;
+                        });
+                    } else {
+                        var share = newQty / stageKeys.length;
+                        stageKeys.forEach(function (sk) {
+                            item.stageData[sk].days = share;
+                        });
+                    }
+                }
+            }
         } else if (field === 'actualQuantity') {
             var aq = parseFloat(value);
             item.actualQuantity = (isNaN(aq) || value === '') ? 0 : aq;
@@ -2039,6 +2067,12 @@
                 item.rateType = 'negotiable'; // Phase 198: Keeps alternative rate edits dynamic
                 item.rateSource = 'custom';
                 if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
+                // Phase 199: Propagate manual rate updates down to all stage specific rates
+                if (item.stageData && Object.keys(item.stageData).length > 0) {
+                    Object.keys(item.stageData).forEach(function (sk) {
+                        item.stageData[sk].rate = v;
+                    });
+                }
             }
         }
 
@@ -3210,16 +3244,48 @@
         if (!item) return;
 
         if (field === 'description') item.description = value;
-        else if (field === 'quantity') item.quantity = parseFloat(value) || 0;
+        else if (field === 'quantity') {
+            var newQty = parseFloat(value) || 0;
+            item.quantity = newQty;
+            // Phase 199: Proportionally scale stage days on manual quantity edit
+            if (item.stageData && Object.keys(item.stageData).length > 0) {
+                var stageKeys = Object.keys(item.stageData);
+                if (stageKeys.length === 1) {
+                    item.stageData[stageKeys[0]].days = newQty;
+                } else {
+                    var sum = 0;
+                    stageKeys.forEach(function (sk) { sum += parseFloat(item.stageData[sk].days) || 0; });
+                    if (sum > 0) {
+                        var scale = newQty / sum;
+                        stageKeys.forEach(function (sk) {
+                            var d = parseFloat(item.stageData[sk].days) || 0;
+                            item.stageData[sk].days = Math.round(d * scale * 10000) / 10000;
+                        });
+                    } else {
+                        var share = newQty / stageKeys.length;
+                        stageKeys.forEach(function (sk) {
+                            item.stageData[sk].days = share;
+                        });
+                    }
+                }
+            }
+        }
         else if (field === 'rate') {
             var rawVal = parseFloat(value) || 0;
             var dec = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency.deconvert(rawVal) : rawVal;
-            item.rate = Math.round(dec * 10000) / 10000;
+            var v = Math.round(dec * 10000) / 10000;
+            item.rate = v;
             item.rateType = 'negotiable'; // Phase 198: Decoupled but unlocked; lock is explicit user action
             item.rateSource = 'custom';
             /* Manual rate override re-anchors the regional baseRate so future region
              * switches scale from this user-intended value. */
             if (mBT.rates && mBT.rates.reanchorFromRate) mBT.rates.reanchorFromRate(item);
+            // Phase 199: Propagate manual rate updates down to all stage specific rates
+            if (item.stageData && Object.keys(item.stageData).length > 0) {
+                Object.keys(item.stageData).forEach(function (sk) {
+                    item.stageData[sk].rate = v;
+                });
+            }
         }
         else if (field === 'unit') item.unit = value;
         else if (field === 'actual') {
@@ -3341,10 +3407,10 @@
             b.sections = {};
             stats.sections++;
         }
-        if (!Array.isArray(b.fringes))       b.fringes       = [];
-        if (!Array.isArray(b.documents))     b.documents     = [];
-        if (!Array.isArray(b.attachments))   b.attachments   = [];
-        if (!Array.isArray(b.activityLog))   b.activityLog   = [];
+        if (!Array.isArray(b.fringes)) b.fringes = [];
+        if (!Array.isArray(b.documents)) b.documents = [];
+        if (!Array.isArray(b.attachments)) b.attachments = [];
+        if (!Array.isArray(b.activityLog)) b.activityLog = [];
         if (!Array.isArray(b.fundingSources)) b.fundingSources = [];
         if (!b.aiContext || typeof b.aiContext !== 'object') b.aiContext = { chat: [], analysis: '' };
         if (!Array.isArray(b.aiContext.chat)) b.aiContext.chat = [];
@@ -3355,8 +3421,8 @@
         if (!Array.isArray(b.ledgers.pettyCash)) b.ledgers.pettyCash = [];
         if (typeof b.ledgers.poCounter !== 'number') b.ledgers.poCounter = 1;
         if (typeof b.contingencyPercentage !== 'number' || isNaN(b.contingencyPercentage)) { b.contingencyPercentage = 10; stats.nanFixes++; }
-        if (typeof b.salesTaxPercentage    !== 'number' || isNaN(b.salesTaxPercentage))    { b.salesTaxPercentage    = 0;  stats.nanFixes++; }
-        if (typeof b.discountPercentage    !== 'number' || isNaN(b.discountPercentage))    { b.discountPercentage    = 0;  stats.nanFixes++; }
+        if (typeof b.salesTaxPercentage !== 'number' || isNaN(b.salesTaxPercentage)) { b.salesTaxPercentage = 0; stats.nanFixes++; }
+        if (typeof b.discountPercentage !== 'number' || isNaN(b.discountPercentage)) { b.discountPercentage = 0; stats.nanFixes++; }
 
         /* 2. Section + item sweep */
         var seenItemIds = {};
@@ -3379,12 +3445,12 @@
 
                 /* Required string fields */
                 if (typeof item.description !== 'string') item.description = '';
-                if (typeof item.unit        !== 'string') item.unit        = 'Day';
-                if (typeof item.notes       !== 'string') item.notes       = '';
+                if (typeof item.unit !== 'string') item.unit = 'Day';
+                if (typeof item.notes !== 'string') item.notes = '';
 
                 /* Numeric fields — NaN → safe default */
                 var numFields = [['quantity', 1], ['rate', 0], ['multiplier', 1], ['actual', 0],
-                                 ['actualQuantity', 0], ['actualRate', 0], ['committedCost', 0]];
+                ['actualQuantity', 0], ['actualRate', 0], ['committedCost', 0]];
                 for (var nf = 0; nf < numFields.length; nf++) {
                     var fname = numFields[nf][0], fdef = numFields[nf][1];
                     var parsed = parseFloat(item[fname]);
@@ -3392,8 +3458,8 @@
                     else item[fname] = parsed;
                 }
                 if (item.multiplier < 1) item.multiplier = 1;
-                if (item.quantity   < 0) item.quantity   = 0;
-                if (item.rate       < 0) item.rate       = 0;
+                if (item.quantity < 0) item.quantity = 0;
+                if (item.rate < 0) item.rate = 0;
 
                 /* Boolean flags */
                 if (typeof item.qualifying !== 'boolean') item.qualifying = false;
@@ -3404,8 +3470,8 @@
                 for (var sk = 0; sk < stageKeys.length; sk++) {
                     var sd = item.stageData[stageKeys[sk]];
                     if (!sd || typeof sd !== 'object') { delete item.stageData[stageKeys[sk]]; continue; }
-                    if (isNaN(parseFloat(sd.days)))       sd.days       = 0;
-                    if (isNaN(parseFloat(sd.rate)))       sd.rate       = 0;
+                    if (isNaN(parseFloat(sd.days))) sd.days = 0;
+                    if (isNaN(parseFloat(sd.rate))) sd.rate = 0;
                     if (isNaN(parseFloat(sd.multiplier))) sd.multiplier = 1;
                 }
 
@@ -4019,7 +4085,7 @@
             var isLocked = opts.isLocked || false;
             var safeName = this.esc(name);
             var rawId = name.replace(/"/g, '&quot;');
-            
+
             var secLockIcon = isLocked ? ((typeof mBTAssets !== "undefined" && mBTAssets.lock) ? mBTAssets.lock : '🔒') : ((typeof mBTAssets !== "undefined" && mBTAssets.link) ? mBTAssets.link : '🔗');
             var secLockTitle = isLocked ? 'Unlock all rates in this category' : 'Lock all rates in this category';
             var secLockColor = isLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-rose-500';
@@ -4359,8 +4425,8 @@
                We find the Jamaica counterpart of this description in the OG database. */
             var jamaicaBase = 0;
             if (mBT.opengate && mBT.opengate.rates) {
-                var jmMatch = mBT.opengate.rates.find(function(r) { 
-                    return r.region === 'Jamaica' && r.description.toLowerCase() === (desc || '').toLowerCase(); 
+                var jmMatch = mBT.opengate.rates.find(function (r) {
+                    return r.region === 'Jamaica' && r.description.toLowerCase() === (desc || '').toLowerCase();
                 });
                 if (jmMatch) jamaicaBase = jmMatch.rate;
             }
@@ -4406,7 +4472,7 @@
         function getRegionalRate(r) {
             var key = (r.description || '').toLowerCase() + '|' + currentRegion.toLowerCase();
             var avg = avgs[key];
-            
+
             var currenciesMap = {
                 'USA': 'USD', 'UK': 'GBP', 'Canada': 'CAD', 'Australia': 'AUD',
                 'Jamaica': 'JMD', 'Trinidad': 'USD', 'Barbados': 'USD', 'Guyana': 'USD',
@@ -4423,7 +4489,7 @@
             // 2. If no research exists, we apply the regional multiplier.
             // We then convert that scaled JMD value into the REGION'S native currency for display.
             var scaledRateJMD = r.rate * mult;
-            
+
             if (regionCurrency !== 'JMD' && window.mBT && mBT.le && mBT.le.convertCurrency) {
                 var rateInLocal = mBT.le.convertCurrency(scaledRateJMD, 'JMD', regionCurrency);
                 return { rate: rateInLocal, currency: regionCurrency };
@@ -4714,17 +4780,17 @@
 
             /* Phase 194.2: Wizard form — Region/Tier added; rates auto-resolve from mBTOG */
             var _ogRegions = (window.mBTOG && mBTOG.RATE_REGIONS) ? Object.keys(mBTOG.RATE_REGIONS) : ['Jamaica', 'USA', 'UK', 'Canada', 'Australia', 'Trinidad', 'Barbados', 'Guyana'];
-            var _ogTiers   = (window.mBTOG && mBTOG.MARKET_TIERS)  ? mBTOG.MARKET_TIERS : ['Standard', 'Indie', 'Studio'];
-            var _ogLoc     = (window.mBTOG && mBTOG.settings && mBTOG.settings.location) ? mBTOG.settings.location : 'Jamaica';
-            var _ogTier    = (window.mBTOG && mBTOG.settings && typeof mBTOG.settings.getMarketTier === 'function') ? mBTOG.settings.getMarketTier() : 'Standard';
-            var _regOpts   = _ogRegions.map(function(r) { return '<option value="' + r + '"' + (r === _ogLoc ? ' selected' : '') + '>' + r + '</option>'; }).join('');
-            var _tierOpts  = _ogTiers.map(function(t)  { return '<option value="' + t + '"' + (t === _ogTier ? ' selected' : '') + '>' + t + '</option>'; }).join('');
-            var _selStyle  = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;';
-            var _inpStyle  = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;';
-            var _lblStyle  = 'display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;';
-            var _errStyle  = 'font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;';
-            var _focusOn   = 'this.style.borderColor=\'#6366f1\';';
-            var _focusOff  = 'this.style.borderColor=\'#e5e7eb\';';
+            var _ogTiers = (window.mBTOG && mBTOG.MARKET_TIERS) ? mBTOG.MARKET_TIERS : ['Standard', 'Indie', 'Studio'];
+            var _ogLoc = (window.mBTOG && mBTOG.settings && mBTOG.settings.location) ? mBTOG.settings.location : 'Jamaica';
+            var _ogTier = (window.mBTOG && mBTOG.settings && typeof mBTOG.settings.getMarketTier === 'function') ? mBTOG.settings.getMarketTier() : 'Standard';
+            var _regOpts = _ogRegions.map(function (r) { return '<option value="' + r + '"' + (r === _ogLoc ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+            var _tierOpts = _ogTiers.map(function (t) { return '<option value="' + t + '"' + (t === _ogTier ? ' selected' : '') + '>' + t + '</option>'; }).join('');
+            var _selStyle = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;cursor:pointer;transition:border-color 150ms;';
+            var _inpStyle = 'display:block;width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1f2937;transition:border-color 150ms;';
+            var _lblStyle = 'display:block;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:#374151;margin-bottom:4px;';
+            var _errStyle = 'font-size:10px;color:#ef4444;margin-top:3px;display:none;font-weight:600;';
+            var _focusOn = 'this.style.borderColor=\'#6366f1\';';
+            var _focusOff = 'this.style.borderColor=\'#e5e7eb\';';
 
             var wizardFormHtml =
                 '<div id="wiz-form" style="margin-bottom:14px;padding:12px 14px;background:rgba(255,255,255,0.65);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.07);border-radius:10px;">' +
@@ -4807,12 +4873,12 @@
 
             /* Phase 194: Wire wizard form defaults + validation after DOM is ready */
             var _wName = document.getElementById('wiz-name');
-            var _wCur  = document.getElementById('wiz-currency');
+            var _wCur = document.getElementById('wiz-currency');
             var _wDate = document.getElementById('wiz-date');
             var _wDays = document.getElementById('wiz-days');
 
             /* Set defaults */
-            if (_wDate) { var _td = new Date(); _wDate.value = _td.getFullYear() + '-' + ('0'+(_td.getMonth()+1)).slice(-2) + '-' + ('0'+_td.getDate()).slice(-2); }
+            if (_wDate) { var _td = new Date(); _wDate.value = _td.getFullYear() + '-' + ('0' + (_td.getMonth() + 1)).slice(-2) + '-' + ('0' + _td.getDate()).slice(-2); }
             if (_wCur && typeof displayCurrency !== 'undefined' && displayCurrency) { _wCur.value = displayCurrency; }
 
             var _wizShowErr = function (elId, msg) {
@@ -4851,7 +4917,7 @@
                     _wizShowErr('wiz-date-err', 'Start date is required'); _wizSetInvalid(_wDate, true); ok = false;
                 } else {
                     var _sel = new Date(dateVal + 'T00:00:00');
-                    var _now = new Date(); _now.setHours(0,0,0,0);
+                    var _now = new Date(); _now.setHours(0, 0, 0, 0);
                     if (_sel < _now) {
                         _wizShowErr('wiz-date-err', 'Date must be today or later'); _wizSetInvalid(_wDate, true); ok = false;
                     } else {
@@ -4876,17 +4942,17 @@
 
             /* Attach listeners */
             if (_wName) { _wName.addEventListener('input', function () { _wizardState.isDirty = true; _wizValidate(); }); }
-            if (_wCur)  { _wCur.addEventListener('change', function () { _wizardState.isDirty = true; _wizValidate(); }); }
+            if (_wCur) { _wCur.addEventListener('change', function () { _wizardState.isDirty = true; _wizValidate(); }); }
             if (_wDate) { _wDate.addEventListener('change', function () { _wizardState.isDirty = true; _wizValidate(); }); }
             if (_wDays) { _wDays.addEventListener('input', function () { _wizardState.isDirty = true; _wizValidate(); }); }
 
             /* Run initial validation silently to set isValid state without displaying errors */
             _wizardState.isValid = (function () {
-                var nameOk = !!(  _wName && _wName.value && _wName.value.trim().length >= 2 && /^[a-zA-Z0-9 \-()–—]+$/.test(_wName.value.trim()) );
-                var curOk  = !!( _wCur && _wCur.value );
+                var nameOk = !!(_wName && _wName.value && _wName.value.trim().length >= 2 && /^[a-zA-Z0-9 \-()–—]+$/.test(_wName.value.trim()));
+                var curOk = !!(_wCur && _wCur.value);
                 var dateOk = (function () {
                     if (!_wDate || !_wDate.value) return false;
-                    var _s = new Date(_wDate.value + 'T00:00:00'); var _n = new Date(); _n.setHours(0,0,0,0); return _s >= _n;
+                    var _s = new Date(_wDate.value + 'T00:00:00'); var _n = new Date(); _n.setHours(0, 0, 0, 0); return _s >= _n;
                 }());
                 var daysOk = !_wDays || !_wDays.value || (function () { var _v = parseInt(_wDays.value, 10); return !isNaN(_v) && _v >= 1 && _v <= 365; }());
                 return nameOk && curOk && dateOk && daysOk;
@@ -5566,38 +5632,38 @@
                 if (!coords) { mBTME.alert("Not Found", "Could not locate address."); return; }
 
                 // 3. Generate Site Slate (Canvas Ops)
-                    var cvs = document.getElementById('canvas_' + widgetId);
-                    if (cvs) {
-                        var ctx = cvs.getContext('2d');
-                        var w = cvs.width;
-                        var h = cvs.height;
+                var cvs = document.getElementById('canvas_' + widgetId);
+                if (cvs) {
+                    var ctx = cvs.getContext('2d');
+                    var w = cvs.width;
+                    var h = cvs.height;
 
-                        // A. Background & Grid
-                        ctx.fillStyle = "#f8fafc"; // Slate-50
-                        ctx.fillRect(0, 0, w, h);
+                    // A. Background & Grid
+                    ctx.fillStyle = "#f8fafc"; // Slate-50
+                    ctx.fillRect(0, 0, w, h);
 
-                        ctx.strokeStyle = "#e2e8f0"; // Slate-200
-                        ctx.lineWidth = 1;
-                        for (var x = 20; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-                        for (var y = 20; y < h; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+                    ctx.strokeStyle = "#e2e8f0"; // Slate-200
+                    ctx.lineWidth = 1;
+                    for (var x = 20; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+                    for (var y = 20; y < h; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 
-                        // B. Header Block
-                        ctx.fillStyle = "#0f172a"; // Slate-900
-                        ctx.fillRect(0, 0, w, 60);
+                    // B. Header Block
+                    ctx.fillStyle = "#0f172a"; // Slate-900
+                    ctx.fillRect(0, 0, w, 60);
 
-                        ctx.fillStyle = "#ffffff";
-                        ctx.font = "bold 14px 'Arial', sans-serif";
-                        ctx.fillText("SITE PLAN / MUD MAP", 15, 25);
+                    ctx.fillStyle = "#ffffff";
+                    ctx.font = "bold 14px 'Arial', sans-serif";
+                    ctx.fillText("SITE PLAN / MUD MAP", 15, 25);
 
-                        ctx.font = "10px 'Arial', sans-serif";
-                        ctx.fillStyle = "#94a3b8";
-                        ctx.fillText('LOC: ' + loc.name.toUpperCase(), 15, 45);
+                    ctx.font = "10px 'Arial', sans-serif";
+                    ctx.fillStyle = "#94a3b8";
+                    ctx.fillText('LOC: ' + loc.name.toUpperCase(), 15, 45);
 
-                        // C. GPS Watermark
-                        ctx.fillStyle = "#475569";
-                        ctx.font = "bold 12px 'Courier New', monospace";
-                        ctx.fillText('ADDR: ' + query, 15, 80);
-                        ctx.fillText('GPS:  ' + coords.lat.toFixed(6) + ', ' + coords.lon.toFixed(6), 15, 95);
+                    // C. GPS Watermark
+                    ctx.fillStyle = "#475569";
+                    ctx.font = "bold 12px 'Courier New', monospace";
+                    ctx.fillText('ADDR: ' + query, 15, 80);
+                    ctx.fillText('GPS:  ' + coords.lat.toFixed(6) + ', ' + coords.lon.toFixed(6), 15, 95);
 
                     // D. Compass Icon
                     ctx.strokeStyle = "#cbd5e1";
@@ -6228,8 +6294,8 @@
                 '<input type="text" ' + lock + ' value="' + esc(sunset || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[1]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">' +
                 '</div>' +
                 '</div>';
-            
-                '<div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar widget-list-grid">' + (d.locations || []).map(function (l, i) {
+
+            '<div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar widget-list-grid">' + (d.locations || []).map(function (l, i) {
                 return '<div class="flex flex-col gap-1 border-b-2 border-black pb-2 mb-1 relative group/loc">' +
                     '<!-- Row 1: Name and Time (Refined Font Size & Width) -->' +
                     '<div class="flex justify-between items-end gap-2 mb-1">' +
@@ -6601,11 +6667,11 @@
 
             /* Form factor presets — (aspect-ratio CSS value) */
             var FORM_FACTORS = [
-                { id: '16:9',  label: '16:9',  css: '16/9',  desc: '1080p / HD' },
+                { id: '16:9', label: '16:9', css: '16/9', desc: '1080p / HD' },
                 { id: '2.39:1', label: 'Scope', css: '2.39/1', desc: 'Anamorphic' },
-                { id: '4:3',   label: '4:3',   css: '4/3',   desc: 'Academy' },
-                { id: '1:1',   label: '1:1',   css: '1/1',   desc: 'Square' },
-                { id: '9:16',  label: '9:16',  css: '9/16',  desc: 'Vertical' }
+                { id: '4:3', label: '4:3', css: '4/3', desc: 'Academy' },
+                { id: '1:1', label: '1:1', css: '1/1', desc: 'Square' },
+                { id: '9:16', label: '9:16', css: '9/16', desc: 'Vertical' }
             ];
 
             var activeFactor = frameState.formFactor || '16:9';
@@ -6626,12 +6692,12 @@
                 'style="width:100%;aspect-ratio:' + activeFF.css + ';max-height:55vh;">' +
                 (val
                     ? '<img id="sbFramePreviewImg" src="' + val + '" ' +
-                      'style="width:100%;height:100%;object-fit:contain;transform:scale(' + frameState.scale + ') translate(' + frameState.offsetX + 'px,' + frameState.offsetY + 'px);transform-origin:center;cursor:grab;" ' +
-                      'draggable="false">'
+                    'style="width:100%;height:100%;object-fit:contain;transform:scale(' + frameState.scale + ') translate(' + frameState.offsetX + 'px,' + frameState.offsetY + 'px);transform-origin:center;cursor:grab;" ' +
+                    'draggable="false">'
                     : '<div class="flex flex-col items-center justify-center gap-3 text-slate-600">' +
-                      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
-                      '<span class="text-[10px] font-black uppercase tracking-widest">No Image</span>' +
-                      '</div>'
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+                    '<span class="text-[10px] font-black uppercase tracking-widest">No Image</span>' +
+                    '</div>'
                 ) +
                 /* Zoom controls overlay */
                 '<div class="absolute bottom-2 right-2 flex gap-1">' +
@@ -6663,9 +6729,9 @@
                 /* Clear */
                 (val
                     ? '<button onclick="mBTDB._clearFrameImage(\'' + docId + '\',\'' + widgetId + '\')" class="flex-1 flex flex-col items-center gap-1 py-3 bg-rose-900 hover:bg-rose-800 rounded-xl transition-all active:scale-95">' +
-                      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>' +
-                      '<span class="text-[8px] font-black uppercase tracking-widest text-rose-300">Clear</span>' +
-                      '</button>'
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>' +
+                    '<span class="text-[8px] font-black uppercase tracking-widest text-rose-300">Clear</span>' +
+                    '</button>'
                     : ''
                 );
 
@@ -6878,7 +6944,7 @@
             var self = this;
 
             /* Build prompt sub-form inside the frame editor modal */
-            var imgProv  = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+            var imgProv = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
             var imgModel = localStorage.getItem('mbt_ai_image_model') || 'flux';
             var provLabel = imgProv.charAt(0).toUpperCase() + imgProv.slice(1);
 
@@ -6910,18 +6976,18 @@
             }
 
             var promptEl = document.getElementById('sbGenPrompt_' + widgetId);
-            if (promptEl) setTimeout(function() { promptEl.focus(); }, 50);
+            if (promptEl) setTimeout(function () { promptEl.focus(); }, 50);
         },
 
         _runFrameGen: function (docId, widgetId) {
             var self = this;
-            var promptEl  = document.getElementById('sbGenPrompt_' + widgetId);
-            var btnEl     = document.getElementById('sbGenBtn_' + widgetId);
-            var statusEl  = document.getElementById('sbGenStatus_' + widgetId);
+            var promptEl = document.getElementById('sbGenPrompt_' + widgetId);
+            var btnEl = document.getElementById('sbGenBtn_' + widgetId);
+            var statusEl = document.getElementById('sbGenStatus_' + widgetId);
             var promptText = promptEl ? promptEl.value.trim() : '';
             if (!promptText) { if (statusEl) statusEl.textContent = 'Enter a prompt first.'; return; }
 
-            if (btnEl)    { btnEl.disabled = true; btnEl.textContent = 'Generating…'; }
+            if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Generating…'; }
             if (statusEl) statusEl.textContent = 'Contacting AI…';
 
             var imgModel = localStorage.getItem('mbt_ai_image_model') || 'flux';
@@ -6930,7 +6996,7 @@
             function onDataUrl(dataUrl) {
                 /* Downscale to 1024x576 before storing */
                 var img = new Image();
-                img.onload = function() {
+                img.onload = function () {
                     var canvas = document.createElement('canvas');
                     canvas.width = 1024; canvas.height = 576;
                     canvas.getContext('2d').drawImage(img, 0, 0, 1024, 576);
@@ -6946,25 +7012,25 @@
             }
 
             function onError(msg) {
-                if (btnEl)    { btnEl.disabled = false; btnEl.textContent = 'Generate'; }
+                if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Generate'; }
                 if (statusEl) statusEl.textContent = 'Error: ' + (msg || 'generation failed');
             }
 
             if (assistant && typeof assistant.callImageGen === 'function') {
                 assistant.callImageGen({ prompt: promptText, model: imgModel, aspectRatio: '16:9' })
-                    .then(function(dataUrl) { onDataUrl(dataUrl); })
-                    .catch(function(err) { onError(err.message); });
+                    .then(function (dataUrl) { onDataUrl(dataUrl); })
+                    .catch(function (err) { onError(err.message); });
             } else {
                 /* Pollinations direct fallback — Phase 193: cache-busting seed per request */
                 var polModel = (imgModel && imgModel !== 'pollinations') ? '&model=' + encodeURIComponent(imgModel) : '';
                 var cacheBuster = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
                 var imgUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(promptText) +
                     '?width=1024&height=576&nologo=true&seed=' + cacheBuster + polModel;
-                fetch(imgUrl, { cache: 'no-store' }).then(function(r) { return r.blob(); }).then(function(blob) {
+                fetch(imgUrl, { cache: 'no-store' }).then(function (r) { return r.blob(); }).then(function (blob) {
                     var rd = new FileReader();
-                    rd.onload = function(e) { onDataUrl(e.target.result); };
+                    rd.onload = function (e) { onDataUrl(e.target.result); };
                     rd.readAsDataURL(blob);
-                }).catch(function() { onError('Network error. Check connection.'); });
+                }).catch(function () { onError('Network error. Check connection.'); });
             }
         },
 
@@ -7914,7 +7980,7 @@
         }
     };
 
-     /* ========= v19.54 CORTEX INTELLIGENCE (mBT.features.cortex) ========= */
+    /* ========= v19.54 CORTEX INTELLIGENCE (mBT.features.cortex) ========= */
     mBT.features.cortex = {
         // --- 1. Logic Engine (The Brain) ---
         logic: {
@@ -8080,11 +8146,11 @@
                 if (burnRate > 100) burnColor = 'text-rose-600';
                 else if (burnRate > 80) burnColor = 'text-amber-500';
 
-                var burnWidget = 
+                var burnWidget =
                     '<div class="col-span-1 md:col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full flex flex-col justify-center items-center text-center">' +
-                        '<div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">Burn Rate</div>' +
-                        '<span class="text-3xl font-black ' + burnColor + ' tracking-tighter">' + burnRate.toFixed(1) + '%</span>' +
-                        '<span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">of budget</span>' +
+                    '<div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">Burn Rate</div>' +
+                    '<span class="text-3xl font-black ' + burnColor + ' tracking-tighter">' + burnRate.toFixed(1) + '%</span>' +
+                    '<span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">of budget</span>' +
                     '</div>';
 
                 // --- Widget 2: Cost Drivers (List) ---
@@ -8092,28 +8158,28 @@
                     var pct = max > 0 ? Math.min((val / max) * 100, 100) : 0;
                     return '<div class="mb-3">' +
                         '<div class="flex justify-between text-[9px] font-black uppercase text-slate-500 mb-1">' +
-                            '<span class="truncate pr-2" title="' + mBT.ui.render.esc(label) + '">' + mBT.ui.render.esc(label) + '</span>' +
-                            '<span>' + fmt(val) + '</span>' +
+                        '<span class="truncate pr-2" title="' + mBT.ui.render.esc(label) + '">' + mBT.ui.render.esc(label) + '</span>' +
+                        '<span>' + fmt(val) + '</span>' +
                         '</div>' +
                         '<div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">' +
-                            '<div class="h-full ' + colorClass + '" style="width: ' + pct + '%"></div>' +
+                        '<div class="h-full ' + colorClass + '" style="width: ' + pct + '%"></div>' +
                         '</div>' +
                         (subText ? '<div class="text-[8px] text-slate-400 font-mono mt-0.5 text-right">' + subText + '</div>' : '') +
-                    '</div>';
+                        '</div>';
                 };
 
                 var maxCost = analysis.financials.topCosts.length ? analysis.financials.topCosts[0].est : 1;
-                var financialsWidget = 
+                var financialsWidget =
                     '<div class="col-span-1 md:col-span-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full overflow-y-auto no-scrollbar">' +
-                        '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Cost Drivers</h4>' +
-                        '<div class="mb-6">' +
-                            (analysis.financials.topCosts.length ? analysis.financials.topCosts.map(function (i) { return renderBar(i.description, i.est, maxCost, 'bg-blue-600'); }).join('') : '<div class="text-[9px] text-slate-300 italic">No data</div>') +
-                        '</div>' +
-                        (analysis.financials.bleeders.length ? 
-                            '<div>' +
-                                '<div class="text-[9px] font-black uppercase text-rose-300 mb-3">Variance Alert</div>' +
-                                analysis.financials.bleeders.map(function (i) { return renderBar(i.description, i.variance, i.variance, 'bg-rose-500', 'Act: ' + fmt(i.act)); }).join('') +
-                            '</div>' : '') +
+                    '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Cost Drivers</h4>' +
+                    '<div class="mb-6">' +
+                    (analysis.financials.topCosts.length ? analysis.financials.topCosts.map(function (i) { return renderBar(i.description, i.est, maxCost, 'bg-blue-600'); }).join('') : '<div class="text-[9px] text-slate-300 italic">No data</div>') +
+                    '</div>' +
+                    (analysis.financials.bleeders.length ?
+                        '<div>' +
+                        '<div class="text-[9px] font-black uppercase text-rose-300 mb-3">Variance Alert</div>' +
+                        analysis.financials.bleeders.map(function (i) { return renderBar(i.description, i.variance, i.variance, 'bg-rose-500', 'Act: ' + fmt(i.act)); }).join('') +
+                        '</div>' : '') +
                     '</div>';
 
                 // --- Widget 3: Human Heatmap Render ---
@@ -8125,68 +8191,68 @@
 
                     return '<div class="flex items-center justify-between p-2 mb-2 bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition-colors">' +
                         '<div class="flex items-center gap-3 overflow-hidden">' +
-                            '<div class="w-8 h-8 rounded-full bg-white text-slate-400 flex items-center justify-center font-black text-[9px] shadow-sm border border-slate-100 shrink-0">' +
-                                c.name.charAt(0).toUpperCase() +
-                            '</div>' +
-                            '<div class="min-w-0">' +
-                                '<div class="text-[10px] font-black text-slate-700 uppercase truncate" title="' + mBT.ui.render.esc(c.name) + '">' + mBT.ui.render.esc(c.name) + '</div>' +
-                                '<div class="text-[8px] text-slate-400 font-bold truncate">' + c.roles.length + ' roles assigned</div>' +
-                            '</div>' +
+                        '<div class="w-8 h-8 rounded-full bg-white text-slate-400 flex items-center justify-center font-black text-[9px] shadow-sm border border-slate-100 shrink-0">' +
+                        c.name.charAt(0).toUpperCase() +
+                        '</div>' +
+                        '<div class="min-w-0">' +
+                        '<div class="text-[10px] font-black text-slate-700 uppercase truncate" title="' + mBT.ui.render.esc(c.name) + '">' + mBT.ui.render.esc(c.name) + '</div>' +
+                        '<div class="text-[8px] text-slate-400 font-bold truncate">' + c.roles.length + ' roles assigned</div>' +
+                        '</div>' +
                         '</div>' +
                         '<div class="text-right shrink-0">' +
-                            '<div class="px-2 py-1 rounded-md text-[9px] font-black ' + statusColor + ' text-center">' + statusLabel + '</div>' +
-                            '<div class="text-[8px] text-slate-400 font-mono mt-0.5">' + c.days + ' Days</div>' +
+                        '<div class="px-2 py-1 rounded-md text-[9px] font-black ' + statusColor + ' text-center">' + statusLabel + '</div>' +
+                        '<div class="text-[8px] text-slate-400 font-mono mt-0.5">' + c.days + ' Days</div>' +
                         '</div>' +
-                    '</div>';
+                        '</div>';
                 };
 
-                var crewWidget = 
+                var crewWidget =
                     '<div class="col-span-1 md:col-span-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm h-full overflow-y-auto no-scrollbar">' +
-                        '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Human Capital</h4>' +
-                        '<div class="mb-6">' +
-                            (analysis.crew.burnout.length ? analysis.crew.burnout.map(renderCrewRow).join('') : '<div class="text-[9px] text-slate-300 italic">No crew data</div>') +
-                        '</div>' +
+                    '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Human Capital</h4>' +
+                    '<div class="mb-6">' +
+                    (analysis.crew.burnout.length ? analysis.crew.burnout.map(renderCrewRow).join('') : '<div class="text-[9px] text-slate-300 italic">No crew data</div>') +
+                    '</div>' +
                     '</div>';
 
                 // --- Widget 4: Live Auditor (Terminal) ---
-                var auditorWidget = 
+                var auditorWidget =
                     '<div class="col-span-1 md:col-span-3 p-4 bg-slate-900 rounded-2xl border border-black shadow-2xl h-full flex flex-col relative overflow-hidden group">' +
-                        '<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(circle, #333 1px, transparent 1px); background-size: 4px 4px;"></div>' +
-                        '<h4 class="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-4 border-b border-slate-800 pb-2 flex justify-between items-center z-10">' +
-                            '<span>Live Auditor</span>' +
-                            '<span class="flex h-2 w-2 relative">' +
-                                '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>' +
-                                '<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>' +
-                            '</span>' +
-                        '</h4>' +
-                        '<div id="cortex-terminal" class="flex-grow font-mono text-[10px] text-emerald-400 space-y-2 overflow-y-auto no-scrollbar leading-relaxed z-10">' +
-                            '<div class="opacity-50">> Initializing Cortex Engine v1.0..</div>' +
-                            '<div class="opacity-50">> Scanning ' + analysis.stats.totalItems + ' data points..</div>' +
-                            '<div class="opacity-50">> Financial velocity calculated at ' + analysis.financials.burnRate.toFixed(2) + '%</div>' +
-                            '<div class="opacity-50">> Crew fatigue analysis complete.</div>' +
-                            '<div class="text-white mt-4 border-t border-slate-700 pt-2 font-bold">> SYSTEM READY. WAITING FOR AI AUDIT..</div>' +
-                        '</div>' +
-                        '<div class="mt-4 pt-4 border-t border-slate-800 z-10">' +
-                             '<button onclick="mBT.features.cortex.startLiveAuditor()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">' +
-                                mBTAssets.zap + ' Run AI Risk Assessment' +
-                             '</button>' +
-                        '</div>' +
+                    '<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(circle, #333 1px, transparent 1px); background-size: 4px 4px;"></div>' +
+                    '<h4 class="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-4 border-b border-slate-800 pb-2 flex justify-between items-center z-10">' +
+                    '<span>Live Auditor</span>' +
+                    '<span class="flex h-2 w-2 relative">' +
+                    '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>' +
+                    '<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>' +
+                    '</span>' +
+                    '</h4>' +
+                    '<div id="cortex-terminal" class="flex-grow font-mono text-[10px] text-emerald-400 space-y-2 overflow-y-auto no-scrollbar leading-relaxed z-10">' +
+                    '<div class="opacity-50">> Initializing Cortex Engine v1.0..</div>' +
+                    '<div class="opacity-50">> Scanning ' + analysis.stats.totalItems + ' data points..</div>' +
+                    '<div class="opacity-50">> Financial velocity calculated at ' + analysis.financials.burnRate.toFixed(2) + '%</div>' +
+                    '<div class="opacity-50">> Crew fatigue analysis complete.</div>' +
+                    '<div class="text-white mt-4 border-t border-slate-700 pt-2 font-bold">> SYSTEM READY. WAITING FOR AI AUDIT..</div>' +
+                    '</div>' +
+                    '<div class="mt-4 pt-4 border-t border-slate-800 z-10">' +
+                    '<button onclick="mBT.features.cortex.startLiveAuditor()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">' +
+                    mBTAssets.zap + ' Run AI Risk Assessment' +
+                    '</button>' +
+                    '</div>' +
                     '</div>';
 
-                var content = 
+                var content =
                     '<div class="flex flex-col h-[600px] max-h-[80vh] bg-slate-50 p-4">' +
-                        '<div class="flex justify-between items-center mb-4 shrink-0">' +
-                            '<h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Mission Control</h3>' +
-                            '<div class="flex gap-2">' +
-                                '<button onclick="mBT.features.cortex.ui.openGlobalDashboard()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white border border-slate-900 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">Global View</button>' +
-                                '<button onclick="mBT.features.ai.analyzeCurrentBudget()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm">' + mBTAssets.doctor + ' Deep Scan</button>' +
-                                '<button onclick="mBT.features.ai.openChat()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm">' + mBTAssets.chat + ' Chat</button>' +
-                                '<button onclick="showSettingsModal(\'ai\')" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">' + mBTAssets.gear + '</button>' +
-                            '</div>' +
-                        '</div>' +
-                        '<div class="grid grid-cols-1 md:grid-cols-12 gap-4 flex-grow overflow-hidden min-h-0">' +
-                            burnWidget + financialsWidget + crewWidget + auditorWidget +
-                        '</div>' +
+                    '<div class="flex justify-between items-center mb-4 shrink-0">' +
+                    '<h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Mission Control</h3>' +
+                    '<div class="flex gap-2">' +
+                    '<button onclick="mBT.features.cortex.ui.openGlobalDashboard()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white border border-slate-900 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">Global View</button>' +
+                    '<button onclick="mBT.features.ai.analyzeCurrentBudget()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm">' + mBTAssets.doctor + ' Deep Scan</button>' +
+                    '<button onclick="mBT.features.ai.openChat()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm">' + mBTAssets.chat + ' Chat</button>' +
+                    '<button onclick="showSettingsModal(\'ai\')" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">' + mBTAssets.gear + '</button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-1 md:grid-cols-12 gap-4 flex-grow overflow-hidden min-h-0">' +
+                    burnWidget + financialsWidget + crewWidget + auditorWidget +
+                    '</div>' +
                     '</div>';
 
                 mBTME.open('analyticsHub', 'Cortex Dashboard', content, 'max-w-5xl', { noPadding: true, hideHeader: true });
@@ -8206,57 +8272,57 @@
                             '<div class="text-[9px] font-black uppercase text-slate-300 mb-2 tracking-widest">' + label + '</div>' +
                             '<span class="text-2xl font-black ' + color + ' tracking-tighter">' + val + '</span>' +
                             '<span class="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">' + sub + '</span>' +
-                        '</div>';
+                            '</div>';
                     };
 
                     var crewList = data.topCrew.map(function (c, i) {
                         return '<div class="flex justify-between items-center p-2 border-b border-slate-50 last:border-0">' +
                             '<div class="flex items-center gap-3">' +
-                                '<div class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[9px] font-black">' + (i + 1) + '</div>' +
-                                '<span class="text-[10px] font-bold text-slate-700 uppercase">' + mBT.ui.render.esc(c.name) + '</span>' +
+                            '<div class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[9px] font-black">' + (i + 1) + '</div>' +
+                            '<span class="text-[10px] font-bold text-slate-700 uppercase">' + mBT.ui.render.esc(c.name) + '</span>' +
                             '</div>' +
                             '<span class="text-[10px] font-mono font-bold text-emerald-600">' + fmt(c.amount) + '</span>' +
-                        '</div>';
+                            '</div>';
                     }).join('');
 
                     var projectList = data.projectSummaries.map(function (p) {
                         return '<div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2 border border-transparent hover:border-blue-200 transition-colors cursor-pointer" onclick="mBT.data.load(\'' + p.name + '\'); mBTME.close(\'analyticsHubModal\');">' +
                             '<div>' +
-                                '<div class="text-[10px] font-black text-slate-800 uppercase">' + mBT.ui.render.esc(p.name) + '</div>' +
-                                '<div class="text-[8px] text-slate-400 font-bold">' + (p.date || 'No Date') + '</div>' +
+                            '<div class="text-[10px] font-black text-slate-800 uppercase">' + mBT.ui.render.esc(p.name) + '</div>' +
+                            '<div class="text-[8px] text-slate-400 font-bold">' + (p.date || 'No Date') + '</div>' +
                             '</div>' +
                             '<div class="text-right">' +
-                                '<div class="text-[10px] font-mono font-bold text-slate-600">' + fmt(p.actual) + ' / ' + fmt(p.budget) + '</div>' +
-                                '<div class="text-[8px] font-black uppercase tracking-widest ' + (p.status === 'Over' ? 'text-rose-500' : 'text-emerald-500') + '">' + p.status + '</div>' +
+                            '<div class="text-[10px] font-mono font-bold text-slate-600">' + fmt(p.actual) + ' / ' + fmt(p.budget) + '</div>' +
+                            '<div class="text-[8px] font-black uppercase tracking-widest ' + (p.status === 'Over' ? 'text-rose-500' : 'text-emerald-500') + '">' + p.status + '</div>' +
                             '</div>' +
-                        '</div>';
+                            '</div>';
                     }).join('');
 
                     var content = '<div class="flex flex-col h-[600px] max-h-[80vh] bg-slate-50 p-6 overflow-hidden">' +
-                            '<div class="flex justify-between items-center mb-6 shrink-0">' +
-                                '<div>' +
-                                    '<h3 class="text-lg font-black uppercase tracking-tighter text-slate-900">Global Studio Audit</h3>' +
-                                    '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aggregate Analysis across ' + data.projectCount + ' Projects</p>' +
-                                '</div>' +
-                                '<button onclick="mBT.features.cortex.ui.openHub()" class="text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-widest">' +
-                                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em; height:1em;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back to Project' +
-                                '</button>' +
-                            '</div>' +
-                            '<div class="grid grid-cols-3 gap-4 mb-6 shrink-0">' +
-                                kpiCard('Total Spend (Actual)', fmt(data.totalSpend), 'Across All Projects', 'text-slate-800') +
-                                kpiCard('Total Budget (Est)', fmt(data.totalBudget), 'Lifetime Projection', 'text-blue-600') +
-                                kpiCard('Project Volume', data.projectCount, 'Active Files', 'text-indigo-500') +
-                            '</div>' +
-                            '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow min-h-0">' +
-                                '<div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">' +
-                                    '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Top Earners (Crew)</h4>' +
-                                    '<div class="overflow-y-auto no-scrollbar space-y-1">' + (crewList || '<div class="text-center text-slate-300 text-[10px] mt-10">No crew data found.</div>') + '</div>' +
-                                '</div>' +
-                                '<div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">' +
-                                    '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Recent Projects</h4>' +
-                                    '<div class="overflow-y-auto no-scrollbar">' + projectList + '</div>' +
-                                '</div>' +
-                            '</div>' +
+                        '<div class="flex justify-between items-center mb-6 shrink-0">' +
+                        '<div>' +
+                        '<h3 class="text-lg font-black uppercase tracking-tighter text-slate-900">Global Studio Audit</h3>' +
+                        '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aggregate Analysis across ' + data.projectCount + ' Projects</p>' +
+                        '</div>' +
+                        '<button onclick="mBT.features.cortex.ui.openHub()" class="text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-[9px] font-black uppercase tracking-widest">' +
+                        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em; height:1em;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg> Back to Project' +
+                        '</button>' +
+                        '</div>' +
+                        '<div class="grid grid-cols-3 gap-4 mb-6 shrink-0">' +
+                        kpiCard('Total Spend (Actual)', fmt(data.totalSpend), 'Across All Projects', 'text-slate-800') +
+                        kpiCard('Total Budget (Est)', fmt(data.totalBudget), 'Lifetime Projection', 'text-blue-600') +
+                        kpiCard('Project Volume', data.projectCount, 'Active Files', 'text-indigo-500') +
+                        '</div>' +
+                        '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow min-h-0">' +
+                        '<div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">' +
+                        '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Top Earners (Crew)</h4>' +
+                        '<div class="overflow-y-auto no-scrollbar space-y-1">' + (crewList || '<div class="text-center text-slate-300 text-[10px] mt-10">No crew data found.</div>') + '</div>' +
+                        '</div>' +
+                        '<div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">' +
+                        '<h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 border-b border-slate-50 pb-2">Recent Projects</h4>' +
+                        '<div class="overflow-y-auto no-scrollbar">' + projectList + '</div>' +
+                        '</div>' +
+                        '</div>' +
                         '</div>';
 
                     mBTME.open('analyticsHub', 'Global Dashboard', content, 'max-w-5xl', { noPadding: true, hideHeader: true });
@@ -8414,43 +8480,43 @@
                 var missing = mBT.features.stages.logic.findMissingEssentials(stageKey);
                 var stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
 
-                var content = 
-                '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">' +
+                var content =
+                    '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">' +
                     '<!-- Option A: Link Existing -->' +
                     '<div class="bg-blue-50 border border-blue-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-blue-200 transition-colors">' +
-                        '<div>' +
-                            '<div class="flex items-center gap-2 mb-2">' +
-                                '<div class="w-8 h-8 rounded-lg bg-blue-200 text-blue-700 flex items-center justify-center shadow-sm">' + mBTAssets.clip + '</div>' +
-                                '<h4 class="font-black text-[10px] uppercase tracking-widest text-blue-800">Link Existing</h4>' +
-                            '</div>' +
-                            '<p class="text-[10px] text-blue-600/80 leading-relaxed mb-4">' +
-                                'Scan your current budget line items. We found <strong>' + matches.length + '</strong> items that match this stage\'s criteria but haven\'t been assigned yet.' +
-                            '</p>' +
-                        '</div>' +
-                        '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'link\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (matches.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
-                            'Sync ' + matches.length + ' Items' +
-                        '</button>' +
+                    '<div>' +
+                    '<div class="flex items-center gap-2 mb-2">' +
+                    '<div class="w-8 h-8 rounded-lg bg-blue-200 text-blue-700 flex items-center justify-center shadow-sm">' + mBTAssets.clip + '</div>' +
+                    '<h4 class="font-black text-[10px] uppercase tracking-widest text-blue-800">Link Existing</h4>' +
+                    '</div>' +
+                    '<p class="text-[10px] text-blue-600/80 leading-relaxed mb-4">' +
+                    'Scan your current budget line items. We found <strong>' + matches.length + '</strong> items that match this stage\'s criteria but haven\'t been assigned yet.' +
+                    '</p>' +
+                    '</div>' +
+                    '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'link\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (matches.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
+                    'Sync ' + matches.length + ' Items' +
+                    '</button>' +
                     '</div>' +
 
                     '<!-- Option B: Generate Missing -->' +
                     '<div class="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex flex-col justify-between h-full group hover:border-emerald-200 transition-colors">' +
-                        '<div>' +
-                            '<div class="flex items-center gap-2 mb-2">' +
-                                '<div class="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-700 flex items-center justify-center shadow-sm">' + mBTAssets.wand + '</div>' +
-                                '<h4 class="font-black text-[10px] uppercase tracking-widest text-emerald-800">Generate Missing</h4>' +
-                            '</div>' +
-                            '<p class="text-[10px] text-emerald-600/80 leading-relaxed mb-4">' +
-                                'Database check complete. We found <strong>' + missing.length + '</strong> standard industry roles/items for this stage that are completely missing from your budget.' +
-                            '</p>' +
-                        '</div>' +
-                        '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'generate\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (missing.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
-                            mBTAssets.plus + ' Add ' + missing.length + ' Items' +
-                        '</button>' +
+                    '<div>' +
+                    '<div class="flex items-center gap-2 mb-2">' +
+                    '<div class="w-8 h-8 rounded-lg bg-emerald-200 text-emerald-700 flex items-center justify-center shadow-sm">' + mBTAssets.wand + '</div>' +
+                    '<h4 class="font-black text-[10px] uppercase tracking-widest text-emerald-800">Generate Missing</h4>' +
                     '</div>' +
-                '</div>' +
-                '<div class="px-4 pb-4 text-center">' +
+                    '<p class="text-[10px] text-emerald-600/80 leading-relaxed mb-4">' +
+                    'Database check complete. We found <strong>' + missing.length + '</strong> standard industry roles/items for this stage that are completely missing from your budget.' +
+                    '</p>' +
+                    '</div>' +
+                    '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'generate\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (missing.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
+                    mBTAssets.plus + ' Add ' + missing.length + ' Items' +
+                    '</button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="px-4 pb-4 text-center">' +
                     '<p class="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Changes are saved automatically upon execution</p>' +
-                '</div>';
+                    '</div>';
 
                 mBTME.open('autoFill', 'Smart Fill: ' + stageLabel, content, 'max-w-xl');
             }
@@ -8495,24 +8561,24 @@
                 '</div>';
 
             // Logic Resolution: Dynamic Toolbar for Bulk Actions with Checkbox Logic
-            var toolbarHtml = 
+            var toolbarHtml =
                 '<div class="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 shadow-sm">' +
-                    '<div class="flex items-center gap-2">' +
-                        '<input type="checkbox" ' +
-                               'data-action="trash-toggle-all" ' +
-                               (hasItems && selectedCount === items.length ? 'checked' : '') + ' ' +
-                               (!hasItems ? 'disabled' : '') +
-                               ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">' +
-                        '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + selectedCount + ' Selected</span>' +
-                    '</div>' +
-                    '<div class="flex gap-2">' +
-                        (selectedCount > 0 ? 
-                            '<button data-action="trash-bulk" data-type="restore" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center gap-1">' + this.icons.undo + ' Restore</button>' +
-                            '<button data-action="trash-bulk" data-type="delete" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">' + this.icons.trash + ' Delete</button>'
-                         : 
-                            '<button data-action="trash-bulk" data-type="empty" class="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all" ' + (!hasItems ? 'disabled style="opacity:0.5"' : '') + '>Empty Bin</button>'
-                        ) +
-                    '</div>' +
+                '<div class="flex items-center gap-2">' +
+                '<input type="checkbox" ' +
+                'data-action="trash-toggle-all" ' +
+                (hasItems && selectedCount === items.length ? 'checked' : '') + ' ' +
+                (!hasItems ? 'disabled' : '') +
+                ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">' +
+                '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + selectedCount + ' Selected</span>' +
+                '</div>' +
+                '<div class="flex gap-2">' +
+                (selectedCount > 0 ?
+                    '<button data-action="trash-bulk" data-type="restore" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center gap-1">' + this.icons.undo + ' Restore</button>' +
+                    '<button data-action="trash-bulk" data-type="delete" class="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center gap-1">' + this.icons.trash + ' Delete</button>'
+                    :
+                    '<button data-action="trash-bulk" data-type="empty" class="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all" ' + (!hasItems ? 'disabled style="opacity:0.5"' : '') + '>Empty Bin</button>'
+                ) +
+                '</div>' +
                 '</div>';
 
             var listHtml = '';
@@ -8696,12 +8762,12 @@
             if (subTab) subTab = _subTabMap[subTab.toLowerCase()] || subTab.toLowerCase();
             var self = this;
             var TABS = [
-                { id: 'general',     label: 'General' },
-                { id: 'database',    label: 'Database' },
-                { id: 'ai',          label: 'AI' },
+                { id: 'general', label: 'General' },
+                { id: 'database', label: 'Database' },
+                { id: 'ai', label: 'AI' },
                 { id: 'connections', label: 'Connections' },
-                { id: 'cloud',       label: 'Cloud' },
-                { id: 'updates',     label: 'Updates' }
+                { id: 'cloud', label: 'Cloud' },
+                { id: 'updates', label: 'Updates' }
             ];
 
             /* Build top-level tab nav */
@@ -9041,10 +9107,10 @@
         setRateRegion: function (region) {
             /* Anchor baseRate against the current (old) region BEFORE updating the location. */
             if (mBT.rates && mBT.rates.stampBaselines) mBT.rates.stampBaselines();
-            
+
             var self = this;
             if (window.mBTOG && mBTOG.settings && mBTOG.settings.setLocation) {
-                mBTOG.settings.setLocation(region).then(function() {
+                mBTOG.settings.setLocation(region).then(function () {
                     if (mBT.rates && mBT.rates.applyRegion) mBT.rates.applyRegion(region);
                     window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { detail: { region: region } }));
                     mBTME.alert('Region Updated', 'Rates rescaled to ' + region + '.');
@@ -9084,18 +9150,18 @@
             if (sectionNames.length === 0) return mBTME.alert("Error", "No sections in budget.");
             var sectionName = sectionNames[0]; // Default to first section
             var section = budget.sections[sectionName];
-            
+
             // SNAPSHOT TRIGGER
             if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot("Added " + desc + " from Database");
 
             var budgetCurr = (budget && budget.currency) || 'JMD';
-            var finalRate = (sourceCurrency && sourceCurrency !== budgetCurr && mBT.le && mBT.le.convertCurrency) ? 
-                             mBT.le.convertCurrency(rate, sourceCurrency, budgetCurr) : 
-                             rate;
+            var finalRate = (sourceCurrency && sourceCurrency !== budgetCurr && mBT.le && mBT.le.convertCurrency) ?
+                mBT.le.convertCurrency(rate, sourceCurrency, budgetCurr) :
+                rate;
 
             var _currentReg = (mBT.opengate && mBT.opengate.settings) ? mBT.opengate.settings.location : 'Jamaica';
             var _mult = (mBT.rates && mBT.rates.resolve) ? mBT.rates.resolve({ description: desc }, _currentReg) : 1;
-            
+
             // Phase 172: Intelligently anchor baseRate
             var baseRate = finalRate;
             var _og = window.mBT && mBT.opengate;
@@ -9281,8 +9347,8 @@
                         window.dispatchEvent(new CustomEvent('mbtOG:regionChanged', { detail: { region: region } }));
                     });
                 } else if (window.mBTOG && mBTOG.settings) {
-                    mBTOG.settings.location = region; 
-                    localStorage.setItem('moo_og_loc', region); 
+                    mBTOG.settings.location = region;
+                    localStorage.setItem('moo_og_loc', region);
                 }
                 mBTME.alert('Profile', 'Profile saved.');
                 mBT.features.settings.open('cloud');
@@ -9459,9 +9525,9 @@
                 (sources.length > 0
                     ? '<div class="px-3 py-2">' + rowsHtml + '</div>'
                     : '<div class="px-5 py-6 text-center">' +
-                      '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">No funding sources yet</p>' +
-                      '<button onclick="mBT.features.funding.openSourceModal(-1)" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">+ Add Funding Source</button>' +
-                      '</div>') +
+                    '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">No funding sources yet</p>' +
+                    '<button onclick="mBT.features.funding.openSourceModal(-1)" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">+ Add Funding Source</button>' +
+                    '</div>') +
                 '</div>' +
                 '</div>';
         },
@@ -9698,7 +9764,7 @@
         setTotalCap: function (rawVal) {
             if (!budget) return;
             if (!budget.targetLock) budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
-            var val  = parseFloat(rawVal) || 0;
+            var val = parseFloat(rawVal) || 0;
             /* Warn when replacing an existing cap -- change cascades to Stages and every stage segment cap */
             /* Phase 180: Remove blocking confirm for smoother HUD experience */
             budget.targetLock.totalCap = val;
@@ -9766,7 +9832,7 @@
     };
 
     window._runExport = function () {
-        var includeDocs     = document.getElementById('exp-include-docs')     ? document.getElementById('exp-include-docs').checked     : true;
+        var includeDocs = document.getElementById('exp-include-docs') ? document.getElementById('exp-include-docs').checked : true;
         var includeContacts = document.getElementById('exp-include-contacts') ? document.getElementById('exp-include-contacts').checked : true;
         mBTME.close('export-dialogModal');
 
@@ -9959,35 +10025,35 @@
                 if (isCompact) {
                     // Grid Card (Vertical Layout) - Tier 5 Event Delegation Update
                     return '<div class="relative group bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center gap-3 text-center h-full" data-action="doc-options" data-id="' + doc.id + '">' +
-                         '<div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors shrink-0">' +
-                            iconSvg +
-                         '</div>' +
-                         '<div class="w-full overflow-hidden">' +
-                            '<div class="text-[10px] font-black uppercase text-slate-700 truncate w-full" title="' + RenderEngine.esc(doc.label) + '">' + RenderEngine.esc(doc.label || 'Untitled') + '</div>' +
-                            '<div class="text-[9px] text-slate-400 font-bold truncate w-full">' + (doc.type ? doc.type.toUpperCase() : 'DOC') + '</div>' +
-                         '</div>' +
-                         '<div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/90 rounded-lg shadow-sm p-1">' +
-                            '<button data-action="doc-duplicate" data-id="' + doc.id + '" class="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded" title="Duplicate">' + mBTAssets.copy + '</button>' +
-                            '<button data-action="doc-archive" data-id="' + doc.id + '" class="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded" title="Archive">' + mBTAssets.trash + '</button>' +
-                         '</div>' +
-                    '</div>';
+                        '<div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors shrink-0">' +
+                        iconSvg +
+                        '</div>' +
+                        '<div class="w-full overflow-hidden">' +
+                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate w-full" title="' + RenderEngine.esc(doc.label) + '">' + RenderEngine.esc(doc.label || 'Untitled') + '</div>' +
+                        '<div class="text-[9px] text-slate-400 font-bold truncate w-full">' + (doc.type ? doc.type.toUpperCase() : 'DOC') + '</div>' +
+                        '</div>' +
+                        '<div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/90 rounded-lg shadow-sm p-1">' +
+                        '<button data-action="doc-duplicate" data-id="' + doc.id + '" class="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded" title="Duplicate">' + mBTAssets.copy + '</button>' +
+                        '<button data-action="doc-archive" data-id="' + doc.id + '" class="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded" title="Archive">' + mBTAssets.trash + '</button>' +
+                        '</div>' +
+                        '</div>';
                 } else {
                     // List Row (Horizontal Layout) - Tier 5 Event Delegation Update
                     return '<div class="group bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all flex items-center justify-between cursor-pointer">' +
                         '<div class="flex items-center gap-4 flex-grow overflow-hidden" data-action="doc-options" data-id="' + doc.id + '">' +
-                            '<div class="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 group-hover:scale-110 transition-transform shrink-0">' +
-                                iconSvg +
-                            '</div>' +
-                            '<div class="min-w-0">' +
-                                '<h4 class="font-black text-slate-900 text-xs uppercase tracking-tighter truncate">' + mBT.ui.render.esc(doc.label || 'Untitled Document') + '</h4>' +
-                                '<p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest truncate">' + (doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document') + '</p>' +
-                            '</div>' +
+                        '<div class="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100 group-hover:scale-110 transition-transform shrink-0">' +
+                        iconSvg +
+                        '</div>' +
+                        '<div class="min-w-0">' +
+                        '<h4 class="font-black text-slate-900 text-xs uppercase tracking-tighter truncate">' + mBT.ui.render.esc(doc.label || 'Untitled Document') + '</h4>' +
+                        '<p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest truncate">' + (doc.type ? doc.type.charAt(0).toUpperCase() + doc.type.slice(1) : 'Document') + '</p>' +
+                        '</div>' +
                         '</div>' +
                         '<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">' +
-                            '<button data-action="doc-duplicate" data-id="' + doc.id + '" class="p-2 text-slate-300 hover:text-blue-600 transition-colors" title="Duplicate">' + mBTAssets.copy + '</button>' +
-                            '<button data-action="doc-archive" data-id="' + doc.id + '" class="p-2 text-slate-300 hover:text-rose-600 transition-colors" title="Archive">' + mBTAssets.trash + '</button>' +
+                        '<button data-action="doc-duplicate" data-id="' + doc.id + '" class="p-2 text-slate-300 hover:text-blue-600 transition-colors" title="Duplicate">' + mBTAssets.copy + '</button>' +
+                        '<button data-action="doc-archive" data-id="' + doc.id + '" class="p-2 text-slate-300 hover:text-rose-600 transition-colors" title="Archive">' + mBTAssets.trash + '</button>' +
                         '</div>' +
-                    '</div>';
+                        '</div>';
                 }
             };
 
@@ -10595,7 +10661,7 @@
             if (form) {
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();
-                    var name  = document.getElementById('crewName').value.trim();
+                    var name = document.getElementById('crewName').value.trim();
                     var phone = document.getElementById('crewPhone').value.trim();
                     var email = document.getElementById('crewEmail').value.trim();
 
@@ -10603,21 +10669,21 @@
                     var importedContact = null;
                     var importField = document.getElementById('crewImportData');
                     if (importField && importField.value) {
-                        try { importedContact = JSON.parse(importField.value); } catch (ex) {}
+                        try { importedContact = JSON.parse(importField.value); } catch (ex) { }
                     }
 
                     /* Build the full crew object — merge typed fields over imported contact */
                     var crewObj = importedContact ? {
-                        contactId:    importedContact.id || null,
-                        name:         name || importedContact.name || '',
-                        phone:        phone || importedContact.phone || '',
-                        email:        email || importedContact.email || '',
-                        role:         importedContact.role || '',
-                        department:   importedContact.department || '',
-                        rate:         importedContact.rate || null,
-                        walletType:   importedContact.walletType || '',
+                        contactId: importedContact.id || null,
+                        name: name || importedContact.name || '',
+                        phone: phone || importedContact.phone || '',
+                        email: email || importedContact.email || '',
+                        role: importedContact.role || '',
+                        department: importedContact.department || '',
+                        rate: importedContact.rate || null,
+                        walletType: importedContact.walletType || '',
                         walletAddress: importedContact.walletAddress || '',
-                        portfolio:    importedContact.portfolio || []
+                        portfolio: importedContact.portfolio || []
                     } : { name: name, phone: phone, email: email };
 
                     if (itemId && itemId.startsWith('dummy_new_contact')) {
@@ -10635,7 +10701,7 @@
                     else if (isGlobalEdit) {
                         var gIdx = mBTOG.contacts.findIndex(function (c) { return c.id === itemId; });
                         if (gIdx > -1) {
-                            mBTOG.contacts[gIdx].name  = name;
+                            mBTOG.contacts[gIdx].name = name;
                             mBTOG.contacts[gIdx].phone = phone;
                             mBTOG.contacts[gIdx].email = email;
                             mBTOG.saveContacts();
@@ -10713,15 +10779,15 @@
                                     'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
                                     'data-cjson="' + safeJson + '" ' +
                                     'onclick="(function(el){' +
-                                        'var n=document.getElementById(\'crewName\');' +
-                                        'var p=document.getElementById(\'crewPhone\');' +
-                                        'var e=document.getElementById(\'crewEmail\');' +
-                                        'if(n) n.value=el.dataset.cname||\'\';' +
-                                        'if(p) p.value=el.dataset.cphone||\'\';' +
-                                        'if(e) e.value=el.dataset.cemail||\'\';' +
-                                        'var h=document.getElementById(\'crewImportData\');' +
-                                        'if(h) h.value=el.dataset.cjson;' +
-                                        'mBTME.close(\'contactPickerModal\');' +
+                                    'var n=document.getElementById(\'crewName\');' +
+                                    'var p=document.getElementById(\'crewPhone\');' +
+                                    'var e=document.getElementById(\'crewEmail\');' +
+                                    'if(n) n.value=el.dataset.cname||\'\';' +
+                                    'if(p) p.value=el.dataset.cphone||\'\';' +
+                                    'if(e) e.value=el.dataset.cemail||\'\';' +
+                                    'var h=document.getElementById(\'crewImportData\');' +
+                                    'if(h) h.value=el.dataset.cjson;' +
+                                    'mBTME.close(\'contactPickerModal\');' +
                                     '})(this)">' +
                                     '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
                                     '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
@@ -10816,7 +10882,7 @@
         if (!items.length) return '<div class="p-4 text-center text-xs text-gray-400">No matches.</div>';
         return items.map(function (item) {
             return '<div onclick="' + (item.isExisting ? 'assignItemToStage(\'' + RenderEngine.esc(item.id) + '\', \'' + RenderEngine.esc(stageKey) + '\')' : 'addStageItemToBudget(\'' + RenderEngine.esc(item.description) + '\', ' + item.rate + ', \'' + RenderEngine.esc(item.unit) + '\', \'' + RenderEngine.esc(stageKey) + '\', \'' + RenderEngine.esc(targetSectionName) + '\')') + '" ' +
-                 'class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">' +
+                'class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">' +
                 '<div><div class="text-sm font-bold text-gray-700">' + item.description + '</div>' + (item.isExisting ? '<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ' + item.sectionName + '</div>' : '') + '</div>' +
                 '<div class="font-mono text-xs text-gray-500 font-bold">' + mBTLE.format.currency(item.rate) + '</div>' +
                 '</div>';
@@ -11683,7 +11749,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.46', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.50', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -11849,17 +11915,17 @@
                 /* 2. Surgical UI Update (The Fix) */
                 var btn = el.closest('button') || el;
                 var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
-                
+
                 // Update Color Class
-                btn.className = 'w-6 h-6 rounded-lg transition-all flex items-center justify-center mx-auto ' + 
-                               (isLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-300 hover:text-blue-500 hover:bg-blue-50');
-                
+                btn.className = 'w-6 h-6 rounded-lg transition-all flex items-center justify-center mx-auto ' +
+                    (isLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-300 hover:text-blue-500 hover:bg-blue-50');
+
                 // Update Inner SVG
                 var span = btn.querySelector('span');
                 if (span) {
                     span.innerHTML = isLocked ? (assets.lock || '') : (assets.link || '');
                 }
-                
+
                 // Update Hover Title
                 btn.title = isLocked ? 'Locked: Rate is fixed' : 'Linked: Rate follows region';
             }
@@ -12716,7 +12782,7 @@
            { type:'mbt:tool-action', action:'reconcile' }. Reload in-memory budget + recompute. */
         window.addEventListener('message', function (evt) {
             if (!evt.data || evt.data.type !== 'mbt:tool-action') return;
-            
+
             /* Phase 182: Handle region changes from OpenGate */
             if (evt.data.action === 'og-location-changed') {
                 if (mBT.rates && typeof mBT.rates.applyRegion === 'function') {
