@@ -511,17 +511,30 @@
                 prevStart = new Date(start);
             });
 
-            /* Phase 3.3: Overrun */
+            /* Phase 200: Universal Projection & Ghost Target computation */
             var cursor = timeline.dist && timeline.dist.end ? timeline.dist.end : baseDate;
+            var targetAdj;
+            var isEstimated = false;
             if (b.deliveryDate) {
                 var target    = new Date(b.deliveryDate);
-                var targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
-                var diffDays  = Math.ceil((targetAdj - cursor) / 86400000);
-                var status    = diffDays < 0 ? 'OVERDUE' : (diffDays < 7 ? 'Tight' : 'On Track');
-                var color     = diffDays < 0 ? 'text-rose-600' : (diffDays < 7 ? 'text-amber-500' : 'text-emerald-500');
-                var ring      = diffDays < 0 ? 'border-rose-500' : (diffDays < 7 ? 'border-amber-400' : 'border-slate-100');
-                timeline._analysis = { projectedEnd: cursor, targetDate: targetAdj, variance: diffDays, status: status, color: color, ring: ring };
+                targetAdj = new Date(target.getTime() + target.getTimezoneOffset() * 60000);
+            } else {
+                targetAdj = new Date(cursor);
+                isEstimated = true;
             }
+            var diffDays  = b.deliveryDate ? Math.ceil((targetAdj - cursor) / 86400000) : 0;
+            var status    = isEstimated ? 'ESTIMATED' : (diffDays < 0 ? 'OVERDUE' : (diffDays < 7 ? 'Tight' : 'On Track'));
+            var color     = isEstimated ? 'text-slate-400 opacity-60 italic' : (diffDays < 0 ? 'text-rose-600' : (diffDays < 7 ? 'text-amber-500' : 'text-emerald-500'));
+            var ring      = isEstimated ? 'border-dashed border-slate-300' : (diffDays < 0 ? 'border-rose-500' : (diffDays < 7 ? 'border-amber-400' : 'border-slate-100'));
+            timeline._analysis = {
+                projectedEnd: cursor,
+                targetDate: targetAdj,
+                variance: diffDays,
+                status: status,
+                color: color,
+                ring: ring,
+                isEstimated: isEstimated
+            };
             return timeline;
         }
 
@@ -708,7 +721,10 @@
                 dom.getElementById('active-project-name').textContent = (b.company && b.company.productionTitle) ? b.company.productionTitle : 'UNTITLED';
                 dom.getElementById('project-tag').textContent = b.id ? b.id.slice(-6).toUpperCase() : 'PROJECT';
                 dom.getElementById('start-date').value    = b.startDate || '';
-                dom.getElementById('delivery-date').value = b.deliveryDate || '';
+                // Phase 200: Handled dynamically by renderVitals to support ghost formatting
+                if (b.deliveryDate) {
+                    dom.getElementById('delivery-date').value = b.deliveryDate;
+                }
                 dom.getElementById('total-cap').value     = b.targetLock ? (b.targetLock.totalCap || '') : '';
 
                 /* Panels */
@@ -816,13 +832,26 @@
                 }).join('');
                 dom.getElementById('timeline-audit').innerHTML = tHtml;
 
-                /* Delivery date input border color */
+                /* Phase 200: Delivery date input ghost styling */
                 var deliveryInput = dom.getElementById('delivery-date');
                 if (timeline._analysis) {
-                    deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500');
-                    if (timeline._analysis.status === 'OVERDUE') deliveryInput.classList.add('border-rose-500');
-                    else if (timeline._analysis.status === 'Tight')  deliveryInput.classList.add('border-amber-500');
-                    else                                              deliveryInput.classList.add('border-emerald-500');
+                    deliveryInput.classList.remove('border-slate-700', 'border-rose-500', 'border-amber-500', 'border-emerald-500', 'border-dashed');
+                    if (timeline._analysis.isEstimated) {
+                        deliveryInput.classList.add('border-dashed', 'border-slate-500');
+                        deliveryInput.style.opacity = '0.45';
+                        deliveryInput.style.fontStyle = 'italic';
+                        var proj = timeline._analysis.projectedEnd;
+                        var yyyy = proj.getFullYear();
+                        var mm = ('0' + (proj.getMonth() + 1)).slice(-2);
+                        var dd = ('0' + proj.getDate()).slice(-2);
+                        deliveryInput.value = yyyy + '-' + mm + '-' + dd;
+                    } else {
+                        deliveryInput.style.opacity = '1';
+                        deliveryInput.style.fontStyle = 'normal';
+                        if (timeline._analysis.status === 'OVERDUE') deliveryInput.classList.add('border-rose-500');
+                        else if (timeline._analysis.status === 'Tight')  deliveryInput.classList.add('border-amber-500');
+                        else                                              deliveryInput.classList.add('border-emerald-500');
+                    }
                 }
             },
 

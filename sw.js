@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v23.49';
+var CACHE_NAME = 'mbt-monolith-cache-v23.50';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -68,15 +68,9 @@ var PRECACHE_ASSETS = [
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
 
-    /* --- WebAssembly modules (full offline support — all build targets) --- */
+    /* --- WebAssembly module (canonical tree — optional; install tolerates absence) --- */
     './src/core/wasm/mbt_wasm.js',
     './src/core/wasm/mbt_wasm_bg.wasm',
-    './src/core/wasm_node/mbt_wasm.js',
-    './src/core/wasm_node/mbt_wasm_bg.wasm',
-    './src/core/wasm_node/mbt_wasm_node.js',
-    './src/core/wasm_node/mbt_wasm_node_bg.wasm',
-    './src/core/wasm_node/pkg/mbt_wasm.js',
-    './src/core/wasm_node/pkg/mbt_wasm_bg.wasm',
 
     /* --- AI tool dependencies (loaded by src/tools/ai/index.html iframe) --- */
     './src/services/ai-context.js',
