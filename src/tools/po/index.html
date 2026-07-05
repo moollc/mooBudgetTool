@@ -180,9 +180,39 @@
             return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        /* --- Currency Format (v23.58, mirrors stages v23.55).
+           Ledger amounts are stored in the budget's base currency — convert to the live
+           display currency (state.currency) using the same rate table the parent uses. --- */
+        var _syncedRates = null; /* pushed by parent in mbt:displayCurrency payload */
+        function _rateTable() {
+            if (_syncedRates) return _syncedRates;
+            /* Same-origin parent: ask its currency engine directly */
+            try {
+                if (window.parent && window.parent !== window && window.parent.mBT &&
+                    window.parent.mBT.logic && window.parent.mBT.logic.currency) {
+                    return window.parent.mBT.logic.currency._getRates();
+                }
+            } catch (e) { }
+            try {
+                if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
+                    var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
+                    if (snap) return JSON.parse(snap);
+                }
+                var live = localStorage.getItem('prodBudget_v5_rates');
+                if (live) return JSON.parse(live);
+            } catch (e) { }
+            return null;
+        }
+
         function fmt(n) {
+            var display = state.currency || 'JMD';
+            var base = (state.budget && state.budget.currency) ? state.budget.currency : 'JMD';
             var num = parseFloat(n) || 0;
-            return state.currency + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (base !== display) {
+                var rates = _rateTable();
+                if (rates && rates[base] && rates[display]) num = num / rates[base] * rates[display];
+            }
+            return display + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         function genId() { return 'po_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4); }
@@ -603,10 +633,19 @@
             renderCash();
         }
 
+        /* --- v23.58: live display-currency switch from parent (mirrors stages) --- */
+        function setDisplayCurrency(code, rates) {
+            state.currency = code || 'JMD';
+            if (rates) _syncedRates = rates;
+            renderPOs();
+            renderCash();
+        }
+
         return {
             init: init,
             io: {
-                hydrateLedgerViews: function(pos, pettyCash) { hydrateLedgerViews(pos, pettyCash); }
+                hydrateLedgerViews: function(pos, pettyCash) { hydrateLedgerViews(pos, pettyCash); },
+                setDisplayCurrency: function(code, rates) { setDisplayCurrency(code, rates); }
             }
         };
     })();
@@ -622,6 +661,12 @@
         if (action === 'reload-ledgers') {
             mBTPO.io.hydrateLedgerViews(payload.pos, payload.pettyCash);
         }
+    });
+
+    /* v23.58: receive live display-currency switches from parent (mirrors stages/publisher) */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+        mBTPO.io.setDisplayCurrency(e.data.currency, e.data.rates);
     });
   </script>
 </body>
