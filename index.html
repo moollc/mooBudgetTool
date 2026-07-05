@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.53</title>
+    <title>mooBudgetTool v23.55</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.53";
+    var APP_VERSION = "23.55";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -2669,14 +2669,54 @@
         return { estimated: est || 0, variance: (act - est) || 0 };
     }
 
+    /* Currency symbol lookup — derived from the shared formatter so symbols never drift */
+    var _curSymCache = {};
+    function currencySymbol(code) {
+        code = code || 'JMD';
+        if (_curSymCache[code]) return _curSymCache[code];
+        var sym = code + ' ';
+        if (typeof mBTLE !== 'undefined' && mBTLE.format) {
+            try { sym = mBTLE.format.currency(0, code).replace(/[\d.,\s ]/g, ''); } catch (e) { }
+        }
+        _curSymCache[code] = sym;
+        return sym;
+    }
+
     function formatAbbreviated(value, currency) {
         currency = currency || 'JMD';
-        if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
-        if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
+        var v = parseFloat(value) || 0;
+        var neg = v < 0 ? '-' : '';
+        var abs = Math.abs(v);
+        if (abs >= 1000000) return neg + currencySymbol(currency) + (abs / 1000000).toFixed(1) + 'M';
+        if (abs >= 1000) return neg + currencySymbol(currency) + (abs / 1000).toFixed(1) + 'k';
         if (typeof mBTLE !== 'undefined' && mBTLE.format) {
-            return mBTLE.format.currency(value, currency);
+            return mBTLE.format.currency(v, currency);
         }
-        return new Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD' }).format(value);
+        return new Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD' }).format(v);
+    }
+
+    /* Convert between two arbitrary currency codes using the live/locked rate table
+       (same table mBT.logic.currency uses). Used by ledger displays where each
+       payment carries its own currency — display-only, never mutates stored data. */
+    function convertBetween(val, from, to) {
+        var v = parseFloat(val) || 0;
+        if (!from || !to || from === to) return v;
+        var rates = (window.mBT && mBT.logic && mBT.logic.currency) ? mBT.logic.currency._getRates() : null;
+        if (rates && rates[from] && rates[to]) return v / rates[from] * rates[to];
+        if (typeof mBTLE !== 'undefined' && typeof mBTLE.convertCurrency === 'function') {
+            try { return mBTLE.convertCurrency(v, from, to); } catch (e) { }
+        }
+        return v;
+    }
+
+    /* Phase 118 follow-up: single display-money helper. Every stored-base amount painted
+       to the UI must pass through here so the displayCurrency conversion is never skipped.
+       abbreviated=true uses the compact mobile format. */
+    function fmtDisplay(value, abbreviated) {
+        var v = (window.mBT && mBT.logic && mBT.logic.currency)
+            ? mBT.logic.currency.convert(value)
+            : (parseFloat(value) || 0);
+        return abbreviated ? formatAbbreviated(v, displayCurrency) : mBTLE.format.currency(v);
     }
 
     window.esc = esc;
@@ -3791,10 +3831,12 @@
                 var estimated = calc.estimated;
                 var variance = calc.variance;
                 var estCell = document.querySelector('[data-estimated-id="' + item.id + '"]');
-                if (estCell) estCell.textContent = isMobile ? formatAbbreviated(estimated, displayCurrency) : fmt(estimated);
+                if (estCell) estCell.textContent = fmtDisplay(estimated, isMobile);
+                var curTag = document.querySelector('[data-currency-tag="' + item.id + '"]');
+                if (curTag) curTag.textContent = (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD');
                 var varCell = document.querySelector('[data-variance-id="' + item.id + '"]');
                 if (varCell) {
-                    varCell.textContent = isMobile ? formatAbbreviated(variance, displayCurrency) : fmt(variance);
+                    varCell.textContent = fmtDisplay(variance, isMobile);
                     varCell.className = 'p-1 md:p-2 w-[50px] md:w-28 text-right font-mono font-black text-[10px] md:text-xs ' + (variance > 0 ? 'text-red-500' : 'text-green-600');
                 }
                 var updateInput = function (field, val) {
@@ -3997,7 +4039,7 @@
                 '<div>' +
                 '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Payment Amount</label>' +
                 '<div class="relative">' +
-                '<span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>' +
+                '<span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">' + currencySymbol(currency) + '</span>' +
                 '<input type="number" id="payAmount" class="w-full p-4 pl-8 bg-white border-none rounded-2xl text-2xl font-black text-slate-800 outline-none focus:ring-4 focus:ring-emerald-100 transition-all placeholder-slate-200" placeholder="0.00" autofocus>' +
                 '</div>' +
                 '</div>' +
@@ -4025,7 +4067,18 @@
 
         paymentHistory: function (contact) {
             var payments = contact.payments || [];
-            var totalPaid = payments.reduce(function (sum, p) { return sum + (parseFloat(p.amount) || 0); }, 0);
+            /* Ledger display rule (2026-07-05): stored payment.amount/currency are truth and
+               never rewritten. Rows show the native payment currency (+ converted subline when
+               it differs from the display currency). Total Paid converts every payment into the
+               display currency before summing — unlike currencies are never added raw. */
+            var _disp = (typeof displayCurrency !== 'undefined' && displayCurrency) ? displayCurrency : 'JMD';
+            var _base = (typeof budget !== 'undefined' && budget && budget.currency) ? budget.currency : 'JMD';
+            var hasForeign = false;
+            var totalPaid = payments.reduce(function (sum, p) {
+                var pCur = p.currency || _base;
+                if (pCur !== _disp) hasForeign = true;
+                return sum + convertBetween(p.amount, pCur, _disp);
+            }, 0);
             var sorted = payments.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
 
             if (sorted.length === 0) {
@@ -4050,7 +4103,8 @@
                     '</div>' +
                     '</div>' +
                     '<div class="text-right">' +
-                    '<div class="text-[10px] font-black text-slate-800 font-mono">' + mBTLE.format.currency(p.amount, p.currency) + '</div>' +
+                    '<div class="text-[10px] font-black text-slate-800 font-mono">' + mBTLE.format.currency(p.amount, p.currency || _base) + '</div>' +
+                    ((p.currency || _base) !== _disp ? '<div class="text-[8px] text-slate-400 font-bold font-mono">≈ ' + mBTLE.format.currency(convertBetween(p.amount, p.currency || _base, _disp), _disp) + '</div>' : '') +
                     '<div class="text-[8px] text-emerald-500 font-bold uppercase tracking-widest">Paid</div>' +
                     '</div>' +
                     '</div>';
@@ -4061,7 +4115,7 @@
                 '<div class="flex justify-between items-end">' +
                 '<div>' +
                 '<h4 class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Paid</h4>' +
-                '<div class="text-xl font-black text-slate-800 tracking-tighter">' + mBTLE.format.currency(totalPaid) + '</div>' +
+                '<div class="text-xl font-black text-slate-800 tracking-tighter">' + (hasForeign ? '≈ ' : '') + mBTLE.format.currency(totalPaid, _disp) + '</div>' +
                 '</div>' +
                 '<div class="text-[9px] font-bold text-slate-400">' + sorted.length + ' Transactions</div>' +
                 '</div>' +
@@ -4229,30 +4283,30 @@
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<div class="flex items-center gap-1 justify-end md:justify-start">' +
-                '<span class="text-[8px] font-black text-slate-300 pointer-events-none">' + (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD') + '</span>' +
+                '<span data-currency-tag="' + safeId + '" class="text-[8px] font-black text-slate-300 pointer-events-none">' + (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD') + '</span>' +
                 '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="rate" value="' + toDisp(item.rate).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-transparent border-none font-mono font-bold text-xs text-slate-500 focus:ring-0 no-spinner text-right md:text-left p-0">' +
                 (item.rateSource && item.rateSource !== 'scaled' ? '<span title="Verified OpenGate Market Rate" class="text-[8px] text-emerald-500 font-black">✓</span>' : '') +
                 '</div>' +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="' + safeId + '">' +
-                (isMobile ? formatAbbreviated((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated, displayCurrency) : mBTLE.format.currency((mBT.logic && mBT.logic.currency) ? mBT.logic.currency.convert(estimated) : estimated)) +
+                fmtDisplay(estimated, isMobile) +
                 '</td>';
 
             if (isActuals) {
-                html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">' + mBTLE.format.currency(item.committedCost || 0) + '</td>' +
+                html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono text-xs text-slate-400 font-bold">' + fmtDisplay(item.committedCost || 0, false) + '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                     '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualQuantity" value="' + (parseFloat(item.actualQuantity) || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-14 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                     '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualRate" value="' + toDisp(item.actualRate || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
-                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">' + mBTLE.format.currency(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)))) + '</td>' +
-                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="' + safeId + '">' + mBTLE.format.currency(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))) + '</td>';
+                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">' + fmtDisplay(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))), false) + '</td>' +
+                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="' + safeId + '">' + fmtDisplay(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)), false) + '</td>';
             } else {
                 html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                     '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actual" value="' + toDisp(item.actual || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
-                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs ' + hideVar + '" data-variance-id="' + safeId + '">' + (isMobile ? formatAbbreviated(variance, displayCurrency) : mBTLE.format.currency(variance)) + '</td>';
+                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs ' + hideVar + '" data-variance-id="' + safeId + '">' + fmtDisplay(variance, isMobile) + '</td>';
             }
 
             if (hasIncentive) {
@@ -4293,7 +4347,7 @@
                 '<p class="text-[10px] font-black ' + (isConflict ? 'text-amber-800' : 'text-slate-800') + ' uppercase truncate">' + this.esc(item.description) + '</p>' +
                 '<p class="text-[8px] ' + (isConflict ? 'text-amber-600' : 'text-slate-400') + ' font-bold uppercase tracking-widest">' + this.esc(item._sec) + '</p>' +
                 '</div>' +
-                '<span id="cost-' + item.id + '-' + stageKey + '" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">' + formatAbbreviated(cost, displayCurrency) + '</span>' +
+                '<span id="cost-' + item.id + '-' + stageKey + '" class="text-[10px] font-black text-slate-900 font-mono flex-shrink-0">' + fmtDisplay(cost, true) + '</span>' +
                 '</div>' +
                 '<div class="flex items-center gap-2">' +
                 '<div class="w-12">' +
@@ -4384,7 +4438,7 @@
 
             var isLocked = (section.items && section.items.length > 0) && section.items.every(function (it) { return it.rateType === 'fixed'; });
 
-            return mBT.ui.render.section({ name: name, total: mBTLE.format.currency(section.total), isOpen: section.isOpen, content: bodyContent, isLocked: isLocked });
+            return mBT.ui.render.section({ name: name, total: fmtDisplay(section.total, false), isOpen: section.isOpen, content: bodyContent, isLocked: isLocked });
         }).join('');
     }
 
@@ -11789,7 +11843,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.53', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.55', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13020,7 +13074,20 @@
             getCurrentProjectName: function () { return currentProjectName; },
             setCurrentProjectName: function (n) { currentProjectName = n; },
             getDisplayCurrency: function () { return displayCurrency; },
-            setDisplayCurrency: function (v) { displayCurrency = v; },
+            setDisplayCurrency: function (v) {
+                displayCurrency = v;
+                /* Live currency sync: notify open tool iframes (mirrors mbt:workWeek broadcast).
+                   Ship the rate table too — Phase 194 consolidated the localStorage rates key,
+                   so children can't reliably read it themselves. */
+                var _rates = null;
+                try { _rates = (mBT.logic && mBT.logic.currency) ? mBT.logic.currency._getRates() : null; } catch (e) { }
+                var toolIframes = document.querySelectorAll('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
+                for (var i = 0; i < toolIframes.length; i++) {
+                    if (toolIframes[i].contentWindow) {
+                        toolIframes[i].contentWindow.postMessage({ type: 'mbt:displayCurrency', currency: v, rates: _rates }, '*');
+                    }
+                }
+            },
             getMBTActiveTool: function () { return mBTActiveTool; },
             setMBTActiveTool: function (v) { mBTActiveTool = v; },
             getDiffActive: function () { return _diffActive; },

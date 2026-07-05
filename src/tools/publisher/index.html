@@ -199,12 +199,40 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     'use strict';
 
     // ─── State ───────────────────────────────────────────────────────────────────
-    var budget   = null;
-    var currency = 'JMD';
+    var budget       = null;
+    var currency     = 'JMD'; /* display currency (URL param / live mbt:displayCurrency) */
+    var baseCurrency = 'JMD'; /* budget's stored base — amounts in `budget` are in this */
 
     // ─── Helpers ─────────────────────────────────────────────────────────────────
+    /* Shared live/locked rate table: prefer rates pushed with mbt:displayCurrency,
+       then the same-origin parent engine, then localStorage remnants */
+    var _syncedRates = null;
+    function _rateTable() {
+      if (_syncedRates) return _syncedRates;
+      try {
+        if (window.parent && window.parent !== window && window.parent.mBT &&
+            window.parent.mBT.logic && window.parent.mBT.logic.currency) {
+          return window.parent.mBT.logic.currency._getRates();
+        }
+      } catch (e) { }
+      try {
+        if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
+          var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
+          if (snap) return JSON.parse(snap);
+        }
+        var live = localStorage.getItem('prodBudget_v5_rates');
+        if (live) return JSON.parse(live);
+      } catch (e) { }
+      return null;
+    }
+
+    /* On-screen amounts convert base → display; exports stay in base currency */
     function fmt(val) {
       var n = parseFloat(val) || 0;
+      if (baseCurrency !== currency) {
+        var rates = _rateTable();
+        if (rates && rates[baseCurrency] && rates[currency]) n = n / rates[baseCurrency] * rates[currency];
+      }
       return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
@@ -238,6 +266,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* Phase 73B: receive undo/redo routing from parent monolith */
     window.addEventListener('message', function(e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
+    });
+
+    /* Live display-currency switches from parent (mirrors mbt:workWeek) */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+        currency = e.data.currency || 'JMD';
+        if (e.data.rates) _syncedRates = e.data.rates;
+        if (budget) renderAll();
     });
 
     // ─── Back button ─────────────────────────────────────────────────────────────
@@ -276,7 +312,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           return;
         }
         budget = data;
-        if (budget.currency) currency = budget.currency;
+        /* budget.currency is the stored base — keep `currency` as the DISPLAY currency
+           from the URL/live sync instead of overwriting it (pre-v23.55 bug) */
+        baseCurrency = budget.currency || 'JMD';
         var tag = dom.getElementById('publisher-project-tag');
         if (tag) { tag.textContent = budget.projectName; tag.classList.remove('hidden'); }
         var sk = dom.getElementById('publisher-skeleton');
@@ -351,7 +389,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         document.getElementById('sf-btn-generate').onclick = function () {
           var pub = window.mBTPublisher;
           if (!pub || !pub.format || typeof pub.format.pdf !== 'function') return;
-          pub.format.pdf(templateId, budget, { editorData: editorData, currency: currency });
+          pub.format.pdf(templateId, budget, { editorData: editorData, currency: baseCurrency });
           /* Phase 144 Task 4: two-way sync — push editorData back to parent Budget Editor */
           if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'mbt:tool-action', action: 'sync-funding-source', payload: { editorData: editorData } }, '*');
@@ -488,7 +526,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!pub) { showStatus('Publisher engine not loaded.', 'error'); return; }
         showStatus('Generating PDF…', 'info');
         try {
-          pub.format.professionalPdf(budget, currency);
+          /* Exports render stored (base-currency) amounts — label them with the base */
+          pub.format.professionalPdf(budget, baseCurrency);
         } catch (e) {
           console.error(e);
           showStatus('PDF export failed. See console.', 'error');
@@ -512,7 +551,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         try {
           // Build a temporary data-only representation as a hidden element, then export
           // The engine's htmlStandalone works from DOM; use io.forceDownload with our own HTML string
-          exportHtmlFromData(budget, currency);
+          exportHtmlFromData(budget, baseCurrency);
         } catch (e) {
           console.error(e);
           showStatus('HTML export failed. See console.', 'error');
