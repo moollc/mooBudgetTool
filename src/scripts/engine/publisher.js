@@ -165,9 +165,13 @@
                 /* 1. Budget JSON (.moo) */
                 zip.file(cleanName + '.moo', JSON.stringify(budgetData, null, 2));
 
-                /* 2. Budget Top Sheet PDF — capture as blob instead of triggering download */
+                /* 2. Budget Top Sheet PDF — capture as blob instead of triggering download.
+                   NOTE: this renderer is authored in millimeters (105mm centerline, mm column
+                   widths); config.pdf.jsPDF is the html2pdf inch config and must not be used
+                   here — it makes autotable's available width negative and recurses to a
+                   stack overflow. */
                 var jsPDF   = window.jspdf.jsPDF;
-                var doc     = new jsPDF(window.mBTPublisher.config.pdf.jsPDF);
+                var doc     = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
                 currency    = currency || 'JMD';
                 var fmt     = function (val) { return fmtCurrency(val, currency); };
                 var version = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '20.0';
@@ -477,8 +481,10 @@
             professionalPdf: function (budgetData, currency) {
                 if (typeof window.jspdf === 'undefined') return notify('Error', 'PDF Engine missing.');
 
+                /* Millimeter-authored layout — do not construct from config.pdf.jsPDF (inches;
+                   that config belongs to html2pdf and blows autotable's width math) */
                 var jsPDF = window.jspdf.jsPDF;
-                var doc = new jsPDF(window.mBTPublisher.config.pdf.jsPDF);
+                var doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
                 currency = currency || 'JMD';
                 var fmt = function (val) { return fmtCurrency(val, currency); };
                 var version = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '20.0';

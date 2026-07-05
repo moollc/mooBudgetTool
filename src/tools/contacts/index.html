@@ -205,11 +205,26 @@ var mBTContacts = (function () {
 
     var DEPTS = ['All', 'Production', 'Art', 'Camera', 'Sound', 'Electrical', 'Editing', 'Post', 'Transport', 'Craft Services', 'Miscellaneous'];
 
+    /* USD-denominated fallback day rates — resolve through deptStandard() so they
+       land in the project currency instead of masquerading as it */
     var STANDARD_RATES = {
         'Production': 450, 'Art': 350, 'Camera': 400, 'Sound': 380,
         'Electrical': 370, 'Editing': 420, 'Post': 400, 'Transport': 300,
         'Craft Services': 200, 'Miscellaneous': 150
     };
+
+    function deptStandard(dept) {
+        var usd = STANDARD_RATES[dept] || 0;
+        if (!usd || state.currency === 'USD') return usd;
+        try {
+            var le = window.parent && window.parent.mBT && window.parent.mBT.le;
+            if (le && typeof le.convertCurrency === 'function') {
+                var converted = le.convertCurrency(usd, 'USD', state.currency);
+                if (converted && isFinite(converted)) return Math.round(converted);
+            }
+        } catch (e) { /* cross-origin or engine unavailable — fall through */ }
+        return usd;
+    }
 
     var DEPT_COLORS = {
         'Production': '#6366f1', 'Camera': '#3b82f6', 'Sound': '#10b981',
@@ -226,7 +241,7 @@ var mBTContacts = (function () {
     }
 
     function fmt(n) {
-        return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        return state.currency + ' ' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
 
     function fmtCurrency(n) {
@@ -374,7 +389,7 @@ var mBTContacts = (function () {
                     id: 'budget_' + cid,
                     name: item.description,
                     department: dept,
-                    rate: item.rate || STANDARD_RATES[dept],
+                    rate: item.rate || deptStandard(dept),
                     projectName: budget.projectName || 'Active Budget',
                     isBudgetExtraction: true
                 });
@@ -448,7 +463,7 @@ var mBTContacts = (function () {
 
         var name = c.name || 'Unnamed';
         var dept = c.department || 'General';
-        var rate = c.rate || STANDARD_RATES[dept] || 0;
+        var rate = c.rate || deptStandard(dept) || 0;
         var isBudget = c.isBudgetExtraction;
         var accent = DEPT_COLORS[dept] || '#64748b';
 
@@ -925,7 +940,7 @@ var mBTContacts = (function () {
                     field('Name *', 'text', 'm-name', 'Full name', (prefill && prefill.name) || '') +
                     '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Department *</label>' +
                     '<select id="m-dept" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' + deptOpts + '</select></div>' +
-                    field('Daily Rate ($)', 'number', 'm-rate', 'Dept standard if blank', (prefill && prefill.rate) || '') +
+                    field('Daily Rate (' + state.currency + ')', 'number', 'm-rate', 'Dept standard if blank', (prefill && prefill.rate) || '') +
                     field('Email', 'email', 'm-email', 'email@example.com', (prefill && prefill.email) || '') +
                     field('Phone', 'tel', 'm-phone', '+1 (555) 123-4567', (prefill && prefill.phone) || '') +
                     field('Dietary Restrictions', 'text', 'm-dietary', 'e.g. Vegetarian, Halal', (prefill && prefill.dietaryRestrictions) || '') +
@@ -1062,7 +1077,7 @@ var mBTContacts = (function () {
         var name = document.getElementById('m-name').value.trim();
         var dept = document.getElementById('m-dept').value;
         var rateStr = document.getElementById('m-rate').value;
-        var rate = rateStr ? parseFloat(rateStr) : STANDARD_RATES[dept];
+        var rate = rateStr ? parseFloat(rateStr) : deptStandard(dept);
         var email = document.getElementById('m-email').value.trim();
         var phone = document.getElementById('m-phone').value.trim();
         var dietary = document.getElementById('m-dietary').value.trim();
