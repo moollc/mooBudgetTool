@@ -1190,6 +1190,13 @@ var mBTContacts = (function () {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
     });
 
+    /* Live display-currency switches from parent (mirrors mbt:workWeek) */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+        state.currency = e.data.currency || 'JMD';
+        if (typeof render === 'function') render();
+    });
+
     /* --- Phase 127.B: Contact Import --- */
     function parseVCard(text) {
         var contacts = [];

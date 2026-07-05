@@ -276,13 +276,41 @@
             return d.innerHTML;
         }
 
-        /* --- Currency Format (reads currency from URL param passed by parent budget) --- */
+        /* --- Currency Format (display currency from URL param / live mbt:displayCurrency).
+           Amounts in the loaded budget are stored in its base currency — convert for display
+           using the same live/locked rate table the parent uses (shared localStorage). --- */
+        var _syncedRates = null; /* pushed by parent in mbt:displayCurrency payload */
+        function _rateTable() {
+            if (_syncedRates) return _syncedRates;
+            /* Same-origin parent: ask its currency engine directly */
+            try {
+                if (window.parent && window.parent !== window && window.parent.mBT &&
+                    window.parent.mBT.logic && window.parent.mBT.logic.currency) {
+                    return window.parent.mBT.logic.currency._getRates();
+                }
+            } catch (e) { }
+            try {
+                if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
+                    var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
+                    if (snap) return JSON.parse(snap);
+                }
+                var live = localStorage.getItem('prodBudget_v5_rates');
+                if (live) return JSON.parse(live);
+            } catch (e) { }
+            return null;
+        }
         function fmt(n) {
             var code = (mBTStages && mBTStages.state && mBTStages.state._currency) ? mBTStages.state._currency : 'JMD';
+            var base = (mBTStages && mBTStages.state && mBTStages.state.project && mBTStages.state.project.currency) ? mBTStages.state.project.currency : 'JMD';
+            var v = parseFloat(n) || 0;
+            if (base !== code) {
+                var rates = _rateTable();
+                if (rates && rates[base] && rates[code]) v = v / rates[base] * rates[code];
+            }
             try {
-                return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
             } catch(e) {
-                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
             }
         }
 
@@ -606,6 +634,16 @@
                     if (!mBTStages.state || !mBTStages.state.project) return;
                     if (!mBTStages.state.project.settings) mBTStages.state.project.settings = {};
                     mBTStages.state.project.settings.workWeek = parseInt(e.data.workWeek) || 5;
+                    if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
+                    if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
+                });
+
+                /* Receive live display-currency switches from parent (mirrors mbt:workWeek) */
+                window.addEventListener('message', function(e) {
+                    if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+                    if (!mBTStages.state) return;
+                    mBTStages.state._currency = e.data.currency || 'JMD';
+                    if (e.data.rates) _syncedRates = e.data.rates;
                     if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
                     if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
                 });

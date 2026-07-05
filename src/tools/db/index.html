@@ -605,6 +605,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (e.data.action === 'redo') dbRedo();
   });
 
+  /* Live display-currency switches from parent (mirrors mbt:workWeek) */
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+    var code = e.data.currency || 'JMD';
+    var sel = dom.getElementById('opt-currency');
+    if (sel) {
+      var has = false;
+      for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === code) { has = true; break; } }
+      if (has) sel.value = code;
+    }
+    currency = code;
+    conversionRate = getRate(currency);
+    updateRateUI();
+    if (activeTab === 'preview' && activeTemplateId) renderPreview();
+  });
+
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
     if (window.parent && window.parent !== window) {
