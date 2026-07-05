@@ -10,23 +10,25 @@
 ## Getting Started
 
 ### Open on Desktop
-1. Download the `dist/` folder (or the full repo)
-2. Double-click `dist/index.html`
-3. The app opens in your browser — no internet required
+1. Download or clone the repository
+2. Serve the folder with any static file server (e.g. `npx http-server . -p 3000`)
+3. Open `http://localhost:3000/index.html` — after the first load it works offline
+
+Opening `index.html` straight from disk works for a quick look, but offline caching and app installation need it served over HTTP.
 
 ### Install as Desktop App (Chrome / Edge)
-1. Open `dist/index.html` in Chrome or Edge
+1. Open the served `index.html` in Chrome or Edge
 2. Look for the install icon in the address bar, or go to **menu → Install app**
 3. mBT installs as a standalone window — launches without opening a browser tab
 
 ### Install on Android (Add to Home Screen)
-1. Open `dist/index.html` in **Chrome for Android**
+1. Open the served `index.html` in **Chrome for Android**
 2. Tap the three-dot menu → **Add to Home Screen**
 3. Tap **Add** — mBT appears on your home screen like a native app
 4. Works fully offline after the first load
 
 ### Install on iPhone / iPad (iOS Safari)
-1. Open `dist/index.html` in **Safari**
+1. Open the served `index.html` in **Safari**
 2. Tap the **Share** button (box with arrow)
 3. Scroll down → **Add to Home Screen**
 4. Tap **Add** — the app icon appears on your home screen
@@ -35,13 +37,10 @@
 
 ## Navigation
 
-mBT has two navigation modes:
+mBT uses a floating dock at the bottom of the screen: Stages, Docs, Crew, Undo/Redo, Settings, Calendar, Publish, and Support.
 
-**Sidebar (default on desktop)** — icons on the left. Click the mBT logo to expand labels.
-
-**Bottom Nav (default on mobile)** — tabs at the bottom of the screen. Tap to expand, auto-collapses after 8 seconds.
-
-Switch modes: **Settings → Nav Position**
+- **Auto-Hide Nav** (Settings → General) slides the dock away when idle — tap anywhere to bring it back
+- **Navigation Visibility → Manage** (Settings → General) lets you show or hide individual dock buttons
 
 ---
 
@@ -115,7 +114,7 @@ Two modes:
 ### Settings
 - **Currency** — set display currency (JMD, USD, GBP, etc.)
 - **Dark Mode** — toggle dark/light theme
-- **Nav Position** — sidebar or bottom bar
+- **Auto-Hide Nav / Navigation Visibility** — dock behavior and which buttons show
 - **Cloud Sync** — connect to Supabase for cross-device backup
 - **AI Settings** — configure LLM endpoint and API key
 
@@ -157,8 +156,8 @@ Your data remains private — Row Level Security ensures each user only sees the
 | App shows old version after update | Go to browser Settings → Clear site data for the file path, then reopen |
 | AI tab shows "Could not reach provider" | Check your LM Studio server is running. In AI → Settings, verify the endpoint URL. |
 | PDF export is blank or cut off | Make sure you're on the Preview tab before exporting. Try the PDF (Alt) button for tables. |
-| Icons not showing | Open from the `dist/` or `src/core/` folder, not a renamed copy. Relative paths must resolve. |
-| Bottom nav missing | Settings → Nav Position → Bottom Bar |
+| Icons not showing | Open from the repository root, not a renamed or partial copy. Relative paths must resolve. |
+| Bottom dock missing | Settings → General → Navigation Visibility → Manage, or disable Auto-Hide Nav |
 | Installed PWA opens wrong page | Uninstall the app, clear browser cache, reinstall from the current `index.html` location |
 
 ---

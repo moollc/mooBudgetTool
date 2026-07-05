@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.50</title>
+    <title>mooBudgetTool v23.53</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.50";
+    var APP_VERSION = "23.53";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -713,8 +713,20 @@
                     try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch (e) { return raw; }
                 })();
 
+                /* One-shot scrub of the phantom 'undefined' key left by pre-v23.51 boots
+                   (metadata saved under storageKeyPrefix + undefined projectName).
+                   Must go through the dual storage layer — the phantom can live in OPFS too. */
+                var scrubPhantomKey = function () {
+                    var phantomKey = storageKeyPrefix + 'undefined';
+                    if (!mBT.data || !mBT.data.storage) return Promise.resolve();
+                    return mBT.data.storage.load(phantomKey).then(function (v) {
+                        if (v && !v.sections) return mBT.data.storage.remove(phantomKey);
+                    }).catch(function () { });
+                };
+
                 /* Phase 194: Config consolidation + store init before project list load */
                 var listP = consolidateConfigKeys()
+                    .then(function () { return scrubPhantomKey(); })
                     .then(function () { return mBTConfigStore._ensureLoaded(); })
                     .then(function () {
                         return (typeof getProjectList === 'function')
@@ -1326,7 +1338,9 @@
 
         /* save: strip Proxy, stamp updated_at, dual-write via storage layer */
         save: function () {
-            if (!budget) return Promise.resolve();
+            /* Guard: never persist a budget without a real name — a save during a broken
+               boot otherwise writes a phantom 'prodBudget_v5_undefined' key */
+            if (!budget || !budget.projectName) return Promise.resolve();
             var projectKey = storageKeyPrefix + budget.projectName;
             var self = this;
             try {
@@ -1361,6 +1375,12 @@
                             console.log('Migrated ' + projectName + ' to Async Storage');
                         } catch (e) { console.error('Migration failed', e); }
                     }
+                }
+                if (data && !data.sections) {
+                    /* Not a budget (config/metadata blob under a project-style key) — refuse to
+                       load it as one; boot falls through to the new-project path instead */
+                    console.warn('[mBT] Ignoring non-budget data under key: ' + projectKey);
+                    data = null;
                 }
                 if (data) {
                     budget = mBT.data.state.wrap(data);
@@ -1397,6 +1417,7 @@
                 fKeys.concat(lKeys).forEach(function (k) { combined[k] = true; });
                 return Object.keys(combined).filter(function (k) {
                     return k.indexOf(storageKeyPrefix) === 0 &&
+                        k.charAt(storageKeyPrefix.length) !== '$' &&
                         k.indexOf('_trash') === -1 &&
                         k.indexOf('_globalItems') === -1 &&
                         k.indexOf('_templates') === -1 &&
@@ -1470,7 +1491,7 @@
                         mBTME.alert('Validation Error', 'Project name must be 2–100 characters.');
                         return;
                     }
-                    if (!/^[a-zA-Z0-9 \-()–—]+$/.test(_wizNameVal)) {
+                    if (!/^[a-zA-Z0-9À-ÿ '&.,!#\-()–—]+$/.test(_wizNameVal)) {
                         mBTME.alert('Validation Error', 'Project name contains invalid characters.');
                         return;
                     }
@@ -1492,7 +1513,7 @@
                         return;
                     }
                     if (_wizDaysVal !== null && (_wizDaysVal < 1 || _wizDaysVal > 365)) {
-                        mBTME.alert('Validation Error', 'Production days must be between 1 and 365.');
+                        mBTME.alert('Validation Error', 'Shoot days must be between 1 and 365.');
                         return;
                     }
                 }
@@ -1649,6 +1670,18 @@
                         })(),
                         ledgers: { poCounter: 1, pos: [], pettyCash: [] },
                         actualsMode: false,
+                        /* Seed the stage timeline so header day pills work immediately and the
+                           wizard's shoot days actually land on the PROD stage */
+                        targetLock: {
+                            totalCap: 0,
+                            stages: {
+                                dev: { label: 'DEV', ratio: 20, days: 0, locked: false },
+                                pre: { label: 'PRE', ratio: 20, days: 0, locked: false },
+                                prod: { label: 'PROD', ratio: 20, days: _wizDaysVal || 0, locked: false },
+                                post: { label: 'POST', ratio: 20, days: 0, locked: false },
+                                dist: { label: 'DIST', ratio: 20, days: 0, locked: false }
+                            }
+                        },
                         currency: _wizCurVal || displayCurrency,
                         productionDays: _wizDaysVal,
                         region: _wizRegionVal,
@@ -1658,7 +1691,7 @@
                     budget = mBT.data.state.wrap(newBudget);
                     currentProjectName = budget.projectName;
                     return self.save().then(function () {
-                        mBTME.close('newProject');
+                        mBTME.close('newProjectModal');
                         if (typeof render === 'function') render();
                         if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
                         var projectSelect = document.getElementById('projectSelect');
@@ -4531,10 +4564,11 @@
             '<span class="text-[10px] font-black uppercase tracking-widest">+ Create Custom</span>' +
             '</button>' +
             rates.map(function (r) {
-                var regionalRate = getRegionalRate(r);
-                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + regionalRate + ', \'' + r.unit + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
+                /* getRegionalRate returns { rate, currency } — pass the fields, not the object */
+                var reg = getRegionalRate(r);
+                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + reg.rate + ', \'' + r.unit + '\', \'' + reg.currency + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
                     '<span class="text-[10px] font-bold text-slate-700 uppercase">' + r.description + '</span>' +
-                    '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + mBTLE.format.currency(regionalRate) + ' / ' + r.unit + '</span>' +
+                    '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + reg.rate.toLocaleString() + ' ' + reg.currency + ' / ' + r.unit + '</span>' +
                     '</button>';
             }).join('') +
             '</div>' +
@@ -4825,7 +4859,7 @@
                 '</select>' +
                 '</div>' +
                 '</div>' +
-                /* Row 3: Start Date + Prod Days */
+                /* Row 3: Start Date + Shoot Days */
                 '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
                 '<div>' +
                 '<label for="wiz-date" style="' + _lblStyle + '">Start Date <span style="color:#ef4444;">*</span></label>' +
@@ -4833,8 +4867,10 @@
                 '<div id="wiz-date-err" style="' + _errStyle + '"></div>' +
                 '</div>' +
                 '<div>' +
-                '<label for="wiz-days" style="' + _lblStyle + '">Prod. Days <span style="color:#9ca3af;font-weight:400;">(optional)</span></label>' +
+                '<label for="wiz-days" style="' + _lblStyle + '">Shoot Days <span style="color:#9ca3af;font-weight:400;">(optional)</span></label>' +
                 '<input type="number" id="wiz-days" placeholder="e.g., 5" min="1" max="365" autocomplete="off" style="' + _inpStyle + '" onfocus="' + _focusOn + '" onblur="' + _focusOff + '" />' +
+                '<div id="wiz-days-err" style="' + _errStyle + '"></div>' +
+                '<div style="font-size:9px;color:#9ca3af;font-weight:600;margin-top:3px;">Principal photography only — prep/post days are set in Stages</div>' +
                 '</div>' +
                 '</div>' +
                 '</div>';
@@ -4869,7 +4905,7 @@
             /* Swap skeleton content */
             var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
             if (modalBody) modalBody.innerHTML = content;
-            else { mBTME.close('newProject'); mBTME.open('newProject', '', content, 'max-w-xl', { hideHeader: true, noPadding: true }); }
+            else { mBTME.close('newProjectModal'); mBTME.open('newProject', '', content, 'max-w-xl', { hideHeader: true, noPadding: true }); }
 
             /* Phase 194: Wire wizard form defaults + validation after DOM is ready */
             var _wName = document.getElementById('wiz-name');
@@ -4899,8 +4935,8 @@
                     _wizShowErr('wiz-name-err', 'Project name is required'); _wizSetInvalid(_wName, true); ok = false;
                 } else if (nameVal.length < 2 || nameVal.length > 100) {
                     _wizShowErr('wiz-name-err', 'Must be 2–100 characters'); _wizSetInvalid(_wName, true); ok = false;
-                } else if (!/^[a-zA-Z0-9 \-()–—]+$/.test(nameVal)) {
-                    _wizShowErr('wiz-name-err', 'Letters, numbers, spaces, hyphens, parentheses only'); _wizSetInvalid(_wName, true); ok = false;
+                } else if (!/^[a-zA-Z0-9À-ÿ '&.,!#\-()–—]+$/.test(nameVal)) {
+                    _wizShowErr('wiz-name-err', 'No quotes, angle brackets, or slashes in names'); _wizSetInvalid(_wName, true); ok = false;
                 } else {
                     _wizShowErr('wiz-name-err', ''); _wizSetInvalid(_wName, false);
                 }
@@ -4948,7 +4984,7 @@
 
             /* Run initial validation silently to set isValid state without displaying errors */
             _wizardState.isValid = (function () {
-                var nameOk = !!(_wName && _wName.value && _wName.value.trim().length >= 2 && /^[a-zA-Z0-9 \-()–—]+$/.test(_wName.value.trim()));
+                var nameOk = !!(_wName && _wName.value && _wName.value.trim().length >= 2 && /^[a-zA-Z0-9À-ÿ '&.,!#\-()–—]+$/.test(_wName.value.trim()));
                 var curOk = !!(_wCur && _wCur.value);
                 var dateOk = (function () {
                     if (!_wDate || !_wDate.value) return false;
@@ -4995,8 +5031,8 @@
             '<button onclick="mBTME.close(\'saveBlueprintModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
             '<button onclick="mBT_confirmSaveBlueprint();" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Save Blueprint</button>' +
             '</div></div>';
-        mBTME.close('newProject');
-        mBTME.open('saveBlueprintModal', 'Save as Blueprint', content, 'max-w-sm');
+        mBTME.close('newProjectModal');
+        mBTME.open('saveBlueprint', 'Save as Blueprint', content, 'max-w-sm');
     };
 
     /* Phase 94.2: ES5 .then() conversion */
@@ -5015,7 +5051,7 @@
 
     /* Phase 94.2: async removed -- body already uses .then() */
     window.mBT_deleteBlueprint = function (name) {
-        mBTME.close('newProject');
+        mBTME.close('newProjectModal');
         var content =
             '<div class="p-5 space-y-4">' +
             '<p class="text-sm text-slate-600">Delete blueprint <strong>' + name + '</strong>? This cannot be undone.</p>' +
@@ -5023,12 +5059,12 @@
             '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
             '<button onclick="mBT.data.templates.deleteTemplate(\'' + name.replace(/'/g, "\\'") + '\').then(function(){ mBTME.close(\'deleteBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all">Delete</button>' +
             '</div></div>';
-        mBTME.open('deleteBlueprintModal', 'Delete Blueprint', content, 'max-w-sm');
+        mBTME.open('deleteBlueprint', 'Delete Blueprint', content, 'max-w-sm');
     };
 
     /* Phase 94.2: async removed -- body already uses .then() */
     window.mBT_renameBlueprint = function (oldName) {
-        mBTME.close('newProject');
+        mBTME.close('newProjectModal');
         var content =
             '<div class="p-5 space-y-3">' +
             '<input type="text" id="renameBlueprintInput" value="' + oldName + '"' +
@@ -5037,7 +5073,7 @@
             '<button onclick="showNewProjectModal();" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
             '<button onclick="var n=(document.getElementById(\'renameBlueprintInput\')||{}).value||\'\'; mBT.data.templates.renameTemplate(\'' + oldName.replace(/'/g, "\\'") + '\', n).then(function(){ mBTME.close(\'renameBlueprintModal\'); showNewProjectModal(); });" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all">Rename</button>' +
             '</div></div>';
-        mBTME.open('renameBlueprintModal', 'Rename Blueprint', content, 'max-w-sm');
+        mBTME.open('renameBlueprint', 'Rename Blueprint', content, 'max-w-sm');
     };
 
 
@@ -5568,7 +5604,7 @@
                 }
 
                 if (mBTME.hideLoader) mBTME.hideLoader();
-                mBTME.open('previewModal', 'Snapshot: ' + mode.toUpperCase(),
+                mBTME.open('preview', 'Snapshot: ' + mode.toUpperCase(),
                     '<div class="flex flex-col items-center bg-slate-900 h-full p-8 overflow-auto no-scrollbar"><img src="' + jpegURL + '" id="finalPreviewImage" class="shadow-2xl border border-black max-w-full h-auto mb-24 bg-white rounded-sm"><div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-4 z-[10001]"><button onclick="mBTPublisher.downloadJPEG(\'' + jpegURL + '\', \'' + doc.label + '\')" class="flex items-center gap-3 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95">Download JPEG</button><button onclick="mBTDB.sendToDistribution(\'' + jpegURL + '\')" class="flex items-center gap-3 bg-emerald-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95">Send to Crew</button><button onclick="mBTME.close(\'previewModal\')" class="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-slate-100 transition-all">Close</button></div></div>', 'w-full h-full');
             });
         },
@@ -8286,7 +8322,7 @@
                     }).join('');
 
                     var projectList = data.projectSummaries.map(function (p) {
-                        return '<div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2 border border-transparent hover:border-blue-200 transition-colors cursor-pointer" onclick="mBT.data.load(\'' + p.name + '\'); mBTME.close(\'analyticsHubModal\');">' +
+                        return '<div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl mb-2 border border-transparent hover:border-blue-200 transition-colors cursor-pointer" onclick="mBT.data.load(\'' + p.name.replace(/'/g, "\\'") + '\'); mBTME.close(\'analyticsHubModal\');">' +
                             '<div>' +
                             '<div class="text-[10px] font-black text-slate-800 uppercase">' + mBT.ui.render.esc(p.name) + '</div>' +
                             '<div class="text-[8px] text-slate-400 font-bold">' + (p.date || 'No Date') + '</div>' +
@@ -8798,7 +8834,7 @@
             if (existing) {
                 var bodyEl = existing.querySelector('.modal-body, [data-modal-body]');
                 /* Re-render full content into existing modal */
-                mBTME.close('settings');
+                mBTME.close('settingsModal');
             }
             mBTME.open('settings', '', content, 'max-w-2xl', { hideHeader: true });
 
@@ -9040,7 +9076,7 @@
                 '<button onclick="mBT.features.settings.applyFooterVis();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all shadow-sm">Apply Changes</button>' +
                 '</div></div>';
 
-            mBTME.open('footerVisModal', 'Manage HUD Buttons', content, 'max-w-md', { noPadding: true });
+            mBTME.open('footerVis', 'Manage HUD Buttons', content, 'max-w-md', { noPadding: true });
         },
 
         applyFooterVis: function () {
@@ -9683,7 +9719,7 @@
                 '</div>' +
                 '<button onclick="mBT.features.funding.saveSource(' + (index >= 0 ? index : -1) + ')" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-700 transition-all">' + (index >= 0 ? 'Save Changes' : 'Add Source') + '</button>' +
                 '</div>';
-            mBTME.open('fundingAddModal', title, content, 'max-w-md'); // Made wider for the detailed fields
+            mBTME.open('fundingAdd', title, content, 'max-w-md'); // Made wider for the detailed fields
             setTimeout(function () { window._renderFundingAttachments(); }, 10);
         },
 
@@ -11025,7 +11061,11 @@
 
     // --- TIER 5 UPGRADE: Manual Duration Handler (Phase 2 Fix) ---
     window.updateStageDuration = function (stageKey, value) {
-        if (!budget || !budget.targetLock || !budget.targetLock.stages) return;
+        if (!budget) return;
+        /* Scaffold targetLock if the Stages tool has never initialized it —
+           otherwise day edits on a fresh project are silently dropped */
+        if (!budget.targetLock) budget.targetLock = { totalCap: 0, stages: {} };
+        if (!budget.targetLock.stages) budget.targetLock.stages = {};
 
         // 1. Update Data Model -- create key if Stages tool hasn't visited it yet
         var days = parseFloat(value) || 0;
@@ -11749,7 +11789,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.50', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.53', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -11901,7 +11941,7 @@
                 '<button onclick="mBTME.close(\'sectionCapModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
                 '<button onclick="(function(){var v=parseFloat((document.getElementById(\'sectionCapInput\')||{}).value)||0;if(budget&&budget.sections&&window._mBT_pendingCapSection&&budget.sections[window._mBT_pendingCapSection]){budget.sections[window._mBT_pendingCapSection].targetCap=v;saveBudget();if(typeof mBTLE!==\'undefined\')mBTLE.reconcile();mBT.ui.paint();}mBTME.close(\'sectionCapModal\');})();" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all">Set Cap</button>' +
                 '</div></div>';
-            mBTME.open('sectionCapModal', 'Section Cap \u2014 ' + sectionName, capContent, 'max-w-xs');
+            mBTME.open('sectionCap', 'Section Cap \u2014 ' + sectionName, capContent, 'max-w-xs');
         });
 
         mBT.core.action('row-lock', function (e, el) {

@@ -369,7 +369,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         { label: 'Project',    value: budget.projectName || 'Untitled' },
         { label: 'Company',    value: budget.company || 'Independent' },
         { label: 'Currency',   value: currency },
-        { label: 'Start Date', value: budget.startDate ? new Date(budget.startDate).toLocaleDateString() : 'TBD' },
+        { label: 'Start Date', value: budget.startDate ? new Date(budget.startDate + 'T00:00:00').toLocaleDateString() : 'TBD' },
         { label: 'Subtotal',   value: fmt(budget.subtotal || 0) },
         { label: 'Contingency (' + (budget.contingencyPercentage || 0) + '%)', value: fmt(contingencyAmt) },
         { label: 'Sales Tax (' + (budget.salesTaxPercentage || 0) + '%)',       value: fmt(taxAmt) },
