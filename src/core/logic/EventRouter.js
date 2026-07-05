@@ -749,9 +749,8 @@ window.mBTRouter = (function () {
                     writer:      'full name or empty string'
                 },
                 callSheet: {
-                    weather:     'short phrase e.g. "Partly cloudy, 82F, 30% rain"',
-                    notes:       'one or two concise bullet points',
-                    safetyNote:  'one sentence hazard/safety call-out based on location'
+                    weatherConditions: 'short weather phrase e.g. "Partly cloudy, 30% rain"',
+                    safetyNotes:       'one sentence hazard/safety call-out based on location'
                 },
                 crewList: {
                     notes:       'optional one-line commentary'

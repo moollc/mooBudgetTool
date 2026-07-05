@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.55</title>
+    <title>mooBudgetTool v23.57</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.55";
+    var APP_VERSION = "23.57";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -11843,7 +11843,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.55', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.57', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -12200,12 +12200,15 @@
             if (document.getElementById('publishModal')) mBTME.close('publishModal');
             if (typeof mBTPublisher === 'undefined') return;
 
-            if (type === 'pdf') mBTPublisher.format.professionalPdf(budget, displayCurrency);
+            /* Exports render stored (base-currency) amounts — label with budget.currency,
+               never displayCurrency (same rule as the Publisher tool, v23.55) */
+            var _exportCur = (budget && budget.currency) || 'JMD';
+            if (type === 'pdf') mBTPublisher.format.professionalPdf(budget, _exportCur);
             else if (type === 'moo') mBTPublisher.io.saveMoo(budget);
             else if (type === 'bundle') mBTPublisher.io.saveBundle(budget, function (key) { return mBT.data.storage.loadBlob(key); });
             else if (type === 'html') mBTPublisher.format.htmlStandalone('budget-sections', budget.projectName);
             else if (type === 'xlsx') mBTPublisher.format.professionalXlsx(budget);
-            else if (type === 'wrap') mBTPublisher.io.wrapExport(budget, displayCurrency, mBTOG ? mBTOG.contacts : []);
+            else if (type === 'wrap') mBTPublisher.io.wrapExport(budget, _exportCur, mBTOG ? mBTOG.contacts : []);
         });
 
         // 2. Navigation

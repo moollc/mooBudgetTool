@@ -137,6 +137,13 @@
     .smart-btn:hover { background: #eff6ff; border-color: var(--primary); }
     .smart-btn svg { flex-shrink: 0; }
     #weather-status { font-size: 10px; color: var(--muted); font-style: italic; }
+    /* v23.57: non-blocking toast for AI Fill / async feedback (replaces bare alert) */
+    #db-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(8px); background: #0f172a; color: #fff; padding: 9px 16px; border-radius: 9999px; font-size: 11px; font-weight: 700; box-shadow: 0 8px 24px rgba(15,23,42,.35); z-index: 9999; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; max-width: 88vw; }
+    #db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #db-toast.err { background: #b91c1c; }
+    /* Brief highlight on fields the AI just wrote */
+    .ai-flash { animation: aiFlash 2.2s ease-out; }
+    @keyframes aiFlash { 0% { background: #ede9fe; box-shadow: 0 0 0 2px #8b5cf6; } 100% { background: transparent; box-shadow: none; } }
     #hospital-picker { background: #f8fafc; border: 1px solid var(--border); border-radius: 5px; margin: 5px 10px; padding: 6px 8px; display: none; }
     #hospital-picker p { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
     .hosp-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 11px; }
@@ -215,9 +222,18 @@
     @media (max-width: 768px) {
       :root { --picker-w: 100%; }
       #workspace { flex-direction: column; }
-      /* Picker: slim header bar with dropdown select on mobile */
-      #picker { width: 100%; max-height: none; overflow-y: visible; border-right: none; border-bottom: 1px solid var(--border); flex-direction: column; flex-wrap: nowrap; }
+      /* Picker collapses to tabs + dropdown so #preview-panel (editor, toolbar,
+         exports) actually gets the viewport — v23.57: the card list previously
+         filled the whole column and made the editor unreachable on phones */
+      #picker { width: 100%; max-height: none; overflow-y: visible; border-right: none; border-bottom: 1px solid var(--border); flex-direction: column; flex-wrap: nowrap; flex-shrink: 0; }
       #picker-header { display: none; }
+      #picker-search-wrap { display: none; }
+      #tmpl-list { display: none; }
+      /* Saved tab still needs its list — cap it so preview stays reachable */
+      #saved-list { max-height: 38vh; overflow-y: auto; }
+      #preview-panel { flex: 1; min-height: 0; }
+      /* Topbar project name: ellipsis instead of wrapping into the controls */
+      #topbar-project { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .tmpl-card-desc { display: none; }
       /* Mobile template select dropdown — replaces card list on mobile */
       #picker-mobile-select { display: block; width: 100%; min-height: 44px; padding: 8px 12px; font-size: 15px; border: none; border-bottom: 1px solid var(--border); background: var(--surface); cursor: pointer; font-family: inherit; }
@@ -469,9 +485,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* Phase 149.2: Templates supporting generic AI Fill + list of AI-eligible fields per template.
      Only fields listed here will be sent for AI completion (others are budget-pull / user-entered). */
+  /* Keys MUST match real editor fld() keys — orphan keys make AI Fill a silent no-op
+     (v23.57 audit: callSheet used weather/notes/safetyNote, none rendered; fundingPackage
+     listed synopsis, which only exists on pitchDeck). */
   var AI_FILL_TEMPLATES = {
-    fundingPackage:    ['logline', 'genre', 'format', 'synopsis', 'director', 'producer', 'writer'],
-    callSheet:         ['weather', 'notes', 'safetyNote'],
+    fundingPackage:    ['logline', 'genre', 'format', 'director', 'producer', 'writer'],
+    callSheet:         ['weatherConditions', 'safetyNotes'],
     crewList:          ['notes'],
     pitchDeck:         ['logline', 'synopsis', 'targetMarket', 'comparables', 'directorStatement', 'directorBio', 'useOfFunds'],
     crewDealMemo:      ['role', 'department', 'terms', 'creditName', 'creditBilling'],
@@ -3416,8 +3435,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
      with the active template's blank eligible fields. Context is pulled from the Context
      Ledger automatically on the parent side (treatment, script, receipts, snapshot). */
   var _aiFillPending = false;
+  /* v23.57: non-blocking toast (alert replacement for async flows) */
+  var _dbToastTimer = null;
+  function dbToast(msg, isError) {
+    var el = dom.getElementById('db-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'db-toast';
+      (dom.body || document.body).appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = isError ? 'show err' : 'show';
+    if (_dbToastTimer) clearTimeout(_dbToastTimer);
+    _dbToastTimer = setTimeout(function () { el.className = ''; }, 3500);
+  }
+
   function runAiFillForActiveTemplate() {
-    if (!budget) { alert('No project loaded.'); return; }
+    if (!budget) { dbToast('No project loaded.', true); return; }
     if (!activeTemplateId || !AI_FILL_TEMPLATES[activeTemplateId]) return;
     if (_aiFillPending) return;
 
@@ -3459,10 +3493,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var v = editorData ? editorData[k] : null;
       if (!v || String(v).trim() === '') blanks.push(k);
     }
-    if (!blanks.length) { alert('All eligible fields already have values.'); return; }
+    if (!blanks.length) { dbToast('All eligible fields already have values.'); return; }
 
     if (window.parent === window) {
-      alert('AI Fill requires the Budget Editor (must be opened from the main tool).');
+      dbToast('AI Fill requires the Budget Editor (open this tool from the main app).', true);
       return;
     }
 
@@ -3494,7 +3528,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       jurisdiction:      (budget.jurisdiction && budget.jurisdiction.name) || ''
     };
 
-    var timeout = setTimeout(function () { cleanup(); alert('AI Fill timed out. If using a local model, it may need more time — try again.'); }, 120000);
+    var timeout = setTimeout(function () { cleanup(); dbToast('AI Fill timed out. If using a local model, it may need more time — try again.', true); }, 120000);
 
     function cleanup() {
       _aiFillPending = false;
@@ -3510,25 +3544,35 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       cleanup();
       var r = e.data.payload || {};
       if (r._error === 'no-api-key') {
-        alert('AI Fill requires an API key. Go to Settings \u2192 AI Provider to configure one.');
+        dbToast('AI Fill needs an API key \u2014 Settings \u2192 AI Provider in the main app.', true);
         return;
       }
       if (r._error) {
-        alert('AI Fill failed: ' + r._error);
+        dbToast('AI Fill failed: ' + r._error, true);
         return;
       }
       var changed = false;
+      var filledKeys = [];
       blanks.forEach(function (k) {
         if (r[k] != null && String(r[k]).trim() !== '' && (!editorData[k] || String(editorData[k]).trim() === '')) {
           editorData[k] = String(r[k]);
+          filledKeys.push(k);
           changed = true;
         }
       });
       if (changed) {
         saveEditorData();
         buildEditor(activeTemplateId);
+        /* Flash the fields the AI just wrote so success is visible */
+        setTimeout(function () {
+          filledKeys.forEach(function (k) {
+            var el = dom.querySelector('[data-key="' + k + '"]');
+            if (el) el.classList.add('ai-flash');
+          });
+        }, 60);
+        dbToast('AI filled ' + filledKeys.length + ' field' + (filledKeys.length === 1 ? '' : 's') + '.');
       } else {
-        alert('AI did not return usable values for these fields. Try adding a treatment or more project details.');
+        dbToast('AI did not return usable values. Try adding a treatment or more project details.', true);
       }
     }
 
