@@ -611,7 +611,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.60';
+            var currentVersion = updateStatus.localVersion || 'v23.64';
 
             var statusMsg = '';
             if (isChecking) {

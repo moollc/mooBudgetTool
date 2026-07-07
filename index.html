@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.60</title>
+    <title>mooBudgetTool v23.64</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.60";
+    var APP_VERSION = "23.64";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3834,6 +3834,11 @@
                 if (estCell) estCell.textContent = fmtDisplay(estimated, isMobile);
                 var curTag = document.querySelector('[data-currency-tag="' + item.id + '"]');
                 if (curTag) curTag.textContent = (typeof displayCurrency !== 'undefined' ? displayCurrency : 'JMD');
+                /* Phase 200: repaint schedule chip on surgical render (not just full render) */
+                var schedChip = document.querySelector('[data-schedule-chip-id="' + item.id + '"]');
+                if (schedChip && typeof mBTSchedule !== 'undefined') {
+                    schedChip.outerHTML = mBTSchedule.chipHtml(item, sectionKey);
+                }
                 var varCell = document.querySelector('[data-variance-id="' + item.id + '"]');
                 if (varCell) {
                     varCell.textContent = fmtDisplay(variance, isMobile);
@@ -4192,6 +4197,10 @@
                 '<button data-action="section-cap" data-id="' + rawId + '" title="Set section spending cap" class="pointer-events-auto w-5 h-5 flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors rounded">' +
                 '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>' +
                 '</button>' +
+                /* Phase 201: block menu (rename + default phase + lock + cap) */
+                '<button data-action="block-menu" data-id="' + rawId + '" title="Block options" class="pointer-events-auto w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors rounded-lg">' +
+                '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" class="pointer-events-none"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>' +
+                '</button>' +
                 '</div>' +
                 '</div>' +
                 '</div>' +
@@ -4266,6 +4275,7 @@
                 '<input type="text" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="description" value="' + this.esc(item.description) + '" class="w-full bg-transparent border-none font-bold text-xs text-slate-700 focus:ring-0 truncate mobile-desc-truncate" placeholder="Item.." ' + (item.memoStatus === 'Pending' ? 'readonly' : '') + '>' +
                 (item.memoStatus === 'Pending' ? '<span style="display:inline-block;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:rgba(120,53,15,0.85);background:rgba(234,179,8,0.25);border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;">MEMO</span>' : '') +
                 _multChip +
+                '<div class="block">' + (typeof mBTSchedule !== 'undefined' ? mBTSchedule.chipHtml(item, sectionName) : '') + '</div>' +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
                 '<input type="number" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="quantity" value="' + item.quantity + '" onchange="handleLineItemUpdate(this)" class="w-12 bg-transparent border-none text-center font-black text-xs text-blue-600 focus:ring-0 no-spinner p-0">' +
@@ -4384,6 +4394,401 @@
     };
 
     window.RenderEngine = mBT.ui.render;
+
+    /* =========================================================================
+       Phase 200: Line-item timeline schedule (row chip + multi-phase sheet).
+       Reads/writes the existing item.stageData (keyed dev/pre/prod/post/dist).
+       One source of truth shared with the Stages modal. ES5 only.
+       ========================================================================= */
+    var mBTSchedule = (function () {
+        var KEYS   = ['dev', 'pre', 'prod', 'post', 'dist'];
+        var LABELS = { dev: 'Dev', pre: 'Pre', prod: 'Prod', post: 'Post', dist: 'Dist' };
+        var TITLES = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
+
+        function esc(s) { return mBT.ui.render.esc(s); }
+
+        /* Ordered [ {key, days} ] for phases that actually carry days */
+        function scheduledPhases(item) {
+            var out = [];
+            if (!item || !item.stageData) return out;
+            for (var i = 0; i < KEYS.length; i++) {
+                var k = KEYS[i];
+                var sd = item.stageData[k];
+                if (!sd) continue;
+                var d = parseFloat(sd.days) || 0;
+                if (d > 0) out.push({ key: k, days: d });
+            }
+            return out;
+        }
+
+        function totalDays(item) {
+            var p = scheduledPhases(item), t = 0;
+            for (var i = 0; i < p.length; i++) t += p[i].days;
+            return t;
+        }
+
+        /* Chip summary text per final doc:
+           Not scheduled | Pre · 8d | Dev 5 · Dist 3 | 3 phases · 21d (>=3 phases) */
+        function chipText(item) {
+            var p = scheduledPhases(item);
+            if (p.length === 0) return 'Schedule';
+            if (p.length >= 3) {
+                var t = totalDays(item);
+                return p.length + ' phases · ' + (Math.round(t * 10) / 10) + 'd';
+            }
+            var parts = [];
+            for (var i = 0; i < p.length; i++) {
+                var d = Math.round(p[i].days * 10) / 10;
+                parts.push(LABELS[p[i].key] + ' ' + d);
+            }
+            /* single phase reads "Pre · 8d", two phases read "Dev 5 · Dist 3" */
+            return p.length === 1 ? (LABELS[p[0].key] + ' · ' + (Math.round(p[0].days * 10) / 10) + 'd') : parts.join(' · ');
+        }
+
+        function chipHtml(item, sectionName) {
+            var scheduled = scheduledPhases(item).length > 0;
+            var txt = chipText(item);
+            /* clock glyph + text; faint when unscheduled, blue when scheduled.
+               data-action drives the delegated tap handler; >=44px tap width. */
+            var cls = scheduled
+                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                : 'bg-slate-50 text-slate-400 hover:bg-slate-100';
+            var clock = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0" style="pointer-events:none;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>';
+            return '<button type="button" data-action="schedule" data-id="' + esc(item.id) + '" data-section="' + esc(sectionName || '') + '" ' +
+                'data-schedule-chip-id="' + esc(item.id) + '" ' +
+                'title="Schedule on timeline" ' +
+                'class="schedule-chip inline-flex items-center gap-1 mt-0.5 min-h-[24px] px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest align-middle transition-colors ' + cls + '" ' +
+                'style="min-width:44px;">' + clock + '<span style="pointer-events:none;">' + esc(txt) + '</span></button>';
+        }
+
+        /* Recompute line quantity from the schedule (total days) so the grid qty
+           reflects the timeline; mirrors Phase 199 which keeps them in sync. */
+        function syncQtyFromSchedule(item) {
+            var t = totalDays(item);
+            if (t > 0) item.quantity = Math.round(t * 10000) / 10000;
+        }
+
+        function findItem(sectionName, itemId) {
+            var sec = budget && budget.sections && budget.sections[sectionName];
+            if (sec && sec.items) {
+                var f = sec.items.find(function (i) { return i.id === itemId; });
+                if (f) return f;
+            }
+            /* section may have been renamed / passed empty; fall back to a scan */
+            var found = null;
+            if (budget && budget.sections) {
+                Object.keys(budget.sections).forEach(function (k) {
+                    if (found) return;
+                    var it = (budget.sections[k].items || []).find(function (i) { return i.id === itemId; });
+                    if (it) found = it;
+                });
+            }
+            return found;
+        }
+
+        /* Build the sheet body: one row per phase (checkbox + days on the same row) */
+        function sheetBody(item) {
+            var rows = '';
+            for (var i = 0; i < KEYS.length; i++) {
+                var k = KEYS[i];
+                var sd = item.stageData && item.stageData[k];
+                var on = !!(sd && (parseFloat(sd.days) || 0) > 0);
+                var days = (sd && sd.days != null) ? sd.days : '';
+                rows +=
+                    '<label class="flex items-center gap-3 py-2 px-1 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors" style="min-height:44px;">' +
+                        '<input type="checkbox" class="mbt-sched-check w-5 h-5 rounded accent-blue-600 shrink-0" data-phase="' + k + '"' + (on ? ' checked' : '') + '>' +
+                        '<span class="flex-1 text-[11px] font-black text-slate-700 uppercase tracking-widest">' + esc(TITLES[k]) + '</span>' +
+                        '<input type="number" min="0" step="0.5" class="mbt-sched-days w-16 bg-slate-100 rounded-lg px-2 py-1.5 text-[12px] font-black text-blue-600 text-right border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none no-spinner" ' +
+                            'data-phase="' + k + '" value="' + esc(days) + '" placeholder="0" style="min-height:40px;">' +
+                        '<span class="text-[9px] font-black text-slate-400 uppercase w-6">days</span>' +
+                    '</label>';
+            }
+            return '<div class="p-4 space-y-1">' +
+                '<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">When on the timeline does this work happen? Check a phase and set its days.</p>' +
+                rows +
+                '<div class="flex items-center justify-between px-1 pt-3 mt-1 border-t border-slate-100">' +
+                    '<span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total <span id="mbt-sched-total" class="text-slate-700">0</span> days · syncs line qty</span>' +
+                '</div>' +
+                '<div class="flex gap-2 pt-3">' +
+                    '<button type="button" onclick="mBTME.close(\'scheduleModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all" style="min-height:44px;">Cancel</button>' +
+                    '<button type="button" id="mbt-sched-done" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all" style="min-height:44px;">Done</button>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function recomputeTotal() {
+            var container = document.getElementById('scheduleModal');
+            if (!container) return;
+            var checks = container.querySelectorAll('.mbt-sched-check');
+            var total = 0;
+            for (var i = 0; i < checks.length; i++) {
+                if (!checks[i].checked) continue;
+                var d = container.querySelector('.mbt-sched-days[data-phase="' + checks[i].getAttribute('data-phase') + '"]');
+                total += (d && parseFloat(d.value)) || 0;
+            }
+            var el = document.getElementById('mbt-sched-total');
+            if (el) el.textContent = Math.round(total * 10) / 10;
+        }
+
+        function openSheet(sectionName, itemId) {
+            var item = findItem(sectionName, itemId);
+            if (!item) return;
+            if (!item.stageData) item.stageData = {};
+            var title = 'Schedule: ' + (item.description || 'Line');
+            mBTME.open('schedule', title, sheetBody(item), 'max-w-sm');
+
+            var container = document.getElementById('scheduleModal');
+            if (!container) return;
+
+            /* Live total + auto-check a phase when days typed into an unchecked row */
+            container.addEventListener('input', function (e) {
+                var t = e.target;
+                if (t.classList && t.classList.contains('mbt-sched-days')) {
+                    var chk = container.querySelector('.mbt-sched-check[data-phase="' + t.getAttribute('data-phase') + '"]');
+                    if (chk && !chk.checked && (parseFloat(t.value) || 0) > 0) chk.checked = true;
+                }
+                recomputeTotal();
+            });
+            container.addEventListener('change', function (e) {
+                if (e.target.classList && e.target.classList.contains('mbt-sched-check')) {
+                    /* checking an empty phase seeds 1 day; unchecking clears the field */
+                    var d = container.querySelector('.mbt-sched-days[data-phase="' + e.target.getAttribute('data-phase') + '"]');
+                    if (d) {
+                        if (e.target.checked && !(parseFloat(d.value) > 0)) d.value = 1;
+                        if (!e.target.checked) d.value = '';
+                    }
+                    recomputeTotal();
+                }
+            });
+            recomputeTotal();
+
+            var doneBtn = document.getElementById('mbt-sched-done');
+            if (doneBtn) doneBtn.addEventListener('click', function () { commitSheet(item); });
+        }
+
+        /* Seed a new line's schedule from its block's defaultPhase (if set).
+           New lines only. Never touches existing items. 1 day at the line rate,
+           so the row chip shows it and the schedule sheet opens pre-checked. */
+        function applyDefaultPhase(item, sectionName) {
+            var sec = budget && budget.sections && budget.sections[sectionName];
+            if (!sec || !sec.defaultPhase) return;
+            var k = sec.defaultPhase;
+            if (KEYS.indexOf(k) === -1) return;
+            if (!item.stageData) item.stageData = {};
+            if (!item.stageData[k]) {
+                item.stageData[k] = { days: (parseFloat(item.quantity) || 1) || 1, rate: item.rate || 0, order: 0 };
+                syncQtyFromSchedule(item);
+            }
+        }
+
+        function commitSheet(item) {
+            var container = document.getElementById('scheduleModal');
+            if (!container) return;
+            if (!item.stageData) item.stageData = {};
+            var checks = container.querySelectorAll('.mbt-sched-check');
+            for (var i = 0; i < checks.length; i++) {
+                var k = checks[i].getAttribute('data-phase');
+                var daysInput = container.querySelector('.mbt-sched-days[data-phase="' + k + '"]');
+                var d = (daysInput && parseFloat(daysInput.value)) || 0;
+                if (checks[i].checked && d > 0) {
+                    if (!item.stageData[k]) {
+                        /* new phase: default rate to the line rate, mirrors drag path */
+                        item.stageData[k] = { days: d, rate: item.rate || 0, order: 0 };
+                    } else {
+                        item.stageData[k].days = d;
+                    }
+                } else {
+                    /* unchecked or zero: remove the phase entirely */
+                    if (item.stageData[k]) delete item.stageData[k];
+                }
+            }
+            syncQtyFromSchedule(item);
+
+            mBTME.close('scheduleModal');
+            saveBudget();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+            /* keep the Stages modal in sync if it's open (same pattern as Auto Fill) */
+            if (document.getElementById('stagesViewModal') && typeof window.showStagesModal === 'function') {
+                window.showStagesModal();
+            }
+        }
+
+        /* ===== Section (budget block) rename = rekey + reference sweep ===== */
+
+        /* Same character policy as project names: block quotes/anglebrackets/slashes
+           (XSS + storage-key safety); allow apostrophes, &, accents, spaces. */
+        function nameIsLegal(n) {
+            return !!n && !/["<>\/\\]/.test(n);
+        }
+
+        function renameSection(oldName, newName) {
+            newName = (newName || '').trim();
+            if (!budget || !budget.sections || !budget.sections[oldName]) return { ok: false, msg: 'Section not found.' };
+            if (!newName) return { ok: false, msg: 'Name cannot be empty.' };
+            if (newName === oldName) return { ok: true, msg: '' };
+            if (!nameIsLegal(newName)) return { ok: false, msg: 'Remove quotes, slashes, and < > characters.' };
+            if (budget.sections[newName]) return { ok: false, msg: 'A block with that name already exists.' };
+
+            /* Rebuild sections in original insertion order, swapping the one key.
+               Object key order is preserved for string keys, so this keeps blocks
+               from jumping position. */
+            var rebuilt = {};
+            Object.keys(budget.sections).forEach(function (k) {
+                if (k === oldName) rebuilt[newName] = budget.sections[oldName];
+                else rebuilt[k] = budget.sections[k];
+            });
+            budget.sections = rebuilt;
+
+            /* Reference sweep: anything that keys off the section name.
+               - line items may carry item.sectionKey (used by PO tool linkage) */
+            (budget.sections[newName].items || []).forEach(function (it) {
+                if (it.sectionKey === oldName) it.sectionKey = newName;
+            });
+            /* - PO / petty-cash ledger rows key their section by name too */
+            if (budget.ledgers && Array.isArray(budget.ledgers.pos)) {
+                budget.ledgers.pos.forEach(function (po) { if (po.sectionKey === oldName) po.sectionKey = newName; });
+            }
+            /* - active grid filter */
+            if (mBT.ui && mBT.ui.state && mBT.ui.state.activeFilter === oldName) {
+                mBT.ui.state.activeFilter = newName;
+            }
+
+            saveBudget();
+            if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+            /* render()'s surgical path only rebuilds sections on an item-count change; a
+               rename keeps the count, so force a section-container rebuild so the header
+               name + all name-keyed attributes (data-section, totals) refresh. */
+            forceSectionRebuild();
+            return { ok: true, msg: '' };
+        }
+
+        function forceSectionRebuild() {
+            /* render()'s surgical path only rebuilds the section list on a row-count change;
+               a rename keeps the count, so headers/name-keyed markup go stale. Write the
+               fresh section HTML directly (verified) and re-bind list wiring.
+               Use window.* explicitly so we call the exact global builder that reads the
+               shared window.budget (avoids any lexical-scope binding ambiguity). */
+            var sectionContainer = document.getElementById('budget-sections');
+            if (sectionContainer && typeof window.renderBudgetSections === 'function') {
+                sectionContainer.innerHTML = window.renderBudgetSections();
+                if (typeof window.initializeDragAndDrop === 'function') window.initializeDragAndDrop();
+                if (typeof window.mBTRBACPostRender === 'function') window.mBTRBACPostRender();
+            } else if (typeof window.render === 'function') {
+                window.render();
+            }
+        }
+
+        /* ===== Block (section) menu: bottom sheet via mBTME ===== */
+
+        function phaseSelectHtml(current) {
+            var opts = '<option value=""' + (!current ? ' selected' : '') + '>(None)</option>';
+            for (var i = 0; i < KEYS.length; i++) {
+                var k = KEYS[i];
+                opts += '<option value="' + k + '"' + (current === k ? ' selected' : '') + '>' + esc(TITLES[k]) + '</option>';
+            }
+            return opts;
+        }
+
+        function openBlockMenu(sectionName) {
+            var sec = budget && budget.sections && budget.sections[sectionName];
+            if (!sec) return;
+            var isLocked = (sec.items && sec.items.length > 0) && sec.items.every(function (it) { return it.rateType === 'fixed'; });
+            var body =
+                '<div class="p-4 space-y-4">' +
+                    /* Rename */
+                    '<div>' +
+                        '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Block name</label>' +
+                        '<input type="text" id="mbt-block-name" value="' + esc(sectionName) + '" ' +
+                            'class="w-full bg-slate-100 rounded-xl px-3 py-2.5 text-sm font-black text-slate-700 border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none" style="min-height:44px;">' +
+                        '<p id="mbt-block-name-err" class="text-[9px] font-bold text-rose-500 mt-1 hidden"></p>' +
+                    '</div>' +
+                    /* Default phase */
+                    '<div>' +
+                        '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Default timeline phase</label>' +
+                        '<select id="mbt-block-phase" class="w-full bg-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 border-0 focus:ring-2 focus:ring-blue-400 focus:outline-none" style="min-height:44px;">' +
+                            phaseSelectHtml(sec.defaultPhase) +
+                        '</select>' +
+                        '<p class="text-[9px] font-bold text-slate-400 mt-1">New lines only. Existing lines keep their schedule.</p>' +
+                    '</div>' +
+                    /* Secondary actions */
+                    '<div class="grid grid-cols-2 gap-2 pt-1">' +
+                        '<button type="button" id="mbt-block-lock" class="py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ' + (isLocked ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') + '" style="min-height:44px;">' + (isLocked ? 'Unlock rates' : 'Lock rates') + '</button>' +
+                        '<button type="button" id="mbt-block-cap" class="py-2.5 rounded-xl bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all" style="min-height:44px;">Section cap</button>' +
+                    '</div>' +
+                    /* Save / cancel */
+                    '<div class="flex gap-2 pt-1">' +
+                        '<button type="button" onclick="mBTME.close(\'blockMenuModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all" style="min-height:44px;">Cancel</button>' +
+                        '<button type="button" id="mbt-block-save" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-500 transition-all" style="min-height:44px;">Save</button>' +
+                    '</div>' +
+                '</div>';
+
+            mBTME.open('blockMenu', 'Block: ' + sectionName, body, 'max-w-sm');
+
+            var container = document.getElementById('blockMenuModal');
+            if (!container) return;
+
+            function showErr(msg) {
+                var el = document.getElementById('mbt-block-name-err');
+                if (el) { el.textContent = msg; el.classList.toggle('hidden', !msg); }
+            }
+
+            /* Lock rates: reuse existing global, then close */
+            var lockBtn = document.getElementById('mbt-block-lock');
+            if (lockBtn) lockBtn.addEventListener('click', function () {
+                if (typeof window.lockSectionRates === 'function') window.lockSectionRates(sectionName);
+                mBTME.close('blockMenuModal');
+            });
+            /* Section cap: defer to the existing cap flow */
+            var capBtn = document.getElementById('mbt-block-cap');
+            if (capBtn) capBtn.addEventListener('click', function () {
+                mBTME.close('blockMenuModal');
+                if (mBT.core && mBT.core.actions && mBT.core.actions['section-cap']) {
+                    mBT.core.actions['section-cap']({ stopPropagation: function () {} }, { dataset: { id: sectionName } });
+                }
+            });
+
+            var saveBtn = document.getElementById('mbt-block-save');
+            if (saveBtn) saveBtn.addEventListener('click', function () {
+                var newName = (document.getElementById('mbt-block-name') || {}).value || '';
+                var phaseVal = (document.getElementById('mbt-block-phase') || {}).value || '';
+                newName = newName.trim();
+
+                var targetName = sectionName;
+
+                /* Rename if changed: surfaces guard errors inline without closing */
+                if (newName && newName !== sectionName) {
+                    var res = renameSection(sectionName, newName); /* saves + reconciles + rebuilds */
+                    if (!res.ok) { showErr(res.msg); return; }
+                    targetName = newName;
+                }
+
+                /* Set / clear default phase on the (possibly renamed) section */
+                var tSec = budget.sections[targetName];
+                if (tSec) {
+                    if (phaseVal && KEYS.indexOf(phaseVal) > -1) tSec.defaultPhase = phaseVal;
+                    else delete tSec.defaultPhase;
+                    saveBudget();
+                }
+
+                mBTME.close('blockMenuModal');
+            });
+        }
+
+        return {
+            KEYS: KEYS, LABELS: LABELS, TITLES: TITLES,
+            scheduledPhases: scheduledPhases,
+            totalDays: totalDays,
+            chipText: chipText,
+            chipHtml: chipHtml,
+            syncQtyFromSchedule: syncQtyFromSchedule,
+            applyDefaultPhase: applyDefaultPhase,
+            openSheet: openSheet,
+            renameSection: renameSection,
+            openBlockMenu: openBlockMenu
+        };
+    })();
+    window.mBTSchedule = mBTSchedule;
 
     function renderBudgetSections() {
         if (!budget || !budget.sections) return '';
@@ -4538,6 +4943,8 @@
                 rateType: 'negotiable'
             };
             section.items.push(newItem);
+            /* Phase 201: seed the block's default timeline phase on new lines only */
+            if (typeof mBTSchedule !== 'undefined') mBTSchedule.applyDefaultPhase(newItem, sectionName);
             mBTME.close('itemSelectorModal');
 
             // Tier 4 Surgeon: Inject DOM node instantly
@@ -8480,6 +8887,9 @@
 
     /* ========= v19.54 STAGE INTELLIGENCE (mBT.features.stages) ========= */
     mBT.features.stages = {
+        /* Phase 202: realtime save debounce handle for the Stages modal days edits.
+           Was referenced (state._timer) but never initialized, throwing on every edit. */
+        state: {},
         definitions: {
             'dev': ['writer', 'script', 'research', 'option', 'rights', 'legal', 'development', 'story', 'attorney', 'concept'],
             'pre': ['scout', 'casting', 'rehearsal', 'director', 'producer', 'coordinator', 'location', 'travel', 'prep', 'storyboard'],
@@ -8488,7 +8898,11 @@
             'dist': ['marketing', 'sales', 'festival', 'publicity', 'premiere', 'distribution', 'deliverables', 'trailer']
         },
         logic: {
-            // Strategy A: Find items existing in budget but not linked to stage
+            // Strategy A: Find items existing in budget but not linked to stage.
+            // Match order: a section's own defaultPhase wins; otherwise keyword match on the
+            // line DESCRIPTION only. The section name is intentionally NOT part of the keyword
+            // text so a budget block named e.g. "Distribution" no longer sweeps its lines into
+            // the dist timeline phase (block name and phase are different axes).
             findMatchesInBudget: function (stageKey) {
                 var keywords = mBT.features.stages.definitions[stageKey] || [];
                 var matches = [];
@@ -8498,17 +8912,41 @@
                 for (var si = 0; si < sectionKeys.length; si++) {
                     var secName = sectionKeys[si];
                     var sec = budget.sections[secName];
+                    var secDefault = sec.defaultPhase || null;
                     sec.items.forEach(function (item) {
-                        // Skip if already in this stage
+                        // Skip if already scheduled in this phase (don't stomp existing days)
                         if (item.stageData && item.stageData[stageKey]) return;
 
-                        var text = (item.description + ' ' + secName).toLowerCase();
-                        if (keywords.some(function (w) { return text.includes(w); })) {
+                        // The block's default phase is the strongest hint for its lines
+                        if (secDefault === stageKey) { matches.push(item); return; }
+
+                        var text = (item.description || '').toLowerCase();
+                        if (keywords.some(function (w) { return text.indexOf(w) > -1; })) {
                             matches.push(item);
                         }
                     });
                 }
                 return matches;
+            },
+            // How many keyword/default matches were left alone because they already carry
+            // days in this phase (drives the "Kept your schedules" snack).
+            countSkippedScheduled: function (stageKey) {
+                var keywords = mBT.features.stages.definitions[stageKey] || [];
+                var skipped = 0;
+                if (!budget || !budget.sections) return 0;
+                Object.keys(budget.sections).forEach(function (secName) {
+                    var sec = budget.sections[secName];
+                    var secDefault = sec.defaultPhase || null;
+                    (sec.items || []).forEach(function (item) {
+                        var sd = item.stageData && item.stageData[stageKey];
+                        var hasDays = !!(sd && (parseFloat(sd.days) || 0) > 0);
+                        if (!hasDays) return;
+                        var text = (item.description || '').toLowerCase();
+                        var wouldMatch = (secDefault === stageKey) || keywords.some(function (w) { return text.indexOf(w) > -1; });
+                        if (wouldMatch) skipped++;
+                    });
+                });
+                return skipped;
             },
             // Strategy B: Find items in DB that are missing from budget entirely
             findMissingEssentials: function (stageKey) {
@@ -8580,7 +9018,7 @@
                     '<h4 class="font-black text-[10px] uppercase tracking-widest text-blue-800">Link Existing</h4>' +
                     '</div>' +
                     '<p class="text-[10px] text-blue-600/80 leading-relaxed mb-4">' +
-                    'Scan your current budget line items. We found <strong>' + matches.length + '</strong> items that match this stage\'s criteria but haven\'t been assigned yet.' +
+                    'Scan your budget lines by role. We found <strong>' + matches.length + '</strong> lines that fit the <strong>' + stageLabel + '</strong> timeline phase and are not scheduled there yet. Lines you already scheduled are left as-is.' +
                     '</p>' +
                     '</div>' +
                     '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'link\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (matches.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
@@ -8596,7 +9034,7 @@
                     '<h4 class="font-black text-[10px] uppercase tracking-widest text-emerald-800">Generate Missing</h4>' +
                     '</div>' +
                     '<p class="text-[10px] text-emerald-600/80 leading-relaxed mb-4">' +
-                    'Database check complete. We found <strong>' + missing.length + '</strong> standard industry roles/items for this stage that are completely missing from your budget.' +
+                    'Database check complete. We found <strong>' + missing.length + '</strong> standard industry roles for the <strong>' + stageLabel + '</strong> timeline phase that are missing from your budget.' +
                     '</p>' +
                     '</div>' +
                     '<button onclick="window.handleStageAutoFill(\'' + stageKey + '\', \'generate\'); mBTME.close(\'autoFillModal\');" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2" ' + (missing.length === 0 ? 'disabled style="opacity:0.5"' : '') + '>' +
@@ -8608,7 +9046,7 @@
                     '<p class="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Changes are saved automatically upon execution</p>' +
                     '</div>';
 
-                mBTME.open('autoFill', 'Smart Fill: ' + stageLabel, content, 'max-w-xl');
+                mBTME.open('autoFill', 'Smart Fill: ' + stageLabel + ' phase', content, 'max-w-xl');
             }
         }
     };
@@ -9281,6 +9719,8 @@
                 rateType: 'negotiable'
             };
             section.items.push(newItem);
+            /* Phase 201: seed the block's default timeline phase on new lines only */
+            if (typeof mBTSchedule !== 'undefined') mBTSchedule.applyDefaultPhase(newItem, sectionName);
             if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
             if (typeof render === 'function') render();
             mBTME.alert("Success", desc + " added to " + sectionName);
@@ -11165,13 +11605,22 @@
         if (mode === undefined) mode = 'link';
         var stageLabel = (budget.targetLock && budget.targetLock.stages[stageKey]) ? budget.targetLock.stages[stageKey].label : stageKey.toUpperCase();
         var count = 0;
+        var skipped = 0;
 
         if (mode === 'link') {
+            /* Count lines we leave alone because they already carry days in this phase */
+            skipped = mBT.features.stages.logic.countSkippedScheduled(stageKey);
             var matches = mBT.features.stages.logic.findMatchesInBudget(stageKey);
-            if (matches.length === 0) return mBTME.alert("No Matches", "No matching items found to link.");
+            if (matches.length === 0) {
+                if (skipped > 0) return mBTME.alert("Kept Your Schedules", "Every match for " + stageLabel + " is already scheduled. Nothing changed.");
+                return mBTME.alert("No Matches", "No matching items found to link.");
+            }
 
             matches.forEach(function (item) {
                 if (!item.stageData) item.stageData = {};
+                /* Guard: never overwrite a phase that already has days set */
+                var existing = item.stageData[stageKey];
+                if (existing && (parseFloat(existing.days) || 0) > 0) { skipped++; return; }
                 item.stageData[stageKey] = { days: 1, rate: item.rate };
                 count++;
             });
@@ -11214,19 +11663,28 @@
             saveBudget();
             mBTLE.reconcile();
             if (document.getElementById('stagesViewModal')) window.showStagesModal();
-            mBTME.alert("Auto-Fill Complete", count + ' items processed for ' + stageLabel + '.');
+            var msg = count + ' item' + (count === 1 ? '' : 's') + ' added to ' + stageLabel + '.';
+            if (skipped > 0) msg += ' Kept your schedules on ' + skipped + ' line' + (skipped === 1 ? '' : 's') + '.';
+            mBTME.alert("Auto-Fill Complete", msg);
+        } else if (skipped > 0) {
+            mBTME.alert("Kept Your Schedules", "Every match for " + stageLabel + " is already scheduled. Nothing changed.");
         }
     };
 
     window.handleStageBulkAutoFill = function () {
-        mBTME.confirm("Smart Scan", "Auto-populate ALL stages with existing budget items?", function () {
+        mBTME.confirm("Smart Scan", "Auto-populate ALL timeline phases with matching budget lines? Lines you already scheduled are left untouched.", function () {
             var total = 0;
+            var skipped = 0;
             var validKeys = ['dev', 'pre', 'prod', 'post', 'dist'];
 
             validKeys.forEach(function (k) {
+                skipped += mBT.features.stages.logic.countSkippedScheduled(k);
                 var matches = mBT.features.stages.logic.findMatchesInBudget(k);
                 matches.forEach(function (item) {
                     if (!item.stageData) item.stageData = {};
+                    /* Guard: never overwrite a phase that already has days set */
+                    var existing = item.stageData[k];
+                    if (existing && (parseFloat(existing.days) || 0) > 0) { skipped++; return; }
                     item.stageData[k] = { days: 1, rate: item.rate };
                     total++;
                 });
@@ -11236,7 +11694,11 @@
                 saveBudget();
                 mBTLE.reconcile();
                 window.showStagesModal();
-                mBTME.alert("Scan Complete", "Smart Scan Linked " + total + " items.");
+                var msg = "Linked " + total + " line" + (total === 1 ? '' : 's') + " to timeline phases.";
+                if (skipped > 0) msg += " Kept your schedules on " + skipped + " line" + (skipped === 1 ? '' : 's') + ".";
+                mBTME.alert("Scan Complete", msg);
+            } else if (skipped > 0) {
+                mBTME.alert("Kept Your Schedules", "Everything that matches is already scheduled. Nothing changed.");
             } else {
                 mBTME.alert("Scan Complete", "No new matches found.");
             }
@@ -11843,7 +12305,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.60', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.64', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -11978,6 +12440,18 @@
         mBT.core.action('section-toggle', function (e, el) { handleToggleSection(el.dataset.id, el); });
         mBT.core.action('section-add', function (e, el) { showItemSelectorModal(el.dataset.id); });
         mBT.core.action('row-delete', function (e, el) { handleRemoveItem(el.dataset.section, el.dataset.id); });
+
+        /* Phase 200: line-item timeline schedule; chip opens the multi-phase sheet */
+        mBT.core.action('schedule', function (e, el) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (typeof mBTSchedule !== 'undefined') mBTSchedule.openSheet(el.dataset.section, el.dataset.id);
+        });
+
+        /* Phase 201: section block menu (rename rekey, default phase, lock, cap) */
+        mBT.core.action('block-menu', function (e, el) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (typeof mBTSchedule !== 'undefined') mBTSchedule.openBlockMenu(el.dataset.id);
+        });
 
         /* Phase 114: Section spending cap -- target icon opens a cap input modal */
         mBT.core.action('section-cap', function (e, el) {
