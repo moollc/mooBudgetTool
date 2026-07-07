@@ -288,6 +288,33 @@ var mBTContacts = (function () {
         render();
     }
 
+    /* --- Reveal newly imported/added contacts ---
+       A new contact can carry an empty department (device picker, some CSV/VCF rows).
+       If a dept pill or search filter is active, render() hides it and the user thinks
+       the import failed (they had to refresh the whole app, which resets the filter to
+       All). After any import/add, drop back to the DB tab with no filter so the new
+       rows are always visible in the same session, then optionally flash one. */
+    function revealNewContacts(highlightId) {
+        state.currentTab = 'db';
+        state.currentDept = '';
+        var search = dom.getElementById('contact-search');
+        if (search) search.value = '';
+        setTab('db');       /* repaints tab styling + calls render() */
+        renderDeptBar();    /* clears the active dept pill highlight */
+        render();
+        if (highlightId) flashCard(highlightId);
+    }
+
+    function flashCard(id) {
+        setTimeout(function () {
+            var el = dom.getElementById('card-' + id);
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.outline = '2px solid #3b82f6';
+            setTimeout(function () { el.style.outline = ''; }, 2500);
+        }, 100);
+    }
+
     /* --- Data load --- */
     function load() {
         var params = new URLSearchParams(window.location.search);
@@ -1109,7 +1136,10 @@ var mBTContacts = (function () {
         };
         if (state.editingId) contact.id = state.editingId;
 
-        STORAGE.saveContact(contact).then(function () {
+        var wasEdit = !!state.editingId;
+        var savedId = null;
+        STORAGE.saveContact(contact).then(function (saved) {
+            savedId = (saved && saved.id) || contact.id || null;
             /* Rate sync: dispatch to Budget Editor if editing an existing contact */
             if (state.editingId && contact.rate && window.parent !== window) {
                 window.parent.postMessage({
@@ -1122,7 +1152,10 @@ var mBTContacts = (function () {
         }).then(function (all) {
             state.dbContacts = all || [];
             closeModal();
-            render();
+            /* A brand-new contact may not match the active dept/search filter — reveal it.
+               An edit keeps the user's current view (don't yank their filter). */
+            if (wasEdit) render();
+            else revealNewContacts(savedId);
         }).catch(function (e) {
             console.error('[mBTContacts] Save error:', e);
             alert('Error saving contact');
@@ -1290,7 +1323,7 @@ var mBTContacts = (function () {
                 return STORAGE.getAllContacts();
             }).then(function (all) {
                 state.dbContacts = all || [];
-                render();
+                revealNewContacts();
                 walletSnack('Imported ' + toAdd.length + ' contact' + (toAdd.length !== 1 ? 's' : '') + '.');
             }).catch(function (e) {
                 console.error('[mBTContacts] Import error:', e);
@@ -1320,7 +1353,7 @@ var mBTContacts = (function () {
                     return STORAGE.getAllContacts();
                 }).then(function (all) {
                     state.dbContacts = all || [];
-                    render();
+                    revealNewContacts();
                     walletSnack('Imported ' + results.length + ' device contact' + (results.length !== 1 ? 's' : '') + '.');
                 });
             }).catch(function () { walletSnack('Contact access denied or cancelled.'); });
@@ -1440,8 +1473,8 @@ var mBTContacts = (function () {
             });
             chain.then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
                 state.dbContacts = all || [];
-                render();
                 closeOverlay();
+                revealNewContacts();
                 walletSnack('Imported ' + toImport.length + ' contact' + (toImport.length !== 1 ? 's' : '') + ' from mBT roster.');
             });
         });

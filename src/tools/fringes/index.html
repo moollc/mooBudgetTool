@@ -67,6 +67,10 @@
     /* ========= mBTFringes ========= */
     var mBTFringes = (function() {
         var state = { projectKey: null, budget: null, currency: 'JMD' };
+        /* v23.59: rate table pushed by parent mbt:displayCurrency payload. Fringes are
+           percentages, so nothing here renders a converted dollar figure today — this is
+           stashed only so a future money surface has the live rates without a round-trip. */
+        var _syncedRates = null;
 
         function snack(msg) {
             var el = document.getElementById('snackbar');
@@ -261,7 +265,21 @@
             });
         }
 
-        return { init: init };
+        /* v23.59: live display-currency switch from parent (mirrors po/stages siblings).
+           Percentages are currency-agnostic, so re-render only keeps state.currency in
+           sync and refreshes should a money surface ever be added. */
+        function setDisplayCurrency(code, rates) {
+            state.currency = code || 'JMD';
+            if (rates) _syncedRates = rates;
+            render();
+        }
+
+        return {
+            init: init,
+            io: {
+                setDisplayCurrency: function(code, rates) { setDisplayCurrency(code, rates); }
+            }
+        };
     })();
 
     window.addEventListener('DOMContentLoaded', mBTFringes.init);
@@ -269,6 +287,12 @@
     /* Phase 73B: receive undo/redo routing from parent monolith */
     window.addEventListener('message', function(e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
+    });
+
+    /* v23.59: receive live display-currency switches from parent (mirrors po/stages) */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
+        mBTFringes.io.setDisplayCurrency(e.data.currency, e.data.rates);
     });
   </script>
 </body>
