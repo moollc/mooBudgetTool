@@ -61,11 +61,11 @@
         mixer:           'Sound Mixer',
         boom:            'Boom Operator',
         utility:         'Sound Utility',
-        /* Equipment */
-        camera:          'Camera Operator',
-        lighting:        'Gaffer',
-        sound:           'Sound Mixer',
-        arsenal:         'Key Grip',
+        /* Equipment (Phase 202: point at rental line items, not crew roles) */
+        camera:          'Camera Kit (4K Cinema Package)',
+        lighting:        'Light Kit (3-Light)',
+        sound:           'Sound Kit (Mixer + Wireless)',
+        arsenal:         'Grip Kit (Dolly + Stands)',
         vfx:             'VFX Artist',
         /* Location */
         studio:          'Location Manager',

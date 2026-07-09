@@ -196,6 +196,29 @@
         { "description": "Lead Labourer", "unit": "Day", "baseRate": 400, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.7, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } }
     ];
 
+    /* ========= EQUIPMENT RENTAL INDEX (Phase 202, block OG-Equipment-v1) =========
+       Same shape as crew roles minus 'intelligence' text; itemType/category are
+       stamped by _expandIndex, not stored here (keeps master rows uniform).
+       Multipliers = round(regional equipment midpoint USD / USA baseRate, 2) from
+       research/rates/{SOUTHEAST_ASIA,INDIA_PRODUCTION,SOUTH_AFRICA,
+       MEXICO_LATIN_AMERICA,EASTERN_EUROPE}_RATES.md. Where a region's table gives
+       one combined camera-kit row (no RED/ARRI vs Sony split -- Brazil, Colombia,
+       Poland), that single ratio is used for both camera SKUs.
+       No Jamaica/Caribbean/UK/Canada/Australia equipment tables exist -- those
+       anchor to the related crew role's regional multiplier per brief (Camera
+       Kit->Camera Operator, Light Kit->Gaffer, Sound Kit->Sound Mixer,
+       Grip/Drone->Key Grip), Jamaica fixed at 0.28 for all equipment. Same rule
+       covers Drone Package where a region's table has no drone row (Philippines,
+       Mexico, Brazil, Colombia, Poland). */
+    var _MASTER_EQUIPMENT_INDEX = [
+        { "description": "Camera Kit (4K Cinema Package)", "unit": "Day", "baseRate": 850, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
+        { "description": "Camera Kit (Sony FX6/FX9)", "unit": "Day", "baseRate": 475, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.11, "Thailand": 0.90, "Philippines": 0.71, "Vietnam": 0.84, "Poland": 0.94, "Mexico": 0.95, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.29 } },
+        { "description": "Light Kit (3-Light)", "unit": "Day", "baseRate": 350, "category": "lighting", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 0.86, "Thailand": 0.86, "Philippines": 0.71, "Vietnam": 0.86, "Poland": 0.86, "Mexico": 1.29, "Brazil": 1.50, "Colombia": 0.86, "South Africa": 1.08 } },
+        { "description": "Sound Kit (Mixer + Wireless)", "unit": "Day", "baseRate": 225, "category": "sound", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
+        { "description": "Grip Kit (Dolly + Stands)", "unit": "Day", "baseRate": 325, "category": "arsenal", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 1.15, "Thailand": 0.92, "Philippines": 0.69, "Vietnam": 0.69, "Poland": 0.92, "Mexico": 1.15, "Brazil": 1.38, "Colombia": 0.69, "South Africa": 0.99 } },
+        { "description": "Drone Package", "unit": "Day", "baseRate": 300, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.68, "Australia": 0.68, "India": 1.17, "Thailand": 1.00, "Philippines": 0.39, "Vietnam": 1.00, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.81 } }
+    ];
+
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
     var REGION_INTELLIGENCE = {
         'Jamaica':      'INTELLIGENCE: RATES BASED ON AGGREGATED HISTORICAL INVOICING (2025). NO FORMAL UNION SCALES EXIST. NEGOTIATIONS BESPOKE PER PROJECT.',
@@ -263,20 +286,23 @@
         })(),
 
         /**
-         * _expandMasterIndex(region, communityData)
-         * Projects the master index and merges it with community-calibrated overrides.
+         * _expandIndex(masterArray, region, communityData, itemType)
+         * Projects a master index (crew or equipment) and merges it with
+         * community-calibrated overrides. itemType is stamped on each output
+         * row ('crew' default) so the item selector / substitution table can
+         * tell equipment rows from labor rows.
          */
-        _expandMasterIndex: function (region, communityData) {
+        _expandIndex: function (masterArray, region, communityData, itemType) {
             var self = this;
             var currencies = OG_CURRENCIES;
             var baseCurrency = currencies[region] || 'USD';
-            
-            return _MASTER_CREW_INDEX.map(function (role) {
+
+            return masterArray.map(function (role) {
                 var key = (role.description || '').toLowerCase() + '|' + (region || '').toLowerCase();
                 var comm = (communityData && communityData[key]) ? communityData[key] : null;
 
                 var rate, source;
-                
+
                 if (comm && comm.avg_rate > 0) {
                     rate = comm.avg_rate;
                     source = 'community';
@@ -284,8 +310,8 @@
                     /* Role-Specific Multiplier with a strict 1.0 fallback to prevent Drift. */
                     var mult = (role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0;
                     rate = role.baseRate * mult;
-                    
-                    /* Phase 190: Apply Market Tier Scalar (Indie/Standard/Studio) 
+
+                    /* Phase 190: Apply Market Tier Scalar (Indie/Standard/Studio)
                        ONLY to 'default' source rates. Community overrides remain atomic. */
                     var currentTier = self.settings.getMarketTier();
                     if (currentTier && currentTier !== 'Standard') {
@@ -304,9 +330,21 @@
                     region: region,
                     currency: baseCurrency,
                     source: source,
+                    itemType: itemType || 'crew',
+                    category: role.category,
                     intelligence: role.intelligence || ( (source === 'default' && (!role.multipliers || !role.multipliers[region])) ? "USA Market Anchor applied. Negotiate bespoke local rate." : "" ) || (source === 'community' ? "Community-calibrated rate based on regional research." : "")
                 };
             });
+        },
+
+        /* Back-compat: existing call sites use _expandMasterIndex(region, c) for crew */
+        _expandMasterIndex: function (region, communityData) {
+            return this._expandIndex(_MASTER_CREW_INDEX, region, communityData, 'crew');
+        },
+
+        /* New: equipment projection, same shape, itemType stamped 'equipment' */
+        _expandEquipmentIndex: function (region, communityData) {
+            return this._expandIndex(_MASTER_EQUIPMENT_INDEX, region, communityData, 'equipment');
         },
 
         /* ========= DYNAMIC REGIONAL GETTERS ========= */
@@ -425,14 +463,15 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.04.28_v1';
-            
+            var CURRENT_VERSION = '2026.07.09_equipment_v1';
+
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
                     self.rates.length = 0;
                     /* Reseed if version mismatch OR if forced by a regional change. */
                     if (!stored || stored.length === 0 || v !== CURRENT_VERSION || forceReseed) {
-                        var defaults = self._expandMasterIndex(self.settings.location);
+                        var defaults = self._expandMasterIndex(self.settings.location)
+                            .concat(self._expandEquipmentIndex(self.settings.location));
                         for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
                         _lfSet(DB_VERSION_KEY, CURRENT_VERSION);
                         return self.saveRates();
@@ -1156,12 +1195,21 @@
 
             if (!r || !t) return null;
 
-            /* Find role in Master Index */
+            /* Find role in Master Index (crew, then equipment -- SYNONYM_REGISTRY
+               equipment keys resolve to _MASTER_EQUIPMENT_INDEX descriptions) */
             var role = null;
             for (var i = 0; i < _MASTER_CREW_INDEX.length; i++) {
                 if (_MASTER_CREW_INDEX[i].description.toLowerCase() === d) {
                     role = _MASTER_CREW_INDEX[i];
                     break;
+                }
+            }
+            if (!role) {
+                for (var eq = 0; eq < _MASTER_EQUIPMENT_INDEX.length; eq++) {
+                    if (_MASTER_EQUIPMENT_INDEX[eq].description.toLowerCase() === d) {
+                        role = _MASTER_EQUIPMENT_INDEX[eq];
+                        break;
+                    }
                 }
             }
             if (!role) return null;
@@ -1197,7 +1245,7 @@
             var self = this;
             var all = [];
             (window.mBTOG_REGIONS || RATE_REGIONS).forEach(function(r) {
-                all = all.concat(self._expandMasterIndex(r));
+                all = all.concat(self._expandMasterIndex(r)).concat(self._expandEquipmentIndex(r));
             });
             return all;
         }
