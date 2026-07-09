@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.64</title>
+    <title>mooBudgetTool v23.66</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.64";
+    var APP_VERSION = "23.66";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3241,9 +3241,11 @@
             var to = displayCurrency || 'JMD';
             if (from === to) return parseFloat(val) || 0;
             var rates = this._getRates();
-            var fromRate = rates[from] || 1;
-            var toRate = rates[to] || 1;
-            var res = (parseFloat(val) || 0) / fromRate * toRate;
+            /* Missing rate code -> silent no-convert (matches convertBetween + tool fmt guards).
+               A || 1 fallback here would produce bogus 1:1 math under the wrong symbol -- worse
+               than leaving the number unconverted. */
+            if (!rates || !rates[from] || !rates[to]) return parseFloat(val) || 0;
+            var res = (parseFloat(val) || 0) / rates[from] * rates[to];
             return Math.round(res * 10000) / 10000;
         },
         /* Reverse conversion: from displayCurrency back to budget base currency */
@@ -3252,9 +3254,10 @@
             var to = displayCurrency || 'JMD';
             if (from === to) return parseFloat(val) || 0;
             var rates = this._getRates();
-            var fromRate = rates[from] || 1;
-            var toRate = rates[to] || 1;
-            var res = (parseFloat(val) || 0) / toRate * fromRate;
+            /* Same guard as convert() -- a missing code must not corrupt stored base values
+               (rate/actual fields write this result directly onto the budget item). */
+            if (!rates || !rates[from] || !rates[to]) return parseFloat(val) || 0;
+            var res = (parseFloat(val) || 0) / rates[to] * rates[from];
             return Math.round(res * 10000) / 10000;
         },
         isLocked: function () {
@@ -12305,7 +12308,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.64', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.66', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
