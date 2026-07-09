@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.66</title>
+    <title>mooBudgetTool v23.70</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -395,7 +395,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.66";
+    var APP_VERSION = "23.70";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3842,6 +3842,15 @@
                 if (schedChip && typeof mBTSchedule !== 'undefined') {
                     schedChip.outerHTML = mBTSchedule.chipHtml(item, sectionKey);
                 }
+                /* Phase 201: repaint crew avatar on surgical render (assign/unassign) */
+                var crewWrap = document.querySelector('[data-crew-wrapper-id="' + item.id + '"]');
+                if (!crewWrap) {
+                    var crewRow = document.querySelector('tr[data-item-id="' + item.id + '"]');
+                    if (crewRow) crewWrap = crewRow.querySelector('.crew-wrapper');
+                }
+                if (crewWrap && mBT.ui.render && typeof mBT.ui.render.crewWrapperHtml === 'function') {
+                    crewWrap.outerHTML = mBT.ui.render.crewWrapperHtml(item, sectionKey);
+                }
                 var varCell = document.querySelector('[data-variance-id="' + item.id + '"]');
                 if (varCell) {
                     varCell.textContent = fmtDisplay(variance, isMobile);
@@ -4213,6 +4222,33 @@
                 '</div>';
         },
 
+        // --- Crew column: shared by full render + surgical paint ---
+        crewWrapperHtml: function (item, sectionName) {
+            var safeId = this.esc(item.id);
+            var safeSection = this.esc(sectionName);
+            var crew = item.crew || {};
+            var initials = crew.name ? crew.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase() : '?';
+            var telLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.call(crew.phone) : "#";
+            var waLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.whatsapp(crew.phone) : "#";
+            var mailLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.email(crew.email) : "#";
+            var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
+            return '<div class="crew-wrapper inline-block" data-crew-wrapper-id="' + safeId + '">' +
+                '<button data-action="crew-toggle" class="crew-avatar rounded border border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ' + (crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white') + ' relative z-20">' +
+                '<span class="text-[12px] font-black pointer-events-none">' + initials + '</span>' +
+                '</button>' +
+                '<div class="crew-popup">' +
+                (crew.name ?
+                    (crew.phone && telLink !== '#' ? '<a href="' + telLink + '" class="contact-action-btn action-call" title="Call">' + (assets.phone || '') + '</a>' : '') +
+                    (crew.phone && waLink !== '#' ? '<a href="' + waLink + '" target="_blank" class="contact-action-btn action-wa" title="WhatsApp">' + (assets.wa || '') + '</a>' : '') +
+                    (crew.email && mailLink !== '#' ? '<a href="' + mailLink + '" class="contact-action-btn action-email" title="Email">' + (assets.mail || '') + '</a>' : '') +
+                    '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="contact-action-btn action-profile" title="Profile">' + (assets.user || '') + '</button>' :
+                    '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">' +
+                    '<span class="pointer-events-none">Assign</span> ' + (assets.plus || '') +
+                    '</button>') +
+                '</div>' +
+                '</div>';
+        },
+
         // --- Data Row Blueprint: Itemized line generation ---
         // Logic Resolution: Mobile-optimized widths, font-scaling, and "touch-friendly" inputs.
         // Updated to use delegation: data-action attributes for buttons.
@@ -4223,13 +4259,7 @@
             var itemCalc = calculateItem(item);
             var estimated = itemCalc.estimated;
             var variance = itemCalc.variance;
-            var crew = item.crew || {};
             var isLocked = item.rateType === 'fixed';
-            var initials = crew.name ? crew.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase() : '?';
-
-            var telLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.call(crew.phone) : "#";
-            var waLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.whatsapp(crew.phone) : "#";
-            var mailLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.email(crew.email) : "#";
             var isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
             var isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
             var hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
@@ -4257,21 +4287,7 @@
 
             var html = '<tr class="group border-b border-slate-50 hover:bg-blue-50/30 transition-all draggable-row" data-item-id="' + safeId + '" data-section="' + safeSection + '"' + (item.memoStatus === 'Pending' ? ' style="background-color:rgba(234,179,8,0.12);"' : '') + '>' +
                 '<td class="px-1 ' + rowPad + ' text-center relative w-12 md:w-14 overflow-visible">' +
-                '<div class="crew-wrapper inline-block">' +
-                '<button data-action="crew-toggle" class="crew-avatar rounded border border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ' + (crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white') + ' relative z-20">' +
-                '<span class="text-[12px] font-black pointer-events-none">' + initials + '</span>' +
-                '</button>' +
-                '<div class="crew-popup">' +
-                (crew.name ?
-                    (crew.phone && telLink !== '#' ? '<a href="' + telLink + '" class="contact-action-btn action-call" title="Call">' + (assets.phone || '') + '</a>' : '') +
-                    (crew.phone && waLink !== '#' ? '<a href="' + waLink + '" target="_blank" class="contact-action-btn action-wa" title="WhatsApp">' + (assets.wa || '') + '</a>' : '') +
-                    (crew.email && mailLink !== '#' ? '<a href="' + mailLink + '" class="contact-action-btn action-email" title="Email">' + (assets.mail || '') + '</a>' : '') +
-                    '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="contact-action-btn action-profile" title="Profile">' + (assets.user || '') + '</button>' :
-                    '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">' +
-                    '<span class="pointer-events-none">Assign</span> ' + (assets.plus || '') +
-                    '</button>') +
-                '</div>' +
-                '</div>' +
+                this.crewWrapperHtml(item, sectionName) +
                 '</td>' +
                 '<td class="px-1 ' + rowPad + ' w-8 drag-handle text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing text-center ' + (isCompact ? 'hidden' : '') + '">' + (assets.drag || '') + '</td>' +
                 '<td class="px-1 ' + rowPad + ' text-left min-w-[200px]">' +
@@ -11156,7 +11172,7 @@
             '</div>' +
             portfolioHtml +
             '<div class="flex justify-between items-center pt-1">' +
-            (!isGlobalEdit && sectionName ? '<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment(\'' + mBT.ui.render.esc(itemId) + '\', \'' + mBT.ui.render.esc(sectionName) + '\')">Unassign</button>' : '<div></div>') +
+            (!isGlobalEdit && sectionName ? '<button type="button" class="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 px-4 py-3 rounded-2xl transition-all" onclick="window.clearCrewAssignment(this.dataset.itemId, this.dataset.sectionName)" data-item-id="' + mBT.ui.render.esc(itemId) + '" data-section-name="' + mBT.ui.render.esc(sectionName) + '">Unassign</button>' : '<div></div>') +
             '<button type="submit" class="py-3 px-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95">Save Profile</button>' +
             '</div>' +
             '</div>';
@@ -11342,7 +11358,17 @@
 
     window.clearCrewAssignment = function (itemId, sectionName) {
         mBTME.confirm("Remove Assignment", "Remove this crew assignment?", function () {
-            var item = budget.sections[sectionName].items.find(function (i) { return i.id === itemId; });
+            var item = null;
+            if (sectionName && budget.sections && budget.sections[sectionName]) {
+                item = budget.sections[sectionName].items.find(function (i) { return i.id === itemId; });
+            }
+            if (!item && budget.sections && itemId) {
+                var secKeys = Object.keys(budget.sections);
+                for (var si = 0; si < secKeys.length; si++) {
+                    var secItem = budget.sections[secKeys[si]].items.find(function (i) { return i.id === itemId; });
+                    if (secItem) { item = secItem; break; }
+                }
+            }
             if (item) {
                 delete item.crew;
                 mBTME.close('crewProfileModal');
@@ -12308,7 +12334,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.66', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.70', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -12572,18 +12598,7 @@
         mBT.core.action('crew-toggle', function (e, el) {
             var itemId = (el.closest('tr') && el.closest('tr').dataset.itemId) || el.dataset.id;
             var section = (el.closest('tr') && el.closest('tr').dataset.section) || el.dataset.section;
-
-            var item = null;
-            if (section && budget.sections[section]) {
-                item = budget.sections[section].items.find(function (i) { return i.id === itemId; });
-            }
-
-            /* Enhanced Interaction: If unassigned, go straight to Profile/Import */
-            if (!item || !item.crew || !item.crew.name) {
-                openCrewProfile(el, e, itemId, section);
-            } else {
-                toggleCrewPopup(el, e);
-            }
+            openCrewProfile(el, e, itemId, section);
         });
         mBT.core.action('crew-profile', function (e, el) { return openCrewProfile(el, e, el.dataset.id, el.dataset.section); });
 

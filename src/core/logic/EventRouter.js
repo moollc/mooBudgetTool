@@ -302,9 +302,19 @@ window.mBTRouter = (function () {
         if (window.mBTME) mBTME.open('export-choice', 'Export File', content, 'max-w-sm');
     }
 
-    /* --- Phase 133: persist helper — reconcile totals, save async, ACK source on commit --- */
-    function _persistBudget(source, actionName, budget) {
+    /* --- Phase 133: persist helper — reconcile totals, save async, ACK source on commit.
+       Process fix (2026-07-09): repaints by default. Three action handlers
+       (inject-contact, update-contact-rate, og-rate-changed) mutated budget.globalItems
+       and called this without ever repainting -- the grid stayed stale until a manual
+       reload. Reconcile+save alone must never be mistaken for "the UI is caught up."
+       Pass { skipRepaint: true } only for handlers that already repaint themselves
+       (e.g. update-ledgers calls render() inline before this runs). */
+    function _persistBudget(source, actionName, budget, opts) {
         if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
+        if (!(opts && opts.skipRepaint)) {
+            if (window.mBT && mBT.ui && typeof mBT.ui.paint === 'function') mBT.ui.paint();
+            else if (window.render) render();
+        }
         if (window.saveBudget) {
             saveBudget().then(function () {
                 if (source) {
@@ -312,6 +322,69 @@ window.mBTRouter = (function () {
                 }
             });
         }
+    }
+
+    /* --- Resolve which budget section should receive a pushed contact --- */
+    function _resolveContactSection(budget, department) {
+        if (!budget || !budget.sections) return null;
+        var keys = Object.keys(budget.sections);
+        if (!keys.length) return null;
+        var dept = (department || 'Production').toLowerCase();
+        var i, k, lk;
+        for (i = 0; i < keys.length; i++) {
+            if (keys[i].toLowerCase() === dept) return keys[i];
+        }
+        if (dept === 'post' || dept === 'editing') {
+            for (i = 0; i < keys.length; i++) {
+                lk = keys[i].toLowerCase();
+                if (lk.indexOf('post') !== -1) return keys[i];
+            }
+        }
+        for (i = 0; i < keys.length; i++) {
+            lk = keys[i].toLowerCase();
+            if (lk.indexOf('talent') !== -1 || lk.indexOf('direction') !== -1) return keys[i];
+        }
+        for (i = 0; i < keys.length; i++) {
+            if (keys[i] === 'Production') return keys[i];
+        }
+        return keys[0];
+    }
+
+    /* --- Mirror a crew line into globalItems for Contacts extraction / export --- */
+    function _mirrorGlobalContactItem(budget, lineItem) {
+        if (!budget || !lineItem) return;
+        if (!budget.globalItems) budget.globalItems = [];
+        var gi = {
+            id:            lineItem.id,
+            description:   lineItem.description,
+            rate:          lineItem.rate,
+            quantity:      lineItem.quantity,
+            unit:          lineItem.unit,
+            contact_id:    lineItem.contact_id || null,
+            contact_name:  lineItem.description,
+            contact_phone: (lineItem.crew && lineItem.crew.phone) || null,
+            contact_email: (lineItem.crew && lineItem.crew.email) || null
+        };
+        budget.globalItems.push(gi);
+    }
+
+    /* --- Update grid line items (sections) by description / crew name match --- */
+    function _updateSectionRatesByMatch(budget, matchLower, newRate) {
+        if (!budget || !budget.sections || !matchLower) return false;
+        var updated = false;
+        Object.keys(budget.sections).forEach(function (sk) {
+            var items = budget.sections[sk].items || [];
+            for (var ii = 0; ii < items.length; ii++) {
+                var it = items[ii];
+                var desc = (it.description || '').toLowerCase();
+                var crewName = (it.crew && it.crew.name) ? it.crew.name.toLowerCase() : '';
+                if (desc === matchLower || crewName === matchLower) {
+                    it.rate = newRate;
+                    updated = true;
+                }
+            }
+        });
+        return updated;
     }
 
     /* --- Phase 150: tool broadcast helper --- */
@@ -340,8 +413,10 @@ window.mBTRouter = (function () {
 
         /* --- Phase 73/78: update-fringes + update-ledgers (consolidated save path) --- */
         } else if ((action === 'update-fringes' || action === 'update-ledgers') && currentProjectName && budget) {
+            var _persistOpts;
             if (action === 'update-fringes') {
                 budget.fringes = Array.isArray(payload.fringes) ? payload.fringes : [];
+                /* No inline render — let _persistBudget reconcile + paint (AG audit 2026-07-09). */
             } else {
                 if (!budget.ledgers) budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
                 if (Array.isArray(payload.pos))        budget.ledgers.pos        = payload.pos;
@@ -354,8 +429,9 @@ window.mBTRouter = (function () {
                         _poIframe.contentWindow.postMessage(_safeSerialize({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }), '*');
                     }
                 }
+                _persistOpts = { skipRepaint: true }; /* render() already ran above */
             }
-            _persistBudget(e.source, action, budget);
+            _persistBudget(e.source, action, budget, _persistOpts);
 
         /* --- close-tool: dismiss tool modal and lifecycle sync --- */
         } else if (action === 'close-tool') {
@@ -367,24 +443,36 @@ window.mBTRouter = (function () {
                 mBTSync.pushAll().catch(function (e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
             }
 
-        /* --- inject-contact: push a contact as a crew line item --- */
+        /* --- inject-contact: push a contact as a crew line item in the budget grid --- */
         } else if (action === 'inject-contact' && currentProjectName) {
             if (payload.name && budget) {
-                var crewItem = {
-                    id:            'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                    description:   payload.name,
-                    rate:          payload.rate || 0,
-                    qty:           1,
-                    unit:          'day',
-                    contact_id:    payload.email || null,
-                    contact_name:  payload.name,
-                    contact_phone: payload.phone || null,
-                    contact_email: payload.email || null
-                };
-                if (!budget.globalItems) budget.globalItems = [];
-                budget.globalItems.push(crewItem);
-                _persistBudget(e.source, action, budget);
-                console.log('[mBT] Injected contact:', payload.name);
+                var targetSection = _resolveContactSection(budget, payload.department);
+                var section = targetSection ? budget.sections[targetSection] : null;
+                if (section) {
+                    var lineRate = parseFloat(payload.rate) || 0;
+                    var newCrewItem = {
+                        id:          'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        description: payload.name,
+                        quantity:    1,
+                        unit:        'Day',
+                        baseRate:    lineRate,
+                        rate:        lineRate,
+                        multiplier:  1,
+                        actual:      0,
+                        rateType:    'negotiable',
+                        contact_id:  payload.email || null,
+                        crew:        { name: payload.name, phone: payload.phone || '', email: payload.email || '' }
+                    };
+                    section.items.push(newCrewItem);
+                    _mirrorGlobalContactItem(budget, newCrewItem);
+                    if (window.mBT && mBT.ui && mBT.ui.ops && typeof mBT.ui.ops.add === 'function') {
+                        mBT.ui.ops.add(targetSection, newCrewItem);
+                    }
+                    _persistBudget(e.source, action, budget);
+                    console.log('[mBT] Injected contact into section:', targetSection, payload.name);
+                } else {
+                    console.warn('[mBT] inject-contact: no section found for', payload.name);
+                }
             }
 
         /* --- calendar-updated: reload milestones --- */
@@ -395,12 +483,14 @@ window.mBTRouter = (function () {
         } else if (action === 'update-contact-rate' && budget) {
             var crName = (payload.name || '').toLowerCase();
             var crRate = parseFloat(payload.rate);
-            if (crName && crRate && budget.globalItems) {
-                var crUpdated = false;
-                for (var ci = 0; ci < budget.globalItems.length; ci++) {
-                    if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
-                        budget.globalItems[ci].rate = crRate;
-                        crUpdated = true;
+            if (crName && crRate) {
+                var crUpdated = _updateSectionRatesByMatch(budget, crName, crRate);
+                if (budget.globalItems) {
+                    for (var ci = 0; ci < budget.globalItems.length; ci++) {
+                        if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
+                            budget.globalItems[ci].rate = crRate;
+                            crUpdated = true;
+                        }
                     }
                 }
                 if (crUpdated) {
@@ -416,13 +506,15 @@ window.mBTRouter = (function () {
         /* --- og-rate-changed: update matching line items with new rate --- */
         } else if (action === 'og-rate-changed' && budget) {
             var ogDesc = (payload.description || '').toLowerCase();
-            var newRate = payload.rate;
-            if (ogDesc && newRate && budget.globalItems) {
-                var ogUpdated = false;
-                for (var ri = 0; ri < budget.globalItems.length; ri++) {
-                    if ((budget.globalItems[ri].description || '').toLowerCase() === ogDesc) {
-                        budget.globalItems[ri].rate = newRate;
-                        ogUpdated = true;
+            var newRate = parseFloat(payload.rate);
+            if (ogDesc && newRate) {
+                var ogUpdated = _updateSectionRatesByMatch(budget, ogDesc, newRate);
+                if (budget.globalItems) {
+                    for (var ri = 0; ri < budget.globalItems.length; ri++) {
+                        if ((budget.globalItems[ri].description || '').toLowerCase() === ogDesc) {
+                            budget.globalItems[ri].rate = newRate;
+                            ogUpdated = true;
+                        }
                     }
                 }
                 if (ogUpdated) {
