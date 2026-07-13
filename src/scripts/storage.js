@@ -77,8 +77,21 @@ var mBTStorage = {
     return new Promise(function (resolve, reject) {
       var request = indexedDB.open(DB_NAME, DB_VERSION);
 
+      /* Guard against indexedDB.open() hanging forever: with no onblocked
+         handler, a version conflict with another open tab/iframe leaves this
+         request pending indefinitely — no onsuccess, no onerror — so every
+         write silently never completes and the caller never finds out why.
+         Surface it as a real rejection instead, and clear _dbPromise so a
+         later retry (e.g. after the other tab closes) isn't stuck reusing
+         a dead promise forever. */
+      request.onblocked = function () {
+        mBTStorage._dbPromise = null;
+        reject(new Error('mBT_DB open blocked by another open tab/connection. Close other mBT tabs and retry.'));
+      };
+
       request.onerror = function () {
         var err = request.error;
+        mBTStorage._dbPromise = null;
         if (err && err.name === 'QuotaExceededError') {
           window.dispatchEvent(new CustomEvent('mbt:quota-exceeded', { detail: { store: 'DB open' } }));
         }
@@ -87,6 +100,13 @@ var mBTStorage = {
 
       request.onsuccess = function () {
         mBTStorage._db = request.result;
+        mBTStorage._db.onversionchange = function () {
+          /* Another tab wants to upgrade the schema — release our handle so
+             that tab isn't blocked forever by this one holding the old version. */
+          mBTStorage._db.close();
+          mBTStorage._db = null;
+          mBTStorage._dbPromise = null;
+        };
         resolve(mBTStorage._db);
       };
 

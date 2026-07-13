@@ -298,6 +298,42 @@
                 min-width: 40px;
             }
         }
+
+        /* Budget row tables: show thin horizontal scrollbar + right fade when overflow
+           (do not use .no-scrollbar here -- rate/actual/delete sit off-screen with no cue) */
+        .mbt-table-scroll-wrap {
+            position: relative;
+        }
+        .mbt-table-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #94a3b8 transparent;
+            -ms-overflow-style: auto;
+        }
+        .mbt-table-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .mbt-table-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .mbt-table-scroll::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 9999px;
+        }
+        .mbt-table-fade-r {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 6px;
+            width: 28px;
+            pointer-events: none;
+            background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 70%);
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 2;
+        }
+        .mbt-table-fade-r.visible {
+            opacity: 1;
+        }
     </style>
 </head>
 
@@ -397,7 +433,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.79";
+    var APP_VERSION = "23.81";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -521,14 +557,43 @@
         init: function () {
             /* Phase 192B: Global typing state guard — attach EARLY before any promises */
             (function () {
+                var _autoSelFields = {
+                    rate: 1, quantity: 1, actual: 1,
+                    actualQuantity: 1, actualRate: 1, description: 1
+                };
                 document.addEventListener('focusin', function (e) {
                     if (e.target && e.target.tagName === 'INPUT') {
                         e.target.dataset.typing = 'true';
+                        /* Auto-select short single-value fields so click+type replaces instead of inserts
+                           (prevents rate 0.00 + "60000" becoming 600000.00). Not for textarea notes.
+                           Chrome: type=number ignores select()/selectionStart, so also set replace-on-type. */
+                        var _af = e.target.getAttribute('data-field');
+                        if (_af && _autoSelFields[_af]) {
+                            e.target.dataset.mbtReplaceOnType = '1';
+                            setTimeout(function () {
+                                try {
+                                    if (document.activeElement === e.target) e.target.select();
+                                } catch (err) { /* ignore */ }
+                            }, 0);
+                        }
+                    }
+                }, true);
+                document.addEventListener('keydown', function (e) {
+                    var t = e.target;
+                    if (!t || t.tagName !== 'INPUT' || t.dataset.mbtReplaceOnType !== '1') return;
+                    var printable = e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+                    if (printable) {
+                        /* Clear first so digits replace the whole field (Chrome number inputs) */
+                        t.value = '';
+                        t.dataset.mbtReplaceOnType = '0';
+                    } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+                        t.dataset.mbtReplaceOnType = '0';
                     }
                 }, true);
                 document.addEventListener('focusout', function (e) {
                     if (e.target && e.target.tagName === 'INPUT') {
                         delete e.target.dataset.typing;
+                        delete e.target.dataset.mbtReplaceOnType;
                     }
                 }, true);
                 document.addEventListener('input', function (e) {
@@ -3793,12 +3858,14 @@
 
                 // Re-bind specific list listeners
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                if (typeof initTableScrollHints === 'function') initTableScrollHints();
                 /* Phase 62: Re-apply RBAC lockdown after DOM rebuild */
                 if (typeof mBTRBACPostRender === 'function') mBTRBACPostRender();
             }
 
             // Always Paint values (covers typing, calculations, and the new rows)
             this.paint();
+            if (typeof initTableScrollHints === 'function') initTableScrollHints();
         }
 
         // B. Auxiliary Interface Updates (Top Level)
@@ -3835,11 +3902,12 @@
             '</button>' +
             '<div id="currencyPopover" class="hidden absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 min-w-[130px]"></div>' +
             '</div>' +
-            '<button id="openAiToolsBtn" class="relative p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center overflow-visible">' +
-            (mBTAssets.wand || '') +
-            '<span class="absolute pointer-events-none" aria-hidden="true" style="bottom:-3px;right:-3px;width:12px;height:12px;line-height:0">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="#a5f3fc" stroke="#4f46e5" stroke-width="2.5"/></svg>' +
-            '</span>' +
+            '<button id="openAiToolsBtn" title="AI Assistant" class="relative p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center overflow-visible">' +
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">' +
+            '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2Z" fill="rgba(255,255,255,0.14)" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>' +
+            '<path d="M13.2 6.4l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" fill="currentColor"/>' +
+            '<path d="M9 12.6l.35 1 1 .35-1 .35-.35 1-.35-1-1-.35 1-.35Z" fill="currentColor"/>' +
+            '</svg>' +
             '</button>' +
             '<span id="shareHubBtnWrap" style="position:relative;display:inline-flex;">' +
             '<button id="shareHubBtn" title="Share &amp; Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">' +
@@ -3853,6 +3921,7 @@
         /* Re-bind all initial listeners for a fresh DOM */
         if (typeof initializeInteractiveInputs === 'function') initializeInteractiveInputs();
         if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+        if (typeof initTableScrollHints === 'function') initTableScrollHints();
         this.paint();
     };
 
@@ -4895,7 +4964,8 @@
             var _hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
             var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
 
-            var bodyContent = '<div class="table-container overflow-x-auto no-scrollbar relative mbt-mobile-safe">' +
+            var bodyContent = '<div class="mbt-table-scroll-wrap">' +
+                '<div class="table-container overflow-x-auto mbt-table-scroll relative mbt-mobile-safe">' +
                 '<table class="w-full border-collapse min-w-full table-auto">' +
                 '<thead class="bg-slate-50 text-[11px] font-black uppercase tracking-tighter text-slate-400 border-b border-slate-100">' +
                 '<tr>' +
@@ -4925,6 +4995,8 @@
                 (section.items || []).map(function (item) { return mBT.ui.render.lineItem(item, name); }).join('') +
                 '</tbody>' +
                 '</table>' +
+                '</div>' +
+                '<div class="mbt-table-fade-r" aria-hidden="true"></div>' +
                 '</div>' +
                 '<div class="p-1 bg-slate-50 border-t border-slate-100">' +
                 '<button data-action="section-add" data-id="' + safeSectionName + '" class="w-full py-1.5 text-center text-blue-500 font-black text-[9px] hover:bg-blue-50 hover:text-blue-700 transition-colors uppercase tracking-widest">' +
@@ -5133,6 +5205,36 @@
 
     // Logic Resolution: Placeholders for event listeners handled by Tier 6.
     function initializeInteractiveInputs() { }
+
+    /* Budget line tables: thin scrollbar is always visible via CSS; fade cue when more content right */
+    function initTableScrollHints() {
+        var wraps = document.querySelectorAll('.mbt-table-scroll-wrap');
+        for (var i = 0; i < wraps.length; i++) {
+            var wrap = wraps[i];
+            if (wrap.getAttribute('data-scroll-hint') === '1') continue;
+            wrap.setAttribute('data-scroll-hint', '1');
+            var bar = wrap.querySelector('.table-container');
+            var fadeR = wrap.querySelector('.mbt-table-fade-r');
+            if (!bar || !fadeR) continue;
+            (function (barEl, fadeEl) {
+                var update = function () {
+                    var overflow = barEl.scrollWidth > barEl.clientWidth + 1;
+                    var atEnd = barEl.scrollLeft >= barEl.scrollWidth - barEl.clientWidth - 1;
+                    if (overflow && !atEnd) fadeEl.classList.add('visible');
+                    else fadeEl.classList.remove('visible');
+                };
+                barEl.addEventListener('scroll', update);
+                window.addEventListener('resize', update);
+                if (typeof ResizeObserver !== 'undefined') {
+                    try {
+                        var ro = new ResizeObserver(update);
+                        ro.observe(barEl);
+                    } catch (e) { /* ignore */ }
+                }
+                update();
+            })(bar, fadeR);
+        }
+    }
 
     // Logic Resolution: Drag and drop initialization.
     function initializeDragAndDrop() {
@@ -12448,7 +12550,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.79', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.81', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
