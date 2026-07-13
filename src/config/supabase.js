@@ -2,10 +2,15 @@
 (function () {
     'use strict';
 
-    /* --- Credentials stored in localStorage or fallback to OpenGate embedded keys per security protocol --- */
+    /* --- mbt-collab is now the default backend for regular cloud sign-in (see mBT/src/config/supabase-collab.js).
+           localStorage override wins first (advanced/BYO-Supabase debugging), then the hardcoded mbt-collab
+           default, then the OpenGate community-rates project as a last-resort fallback. --- */
+    var CLOUD_DEFAULT_URL = 'https://omzyycoaaxymjitlnhhj.supabase.co';
+    var CLOUD_DEFAULT_ANON = 'sb_publishable_u_aiS0VvZNMOXEfr0F4fuQ_WYFW1w_k';
+
     window.mBTSupabaseConfig = {
-        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.url : ''); },
-        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.key : ''); },
+        get API_URL()    { return localStorage.getItem('mbt_supabase_url') || CLOUD_DEFAULT_URL || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.url : ''); },
+        get ANON_KEY()   { return localStorage.getItem('mbt_supabase_key') || CLOUD_DEFAULT_ANON || (window.mBTOG && window.mBTOG.cloud ? window.mBTOG.cloud.key : ''); },
         get AUTH_TOKEN() { return localStorage.getItem('mbt_supabase_auth_token') || ''; },
         isConfigured: function () {
             return !!(this.API_URL && this.ANON_KEY);

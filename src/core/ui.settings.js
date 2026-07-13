@@ -389,52 +389,58 @@
                         '</div>' +
                     '</div>';
         }
-           if (tabName === 'ai') {
+        if (tabName === 'connections') {
+            var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
             var ma = window.mBTAssistant;
-            if (!ma) return '<div class="p-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest">AI Service Unavailable</div>';
+            var isDarkConn = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _sw = isDarkConn ? 'bg-slate-600' : 'bg-slate-200';
+            var aiProvidersCardBody = '';
 
-            var saveHistory = (budget && budget.aiContext && budget.aiContext.saveHistory) || false;
-            var provider = ma.getProvider();
-            var storedPrompt = ma.getSystemPrompt() || '';
-            var keyLinks = {
-                'gemini':      'https://aistudio.google.com/app/apikey',
-                'openai':      'https://platform.openai.com/api-keys',
-                'deepseek':    'https://platform.deepseek.com/api_keys',
-                'grok':        'https://console.x.ai/',
-                'anthropic':   'https://console.anthropic.com/settings/keys',
-                'openrouter':  'https://openrouter.ai/keys',
-                'lmstudio':    '#'
-            };
+            if (!ma) {
+                aiProvidersCardBody = '<div class="p-4 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest">AI Service Unavailable</div>';
+            } else {
+                var saveHistory = (budget && budget.aiContext && budget.aiContext.saveHistory) || false;
+                var provider = ma.getProvider();
+                var storedPrompt = ma.getSystemPrompt() || '';
+                var keyLinks = {
+                    'gemini':      'https://aistudio.google.com/app/apikey',
+                    'openai':      'https://platform.openai.com/api-keys',
+                    'deepseek':    'https://platform.deepseek.com/api_keys',
+                    'grok':        'https://console.x.ai/',
+                    'anthropic':   'https://console.anthropic.com/settings/keys',
+                    'openrouter':  'https://openrouter.ai/keys',
+                    'lmstudio':    '#'
+                };
 
-            var storedLmEndpoint = ma.getLMStudioEndpoint();
-            var storedLmModel = ma.getLMStudioModel();
-            
-            var cachedChatModels = [];
-            try { cachedChatModels = JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) {}
-            var storedChatModel = ma.getChatModel(provider);
+                var storedLmEndpoint = ma.getLMStudioEndpoint();
+                var storedLmModel = ma.getLMStudioModel();
 
-            var storedImgProvider = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
-            var storedImgModel    = ma.getImageModel();
-            var cachedImgModels = [];
-            try { cachedImgModels = JSON.parse(localStorage.getItem('mbt_cached_img_models_' + storedImgProvider) || '[]'); } catch (e) {}
+                var cachedChatModels = [];
+                try { cachedChatModels = JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) {}
+                var storedChatModel = ma.getChatModel(provider);
 
-            var chatModelOpts = cachedChatModels.length
-                ? cachedChatModels.map(function (m) {
-                    var id = (typeof m === 'object') ? (m.id || m) : m;
-                    var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
-                    return '<option value="' + id + '"' + (storedChatModel === id ? ' selected' : '') + '>' + label + '</option>';
-                  }).join('')
-                : (storedChatModel ? '<option value="' + storedChatModel + '" selected>' + storedChatModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
+                var storedImgProvider = localStorage.getItem('mbt_ai_image_provider') || 'pollinations';
+                var storedImgModel    = ma.getImageModel();
+                var cachedImgModels = [];
+                try { cachedImgModels = JSON.parse(localStorage.getItem('mbt_cached_img_models_' + storedImgProvider) || '[]'); } catch (e) {}
 
-            var imgModelOpts = cachedImgModels.length
-                ? cachedImgModels.map(function (m) {
-                    var id = (typeof m === 'object') ? (m.id || m) : m;
-                    var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
-                    return '<option value="' + id + '"' + (storedImgModel === id ? ' selected' : '') + '>' + label + '</option>';
-                  }).join('')
-                : (storedImgModel ? '<option value="' + storedImgModel + '" selected>' + storedImgModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
+                var chatModelOpts = cachedChatModels.length
+                    ? cachedChatModels.map(function (m) {
+                        var id = (typeof m === 'object') ? (m.id || m) : m;
+                        var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
+                        return '<option value="' + id + '"' + (storedChatModel === id ? ' selected' : '') + '>' + label + '</option>';
+                      }).join('')
+                    : (storedChatModel ? '<option value="' + storedChatModel + '" selected>' + storedChatModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
 
-            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
+                var imgModelOpts = cachedImgModels.length
+                    ? cachedImgModels.map(function (m) {
+                        var id = (typeof m === 'object') ? (m.id || m) : m;
+                        var label = (typeof m === 'object') ? (m.name || m.id || m) : m;
+                        return '<option value="' + id + '"' + (storedImgModel === id ? ' selected' : '') + '>' + label + '</option>';
+                      }).join('')
+                    : (storedImgModel ? '<option value="' + storedImgModel + '" selected>' + storedImgModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>');
+
+                aiProvidersCardBody =
                         '<div class="p-4 bg-slate-900 rounded-3xl border border-black shadow-2xl text-white">' +
                             '<div class="flex justify-between items-start mb-2">' +
                                 '<div>' +
@@ -535,30 +541,44 @@
 
                                 '<button id="saveApiKeyBtn" onclick="mBT_syncAIProvider()" class="w-full bg-blue-600 text-white py-2.5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-blue-500 active:scale-95 transition-all border-b-4 border-blue-800">Synchronize AI Link</button>' +
                             '</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>';
-        }
-        if (tabName === 'connections') {
-            var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
+                        '</div>';
+            }
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
-                            '<div class="flex justify-between items-start mb-3">' +
-                                '<div>' +
-                                    '<h3 class="text-[10px] font-black uppercase tracking-widest text-emerald-400">Production Cloud</h3>' +
-                                    '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Upstream Data Bridge</p>' +
-                                '</div>' +
-                                '<div class="text-slate-700">' + mBTAssets.cloud + '</div>' +
-                            '</div>' +
-                            '<div class="space-y-3">' +
-                                '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Webhook Endpoint</label>' +
-                                    '<div class="flex gap-2">' +
-                                        '<input type="text" id="cloudWebhookInput" value="' + esc(webhookUrl) + '" onchange="localStorage.setItem(\'' + storageKeyPrefix + 'cloudWebhook\', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.mbt-assistant.com/ingest..">' +
-                                        '<button onclick="var url=document.getElementById(\'cloudWebhookInput\').value; if(!url) return mBTME.alert(\'Error\', \'No URL\'); mBTME.showLoader(\'Pinging..\'); fetch(url, {method:\'POST\', headers:{\'Content-Type\':\'application/json\'}, body:JSON.stringify({test:true, source:\'MooBudget\', project:budget.projectName, ts:new Date().toISOString()})}).then(function(r){ mBTME.hideLoader(); if(r.ok) mBTME.alert(\'Success\',\'Endpoint Reachable\'); else mBTME.alert(\'Error\', \'Status: \'+r.status); }).catch(function(e){ mBTME.hideLoader(); mBTME.alert(\'Connection Failed\', e.message); })" class="px-3 bg-emerald-900/50 text-emerald-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-900 border border-emerald-800 transition-colors">Test</button>' +
+                        '<input type="text" id="connectionsSearchInput" placeholder="Search connections..." oninput="var q=this.value.toLowerCase();var cards=document.querySelectorAll(\'.connection-card\');for(var i=0;i<cards.length;i++){var el=cards[i];var txt=el.textContent.toLowerCase();if(!q){el.classList.remove(\'hidden\');}else{el.classList.toggle(\'hidden\',txt.indexOf(q)===-1);}}" class="w-full bg-slate-100 text-slate-800 border border-slate-200 rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder-slate-400">' +
+                        '<div class="space-y-3">' +
+                            '<div class="connection-card">' +
+                                '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
+                                    '<div class="flex justify-between items-start mb-3">' +
+                                        '<div>' +
+                                            '<h3 class="text-[10px] font-black uppercase tracking-widest text-blue-400">AI Providers</h3>' +
+                                            '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Chat, image generation, and assistant configuration</p>' +
+                                        '</div>' +
+                                        '<div class="text-slate-700 opacity-50">' + mBTAssets.sparkle + '</div>' +
                                     '</div>' +
-                                    '<p class="text-[8px] text-slate-600 mt-2">Destination for "Cloud Dispatch". Accepts JSON payloads containing Ledger and Budget totals.</p>' +
+                                    aiProvidersCardBody +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="connection-card">' +
+                                '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
+                                    '<div class="flex justify-between items-start mb-3">' +
+                                        '<div>' +
+                                            '<h3 class="text-[10px] font-black uppercase tracking-widest text-emerald-400">Production Webhook</h3>' +
+                                            '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Upstream Data Bridge</p>' +
+                                        '</div>' +
+                                        '<div class="text-slate-700">' + mBTAssets.cloud + '</div>' +
+                                    '</div>' +
+                                    '<div class="space-y-3">' +
+                                        '<div>' +
+                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Webhook Endpoint</label>' +
+                                            '<div class="flex gap-2">' +
+                                                '<input type="text" id="cloudWebhookInput" value="' + esc(webhookUrl) + '" onchange="localStorage.setItem(\'' + storageKeyPrefix + 'cloudWebhook\', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.mbt-assistant.com/ingest..">' +
+                                                '<button onclick="var url=document.getElementById(\'cloudWebhookInput\').value; if(!url) return mBTME.alert(\'Error\', \'No URL\'); mBTME.showLoader(\'Pinging..\'); fetch(url, {method:\'POST\', headers:{\'Content-Type\':\'application/json\'}, body:JSON.stringify({test:true, source:\'MooBudget\', project:budget.projectName, ts:new Date().toISOString()})}).then(function(r){ mBTME.hideLoader(); if(r.ok) mBTME.alert(\'Success\',\'Endpoint Reachable\'); else mBTME.alert(\'Error\', \'Status: \'+r.status); }).catch(function(e){ mBTME.hideLoader(); mBTME.alert(\'Connection Failed\', e.message); })" class="px-3 bg-emerald-900/50 text-emerald-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-900 border border-emerald-800 transition-colors">Test</button>' +
+                                            '</div>' +
+                                            '<p class="text-[8px] text-slate-600 mt-2">Destination for "Cloud Dispatch". Accepts JSON payloads containing Ledger and Budget totals.</p>' +
+                                            '<p class="text-[8px] text-amber-500 font-bold mt-1">Note: automatic dispatch is not yet implemented. The Test button only checks connectivity. It does not send live budget data.</p>' +
+                                        '</div>' +
+                                    '</div>' +
                                 '</div>' +
                             '</div>' +
                         '</div>' +
@@ -575,10 +595,117 @@
             var profileName = localStorage.getItem('mbt_profile_display_name') || '';
             var profileRegion = localStorage.getItem('mbt_profile_region') || 'Jamaica';
             var profileRole = localStorage.getItem('mbt_profile_role') || '';
-            var authView = localStorage.getItem('mbt_auth_view') || 'login';
             var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
             var ogShareContacts = JSON.parse(localStorage.getItem('moo_og_share_contacts') || 'false');
-            return "\n                    <div class=\"h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300\">\n\n                        <!-- Authentication Section -->\n                        <div class=\"settings-card transition-all duration-300\">\n                            ".concat(isSignedIn ? "\n                            <div class=\"flex items-center justify-between\">\n                                <div class=\"flex items-center gap-3\">\n                                    <div class=\"w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs border border-emerald-100 uppercase tracking-tighter\">\n                                        ".concat(signedInEmail.charAt(0), "\n                                    </div>\n                                    <div>\n                                        <div class=\"text-[10px] font-black settings-text-primary tracking-tight leading-none mb-1\">").concat(esc(signedInEmail), "</div>\n                                        <div class=\"flex items-center gap-1.5\">\n                                            <span class=\"w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse\"></span>\n                                            <span class=\"text-[8px] text-slate-400 uppercase tracking-widest font-black\">Connected to Cloud</span>\n                                        </div>\n                                    </div>\n                                </div>\n                                <button onclick=\"mBT.features.settings.cloudSignOut()\" class=\"px-3 py-1.5 text-slate-400 hover:text-rose-500 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all\">Sign Out</button>\n                            </div>") : "\n                            <div class=\"flex gap-4 border-b ".concat(_sep, " mb-3\">\n                                <button onclick=\"localStorage.setItem('mbt_auth_view', 'login'); mBT.features.settings.open('cloud');\" class=\"pb-2 text-[9px] font-black uppercase tracking-widest transition-all ").concat(authView === 'login' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-300 hover:text-slate-400', "\">Sign In</button>\n                                <button onclick=\"localStorage.setItem('mbt_auth_view', 'signup'); mBT.features.settings.open('cloud');\" class=\"pb-2 text-[9px] font-black uppercase tracking-widest transition-all ").concat(authView === 'signup' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-300 hover:text-slate-400', "\">Sign Up</button>\n                            </div>\n                            <div class=\"space-y-2\">\n                                ").concat(authView === 'forgot' ? "\n                                    <h4 class=\"text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1\">Reset Password</h4>\n                                    <input type=\"email\" id=\"cloudEmail\" placeholder=\"Your account email\" class=\"w-full px-3 py-2 ".concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\">\n                                    <div id=\"cloudAuthError\" class=\"text-[9px] text-red-500 font-bold hidden px-1\"></div>\n                                    <button onclick=\"mBT.features.settings.cloudForgotPassword()\" class=\"w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95\">Send recovery email</button>\n                                    <button onclick=\"localStorage.setItem('mbt_auth_view', 'login'); mBT.features.settings.open('cloud');\" class=\"w-full text-center text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-400 transition-colors\">Back to sign in</button>\n                                ") : authView === 'signup' ? "\n                                    <div class=\"grid grid-cols-1 gap-2\">\n                                        <input type=\"text\" id=\"cloudUsername\" placeholder=\"Unique Username\" class=\"w-full px-3 py-2 ".concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\">\n                                        <input type=\"email\" id=\"cloudEmail\" placeholder=\"Email Address\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\" autocomplete=\"email\">\n                                        <input type=\"password\" id=\"cloudPassword\" placeholder=\"Strong Password\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\" autocomplete=\"new-password\">\n                                    </div>\n                                    <div id=\"cloudAuthError\" class=\"text-[9px] text-red-500 font-bold hidden px-1\"></div>\n                                    <button onclick=\"mBT.features.settings.cloudSignUp()\" class=\"w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95\">Create Free Account</button>\n                                ") : "\n                                    <div class=\"grid grid-cols-1 gap-2\">\n                                        <input type=\"email\" id=\"cloudEmail\" placeholder=\"Email Address\" class=\"w-full px-3 py-2 ".concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\" autocomplete=\"email\">\n                                        <input type=\"password\" id=\"cloudPassword\" placeholder=\"Password\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\" autocomplete=\"current-password\">\n                                    </div>\n                                    <div id=\"cloudAuthError\" class=\"text-[9px] text-red-500 font-bold hidden px-1\"></div>\n                                    <div class=\"flex flex-col gap-2\">\n                                        <button onclick=\"mBT.features.settings.cloudSignIn()\" class=\"w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95\">Sign In</button>\n                                        <div class=\"flex items-center gap-2 py-0.5\">\n                                            <div class=\"h-px flex-grow bg-slate-100\"></div>\n                                            <span class=\"text-[8px] font-black text-slate-300 uppercase tracking-widest\">or</span>\n                                            <div class=\"h-px flex-grow bg-slate-100\"></div>\n                                        </div>\n                                        <button onclick=\"mBT.features.settings.cloudSignInGoogle()\" class=\"w-full py-2 bg-white border border-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2\">\n                                            <svg class=\"w-3 h-3\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M12.48 10.92v3.28h7.84c-.24 1.84-.908 3.162-1.9 4.155C17.18 19.582 15.003 20.634 12.48 20.634c-4.02 0-7.27-3.25-7.27-7.27s3.25-7.27 7.27-7.27c2.17 0 3.847.85 4.97 1.948l2.315-2.315C18.17 4.18 15.59 3 12.48 3 7.302 3 3.1 7.202 3.1 12.38s4.202 9.38 9.38 9.38c2.805 0 4.925-.923 6.59-2.664 1.715-1.715 2.26-4.134 2.26-6.09 0-.58-.05-1.134-.145-1.666h-8.705z\"/></svg>\n                                            Continue with Google\n                                        </button>\n                                        <button onclick=\"localStorage.setItem('mbt_auth_view', 'forgot'); mBT.features.settings.open('cloud');\" class=\"text-center text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-400 transition-colors\">Forgot Password?</button>\n                                    </div>\n                                "), "\n                            </div>\n                            "), "\n                        </div>\n\n                        <!-- User Profile (visible when signed in) -->\n                        ").concat(isSignedIn ? "\n                        <div class=\"settings-card space-y-3\">\n                            <div>\n                                <h3 class=\"text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5\">Profile Identity</h3>\n                                <p class=\"text-[9px] text-slate-400 font-bold\">Public identity used for community database contributions.</p>\n                            </div>\n                            <div class=\"grid grid-cols-1 gap-2\">\n                                <div class=\"space-y-1.5\">\n                                    <label class=\"text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1\">Display Name</label>\n                                    <input type=\"text\" id=\"profileDisplayName\" placeholder=\"e.g. Maverick J.\" value=\"".concat(esc(profileName), "\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\">\n                                </div>\n                                <div class=\"grid grid-cols-2 gap-2\">\n                                    <div class=\"space-y-1.5\">\n                                        <label class=\"text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1\">Home Market</label>\n                                        <select id=\"profileRegion\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer\">\n                                            ").concat(Object.keys(mBTOG.RATE_REGIONS).map(function (r) { return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join(''), "\n                                        </select>\n                                    </div>\n                                    <div class=\"space-y-1.5\">\n                                        <label class=\"text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1\">Standard Role</label>\n                                        <input type=\"text\" id=\"profileRole\" placeholder=\"Producer / DP\" value=\"").concat(esc(profileRole), "\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\">\n                                    </div>\n                                </div>\n                            </div>\n                            <div class=\"pt-3 border-t ").concat(_sep, "\">\n                                <button onclick=\"var el=document.getElementById('passwordChangeSect'); el.classList.toggle('hidden');\" class=\"text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors\">Change Password?</button>\n                                <div id=\"passwordChangeSect\" class=\"hidden space-y-2 animate-in slide-in-from-top-2 duration-300\">\n                                    <input type=\"password\" id=\"newPasswordInput\" placeholder=\"New Secret Password\" class=\"w-full px-3 py-2 ").concat(_i, " border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all\">\n                                    <button onclick=\"mBT.features.settings.cloudChangePassword()\" class=\"w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95\">Update Security</button>\n                                </div>\n                            </div>\n                            <button onclick=\"mBT.features.settings.saveProfile()\" class=\"w-full py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all active:scale-95\">Synchronize Profile</button>\n                        </div>") : '', "\n\n                        <!-- DATABASE Community Rates -->\n                        <div class=\"settings-card\">\n                            <h3 class=\"text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5\">Community Rates</h3>\n                            <p class=\"text-[9px] text-slate-400 font-bold mb-2\">Pull updated industry rates from the shared community database. No account required.</p>\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <span class=\"text-[9px] font-bold text-slate-500 uppercase tracking-widest\">Auto-sync on start</span>\n                                <label class=\"relative inline-flex items-center cursor-pointer\">\n                                    <input type=\"checkbox\" id=\"ogCloudSyncToggle\" ").concat(ogCloudOn ? 'checked' : '', " onchange=\"mBT.features.settings.toggleCloudSync(this.checked);\" class=\"sr-only peer\">\n                                    <div class=\"w-11 h-6 ").concat(_sw, " peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600\"></div>\n                                </label>\n                            </div>\n                            <button onclick=\"if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert('DATABASE', n + ' rate(s) pulled from community.'); mBT.features.settings.open('cloud'); }).catch(function(e){ console.error('Sync Failed:', e); mBTME.alert('Sync Error', 'Failed to sync rates from community.'); }); } else { mBTME.alert('DATABASE', 'Engine not available.'); }\" class=\"w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all\">Sync Rates Now</button>\n                        </div>\n\n                        <!-- Project Backup + Sync -->\n                        <div class=\"settings-card\">\n                            <div class=\"flex items-center justify-between mb-0.5\">\n                                <h3 class=\"text-[10px] font-black uppercase tracking-widest settings-text-primary\">Background Sync</h3>\n                                <div id=\"sync-heartbeat-pill\" class=\"inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400\">\n                                    <span class=\"w-1.5 h-1.5 rounded-full bg-slate-300\"></span>\n                                    Status Check...\n                                </div>\n                            </div>\n                            <p class=\"text-[9px] text-slate-400 font-bold mb-2\">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <span class=\"text-[9px] font-bold text-slate-500 uppercase tracking-widest\">Auto-Sync Changes</span>\n                                <label class=\"relative inline-flex items-center cursor-pointer\">\n                                    <input type=\"checkbox\" id=\"syncOnReconnectToggle\" ").concat(syncOnReconnect ? 'checked' : '', " onchange=\"localStorage.setItem('mbt_supabase_sync_on_reconnect', this.checked ? 'true' : 'false');\" class=\"sr-only peer\">\n                                    <div class=\"w-11 h-6 ").concat(_sw, " peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600\"></div>\n                                </label>\n                            </div>\n                            <button onclick=\"if(window.mBTSync && localStorage.getItem('mbt_supabase_auth_token')){ mBTSync.pushAll().then(function(r){ mBTME.alert('Backup', r.synced + ' records pushed, ' + r.errors + ' errors.'); }); } else { mBTME.alert('Backup', 'You must be signed in to force push data.'); }\" class=\"w-full py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all\">Force Push Data Now</button>\n                        </div>\n\n                        <!-- Contact Sharing Privacy -->\n                        <div class=\"settings-card\">\n                            <h3 class=\"text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5\">Contact Sharing</h3>\n                            <p class=\"text-[9px] text-slate-400 font-bold mb-2\">Allow contacts you mark as shared to be published to the OpenGate community roster. Only contacts with sharing enabled are affected.</p>\n                            <div class=\"flex items-center justify-between\">\n                                <span class=\"text-[9px] font-bold text-slate-500 uppercase tracking-widest\">Publish Shared Contacts</span>\n                                <label class=\"relative inline-flex items-center cursor-pointer\">\n                                    <input type=\"checkbox\" id=\"ogShareContactsToggle\" ").concat(ogShareContacts ? 'checked' : '', " onchange=\"mBT.features.settings.toggleContactSharing(this.checked);\" class=\"sr-only peer\">\n                                    <div class=\"w-11 h-6 ").concat(_sw, " peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600\"></div>\n                                </label>\n                            </div>\n                        </div>\n                    </div>");
+
+            var authSectionHtml = isSignedIn ?
+                ('<div class="flex items-center justify-between">' +
+                    '<div class="flex items-center gap-3">' +
+                        '<div class="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs border border-emerald-100 uppercase tracking-tighter">' +
+                            signedInEmail.charAt(0) +
+                        '</div>' +
+                        '<div>' +
+                            '<div class="text-[10px] font-black settings-text-primary tracking-tight leading-none mb-1">' + esc(signedInEmail) + '</div>' +
+                            '<div class="flex items-center gap-1.5">' +
+                                '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>' +
+                                '<span class="text-[8px] text-slate-400 uppercase tracking-widest font-black">Connected to Cloud</span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-1.5 text-slate-400 hover:text-rose-500 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all">Sign Out</button>' +
+                '</div>') :
+                ('<p class="text-[10px] font-bold text-slate-400 mb-3 leading-relaxed">Sign in to sync your projects and collaborate on shared budgets.</p>' +
+                '<button onclick="window.mBTShowCollabAuth(function(){ mBT.features.settings.open(\'cloud\'); });" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">Sign In / Create Account</button>');
+
+            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
+
+                        '<!-- Authentication Section -->' +
+                        '<div class="settings-card transition-all duration-300">' +
+                            authSectionHtml +
+                        '</div>' +
+
+                        '<!-- User Profile (visible when signed in) -->' +
+                        (isSignedIn ?
+                        ('<div class="settings-card space-y-3">' +
+                            '<div>' +
+                                '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Profile Identity</h3>' +
+                                '<p class="text-[9px] text-slate-400 font-bold">Public identity used for community database contributions.</p>' +
+                            '</div>' +
+                            '<div class="grid grid-cols-1 gap-2">' +
+                                '<div class="space-y-1.5">' +
+                                    '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Name</label>' +
+                                    '<input type="text" id="profileDisplayName" placeholder="e.g. Maverick J." value="' + esc(profileName) + '" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                                '</div>' +
+                                '<div class="grid grid-cols-2 gap-2">' +
+                                    '<div class="space-y-1.5">' +
+                                        '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Home Market</label>' +
+                                        '<select id="profileRegion" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">' +
+                                            Object.keys(mBTOG.RATE_REGIONS).map(function (r) { return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') +
+                                        '</select>' +
+                                    '</div>' +
+                                    '<div class="space-y-1.5">' +
+                                        '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Standard Role</label>' +
+                                        '<input type="text" id="profileRole" placeholder="Producer / DP" value="' + esc(profileRole) + '" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="pt-3 border-t ' + _sep + '">' +
+                                '<button onclick="var el=document.getElementById(\'passwordChangeSect\'); el.classList.toggle(\'hidden\');" class="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors">Change Password?</button>' +
+                                '<div id="passwordChangeSect" class="hidden space-y-2 animate-in slide-in-from-top-2 duration-300">' +
+                                    '<input type="password" id="newPasswordInput" placeholder="New Secret Password" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                                    '<button onclick="mBT.features.settings.cloudChangePassword()" class="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Update Security</button>' +
+                                '</div>' +
+                            '</div>' +
+                            '<button onclick="mBT.features.settings.saveProfile()" class="w-full py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all active:scale-95">Synchronize Profile</button>' +
+                        '</div>') : '') +
+
+                        '<!-- DATABASE Community Rates -->' +
+                        '<div class="settings-card">' +
+                            '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Community Rates</h3>' +
+                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Pull updated industry rates from the shared community database. No account required.</p>' +
+                            '<div class="flex items-center justify-between mb-2">' +
+                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>' +
+                                '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<input type="checkbox" id="ogCloudSyncToggle" ' + (ogCloudOn ? 'checked' : '') + ' onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">' +
+                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
+                                '</label>' +
+                            '</div>' +
+                            '<button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert(\'DATABASE\', n + \' rate(s) pulled from community.\'); mBT.features.settings.open(\'cloud\'); }).catch(function(e){ console.error(\'Sync Failed:\', e); mBTME.alert(\'Sync Error\', \'Failed to sync rates from community.\'); }); } else { mBTME.alert(\'DATABASE\', \'Engine not available.\'); }" class="w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>' +
+                        '</div>' +
+
+                        '<!-- Project Backup + Sync -->' +
+                        '<div class="settings-card">' +
+                            '<div class="flex items-center justify-between mb-0.5">' +
+                                '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Background Sync</h3>' +
+                                '<div id="sync-heartbeat-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400">' +
+                                    '<span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>' +
+                                    'Status Check...' +
+                                '</div>' +
+                            '</div>' +
+                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>' +
+                            '<div class="flex items-center justify-between mb-2">' +
+                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-Sync Changes</span>' +
+                                '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<input type="checkbox" id="syncOnReconnectToggle" ' + (syncOnReconnect ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_supabase_sync_on_reconnect\', this.checked ? \'true\' : \'false\');" class="sr-only peer">' +
+                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
+                                '</label>' +
+                            '</div>' +
+                            '<button onclick="if(window.mBTSync && localStorage.getItem(\'mbt_supabase_auth_token\')){ mBTSync.pushAll().then(function(r){ mBTME.alert(\'Backup\', r.synced + \' records pushed, \' + r.errors + \' errors.\'); }); } else { mBTME.alert(\'Backup\', \'You must be signed in to force push data.\'); }" class="w-full py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>' +
+                        '</div>' +
+
+                        '<!-- Contact Sharing Privacy -->' +
+                        '<div class="settings-card">' +
+                            '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Contact Sharing</h3>' +
+                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Allow contacts you mark as shared to be published to the OpenGate community roster. Only contacts with sharing enabled are affected.</p>' +
+                            '<div class="flex items-center justify-between">' +
+                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Publish Shared Contacts</span>' +
+                                '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<input type="checkbox" id="ogShareContactsToggle" ' + (ogShareContacts ? 'checked' : '') + ' onchange="mBT.features.settings.toggleContactSharing(this.checked);" class="sr-only peer">' +
+                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>' +
+                                '</label>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
         }
         if (tabName === 'database') {
             var dbSubTab = subTab || 'contacts';
@@ -611,7 +738,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.70';
+            var currentVersion = updateStatus.localVersion || 'v23.79';
 
             var statusMsg = '';
             if (isChecking) {

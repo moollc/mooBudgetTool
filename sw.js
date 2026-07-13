@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v23.70';
+var CACHE_NAME = 'mbt-monolith-cache-v23.79';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -159,9 +159,32 @@ self.addEventListener('fetch', function(event) {
                 }
                 return networkResponse;
             }).catch(function() {
-                /* 4. Network failed and nothing in cache — fallback for navigation */
+                /* 4. Network failed and nothing in cache — fallback for navigation.
+                   Resolve against self.registration.scope (absolute, unambiguous) instead of
+                   a bare relative string, which can fail to match the precached entry if the
+                   two resolution contexts (install-time page URL vs runtime SW URL) ever
+                   diverge — that mismatch causes caches.match() to return undefined, which
+                   makes respondWith() reject and Chrome show ERR_FAILED instead of the app. */
                 if (event.request.mode === 'navigate') {
-                    return caches.match('./index.html', { ignoreSearch: true });
+                    var shellUrl = new URL('index.html', self.registration.scope).href;
+                    return caches.match(shellUrl, { ignoreSearch: true }).then(function (shellResponse) {
+                        if (shellResponse) return shellResponse;
+                        /* Last-resort: scan the cache directly for the app shell specifically —
+                           NOT any index.html, since each tool under src/tools has its own
+                           index.html that is also precached, and would serve the wrong page
+                           (e.g. Contacts tool) as the offline shell if matched loosely. Only
+                           accept an entry whose path equals the root index.html. */
+                        return caches.open(CACHE_NAME).then(function (cache) {
+                            return cache.keys().then(function (requests) {
+                                var scopePath = new URL(self.registration.scope).pathname;
+                                var match = requests.filter(function (r) {
+                                    var p = new URL(r.url).pathname;
+                                    return p === scopePath + 'index.html' || p === scopePath;
+                                })[0];
+                                return match ? cache.match(match) : new Response('Offline and no cached shell available.', { status: 503, statusText: 'Offline' });
+                            });
+                        });
+                    });
                 }
                 /* Non-navigation miss: return empty 503 so respondWith gets a valid Response */
                 return new Response('', { status: 503, statusText: 'Offline' });

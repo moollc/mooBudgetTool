@@ -35,13 +35,7 @@
 
     /* ---- Top Bar ---- */
     #topbar { height: var(--header-h); background: #0f172a; color: #fff; display: flex; align-items: center; gap: 10px; padding: 0 12px; flex-shrink: 0; }
-    /* --- Tap targets: 44px minimum for interactive elements --- */
-    button, a { min-height: 44px; }
-    /* Compact mode: tight toolbar when opened from compact budget view */
-    body.compact #preview-toolbar .toolbar-btn,
-    body.compact #preview-toolbar .tab-btn { min-height: unset; }
-    body.compact #preview-toolbar .tab-bar { min-height: unset; }
-    #topbar button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+    #topbar button { background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 4px 12px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
     #topbar button:hover { background: rgba(255,255,255,0.2); }
     #topbar button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
     #topbar-title { font-size: 12px; font-weight: 700; color: #94a3b8; }
@@ -546,6 +540,62 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Helpers ======== */
   function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+  var _dbDialogEl = null;
+  function _dbRemoveDialog() {
+    if (_dbDialogEl && _dbDialogEl.parentNode) {
+      _dbDialogEl.parentNode.removeChild(_dbDialogEl);
+      _dbDialogEl = null;
+    }
+  }
+  function dbAlert(message, title) {
+    _dbRemoveDialog();
+    title = title || 'Notice';
+    var overlay = document.createElement('div');
+    overlay.id = 'db-dialog-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML =
+      '<div role="dialog" aria-modal="true" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(15,23,42,.2);font-family:inherit;">' +
+      '<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:8px;">' + esc(title) + '</div>' +
+      '<div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:16px;">' + esc(message) + '</div>' +
+      '<div style="display:flex;justify-content:flex-end;">' +
+      '<button type="button" id="db-dialog-ok" style="padding:6px 16px;border-radius:4px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;min-height:32px;">OK</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+    _dbDialogEl = overlay;
+    var okBtn = overlay.querySelector('#db-dialog-ok');
+    function dismiss() { _dbRemoveDialog(); }
+    okBtn.addEventListener('click', dismiss);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) dismiss(); });
+    okBtn.focus();
+  }
+  function dbConfirm(message, onConfirm, title) {
+    _dbRemoveDialog();
+    title = title || 'Confirm';
+    var overlay = document.createElement('div');
+    overlay.id = 'db-dialog-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML =
+      '<div role="dialog" aria-modal="true" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(15,23,42,.2);font-family:inherit;">' +
+      '<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:8px;">' + esc(title) + '</div>' +
+      '<div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:16px;">' + esc(message) + '</div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+      '<button type="button" id="db-dialog-cancel" style="padding:6px 14px;border-radius:4px;border:1px solid #e2e8f0;background:#fff;color:#64748b;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;min-height:32px;">Cancel</button>' +
+      '<button type="button" id="db-dialog-confirm" style="padding:6px 16px;border-radius:4px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;min-height:32px;">Confirm</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+    _dbDialogEl = overlay;
+    var cancelBtn = overlay.querySelector('#db-dialog-cancel');
+    var confirmBtn = overlay.querySelector('#db-dialog-confirm');
+    function dismiss() { _dbRemoveDialog(); }
+    cancelBtn.addEventListener('click', dismiss);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) dismiss(); });
+    confirmBtn.addEventListener('click', function () {
+      dismiss();
+      if (typeof onConfirm === 'function') onConfirm();
+    });
+    confirmBtn.focus();
+  }
+
   function storageKey(templateId) {
     return 'mbtdb_' + templateId + '_' + (projectKey || projectId || 'default');
   }
@@ -579,8 +629,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }, 600);
   }
 
+  function dbPushUndoImmediate() {
+    clearTimeout(dbUndoDebounceTimer);
+    dbUndoDebounceTimer = null;
+    dbUndoStack.push(dbCaptureSnapshot());
+    if (dbUndoStack.length > DB_MAX_HISTORY) dbUndoStack.shift();
+    dbRedoStack = [];
+    dbUpdateUndoUI();
+  }
+
   function dbUndo() {
     if (!dbUndoStack.length) return;
+    clearTimeout(dbUndoDebounceTimer);
+    dbUndoDebounceTimer = null;
     dbRedoStack.push(dbCaptureSnapshot());
     var prev = dbUndoStack.pop();
     editorData = prev;
@@ -591,6 +652,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function dbRedo() {
     if (!dbRedoStack.length) return;
+    clearTimeout(dbUndoDebounceTimer);
+    dbUndoDebounceTimer = null;
     dbUndoStack.push(dbCaptureSnapshot());
     var next = dbRedoStack.pop();
     editorData = next;
@@ -598,6 +661,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     buildEditor(activeTemplateId);
     dbUpdateUndoUI();
   }
+
+  window.dbUndo = dbUndo;
+  window.dbRedo = dbRedo;
 
   function dbUpdateUndoUI() {
     var undoBtn = dom.getElementById('btn-db-undo');
@@ -875,6 +941,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var tmplMeta = pub.templates.getAll().find(function (t) { return t.id === d.templateId; });
         if (!tmplMeta) return;
         activeTemplateId = d.templateId;
+        dbPushUndoImmediate();
         editorData = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
         dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
         var matchCard = dom.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
@@ -894,9 +961,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var id = btn.getAttribute('data-del-id');
-        if (!confirm('Delete this saved document?')) return;
-        setSavedDocs(getSavedDocs().filter(function (x) { return x.id !== id; }));
-        buildSavedDocsList();
+        dbConfirm('Delete this saved document?', function () {
+          setSavedDocs(getSavedDocs().filter(function (x) { return x.id !== id; }));
+          buildSavedDocsList();
+        });
       });
     });
     savedList.querySelectorAll('.saved-item-dup').forEach(function (btn) {
@@ -972,11 +1040,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!editorData || !activeTemplateId) return;
     var rows, filename;
     if (activeTemplateId === 'crewList') {
-      rows = [['Department', 'Name', 'Role', 'Phone', 'Email', 'Notes']];
-      (editorData.crew || []).forEach(function (m) { rows.push([m.department, m.name, m.role, m.phone, m.email, m.notes]); });
+      rows = [['Department', 'Name', 'Role', 'Phase(s)', 'Phone', 'Email', 'Notes']];
+      (editorData.crew || []).forEach(function (m) { rows.push([m.department, m.name, m.role, m.phases || '', m.phone, m.email, m.notes]); });
       filename = (editorData.productionTitle || 'crew') + '_crew_list.csv';
     } else if (activeTemplateId === 'dood') {
-      var nd = parseInt(editorData.shootDays, 10) || 10;
+      var nd = resolveDoodShootDays(editorData);
       var hdr = ['Name', 'Role'];
       for (var di = 1; di <= nd; di++) hdr.push('D' + di);
       hdr.push('Work', 'Hold');
@@ -1011,7 +1079,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== XLSX Export ======== */
   dom.getElementById('btn-xlsx').addEventListener('click', function () {
     if (!budget || !activeTemplateId) return;
-    if (!window.XLSX) { alert('XLSX library not loaded.'); return; }
+    if (!window.XLSX) { dbAlert('XLSX library not loaded.', 'Error'); return; }
     var XL = window.XLSX;
     var wb = XL.utils.book_new();
     var projectName = (budget && budget.projectName) || 'Budget';
@@ -1134,7 +1202,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
     if (!pub || !pub.format || typeof pub.format.professionalPdf !== 'function') {
-      alert('jsPDF export not available.');
+      dbAlert('jsPDF export not available.', 'Error');
       return done();
     }
     try {
@@ -1142,7 +1210,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       setTimeout(done, 1000);
     } catch (e) {
       console.error('jsPDF export error:', e);
-      alert('jsPDF export failed: ' + e.message);
+      dbAlert('jsPDF export failed: ' + e.message, 'Error');
       done();
     }
   });
@@ -1551,7 +1619,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     btn.innerHTML = origHtml.replace('Print', 'Opening\u2026');
     var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
     var win = window.open('', '_blank');
-    if (!win) { btn.disabled = false; btn.innerHTML = origHtml; alert('Allow popups for this page to use Print.'); return; }
+    if (!win) { btn.disabled = false; btn.innerHTML = origHtml; dbAlert('Allow popups for this page to use Print.'); return; }
     win.document.write(html);
     win.document.close();
     win.focus();
@@ -1579,6 +1647,40 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   });
 
   /* ======== Editor Data Persistence ======== */
+  var STAGE_PHASE_LABELS = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
+  var STAGE_PHASE_ORDER = ['dev', 'pre', 'prod', 'post', 'dist'];
+
+  /* Project shoot days: Stages prod days, then wizard productionDays */
+  function getBudgetShootDays(b) {
+    if (!b) return 0;
+    var prodDays = 0;
+    if (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod) {
+      prodDays = parseInt(b.targetLock.stages.prod.days, 10) || 0;
+    }
+    if (prodDays > 0) return prodDays;
+    var topDays = parseInt(b.productionDays, 10) || 0;
+    if (topDays > 0) return topDays;
+    return 0;
+  }
+
+  /* DOOD day count: explicit editor shootDays, then budget, then 10 */
+  function resolveDoodShootDays(d) {
+    var explicit = parseInt(d && d.shootDays, 10);
+    if (explicit > 0) return explicit;
+    var fromBudget = getBudgetShootDays(budget);
+    if (fromBudget > 0) return fromBudget;
+    return 10;
+  }
+
+  function formatItemPhases(item) {
+    if (!item || !item.stageData) return '';
+    var parts = [];
+    STAGE_PHASE_ORDER.forEach(function (k) {
+      if (item.stageData[k]) parts.push(STAGE_PHASE_LABELS[k] || k);
+    });
+    return parts.join(', ');
+  }
+
   /* Universal budget-pull: silently fills standard fields from budget on every template load.
      Only fills blank fields — never overwrites user-entered data. */
   function applyBudgetDefaults(templateId) {
@@ -1645,6 +1747,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (d.sections.length) changed = true;
     }
 
+    /* DOOD: shoot days from budget when editor field is blank */
+    if (templateId === 'dood') {
+      var budgetDays = getBudgetShootDays(budget);
+      if (budgetDays > 0) _set('shootDays', String(budgetDays));
+    }
+
     /* Crew list: populate from budget if empty */
     if (templateId === 'crewList' && (!d.crew || !d.crew.length)) {
       var crewRows = [];
@@ -1657,11 +1765,31 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             rate: String(item.rate || ''), rateUnit: item.unit || 'Day',
             phone: (item.crew && item.crew.phone) || '',
             email: (item.crew && item.crew.email) || '',
-            union: '', emergencyContact: '', emergencyPhone: ''
+            union: '', emergencyContact: '', emergencyPhone: '',
+            phases: formatItemPhases(item)
           });
         });
       });
       if (crewRows.length) { d.crew = crewRows; changed = true; }
+    }
+
+    /* Crew list: fill blank phase labels from budget line items */
+    if (templateId === 'crewList' && d.crew && d.crew.length) {
+      var phaseByName = {};
+      Object.keys(budget.sections || {}).forEach(function (sk) {
+        (budget.sections[sk].items || []).forEach(function (item) {
+          var nm = (item.crew && item.crew.name) || item.description || '';
+          if (!nm) return;
+          var ph = formatItemPhases(item);
+          if (ph) phaseByName[nm.toLowerCase()] = ph;
+        });
+      });
+      d.crew.forEach(function (row) {
+        if (!row.phases || String(row.phases).trim() === '') {
+          var hit = phaseByName[(row.name || '').toLowerCase()];
+          if (hit) { row.phases = hit; changed = true; }
+        }
+      });
     }
 
     if (changed) saveEditorData();
@@ -1839,6 +1967,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                            reader.onload = function(evt) {
                                downscaleImage(evt.target.result, 512, 288, 0.8, function(scaled) {
                                    if (editorData.frames && editorData.frames[idx]) {
+                                       dbPushUndoImmediate();
                                        editorData.frames[idx].image = scaled;
                                        saveEditorData();
                                        buildEditor('storyboard');
@@ -1864,6 +1993,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (templateId === 'crewDealMemo') {
       var statusSel = fresh.querySelector('[data-key="status"]');
       if (statusSel) statusSel.addEventListener('change', function() {
+        dbPushUndoImmediate();
         if (!editorData.memoId) {
           editorData.memoId = 'memo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
         }
@@ -1888,7 +2018,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var name = sel ? sel.value : '';
       if (!name) return;
       loadSnapshot(name, function (b) {
-        if (!b) { alert('Snapshot "' + name + '" not found.'); return; }
+        if (!b) { dbAlert('Snapshot "' + name + '" not found.', 'Error'); return; }
+        dbPushUndoImmediate();
         editorData.snapshotA = { name: name, sections: b.sections || {} };
         saveEditorData();
         buildEditor('budgetComparison');
@@ -1901,7 +2032,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var name = sel ? sel.value : '';
       if (!name) return;
       loadSnapshot(name, function (b) {
-        if (!b) { alert('Snapshot "' + name + '" not found.'); return; }
+        if (!b) { dbAlert('Snapshot "' + name + '" not found.', 'Error'); return; }
+        dbPushUndoImmediate();
         editorData.snapshotB = { name: name, sections: b.sections || {} };
         saveEditorData();
         buildEditor('budgetComparison');
@@ -1911,11 +2043,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     var resetBtn = fresh.querySelector('#reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function () {
-      if (!confirm('Reset all fields to defaults? This cannot be undone.')) return;
-      var tmpl = pub.templates[activeTemplateId];
-      editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
-      saveEditorData();
-      buildEditor(activeTemplateId);
+      dbConfirm('Reset all fields to defaults? This cannot be undone.', function () {
+        dbPushUndoImmediate();
+        var tmpl = pub.templates[activeTemplateId];
+        editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
+        saveEditorData();
+        buildEditor(activeTemplateId);
+      });
     });
   }
 
@@ -2157,6 +2291,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<th style="width:120px;">Department</th>' +
       '<th>Name</th>' +
       '<th style="width:120px;">Role</th>' +
+      '<th style="width:130px;">Phase(s)</th>' +
       '<th style="width:80px;">Rate</th>' +
       '<th style="width:60px;">Unit</th>' +
       '<th style="width:80px;">Union</th>' +
@@ -2171,6 +2306,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '<td><input data-arr="crew" data-i="' + i + '" data-f="department" value="' + esc(m.department) + '"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="name" value="' + esc(m.name) + '"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="role" value="' + esc(m.role) + '"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="phases" value="' + esc(m.phases) + '" placeholder="e.g. Production"></td>' +
         '<td><input data-arr="crew" data-i="' + i + '" data-f="rate" value="' + esc(m.rate) + '" style="width:70px;text-align:right;"></td>' +
         '<td><select data-arr="crew" data-i="' + i + '" data-f="rateUnit" style="font-size:10px;padding:2px;">' +
         ['Day','Week','Flat','Hour'].map(function(u){ return '<option value="' + u + '"' + (m.rateUnit === u ? ' selected' : '') + '>' + u + '</option>'; }).join('') +
@@ -2323,7 +2459,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function buildDoodHtml(d) {
     var html = '';
-    var numDays = parseInt(d.shootDays, 10) || 10;
+    var numDays = resolveDoodShootDays(d);
     html += '<div class="ed-section"><div class="ed-section-hdr">DOOD Settings</div>' +
       '<div class="ed-row ed-3">' + fld('productionTitle', 'Production Title') + fld('shootDays', 'Total Shoot Days') + fld('startDate', 'Start Date', 'date') + '</div>' +
       '</div>';
@@ -2539,6 +2675,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var frames = editorData.frames || [];
     var f = frames[index];
     if (!f) return;
+    dbPushUndoImmediate();
     var reader = new FileReader();
     reader.onload = function(evt) {
       downscaleImage(evt.target.result, 1024, 576, 0.85, function(scaled) {
@@ -2564,6 +2701,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var f = frames[index];
     if (!f || !promptText) return;
 
+    dbPushUndoImmediate();
     /* Write prompt back as description if frame had none (two-way sync) */
     if (!f.description) {
       f.description = promptText;
@@ -2792,7 +2930,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var ox = f.panZoom ? f.panZoom.ox : 0;
       var oy = f.panZoom ? f.panZoom.oy : 0;
       img.style.transform = 'scale(' + scale + ') translate(' + ox + 'px,' + oy + 'px)';
-      img.addEventListener('mousedown', function(e) { dragging = true; sx = e.clientX; sy = e.clientY; img.style.cursor = 'grabbing'; e.preventDefault(); });
+      img.addEventListener('mousedown', function(e) { dbPushUndoImmediate(); dragging = true; sx = e.clientX; sy = e.clientY; img.style.cursor = 'grabbing'; e.preventDefault(); });
       document.addEventListener('mousemove', function(e) {
         if (!dragging) return;
         ox += (e.clientX - sx) / scale; oy += (e.clientY - sy) / scale;
@@ -2810,6 +2948,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var frames = editorData.frames || [];
     var f = frames[index];
     if (!f) return;
+    dbPushUndoImmediate();
     f.formFactor = factorId;
     saveEditorData();
     var FACTORS = { '16:9':'16/9', '2.39:1':'2.39/1', '4:3':'4/3', '1:1':'1/1', '9:16':'9/16' };
@@ -2823,6 +2962,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   window._sbZoomFrame = function(index, delta) {
     var f = (editorData.frames || [])[index];
     if (!f) return;
+    dbPushUndoImmediate();
     if (!f.panZoom) f.panZoom = { scale: 1, ox: 0, oy: 0 };
     f.panZoom.scale = Math.max(0.3, Math.min(5, (f.panZoom.scale || 1) + delta));
     saveEditorData();
@@ -2833,6 +2973,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   window._sbResetZoom = function(index) {
     var f = (editorData.frames || [])[index];
     if (!f) return;
+    dbPushUndoImmediate();
     f.panZoom = { scale: 1, ox: 0, oy: 0 };
     saveEditorData();
     var img = document.getElementById('sb-frame-preview-img');
@@ -2842,19 +2983,21 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   window._sbClearFrameImage = function(index) {
     var f = (editorData.frames || [])[index];
     if (!f) return;
-    if (!confirm('Remove the image from Frame ' + (f.num || index + 1) + '?')) return;
-    f.image = '';
-    f.panZoom = null;
-    saveEditorData();
-    buildEditor(activeTemplateId);
-    if (activeTab === 'preview') renderPreview();
-    _sbCloseFrameModal();
-    window.promptStoryboardImage(index);
+    dbConfirm('Remove the image from Frame ' + (f.num || index + 1) + '?', function () {
+      dbPushUndoImmediate();
+      f.image = '';
+      f.panZoom = null;
+      saveEditorData();
+      buildEditor(activeTemplateId);
+      if (activeTab === 'preview') renderPreview();
+      _sbCloseFrameModal();
+      window.promptStoryboardImage(index);
+    });
   };
 
   window._sbPasteImage = function(index) {
     if (!navigator.clipboard || !navigator.clipboard.read) {
-      alert('Use Ctrl+V / Cmd+V with your cursor in the preview area, or use Attach to select a file.');
+      dbAlert('Use Ctrl+V / Cmd+V with your cursor in the preview area, or use Attach to select a file.');
       return;
     }
     navigator.clipboard.read().then(function(items) {
@@ -2866,8 +3009,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           }
         }
       }
-      alert('No image found on clipboard. Copy an image first then try again.');
-    }).catch(function() { alert('Clipboard access denied. Use Attach to select a file.'); });
+      dbAlert('No image found on clipboard. Copy an image first then try again.');
+    }).catch(function() { dbAlert('Clipboard access denied. Use Attach to select a file.'); });
   };
 
   function buildStoryboardHtml(d) {
@@ -3226,6 +3369,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (addBtn) {
         var arrName = addBtn.getAttribute('data-add');
         var newItem = getBlankRow(arrName);
+        dbPushUndoImmediate();
         if (!editorData[arrName]) editorData[arrName] = [];
         editorData[arrName].push(newItem);
         saveEditorData();
@@ -3240,6 +3384,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var arrN = delBtn.getAttribute('data-arr');
         var delIdx = parseInt(delBtn.getAttribute('data-del'), 10);
         if (editorData[arrN]) {
+          dbPushUndoImmediate();
           editorData[arrN].splice(delIdx, 1);
           saveEditorData();
           var scrollYDel = panel.scrollTop;
@@ -3262,7 +3407,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       shootingLocations: { address: '', eta: '', notes: '' },
       items: { description: '', quantity: '1', unitPrice: '', total: '' },
       entries: { date: new Date().toISOString().split('T')[0], description: '', category: '', amount: '', receiptNum: '', approvedBy: '' },
-      crew: { department: '', name: '', role: '', rate: '', rateUnit: 'Day', union: '', phone: '', email: '', emergencyContact: '', emergencyPhone: '' },
+      crew: { department: '', name: '', role: '', phases: '', rate: '', rateUnit: 'Day', union: '', phone: '', email: '', emergencyContact: '', emergencyPhone: '' },
       vehicles: { driver: '', type: 'Van', passengers: '', pickupLocation: '', pickupTime: '', destination: '', eta: '' },
       delays: { duration: '', reason: '' },
       equipment: { description: '', serialNum: '', replacementValue: '', rentalRate: '', rateType: 'Daily' },
@@ -3358,6 +3503,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Auto-populate Production Info fields from budget ATL crew items */
   function autoPopulateFromBudget() {
     if (!budget || !budget.sections) return;
+    dbPushUndoImmediate();
     var sections = budget.sections;
     var found = { director: '', producers: '', upm: '', firstAd: '', secondAd: '' };
 
@@ -3405,16 +3551,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       editorData.productionCompany = budget.projectCompany || budget.company;
       changed = true;
     }
-    /* Phase 70: inject shoot date into the call sheet date field */
-    if (budget.shootDate && !editorData.date) { editorData.date = budget.shootDate; changed = true; }
+    /* Phase 70: inject principal photography start date into call sheet date field */
+    if (budget.startDate && !editorData.date) { editorData.date = budget.startDate; changed = true; }
 
     var locHydrated = false;
-    if ((budget.projectLocation || budget.shootDate) && (!editorData.shootingLocations || editorData.shootingLocations.length === 0)) {
+    if ((budget.projectLocation || budget.startDate) && (!editorData.shootingLocations || editorData.shootingLocations.length === 0)) {
         editorData.shootingLocations = [{
             name: 'Basecamp',
             address: budget.projectLocation || '',
             parking: '',
-            notes: budget.shootDate ? ('Shoot Date: ' + budget.shootDate) : ''
+            notes: budget.startDate ? ('Shoot Date: ' + budget.startDate) : ''
         }];
         changed = true;
         if (budget.projectLocation) locHydrated = true;
@@ -3427,7 +3573,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             setTimeout(fetchWeatherAndHospitals, 300);
         }
     } else {
-        alert("No additional crew contacts found to populate or fields already filled.");
+        dbAlert('No additional crew contacts found to populate or fields already filled.');
     }
   }
 
@@ -3463,6 +3609,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     function _isPlaceholder(v) { return !v || _jobTitlePlaceholders.indexOf(v.trim().toLowerCase()) > -1; }
 
     if (budget && budget.sections) {
+      dbPushUndoImmediate();
       var _crewFound = { director: '', producer: '', writer: '', dp: '' };
       Object.keys(budget.sections).forEach(function(sk) {
         (budget.sections[sk].items || []).forEach(function(item) {
@@ -3555,6 +3702,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var filledKeys = [];
       blanks.forEach(function (k) {
         if (r[k] != null && String(r[k]).trim() !== '' && (!editorData[k] || String(editorData[k]).trim() === '')) {
+          if (!changed) dbPushUndoImmediate();
           editorData[k] = String(r[k]);
           filledKeys.push(k);
           changed = true;
@@ -3588,7 +3736,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Funding Package Autofill (budget -> AI cascade) ======== */
   var _fpAIPending = false;
   function autoPopulateFundingPackage() {
-    if (!budget) { alert('No project loaded.'); return; }
+    if (!budget) { dbAlert('No project loaded.', 'Error'); return; }
+    dbPushUndoImmediate();
     var changed = false;
 
     /* --- Phase 1: budget-pull (deterministic) --- */
@@ -3636,7 +3785,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     if (aiFields.length === 0) {
       buildEditor('fundingPackage');
-      if (!changed) alert('All Funding Package fields are already filled.');
+      if (!changed) dbAlert('All Funding Package fields are already filled.');
       return;
     }
 
@@ -3669,7 +3818,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var timeout = setTimeout(function () {
       cleanup();
       buildEditor('fundingPackage');
-      alert('AI fill timed out. Budget-pull values were saved.');
+      dbAlert('AI fill timed out. Budget-pull values were saved.');
     }, 30000);
 
     function cleanup() {
@@ -3685,11 +3834,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var r = e.data.payload || {};
       var aiChanged = false;
       aiFields.forEach(function (k) {
-        if (r[k] && !editorData[k]) { editorData[k] = String(r[k]); aiChanged = true; }
+        if (r[k] && !editorData[k]) {
+          if (!aiChanged) dbPushUndoImmediate();
+          editorData[k] = String(r[k]); aiChanged = true;
+        }
       });
       if (aiChanged) saveEditorData();
       buildEditor('fundingPackage');
-      if (!aiChanged && !changed) alert('AI did not return usable values.');
+      if (!aiChanged && !changed) dbAlert('AI did not return usable values.');
     }
 
     window.addEventListener('message', onReply);
@@ -3711,7 +3863,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var fallback = locInput ? locInput.value.trim() : '';
       if (fallback) locations = [fallback];
     }
-    if (locations.length === 0) { alert('Enter a shooting location address first.'); return; }
+    if (locations.length === 0) { dbAlert('Enter a shooting location address first.'); return; }
 
     var statusEl = dom.getElementById('weather-status');
     var hospPicker = dom.getElementById('hospital-picker');
@@ -3785,6 +3937,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
 
         /* Build locationForecasts: [{address, days:[{date,high,low,conditions,sunrise,sunset}]}] */
+        dbPushUndoImmediate();
         editorData.locationForecasts = weatherResults.map(function (wr) {
           var d = wr.weather.daily || {};
           var days = (d.time || []).map(function (date, i) {
@@ -3831,6 +3984,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           hospPicker.onclick = function (e) {
             var item = e.target.closest('.hosp-item');
             if (!item) return;
+            dbPushUndoImmediate();
             editorData.hospitalName    = item.getAttribute('data-name');
             editorData.hospitalAddress = item.getAttribute('data-addr');
             editorData.hospitalPhone   = item.getAttribute('data-phone');

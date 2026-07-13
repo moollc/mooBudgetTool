@@ -34,11 +34,64 @@
 
         .gantt-bar { border-radius: 6px; height: 28px; display: flex; align-items: center; padding: 0 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; transition: filter .2s; }
         .gantt-bar:hover { filter: brightness(1.1); }
+        /* Stage name as faint full-row texture: one label, wide tracking, under idle + bar.
+           Left-aligned (not center): when tracking + 22px overflows the chart strip,
+           overflow:hidden must clip the END only. Center + nowrap clips both sides
+           (e.g. DEVELOPMENT -> DELOPMEN). Padding matches .gantt-bar horizontal pad. */
+        .gantt-stage-watermark {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding-left: 10px;
+            padding-right: 10px;
+            pointer-events: none;
+            user-select: none;
+            overflow: hidden;
+            font-size: 22px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.35em;
+            white-space: nowrap;
+            color: rgba(100, 116, 139, 0.09);
+        }
+        .mbt-theme-dark .gantt-stage-watermark {
+            color: rgba(226, 232, 240, 0.06);
+        }
+        /* Date column: soft left fade over chart-edge watermark (not a hard white snip).
+           Row is flex: label | gap-2 (8px) | chart | gap-2 (8px) | date w-20 (80px).
+           Pull 40px left = 8px gap + ~32px into the chart strip so the fade has real distance.
+           Opaque stop at 50% (40px) lands at the chart edge: full overlap is a gradual ramp;
+           flat solid only in the native date column under the right-aligned text. */
+        .gantt-date {
+            position: relative;
+            z-index: 2;
+            margin-left: -40px;
+            padding-left: 40px;
+            padding-top: 2px;
+            padding-bottom: 2px;
+            background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, #ffffff 50%, #ffffff 100%);
+        }
+        .mbt-theme-dark .gantt-date {
+            /* Approximate frosted card (rgba(255,255,255,0.05) over slate-950 body) */
+            background: linear-gradient(to right, rgba(15, 23, 42, 0) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(15, 23, 42, 0.98) 100%);
+        }
+        .scroll-shade {
+            position: absolute; bottom: 0; left: 0; right: 0; height: 48px;
+            background: linear-gradient(to top, rgba(248, 250, 252, 0.95), transparent);
+            pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.2s;
+        }
+        .mbt-theme-dark .scroll-shade { background: linear-gradient(to top, rgba(2, 6, 23, 0.95), transparent); }
         .milestone-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
         .milestone-row:last-child { border-bottom: none; }
         .gantt-milestone { position: absolute; top: -4px; width: 12px; height: 12px; background: #f59e0b; transform: rotate(45deg); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 10; cursor: pointer; }
         .gantt-milestone:hover { background: #d97706; transform: rotate(45deg) scale(1.2); }
-        .gantt-milestone-tooltip { position: absolute; top: -24px; left: 50%; transform: translateX(-50%) rotate(-45deg); background: #1e293b; color: #fff; font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .2s; }
+        .gantt-milestone-tooltip { position: absolute; top: 14px; left: 50%; transform: translateX(-50%) rotate(-45deg); background: #1e293b; color: #fff; font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .2s; }
         .gantt-milestone:hover .gantt-milestone-tooltip { opacity: 1; }
         @media (max-width: 480px) {
             .gantt-label { display: none; }
@@ -47,6 +100,7 @@
         @media print {
             body { background: #fff !important; overflow: visible !important; height: auto !important; }
             .no-scrollbar { overflow: visible !important; }
+            .scroll-shade { display: none !important; }
             #btn-back, #btn-export-ics, #btn-add-milestone, .milestone-row button { display: none !important; }
             .gantt-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             .gantt-milestone { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -59,16 +113,16 @@
 <body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
 
     <!-- Header -->
-    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
-        <div class="flex items-center gap-4">
-            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-600 mbt-theme-dark:hover:text-white transition-colors">
+    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0 overflow-hidden">
+        <div class="flex items-center gap-4 min-w-0 flex-1 overflow-hidden">
+            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-600 mbt-theme-dark:hover:text-white transition-colors">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
-            <div class="h-4 w-px bg-slate-200 mbt-theme-dark:bg-slate-700"></div>
-            <span class="text-slate-900 mbt-theme-dark:text-white text-xl md:text-[11px] font-black uppercase tracking-tight">Production Calendar</span>
-            <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading…</span>
+            <div class="h-4 w-px bg-slate-200 mbt-theme-dark:bg-slate-700 shrink-0"></div>
+            <span class="text-slate-900 mbt-theme-dark:text-white text-xl md:text-[11px] font-black uppercase tracking-tight whitespace-nowrap shrink-0">Production Calendar</span>
+            <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest whitespace-nowrap overflow-hidden text-ellipsis max-w-[160px] shrink" title="Loading…">Loading…</span>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 shrink-0">
             <select id="sel-work-week" onchange="mBTCalendar.setWorkWeek(this.value)" class="bg-slate-200 mbt-theme-dark:bg-slate-800 text-slate-900 mbt-theme-dark:text-white text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg border-none outline-none cursor-pointer" aria-label="Work week type">
                 <option value="5">5-Day</option>
                 <option value="6">6-Day</option>
@@ -86,7 +140,8 @@
     </div>
 
     <!-- Body -->
-    <div class="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6 space-y-6">
+    <div class="flex-1 relative min-h-0">
+    <div id="calendar-body" class="h-full overflow-y-auto no-scrollbar p-4 sm:p-6 space-y-6">
 
         <!-- No project warning -->
         <div id="no-project-msg" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-[11px] text-amber-800 font-semibold">
@@ -96,6 +151,7 @@
 
         <!-- Date Range Summary -->
         <div id="date-summary" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
+            <div class="flex items-center justify-between">
                 <span id="total-days-label" class="text-[9px] font-black text-slate-400 uppercase tracking-widest"></span>
             </div>
             <div class="flex gap-4 text-[10px] mt-2">
@@ -181,6 +237,8 @@
             </table>
         </div>
 
+    </div>
+    <div id="scroll-shade" class="scroll-shade" aria-hidden="true"></div>
     </div>
 
 <script>

@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.70</title>
+    <title>mooBudgetTool v23.77</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -252,7 +252,9 @@
     <script src="./src/core/services/Security.js"></script>
     <script src="./src/core/services/mBTAssistant.js"></script>
     <script src="./src/config/supabase.js"></script>
+    <script src="./src/config/supabase-collab.js"></script>
     <script src="./src/services/supabase-sync.js"></script>
+    <script src="./src/services/collab-client.js"></script>
     <script src="./src/services/supabase-realtime.js"></script>
     <!-- Phase 100.1: Footer Nav Component -->
     <script src="./src/core/ui/Footer.js"></script>
@@ -395,7 +397,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.70";
+    var APP_VERSION = "23.79";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -687,10 +689,15 @@
                     };
                 })();
 
-                /* --- Phase 64: Anonymous Session Tagging --- */
+                /* --- Phase 64: Anonymous Session Tagging (legacy ?invite= only) --- */
                 var urlParams = new URLSearchParams(window.location.search);
+                /* Real multiplayer path: ?collabInvite=<token> (mbt-collab redeem, no anon_*) */
+                var collabInviteToken = urlParams.get('collabInvite');
+                if (collabInviteToken) {
+                    window._mBTPendingCollabInvite = collabInviteToken;
+                }
                 var inviteToken = urlParams.get('invite');
-                if (inviteToken) {
+                if (inviteToken && !collabInviteToken) {
                     var isAuthed = localStorage.getItem('mbt_supabase_auth_token');
                     if (!isAuthed && (!localStorage.getItem('mbt_profile_display_name') || !localStorage.getItem('mbt_supabase_user_id') || String(localStorage.getItem('mbt_supabase_user_id')).indexOf('anon_') !== 0)) {
                         var fallbackName = prompt("You've been invited to collaborate! Please enter a Display Name:", "Guest User");
@@ -708,6 +715,7 @@
                 }
 
                 var projectToLoad = (function () {
+                    if (window._mBTPendingCollabInvite) return null;
                     var raw = localStorage.getItem(storageKeyPrefix + 'lastLoaded');
                     if (!raw) return null;
                     try { var p = JSON.parse(raw); return (p && p.name) ? p.name : raw; } catch (e) { return raw; }
@@ -735,13 +743,27 @@
                     });
 
                 return listP.then(function (projectList) {
-                    if (!projectToLoad || projectList.indexOf(projectToLoad) === -1) {
+                    /* Pending collab invite: never pick a local project as fallback target.
+                       mBTBootstrapCollabInvite must already be defined at script parse time
+                       (hoisted outside bindAppEventListeners). */
+                    if (window._mBTPendingCollabInvite) {
+                        projectToLoad = null;
+                    } else if (!projectToLoad || projectList.indexOf(projectToLoad) === -1) {
                         projectToLoad = projectList.length > 0 ? projectList[0] : null;
                     }
 
                     /* 6. Structural Resolution */
                     var bootP;
-                    if (!projectToLoad) {
+                    if (window._mBTPendingCollabInvite) {
+                        if (typeof window.mBTBootstrapCollabInvite === 'function') {
+                            /* Real collab: sign-in -> redeem -> load shared budget_data */
+                            bootP = window.mBTBootstrapCollabInvite(window._mBTPendingCollabInvite);
+                        } else {
+                            console.error('[mBT] collabInvite present but mBTBootstrapCollabInvite is not defined yet');
+                            alert('Collab invite handler failed to load. Refresh the page or open the invite link again.');
+                            bootP = Promise.resolve();
+                        }
+                    } else if (!projectToLoad) {
                         /* Empty State Anchor (Phase 112): present template picker on first launch */
                         if (typeof showNewProjectModal === 'function') {
                             showNewProjectModal();
@@ -1344,13 +1366,52 @@
             var projectKey = storageKeyPrefix + budget.projectName;
             var self = this;
             try {
+                /* Plain snapshot at call time — same object local storage + collab will use.
+                   Do not capture a Proxy reference for the debounced collab PATCH. */
                 var cleanData = JSON.parse(JSON.stringify(budget));
                 cleanData.updated_at = new Date().toISOString();
+                /* Keep collab id stable even if a later wrap drops the field momentarily */
+                var collabId = cleanData.collab_project_id || budget.collab_project_id || window._mBTActiveCollabProjectId || null;
+                if (collabId && !cleanData.collab_project_id) cleanData.collab_project_id = collabId;
+                if (collabId && !budget.collab_project_id) {
+                    try { budget.collab_project_id = collabId; } catch (eId) { /* ignore */ }
+                }
+
+                function pushCollabIfShared() {
+                    if (!collabId) return;
+                    if (!window.mBTCollab) {
+                        console.warn('[mBT] Collab budget id present but mBTCollab not loaded');
+                        return;
+                    }
+                    if (!window.mBTCollab.getSession()) {
+                        console.warn('[mBT] Collab budget id present but no collab session; remote save skipped');
+                        return;
+                    }
+                    try {
+                        /* Pass the plain snapshot from this save. scheduleSaveProject also
+                           re-reads live window.budget at fire time so rapid edits win. */
+                        if (window.mBTCollab.scheduleSaveProject) {
+                            window.mBTCollab.scheduleSaveProject(collabId, cleanData);
+                        } else {
+                            window.mBTCollab.saveProject(collabId, cleanData).catch(function (ce) {
+                                console.warn('[mBT] Collab save failed:', ce && ce.message ? ce.message : ce);
+                            });
+                        }
+                    } catch (ce) {
+                        console.warn('[mBT] Collab save serialize failed:', ce);
+                    }
+                }
+
                 return self.storage.save(projectKey, cleanData).then(function () {
                     localStorage.setItem(storageKeyPrefix + 'lastLoaded', JSON.stringify({ name: budget.projectName, ts: Date.now() }));
                     if (window.mBTSync && window.mBTSync.scheduleAutoSync) window.mBTSync.scheduleAutoSync();
+                    /* Collab: push on every normal field-edit save path (saveBudget → here) */
+                    pushCollabIfShared();
                 }).catch(function (e) {
                     console.error('Save Failed:', e);
+                    /* Still attempt shared backend push — local disk failure must not
+                       strand a collab-loaded budget as memory-only on other clients. */
+                    pushCollabIfShared();
                     var fallbackData = Object.assign({}, budget);
                     return self.storage.save(projectKey, fallbackData);
                 });
@@ -1559,10 +1620,11 @@
                                     rateData = { rate: 0, unit: 'Day', currency: 'USD', baseRate: 0 };
                                 }
 
-                                /* Convert to display currency if different */
+                                /* Convert to wizard currency if different (mBT.le owns convertCurrency;
+                                   window.mBTLE does not expose it) */
                                 var finalRate = rateData.rate;
-                                if (rateData.currency !== wizCur && window.mBTLE && typeof mBTLE.convertCurrency === 'function') {
-                                    finalRate = mBTLE.convertCurrency(rateData.rate, rateData.currency, wizCur);
+                                if (rateData.currency !== wizCur && window.mBT && mBT.le && mBT.le.convertCurrency) {
+                                    finalRate = mBT.le.convertCurrency(rateData.rate, rateData.currency, wizCur);
                                 }
 
                                 return {
@@ -1747,8 +1809,8 @@
                             trashed.push(r.data);
                             /* Write tombstone so cloud sync can propagate the delete */
                             var projectId = r.data.id || r.data.projectName || r.name;
-                            if (window.mBTStorage && typeof window.mBTStorage._getDb === 'function') {
-                                window.mBTStorage._getDb().then(function (db) {
+                            if (window.mBT && window.mBT.storage && typeof window.mBT.storage._getDb === 'function') {
+                                window.mBT.storage._getDb().then(function (db) {
                                     if (db.objectStoreNames.contains('mbt_tombstones')) {
                                         var tx = db.transaction(['mbt_tombstones'], 'readwrite');
                                         tx.objectStore('mbt_tombstones').put({ id: projectId, store: 'mbt_projects', deleted_at: new Date().toISOString() });
@@ -1937,8 +1999,14 @@
                                 }
 
                                 Promise.all(writes).then(function () {
-                                    /* Load the first budget to bring it into view */
-                                    var firstKey = budgetKeys[0];
+                                    /* Load the first REAL budget to bring it into view — skip
+                                       sentinel/metadata keys like "$METADATA" and "globalItems"
+                                       that live in the same key prefix but aren't projects. */
+                                    var realBudgetKeys = budgetKeys.filter(function (k) {
+                                        var name = k.indexOf(storageKeyPrefix) === 0 ? k.slice(storageKeyPrefix.length) : k;
+                                        return name && name.charAt(0) !== '$' && name !== 'globalItems';
+                                    });
+                                    var firstKey = realBudgetKeys[0] || budgetKeys[0];
                                     var firstName = firstKey.indexOf(storageKeyPrefix) === 0 ? firstKey.slice(storageKeyPrefix.length) : firstKey;
                                     return mBT.data.load(firstName).then(function () {
                                         if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') mBT.ui.toolbar.renderProjectMgmt();
@@ -2000,7 +2068,8 @@
     // --- 4. BACKWARD COMPATIBILITY ALIASES (The Bridge) ---
     // Logic Resolution: Ensures all existing calls in Tier 3-6 continue to function.
     window.mBTState = mBT.data.state;
-    window.mBTStorage = mBT.data.storage;
+    /* Budget persistence (localforage/OPFS). IndexedDB contacts live on window.mBT.storage / window.mBTStorage from storage.js */
+    window.mBTBudgetStorage = mBT.data.storage;
     window.saveBudget = function (silent) {
         if (!silent && typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
         var result = mBT.data.save.apply(mBT.data, arguments);
@@ -3766,8 +3835,11 @@
             '</button>' +
             '<div id="currencyPopover" class="hidden absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 min-w-[130px]"></div>' +
             '</div>' +
-            '<button id="openAiToolsBtn" class="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center">' +
+            '<button id="openAiToolsBtn" class="relative p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center overflow-visible">' +
             (mBTAssets.wand || '') +
+            '<span class="absolute pointer-events-none" aria-hidden="true" style="bottom:-3px;right:-3px;width:12px;height:12px;line-height:0">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="#a5f3fc" stroke="#4f46e5" stroke-width="2.5"/></svg>' +
+            '</span>' +
             '</button>' +
             '<span id="shareHubBtnWrap" style="position:relative;display:inline-flex;">' +
             '<button id="shareHubBtn" title="Share &amp; Collaborate" class="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all hover:bg-emerald-700 active:scale-95 flex items-center justify-center" onclick="openShareHub()">' +
@@ -5356,7 +5428,7 @@
                 '</div>';
 
             var content =
-                '<div class="p-4 bg-gradient-to-b from-slate-50 to-white flex flex-col">' +
+                '<div id="newProjectWizWrap" class="p-4 bg-gradient-to-b from-slate-50 to-white flex flex-col h-full">' +
                 '<div class="text-center mb-3 shrink-0">' +
                 '<div class="inline-flex items-center gap-2 mb-0.5">' +
                 '<img src="./assets/cow-192.png" class="w-6 h-6 object-contain" alt="mBT">' +
@@ -5365,7 +5437,7 @@
                 '<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Set up your project, then pick a blueprint</p></div>' +
                 wizardFormHtml +
                 toggleHtml +
-                '<div class="overflow-y-auto pr-1">' +
+                '<div class="overflow-y-auto pr-1 flex-grow min-h-0">' +
                 '<div class="mb-2 flex items-center gap-3">' +
                 '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Industry Standards</span>' +
                 '<div class="h-px bg-slate-200 flex-grow"></div></div>' +
@@ -5386,6 +5458,13 @@
             var modalBody = document.querySelector('#global-modal-container [data-modal-id="newProject"] .modal-body, #global-modal-container .modal-body');
             if (modalBody) modalBody.innerHTML = content;
             else { mBTME.close('newProjectModal'); mBTME.open('newProject', '', content, 'max-w-xl', { hideHeader: true, noPadding: true }); }
+
+            /* Modal engine's body wrapper is overflow-hidden with a content-driven height,
+               so h-full on our own wrapper cannot resolve via percentage. Pin it to the
+               actual available pixel height so the inner overflow-y-auto grid can scroll. */
+            var _wizWrap = document.getElementById('newProjectWizWrap');
+            var _wizBody = document.getElementById('newProjectModalBody');
+            if (_wizWrap && _wizBody) { _wizWrap.style.height = _wizBody.clientHeight + 'px'; }
 
             /* Phase 194: Wire wizard form defaults + validation after DOM is ready */
             var _wName = document.getElementById('wiz-name');
@@ -8290,7 +8369,7 @@
             var _needsSetup = !_apiKey && _provider !== 'lmstudio';
             if (_needsSetup) {
                 mBTME.alert('Assistant Setup', 'Configure your AI provider and API key before using the Assistant.', function () {
-                    mBT.features.settings.open('ai');
+                    mBT.features.settings.open('connections');
                 });
                 return;
             }
@@ -8329,7 +8408,14 @@
                 var aiIframe = document.getElementById('mbtHubAiIframe');
                 if (aiIframe && aiIframe.contentWindow && typeof budget !== 'undefined' && budget) {
                     var ctx = { projectName: budget.projectName, budget: budget.grandTotal || 0, currency: displayCurrency || 'JMD' };
-                    aiIframe.contentWindow.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }, '*');
+                    /* JSON round-trip strips Proxy-wrapped nested objects that break structuredClone/postMessage */
+                    var safeBudgetDoc;
+                    try { safeBudgetDoc = JSON.parse(JSON.stringify(budget)); } catch (serErr) { safeBudgetDoc = null; }
+                    try {
+                        aiIframe.contentWindow.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: safeBudgetDoc || {} } }, '*');
+                    } catch (pmErr) {
+                        console.warn('[mBT] Assistant Hub budget-sync postMessage failed:', pmErr);
+                    }
                 }
             }, 600);
         },
@@ -9311,7 +9397,6 @@
             var TABS = [
                 { id: 'general', label: 'General' },
                 { id: 'database', label: 'Database' },
-                { id: 'ai', label: 'AI' },
                 { id: 'connections', label: 'Connections' },
                 { id: 'cloud', label: 'Cloud' },
                 { id: 'updates', label: 'Updates' }
@@ -11241,8 +11326,8 @@
                         mBTOG.contacts.push(newC);
                         mBTOG.saveContacts();
                         /* Also persist to IndexedDB if storage available */
-                        if (window.mBTStorage && typeof mBTStorage.saveContact === 'function') {
-                            mBTStorage.saveContact({ id: newC.id, name: newC.name, role: newC.role, phone: newC.phone, email: newC.email, portfolio: [] });
+                        if (window.mBT && window.mBT.storage && typeof window.mBT.storage.saveContact === 'function') {
+                            window.mBT.storage.saveContact({ id: newC.id, name: newC.name, role: newC.role, phone: newC.phone, email: newC.email, portfolio: [] });
                         }
                         mBTME.close('crewProfileModal');
                         if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
@@ -11255,8 +11340,8 @@
                             mBTOG.contacts[gIdx].email = email;
                             mBTOG.saveContacts();
                             /* Sync to IndexedDB */
-                            if (window.mBTStorage && typeof mBTStorage.saveContact === 'function') {
-                                mBTStorage.saveContact(mBTOG.contacts[gIdx]);
+                            if (window.mBT && window.mBT.storage && typeof window.mBT.storage.saveContact === 'function') {
+                                window.mBT.storage.saveContact(mBTOG.contacts[gIdx]);
                             }
                             mBTME.close('crewProfileModal');
                             if (typeof showSettingsModal === 'function') showSettingsModal('database', 'contacts');
@@ -11274,82 +11359,111 @@
 
             var importBtn = document.getElementById('importContactBtn');
             if (importBtn) {
+                function importFromPhoneContacts() {
+                    navigator.contacts.select(['name', 'tel', 'email'], { multiple: false }).then(function (contacts) {
+                        if (contacts.length) {
+                            var c = contacts[0];
+                            if (c.name && c.name[0]) document.getElementById('crewName').value = c.name[0];
+                            if (c.tel && c.tel[0]) document.getElementById('crewPhone').value = c.tel[0];
+                            if (c.email && c.email[0]) document.getElementById('crewEmail').value = c.email[0];
+                        }
+                    }).catch(function (ex) { console.log('Contact Import cancelled'); });
+                }
+
+                function openSavedContactPicker() {
+                    /* Merge mBTOG.contacts + Contacts DB, then show picker */
+                    var _ogContacts = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
+                    var _idb = window.mBT && window.mBT.storage;
+                    var _dbPromise = (_idb && typeof _idb.getAllContacts === 'function')
+                        ? _idb.getAllContacts() : Promise.resolve([]);
+                    _dbPromise.catch(function () { return []; }).then(function (_dbContacts) {
+                        /* Merge: prefer DB contacts, fill in mBTOG contacts not already present by name */
+                        var seen = {};
+                        var roster = [];
+                        _dbContacts.forEach(function (c) {
+                            if (c.name) { seen[c.name.toLowerCase()] = true; roster.push(c); }
+                        });
+                        _ogContacts.forEach(function (c) {
+                            if (c.name && !seen[c.name.toLowerCase()]) roster.push(c);
+                        });
+                        if (!roster.length) {
+                            mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
+                            return;
+                        }
+                        var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
+                            'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
+                            'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
+                            '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
+                        roster.forEach(function (c) {
+                            /* Encode full contact as JSON in a data attribute for pickup by onclick */
+                            var safeJson = mBT.ui.render.esc(JSON.stringify({
+                                id: c.id || '',
+                                name: c.name || '',
+                                phone: c.phone || '',
+                                email: c.email || '',
+                                role: c.role || c.department || '',
+                                department: c.department || c.role || '',
+                                rate: c.rate || null,
+                                walletType: c.walletType || '',
+                                walletAddress: c.walletAddress || '',
+                                portfolio: c.portfolio || []
+                            }));
+                            listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
+                                'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || c.department || '')) + '" ' +
+                                'data-cname="' + mBT.ui.render.esc(c.name || '') + '" ' +
+                                'data-cphone="' + mBT.ui.render.esc(c.phone || '') + '" ' +
+                                'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
+                                'data-cjson="' + safeJson + '" ' +
+                                'onclick="(function(el){' +
+                                'var n=document.getElementById(\'crewName\');' +
+                                'var p=document.getElementById(\'crewPhone\');' +
+                                'var e=document.getElementById(\'crewEmail\');' +
+                                'if(n) n.value=el.dataset.cname||\'\';' +
+                                'if(p) p.value=el.dataset.cphone||\'\';' +
+                                'if(e) e.value=el.dataset.cemail||\'\';' +
+                                'var h=document.getElementById(\'crewImportData\');' +
+                                'if(h) h.value=el.dataset.cjson;' +
+                                'mBTME.close(\'contactPickerModal\');' +
+                                '})(this)">' +
+                                '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                                '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                                '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.department || c.category || '') + '</div></div>' +
+                                '</div>';
+                        });
+                        listHtml += '</div>';
+                        mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
+                        setTimeout(function () {
+                            var s = document.getElementById('contactPickerSearch');
+                            if (s) s.focus();
+                        }, 80);
+                    });
+                }
+
                 importBtn.addEventListener('click', function () {
                     if ('contacts' in navigator && 'ContactsManager' in window) {
-                        navigator.contacts.select(['name', 'tel', 'email'], { multiple: false }).then(function (contacts) {
-                            if (contacts.length) {
-                                var c = contacts[0];
-                                if (c.name && c.name[0]) document.getElementById('crewName').value = c.name[0];
-                                if (c.tel && c.tel[0]) document.getElementById('crewPhone').value = c.tel[0];
-                                if (c.email && c.email[0]) document.getElementById('crewEmail').value = c.email[0];
+                        var choiceHtml = '<div class="space-y-3 p-1">' +
+                            '<button type="button" id="importFromPhoneBtn" class="w-full py-3 px-4 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95">Import from phone</button>' +
+                            '<button type="button" id="importFromSavedBtn" class="w-full py-3 px-4 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-all active:scale-95">Choose saved contact</button>' +
+                            '</div>';
+                        mBTME.open('importContactSource', 'Import Contact', choiceHtml, 'max-w-xs');
+                        setTimeout(function () {
+                            var phoneBtn = document.getElementById('importFromPhoneBtn');
+                            var savedBtn = document.getElementById('importFromSavedBtn');
+                            if (phoneBtn) {
+                                phoneBtn.addEventListener('click', function () {
+                                    mBTME.close('importContactSourceModal');
+                                    importFromPhoneContacts();
+                                });
                             }
-                        }).catch(function (ex) { console.log('Contact Import cancelled'); });
+                            if (savedBtn) {
+                                savedBtn.addEventListener('click', function () {
+                                    mBTME.close('importContactSourceModal');
+                                    openSavedContactPicker();
+                                });
+                            }
+                        }, 50);
                     } else {
-                        /* Desktop fallback: merge mBTOG.contacts + Contacts DB, then show picker */
-                        var _ogContacts = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
-                        var _dbPromise = (window.mBT && window.mBT.storage && typeof mBT.storage.getAllContacts === 'function')
-                            ? mBT.storage.getAllContacts() : Promise.resolve([]);
-                        _dbPromise.catch(function () { return []; }).then(function (_dbContacts) {
-                            /* Merge: prefer DB contacts, fill in mBTOG contacts not already present by name */
-                            var seen = {};
-                            var roster = [];
-                            _dbContacts.forEach(function (c) {
-                                if (c.name) { seen[c.name.toLowerCase()] = true; roster.push(c); }
-                            });
-                            _ogContacts.forEach(function (c) {
-                                if (c.name && !seen[c.name.toLowerCase()]) roster.push(c);
-                            });
-                            if (!roster.length) {
-                                mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
-                                return;
-                            }
-                            var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
-                                'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
-                                'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
-                                '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
-                            roster.forEach(function (c) {
-                                /* Encode full contact as JSON in a data attribute for pickup by onclick */
-                                var safeJson = mBT.ui.render.esc(JSON.stringify({
-                                    id: c.id || '',
-                                    name: c.name || '',
-                                    phone: c.phone || '',
-                                    email: c.email || '',
-                                    role: c.role || c.department || '',
-                                    department: c.department || c.role || '',
-                                    rate: c.rate || null,
-                                    walletType: c.walletType || '',
-                                    walletAddress: c.walletAddress || '',
-                                    portfolio: c.portfolio || []
-                                }));
-                                listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
-                                    'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || c.department || '')) + '" ' +
-                                    'data-cname="' + mBT.ui.render.esc(c.name || '') + '" ' +
-                                    'data-cphone="' + mBT.ui.render.esc(c.phone || '') + '" ' +
-                                    'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
-                                    'data-cjson="' + safeJson + '" ' +
-                                    'onclick="(function(el){' +
-                                    'var n=document.getElementById(\'crewName\');' +
-                                    'var p=document.getElementById(\'crewPhone\');' +
-                                    'var e=document.getElementById(\'crewEmail\');' +
-                                    'if(n) n.value=el.dataset.cname||\'\';' +
-                                    'if(p) p.value=el.dataset.cphone||\'\';' +
-                                    'if(e) e.value=el.dataset.cemail||\'\';' +
-                                    'var h=document.getElementById(\'crewImportData\');' +
-                                    'if(h) h.value=el.dataset.cjson;' +
-                                    'mBTME.close(\'contactPickerModal\');' +
-                                    '})(this)">' +
-                                    '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
-                                    '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
-                                    '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.department || c.category || '') + '</div></div>' +
-                                    '</div>';
-                            });
-                            listHtml += '</div>';
-                            mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
-                            setTimeout(function () {
-                                var s = document.getElementById('contactPickerSearch');
-                                if (s) s.focus();
-                            }, 80);
-                        });
+                        openSavedContactPicker();
                     }
                 });
             }
@@ -12334,7 +12448,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.70', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.79', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13222,6 +13336,300 @@
         });
     }
 
+    /* --- Collab invite helpers (MUST be defined at script parse time) ---
+       These used to live inside bindAppEventListeners(), which only runs AFTER
+       mBT.core.init bootP resolves. Boot checked typeof mBTBootstrapCollabInvite
+       during listP.then, so the function was always undefined, the branch was
+       skipped silently, and the guest landed on a local project with
+       window._mBTPendingCollabInvite left set. */
+    window.mBTShowCollabAuth = function (onSuccess, options) {
+        /* Default is generic (non-invite) copy: safer than falsely telling a Settings user they were invited. */
+        var isInviteContext = !!(options && options.context === 'invite');
+        var existing = document.getElementById('mbtCollabAuthOverlay');
+        if (existing) existing.parentNode.removeChild(existing);
+
+        var overlay = document.createElement('div');
+        overlay.id = 'mbtCollabAuthOverlay';
+        overlay.setAttribute('style',
+            'position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.72);display:flex;align-items:center;justify-content:center;padding:16px;');
+
+        var card = document.createElement('div');
+        card.setAttribute('style',
+            'width:100%;max-width:380px;background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:20px;color:#e2e8f0;font-family:system-ui,sans-serif;');
+
+        card.innerHTML =
+            '<div style="position:relative;margin-bottom:12px;">' +
+                '<button type="button" id="mbtCollabAuthClose" style="position:absolute;top:0;right:0;background:transparent;border:0;color:#94a3b8;font-size:18px;cursor:pointer;padding:4px 8px;">&times;</button>' +
+                '<div style="display:flex;justify-content:center;">' +
+                    '<img src="./assets/cow-192.png" alt="mBT" style="height:44px;width:auto;object-fit:contain;" />' +
+                '</div>' +
+            '</div>' +
+            (isInviteContext ?
+                '<p style="margin:0 0 12px;font-size:11px;color:#94a3b8;line-height:1.4;text-align:center;">You have been invited to collaborate on a shared budget. Sign in or create a free account to continue.</p>' :
+                '<p style="margin:0 0 12px;font-size:11px;color:#94a3b8;line-height:1.4;text-align:center;">Sign in to mBT to sync your projects<br>and collaborate on shared budgets.</p>') +
+            '<label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:4px;">Email</label>' +
+            '<input id="mbtCollabEmail" type="email" autocomplete="email" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#e2e8f0;font-size:13px;" />' +
+            '<label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:4px;">Password</label>' +
+            '<input id="mbtCollabPassword" type="password" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#e2e8f0;font-size:13px;" />' +
+            '<div id="mbtCollabSignupFields" style="display:none;">' +
+                '<label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:4px;">Confirm password</label>' +
+                '<input id="mbtCollabPasswordConfirm" type="password" autocomplete="new-password" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#e2e8f0;font-size:13px;" />' +
+                '<label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:4px;">Display name</label>' +
+                '<input id="mbtCollabUsername" type="text" autocomplete="username" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#e2e8f0;font-size:13px;" />' +
+            '</div>' +
+            '<p id="mbtCollabAuthError" style="display:none;margin:0 0 10px;font-size:12px;color:#fb7185;"></p>' +
+            '<p id="mbtCollabAuthMsg" style="display:none;margin:0 0 10px;font-size:12px;color:#34d399;"></p>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button type="button" id="mbtCollabSignInBtn" style="flex:1;min-width:120px;padding:8px 12px;border:0;border-radius:10px;background:#4f46e5;color:#fff;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;">Sign In</button>' +
+                '<button type="button" id="mbtCollabSignUpBtn" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:10px;background:transparent;color:#e2e8f0;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer;">Sign Up</button>' +
+            '</div>' +
+            '<button type="button" id="mbtCollabForgotBtn" style="display:block;margin:10px auto 0;padding:4px 8px;border:0;background:transparent;color:#94a3b8;font-size:11px;cursor:pointer;text-decoration:underline;">Forgot password?</button>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        /* Progressive disclosure: signup fields (Confirm Password, Display Name) stay
+           hidden until the user clicks Sign Up once. Not persisted, closure-local only. */
+        var signupExpanded = false;
+
+        function expandSignupFields() {
+            var fieldsEl = document.getElementById('mbtCollabSignupFields');
+            if (fieldsEl) fieldsEl.style.display = 'block';
+            var signUpBtn = document.getElementById('mbtCollabSignUpBtn');
+            if (signUpBtn) signUpBtn.textContent = 'Create Account';
+            signupExpanded = true;
+        }
+
+        function collapseSignupFields() {
+            var fieldsEl = document.getElementById('mbtCollabSignupFields');
+            if (fieldsEl) fieldsEl.style.display = 'none';
+            var signUpBtn = document.getElementById('mbtCollabSignUpBtn');
+            if (signUpBtn) signUpBtn.textContent = 'Sign Up';
+            signupExpanded = false;
+        }
+
+        function showErr(msg) {
+            var msgEl = document.getElementById('mbtCollabAuthMsg');
+            if (msgEl) msgEl.style.display = 'none';
+            var errEl = document.getElementById('mbtCollabAuthError');
+            if (!errEl) return;
+            errEl.textContent = msg || 'Auth failed';
+            errEl.style.display = 'block';
+        }
+
+        function showMsg(msg) {
+            var errEl = document.getElementById('mbtCollabAuthError');
+            if (errEl) errEl.style.display = 'none';
+            var msgEl = document.getElementById('mbtCollabAuthMsg');
+            if (!msgEl) return;
+            msgEl.textContent = msg || '';
+            msgEl.style.display = 'block';
+        }
+
+        function closeModal() {
+            var el = document.getElementById('mbtCollabAuthOverlay');
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+
+        /* Mirror the collab session into the regular cloud auth keys so Settings > Cloud
+           (which reads mbt_supabase_auth_token) also picks up as signed-in. Both configs
+           point at the same mbt-collab Supabase project (see mBTBootstrapCollabInvite above,
+           which bridges the same two key sets in the opposite direction). */
+        function bridgeCollabSessionToCloud() {
+            var token = localStorage.getItem('mbt_collab_auth_token');
+            var refresh = localStorage.getItem('mbt_collab_refresh_token');
+            var email = localStorage.getItem('mbt_collab_user_email');
+            var userId = localStorage.getItem('mbt_collab_user_id');
+            if (token) localStorage.setItem('mbt_supabase_auth_token', token);
+            if (refresh) localStorage.setItem('mbt_supabase_refresh_token', refresh);
+            if (email) localStorage.setItem('mbt_supabase_user_email', email);
+            if (userId) localStorage.setItem('mbt_supabase_user_id', userId);
+        }
+
+        function afterAuth() {
+            bridgeCollabSessionToCloud();
+            closeModal();
+            if (typeof onSuccess === 'function') onSuccess();
+        }
+
+        document.getElementById('mbtCollabAuthClose').onclick = closeModal;
+        document.getElementById('mbtCollabSignInBtn').onclick = function () {
+            if (signupExpanded) collapseSignupFields();
+            if (!window.mBTCollab) { showErr('Collab client not loaded.'); return; }
+            var email = (document.getElementById('mbtCollabEmail').value || '').trim();
+            var pass = document.getElementById('mbtCollabPassword').value || '';
+            if (!email || !pass) { showErr('Email and password required.'); return; }
+            mBTCollab.signIn(email, pass).then(afterAuth).catch(function (e) {
+                showErr((e && e.message) || 'Sign-in failed.');
+            });
+        };
+        document.getElementById('mbtCollabSignUpBtn').onclick = function () {
+            if (!signupExpanded) { expandSignupFields(); return; }
+            if (!window.mBTCollab) { showErr('Collab client not loaded.'); return; }
+            var user = (document.getElementById('mbtCollabUsername').value || '').trim();
+            var email = (document.getElementById('mbtCollabEmail').value || '').trim();
+            var pass = document.getElementById('mbtCollabPassword').value || '';
+            var passConfirm = document.getElementById('mbtCollabPasswordConfirm').value || '';
+            if (!email || !pass) { showErr('Email and password required.'); return; }
+            if (pass !== passConfirm) { showErr('Passwords do not match.'); return; }
+            mBTCollab.signUp(email, pass, user || email.split('@')[0]).then(function (data) {
+                if (data && data.access_token) {
+                    afterAuth();
+                } else if (window.mBTCollab.getSession()) {
+                    afterAuth();
+                } else {
+                    showErr('Account created. Check your email to confirm, then sign in above.');
+                }
+            }).catch(function (e) {
+                showErr((e && e.message) || 'Sign-up failed.');
+            });
+        };
+        document.getElementById('mbtCollabForgotBtn').onclick = function () {
+            if (!window.mBTSync) { showErr('Sync service not loaded.'); return; }
+            var email = (document.getElementById('mbtCollabEmail').value || '').trim();
+            if (!email) { showErr('Enter your email above first.'); return; }
+            mBTSync.forgotPassword(email).then(function () {
+                showMsg('If an account exists for ' + email + ', a recovery link has been sent.');
+            }).catch(function (e) {
+                showErr((e && e.message) || 'Recovery request failed.');
+            });
+        };
+    };
+
+    /* Apply a collab budget blob into the normal editor (guest redeem + owner pull). */
+    window.mBTApplyCollabBudget = function (rowOrData, collabProjectId) {
+        var data = rowOrData;
+        var projectId = collabProjectId || null;
+        if (rowOrData && rowOrData.budget_data !== undefined) {
+            data = rowOrData.budget_data;
+            projectId = rowOrData.id || collabProjectId;
+        }
+        if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (e) {
+                return Promise.reject(new Error('Invalid budget_data JSON'));
+            }
+        }
+        if (!data || typeof data !== 'object') {
+            return Promise.reject(new Error('Empty budget data'));
+        }
+        if (projectId) data.collab_project_id = projectId;
+        if (!data.projectName) {
+            data.projectName = (rowOrData && rowOrData.name) ? rowOrData.name : ('Shared ' + String(projectId || '').slice(0, 8));
+        }
+        if (!data.sections) data.sections = [];
+        if (!data.activityLog) data.activityLog = [];
+
+        budget = (mBT.data && mBT.data.state && typeof mBT.data.state.wrap === 'function')
+            ? mBT.data.state.wrap(data)
+            : data;
+        /* Stable id for save hook fallback + console: window.budget is the same
+           global binding as lexical budget (top-level var), reassigned on wrap. */
+        window._mBTActiveCollabProjectId = projectId || data.collab_project_id || null;
+        currentProjectName = budget.projectName;
+        if (!budget.currency) {
+            budget.currency = localStorage.getItem(storageKeyPrefix + 'currency') || 'JMD';
+        }
+
+        return mBT.data.save().then(function () {
+            if (typeof render === 'function') render();
+            if (mBT.ui && mBT.ui.toolbar && typeof mBT.ui.toolbar.renderProjectMgmt === 'function') {
+                mBT.ui.toolbar.renderProjectMgmt();
+            }
+            if (mBT.ui && typeof mBT.ui._fullRender === 'function') {
+                var appEl = document.getElementById('app');
+                if (appEl) mBT.ui._fullRender(appEl);
+            }
+            /* Optional: set local RBAC from membership role */
+            if (window.mBTCollab && projectId && typeof mBTCollab.getMemberRole === 'function') {
+                mBTCollab.getMemberRole(projectId).then(function (role) {
+                    if (role) {
+                        localStorage.setItem('mbt_rbac_role', role === 'owner' ? 'admin' : role);
+                        window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { role: role } }));
+                    }
+                }).catch(function () { });
+            }
+            return budget;
+        });
+    };
+
+    /* Guest entry: ?collabInvite=TOKEN -> auth if needed -> redeem -> load -> render */
+    window.mBTBootstrapCollabInvite = function (token) {
+        if (!token) return Promise.resolve();
+        if (!window.mBTCollab) {
+            alert('Collab client not loaded. Cannot open invite.');
+            return Promise.resolve();
+        }
+
+        function stripCollabInviteFromUrl() {
+            try {
+                var u = new URL(window.location.href);
+                u.searchParams.delete('collabInvite');
+                window.history.replaceState({}, document.title, u.pathname + (u.search || '') + (u.hash || ''));
+            } catch (e) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            window._mBTPendingCollabInvite = null;
+        }
+
+        function redeemAndLoad() {
+            return mBTCollab.redeemInvite(token).then(function (projectId) {
+                return mBTCollab.loadProject(projectId).then(function (row) {
+                    return window.mBTApplyCollabBudget(row).then(function () {
+                        return projectId;
+                    });
+                });
+            }).then(function (projectId) {
+                stripCollabInviteFromUrl();
+                console.log('[mBT] Collab invite redeemed and budget loaded');
+                /* Activity log: join event (requires project_activity migration; non-fatal) */
+                if (projectId && window.mBTCollab && typeof mBTCollab.logActivity === 'function') {
+                    mBTCollab.logActivity(projectId, 'member_joined', 'Joined the shared budget').catch(function (ae) {
+                        console.warn('[mBT] logActivity member_joined failed:', ae && ae.message ? ae.message : ae);
+                    });
+                }
+            });
+        }
+
+        var session = mBTCollab.getSession();
+
+        /* Both configs now point at the same mbt-collab Supabase project, so a JWT from
+           the regular cloud sign-in path is also valid for collab. Bridge it over instead
+           of forcing a second login when the user is already signed in. */
+        if (!session && window.mBTSupabaseConfig && window.mBTSupabaseConfig.isSignedIn()) {
+            var cloudToken = localStorage.getItem('mbt_supabase_auth_token');
+            var cloudRefresh = localStorage.getItem('mbt_supabase_refresh_token');
+            var cloudEmail = localStorage.getItem('mbt_supabase_user_email');
+            var cloudUserId = localStorage.getItem('mbt_supabase_user_id');
+            if (cloudToken) localStorage.setItem('mbt_collab_auth_token', cloudToken);
+            if (cloudRefresh) localStorage.setItem('mbt_collab_refresh_token', cloudRefresh);
+            if (cloudEmail) localStorage.setItem('mbt_collab_user_email', cloudEmail);
+            if (cloudUserId) localStorage.setItem('mbt_collab_user_id', cloudUserId);
+            session = mBTCollab.getSession();
+        }
+
+        if (session) {
+            return redeemAndLoad().catch(function (e) {
+                var msg = (e && e.message) ? e.message : 'Invite redeem failed';
+                alert(msg);
+                console.error('[mBT] collab redeem error', e);
+                return Promise.resolve();
+            });
+        }
+
+        return new Promise(function (resolve) {
+            window.mBTShowCollabAuth(function () {
+                redeemAndLoad().then(function () {
+                    resolve();
+                }).catch(function (e) {
+                    var msg = (e && e.message) ? e.message : 'Invite redeem failed';
+                    alert(msg);
+                    console.error('[mBT] collab redeem error', e);
+                    resolve();
+                });
+            }, { context: 'invite' });
+        });
+    };
+
     /* --- 3. GLOBAL EVENT ORCHESTRATION --- */
     function bindAppEventListeners() {
         var footer = document.querySelector('footer');
@@ -13238,7 +13646,11 @@
                 if (mBT.core.route(e)) return;
                 var target = e.target;
                 if (target.closest('#loginBtn')) mBT.router.handleLogin();
-                if (target.closest('#openAiToolsBtn')) mBT.blueprints.openTool();
+                if (target.closest('#openAiToolsBtn')) {
+                    if (typeof mBTME !== 'undefined' && mBTME.stack && mBTME.stack.length > 0) return;
+                    if (document.getElementById('mbtCollabAuthOverlay')) return;
+                    mBT.blueprints.openTool();
+                }
             };
 
             document.body.addEventListener('click', router);
@@ -13425,7 +13837,8 @@
             // Default true if not set
             if (isInternal === null) isInternal = 'true';
             if (isInternal === 'true') {
-                var content = '<div class="w-full" style="height:85vh;"><iframe src="' + url + '" style="width:100%;height:100%;border:none;"></iframe></div>';
+                /* clipboard-write: Clipboard API from tool iframes (Share Hub copy, etc.) */
+                var content = '<div class="w-full" style="height:85vh;"><iframe src="' + url + '" style="width:100%;height:100%;border:none;" allow="clipboard-write"></iframe></div>';
                 mBTME.open('tool-window', '', content, 'max-w-7xl', { noPadding: true, hideHeader: true });
                 /* Phase 73B: record active tool name for undo/redo routing */
                 var _tm = url.match(/\/tools\/([^\/]+)\//);
@@ -13437,10 +13850,17 @@
 
         /* --- Phase 64 / 68B / 92.8: Share Hub trigger -- clears pending and activity badges on open --- */
         window.openShareHub = function () {
-            openTool('./src/tools/share/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')));
+            var shareUrl = './src/tools/share/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : ''));
+            if (budget && budget.collab_project_id) {
+                shareUrl += '&collabProjectId=' + encodeURIComponent(budget.collab_project_id);
+            }
+            openTool(shareUrl);
             if (typeof window.mBTClearPendingBadge === 'function') window.mBTClearPendingBadge();
             if (typeof window.mBTClearActivityBadge === 'function') window.mBTClearActivityBadge();
         };
+
+        /* Collab helpers (mBTShowCollabAuth / mBTApplyCollabBudget / mBTBootstrapCollabInvite)
+           are defined at script top-level BEFORE bindAppEventListeners so init boot can call them. */
 
         if (footer) {
             footer.addEventListener('click', function (e) {

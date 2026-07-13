@@ -339,7 +339,15 @@
         var p = Promise.resolve();
         for (var i = 0; i < tests.length; i++) {
             (function(t) {
-                p = p.then(function() { return t(); });
+                p = p.then(function() {
+                    try {
+                        return Promise.resolve(t()).catch(function (e) {
+                            return window.mBT.tests.storage.result(t.name || 'unknown', false, 'Error: ' + e.message);
+                        });
+                    } catch (e) {
+                        return window.mBT.tests.storage.result(t.name || 'unknown', false, 'Error: ' + e.message);
+                    }
+                });
             })(tests[i]);
         }
 

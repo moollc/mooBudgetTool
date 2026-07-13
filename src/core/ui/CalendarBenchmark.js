@@ -41,12 +41,30 @@
             return y + m + day;
         }
 
-        /* --- Compute payable working days within a date range --- */
-        function computeWorkingDays(grossDays, startDate, workWeek, blackouts) {
-            if (!workWeek || workWeek >= 7) return grossDays;
+        /* --- Phase 109.1: Weekend-skipping helper -- mirrors Stages tool addWorkDays --- */
+        /* Day-by-day; counts only non-weekend per workWeek 5/6/7. Supports negative days (backward). No blackouts in v1. */
+        function addWorkDays(startDate, days, workWeek) {
+            var date = new Date(startDate);
+            var step = days < 0 ? -1 : 1;
+            var target = days < 0 ? -days : days;
+            var count = 0;
+            while (count < target) {
+                date.setDate(date.getDate() + step);
+                var dow = date.getDay();
+                var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) || (workWeek === 6 && dow === 0);
+                if (!isWeekend) count++;
+            }
+            return date;
+        }
+
+        /* --- Compute payable working days over true [start, end) span --- */
+        function computeWorkingDays(startDate, endDate, workWeek, blackouts) {
+            var calendarDays = Math.round((endDate - startDate) / 86400000);
+            if (calendarDays < 0) calendarDays = 0;
+            if (!workWeek || workWeek >= 7) return calendarDays;
             var working = 0;
             var cursor = new Date(startDate);
-            for (var i = 0; i < grossDays; i++) {
+            while (cursor < endDate) {
                 var dow = cursor.getDay();
                 var dateStr = cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0') + '-' + String(cursor.getDate()).padStart(2, '0');
                 var isWeekend = (workWeek <= 5 && (dow === 0 || dow === 6)) ||
@@ -75,26 +93,85 @@
                     days = parseFloat(stageData.days) || 0;
                 }
 
-                /* --- Overlapping stage offset: start relative to previous stage's start --- */
-                var offset = stageData && stageData.offsetDays;
-                if (typeof offset === 'number' && prevStart) {
-                    cursor = new Date(prevStart);
-                    cursor.setDate(cursor.getDate() + offset);
+                /* --- Overlapping stage offset: only when user explicitly set offsetDays --- */
+                /* When workWeek < 7, offsetDays = N working days after prev start (reuse addWorkDays). */
+                var offset = (stageData && stageData.offsetDays !== undefined)
+                    ? parseFloat(stageData.offsetDays) : null;
+                if (offset !== null && prevStart) {
+                    if (workWeek < 7) {
+                        cursor = addWorkDays(prevStart, offset, workWeek);
+                    } else {
+                        cursor = new Date(prevStart);
+                        cursor.setDate(cursor.getDate() + offset);
+                    }
                 }
 
                 var start = new Date(cursor);
                 prevStart = new Date(start);
-                cursor.setDate(cursor.getDate() + days);
-                var end = new Date(cursor);
-                var workingDays = computeWorkingDays(days, start, workWeek, blackouts);
+                /* Work-week duration when workWeek < 7; calendar add otherwise (match Stages) */
+                var end;
+                if (days > 0 && workWeek < 7) {
+                    end = addWorkDays(start, days, workWeek);
+                } else {
+                    end = new Date(start);
+                    end.setDate(end.getDate() + days);
+                }
+                cursor = new Date(end);
+                var workingDays = computeWorkingDays(start, end, workWeek, blackouts);
 
                 result.push({ key: sc.key, label: sc.label, color: sc.color, text: sc.text, start: start, end: end, days: days, workingDays: workingDays });
             });
             return result;
         }
 
+        /* --- Minimum offsetDays so a stage cannot start before budget.startDate --- */
+        function getMinStageOffset(budget, stageKey) {
+            if (!budget || !budget.startDate) return 0;
+            var stageIdx = -1;
+            for (var i = 0; i < STAGE_CONFIG.length; i++) {
+                if (STAGE_CONFIG[i].key === stageKey) { stageIdx = i; break; }
+            }
+            if (stageIdx <= 0) return 0;
+
+            var timeline = calcTimeline(budget);
+            if (!timeline || !timeline[stageIdx - 1]) return 0;
+
+            var projectStart = parseDate(budget.startDate);
+            var prevStart = timeline[stageIdx - 1].start;
+            return Math.ceil((projectStart - prevStart) / 86400000);
+        }
+
         /* --- Gantt 2.0: Date-scaled pixel-per-day rendering --- */
-        var GANTT_PPD = 8; /* pixels per day — minimum readable scale */
+        var GANTT_PPD = 8; /* pixels per day - minimum readable scale */
+        var GANTT_BAR_MIN = 36; /* min bar width (px): 10px padding each side + 9px uppercase label */
+        var GANTT_ROW_H = 36;
+        var GANTT_BAR_H = 28;
+        var GANTT_BAR_TOP = Math.floor((GANTT_ROW_H - GANTT_BAR_H) / 2);
+        /* Soft cap on idle gap before a bar (cosmetic only; bar width stays true-scale) */
+        var GANTT_GAP_CAP_PX = 96; /* ~12 days at GANTT_PPD=8: full scale up to here */
+        var GANTT_GAP_EXCESS_RATIO = 0.25; /* beyond cap, gap pixels render at 25% rate */
+
+        /* Compress long idle gaps only. Short gaps unchanged; duration width never uses this. */
+        function compressGapPixels(rawGapPx) {
+            if (rawGapPx <= GANTT_GAP_CAP_PX) return rawGapPx;
+            return GANTT_GAP_CAP_PX + (rawGapPx - GANTT_GAP_CAP_PX) * GANTT_GAP_EXCESS_RATIO;
+        }
+
+        /* True project span: min start / max end across active stages (handles negative offsets) */
+        function getTimelineBounds(timeline) {
+            var start = null;
+            var end = null;
+            timeline.forEach(function (t) {
+                if (t.days === 0) return;
+                if (start === null || t.start < start) start = t.start;
+                if (end === null || t.end > end) end = t.end;
+            });
+            if (start === null) {
+                start = timeline[0].start;
+                end = timeline[timeline.length - 1].end;
+            }
+            return { start: start, end: end };
+        }
 
         function renderGantt(timeline) {
             var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
@@ -104,8 +181,9 @@
             }
 
             /* Calculate project date range for axis */
-            var projectStart = timeline[0].start;
-            var projectEnd = timeline[timeline.length - 1].end;
+            var bounds = getTimelineBounds(timeline);
+            var projectStart = bounds.start;
+            var projectEnd = bounds.end;
             var totalSpanDays = Math.ceil((projectEnd - projectStart) / 86400000);
             if (totalSpanDays < 1) totalSpanDays = totalDays;
             var chartWidth = totalSpanDays * GANTT_PPD;
@@ -113,21 +191,36 @@
             var html = '';
             timeline.forEach(function (t) {
                 if (t.days === 0) return;
-                var barWidth = Math.max(GANTT_PPD, t.days * GANTT_PPD);
+                /* Bar width from calendar span (work-day units can span more calendar days) */
+                var spanDays = Math.ceil((t.end - t.start) / 86400000);
+                if (spanDays < 1) spanDays = 1;
+                var barWidth = Math.max(GANTT_BAR_MIN, spanDays * GANTT_PPD);
                 var offsetDays = Math.ceil((t.start - projectStart) / 86400000);
-                var barLeft = offsetDays * GANTT_PPD;
+                var rawGapPx = offsetDays * GANTT_PPD;
+                var barLeft = compressGapPixels(rawGapPx);
+                var dayLabel = t.days + 'd';
+                /* Side column is narrow (w-24): short fragment only (Pre / Post). Watermark spans the full chart strip: use full stage label. */
+                var stageName = esc(t.label.split('-')[0].trim());
+                var stageWatermarkLabel = esc(t.label);
+                /* Watermark z:0 under idle (z:1) and bar (z:2); semi-transparent idle darkens text via normal compositing */
+                var stageWatermark = '<div class="gantt-stage-watermark" aria-hidden="true">' + stageWatermarkLabel + '</div>';
+                var idleHighlight = barLeft > 0
+                    ? '<div style="position:absolute;left:0;top:' + GANTT_BAR_TOP + 'px;width:' + barLeft + 'px;height:' + GANTT_BAR_H + 'px;background:rgba(148,163,184,0.18);z-index:1;"></div>'
+                    : '';
 
                 html += '<div class="flex items-center gap-2">' +
-                    '<div class="gantt-label w-24 text-[8px] font-black text-slate-500 uppercase tracking-widest text-right shrink-0">' + esc(t.label.split('-')[0].trim()) + '</div>' +
+                    '<div class="gantt-label w-24 text-[8px] font-black text-slate-500 uppercase tracking-widest text-right shrink-0">' + stageName + '</div>' +
                     '<div class="flex-1 relative" style="min-width:0;overflow-x:auto;overflow-y:hidden;">' +
-                        '<div style="position:relative;width:' + chartWidth + 'px;min-width:100%;height:36px;">' +
-                            '<div class="gantt-bar" style="position:absolute;left:' + barLeft + 'px;width:' + barWidth + 'px;background:' + t.color + ';color:' + t.text + ';">' +
-                                t.days + 'd' +
+                        '<div style="position:relative;width:' + chartWidth + 'px;min-width:100%;height:' + GANTT_ROW_H + 'px;">' +
+                            stageWatermark +
+                            idleHighlight +
+                            '<div class="gantt-bar" style="position:absolute;left:' + barLeft + 'px;top:' + GANTT_BAR_TOP + 'px;width:' + barWidth + 'px;background:' + t.color + ';color:' + t.text + ';z-index:2;">' +
+                                dayLabel +
                             '</div>' +
                             _renderMilestoneMarkers(t.start, t.end, projectStart, timeline) +
                         '</div>' +
                     '</div>' +
-                    '<div class="text-[8px] text-slate-400 shrink-0 w-20 text-right">' + fmtDate(t.start) + '</div>' +
+                    '<div class="gantt-date text-[8px] text-slate-400 shrink-0 w-20 text-right">' + fmtDate(t.start) + '</div>' +
                 '</div>';
             });
             dom.getElementById('gantt-chart').innerHTML = html;
@@ -199,6 +292,7 @@
                 btnTimeline.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors bg-blue-600 text-white';
                 btnCalendar.className = 'text-[9px] font-black uppercase tracking-widest px-3 py-1.5 transition-colors text-white/60 hover:text-white';
             }
+            updateScrollAffordance();
         }
 
         function renderCalendarGrid() {
@@ -208,12 +302,15 @@
             if (!timeline) return;
 
             var gridEl = dom.getElementById('calendar-grid');
-            var projectStart = parseDate(budget.startDate);
             var totalDays = timeline.reduce(function (s, t) { return s + t.days; }, 0);
             if (totalDays === 0) { gridEl.innerHTML = '<p class="text-[10px] text-slate-400 italic">Set stage days in the Stages tool to see the calendar.</p>'; return; }
 
-            var projectEnd = timeline[timeline.length - 1].end;
+            var bounds = getTimelineBounds(timeline);
+            var projectStart = bounds.start;
+            var projectEnd = bounds.end;
             var blackouts = budget.blackoutDays || [];
+            /* workWeek drives weekend hatch only (not blackouts) — same rule as computeWorkingDays / addWorkDays */
+            var workWeek = (budget.settings && budget.settings.workWeek) || 5;
 
             /* Build stage lookup: date string -> stage config */
             var stageMap = {};
@@ -275,13 +372,24 @@
                     var isBlackout = blackouts.indexOf(dateStr) > -1;
                     var milestone = milestoneMap[dateStr];
                     var isToday = dateStr === new Date().toISOString().slice(0, 10);
+                    /* workWeek weekends only — blackouts stay violet; no blackout in this check */
+                    var dow = new Date(year, month, d).getDay();
+                    var isNonWorkDay = (workWeek <= 5 && (dow === 0 || dow === 6)) ||
+                                       (workWeek === 6 && dow === 0);
 
                     var cellBg = 'bg-white';
                     var cellStyle = '';
                     if (isBlackout) {
                         cellBg = 'bg-violet-100';
                     } else if (stage) {
-                        cellStyle = 'background:' + stage.color + '18;';
+                        if (isNonWorkDay) {
+                            /* Stage ongoing but not a work day: diagonal hatch in stage hue
+                               (solid weekdays use color+'18'; hatch alternates stronger/weaker alpha of same hex) */
+                            cellStyle = 'background-color:#fff;background-image:repeating-linear-gradient(45deg,' +
+                                stage.color + '30 0 3px,' + stage.color + '0c 3px 8px);';
+                        } else {
+                            cellStyle = 'background:' + stage.color + '18;';
+                        }
                     }
 
                     var todayRing = isToday ? 'ring-2 ring-blue-500 ring-inset' : '';
@@ -315,6 +423,7 @@
             }
             renderCalendarGrid();
             save();
+            updateScrollAffordance();
         }
 
         function renderStageTable(timeline) {
@@ -362,6 +471,7 @@
             if (!state.milestones.length) {
                 list.innerHTML = '';
                 empty.classList.remove('hidden');
+                updateScrollAffordance();
                 return;
             }
             empty.classList.add('hidden');
@@ -408,6 +518,7 @@
                 }
             });
             list.innerHTML = html;
+            updateScrollAffordance();
         }
 
         function save() {
@@ -427,14 +538,18 @@
 
             if (!state.projectKey) {
                 dom.getElementById('no-project-msg').classList.remove('hidden');
-                dom.getElementById('project-tag').textContent = 'No Project';
+                var tagNone = dom.getElementById('project-tag');
+                tagNone.textContent = 'No Project';
+                tagNone.setAttribute('title', 'No Project');
                 return;
             }
 
             localforage.getItem(state.projectKey).then(function (budget) {
                 if (!budget) {
                     dom.getElementById('no-project-msg').classList.remove('hidden');
-                    dom.getElementById('project-tag').textContent = 'Not Found';
+                    var tagMissing = dom.getElementById('project-tag');
+                    tagMissing.textContent = 'Not Found';
+                    tagMissing.setAttribute('title', 'Not Found');
                     return;
                 }
                 state.budget = budget;
@@ -447,7 +562,10 @@
                 /* Dismiss skeleton */
                 var sk = dom.getElementById('calendar-skeleton');
                 if (sk) sk.classList.add('hidden');
-                dom.getElementById('project-tag').textContent = budget.projectName || '—';
+                var projectLabel = budget.projectName || '—';
+                var tagEl = dom.getElementById('project-tag');
+                tagEl.textContent = projectLabel;
+                tagEl.setAttribute('title', projectLabel);
                 dom.getElementById('label-project').textContent = budget.projectName || '—';
                 dom.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
                 dom.getElementById('label-delivery').textContent = budget.deliveryDate ? fmtDate(parseDate(budget.deliveryDate)) : 'Not set';
@@ -466,8 +584,27 @@
                     renderStageTable(timeline);
                 }
                 renderMilestones();
+                updateScrollAffordance();
 
             }).catch(function (e) { console.error('[CAL] load failed', e); });
+        }
+
+        /* --- Scroll affordance: fade when more content below fold --- */
+        function updateScrollAffordance() {
+            var body = dom.getElementById('calendar-body');
+            var shade = dom.getElementById('scroll-shade');
+            if (!body || !shade) return;
+            var hasMore = body.scrollHeight > body.clientHeight + body.scrollTop + 8;
+            shade.style.opacity = hasMore ? '1' : '0';
+            shade.setAttribute('aria-hidden', hasMore ? 'false' : 'true');
+        }
+
+        function bindScrollAffordance() {
+            var body = dom.getElementById('calendar-body');
+            if (!body || body._scrollAffordanceBound) return;
+            body._scrollAffordanceBound = true;
+            body.addEventListener('scroll', updateScrollAffordance);
+            window.addEventListener('resize', updateScrollAffordance);
         }
 
         /* --- Re-render all views after data change --- */
@@ -483,6 +620,7 @@
             }
             renderMilestones();
             if (currentView === 'calendar') renderCalendarGrid();
+            updateScrollAffordance();
         }
 
         /* --- ICS export: stages, delivery date, and user milestones --- */
@@ -553,7 +691,13 @@
 
         return {
             init: function () {
+                bindScrollAffordance();
                 load();
+
+                /* Standard lifecycle: parent listens for mbt:tool-ready (e.g. quick-pay handshake) */
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'calendar' }, '*');
+                }
 
                 /* --- Phase 50C.8: Dispatch tool focus to parent presence channel --- */
                 function dispatchFocus() {
@@ -615,6 +759,10 @@
                 if (!state.budget || !state.budget.targetLock || !state.budget.targetLock.stages) return;
                 if (!state.budget.targetLock.stages[stageKey]) return;
                 var parsed = val === '' ? undefined : (parseFloat(val) || 0);
+                if (parsed !== undefined) {
+                    var minOff = getMinStageOffset(state.budget, stageKey);
+                    if (parsed < minOff) parsed = minOff;
+                }
                 if (parsed === undefined) {
                     delete state.budget.targetLock.stages[stageKey].offsetDays;
                 } else {
@@ -630,6 +778,7 @@
                 state.milestones.push({ id: id, type: 'relative', stageKey: 'prod', offsetDays: 0, title: '' });
                 renderMilestones();
                 save();
+                updateScrollAffordance();
             },
 
             updateMilestone: function (input) {
