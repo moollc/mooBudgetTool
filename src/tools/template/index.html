@@ -6,6 +6,13 @@
   <title>mBT — Budget Templates</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../lib/localforage.min.js"></script>
+  <script>
+    /* Theme Bridge: Instant Inheritance (matches calendar_benchmark) */
+    (function() {
+      var activeTheme = localStorage.getItem('mbt_active_theme') || 'light';
+      document.documentElement.className = 'mbt-theme-' + activeTheme;
+    })();
+  </script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
     /* Scrollbar Restoration for mobile UX affordance */
@@ -13,6 +20,15 @@
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     }
+    /* Theme Bridge: Bilateral Architecture */
+    .mbt-theme-dark { background-color: #020617; color: white; }
+    .mbt-theme-dark .tmpl-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(24px);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: none;
+    }
+    .mbt-theme-dark #header-bar { background-color: #0f172a; border-bottom-color: #1e293b; }
     .tmpl-card {
       background: rgba(255,255,255,0.82);
       backdrop-filter: blur(10px);
@@ -27,12 +43,13 @@
     .fade-in { animation: fadeIn 0.25s ease-out forwards; }
     @keyframes slideUp { from { opacity:0; transform: translateY(20px) translateX(-50%); } to { opacity:1; transform: translateY(0) translateX(-50%); } }
     .snack-in { animation: slideUp 0.25s ease-out forwards; }
-    /* Mobile Density Shade */
+    /* Scroll affordance: fade when more content below fold (matches calendar_benchmark) */
     .scroll-shade {
-      position: fixed; bottom: 0; left: 0; right: 0; height: 40px;
-      background: linear-gradient(to top, rgba(241,245,249,0.9), transparent);
-      pointer-events: none; z-index: 10;
+      position: absolute; bottom: 0; left: 0; right: 0; height: 48px;
+      background: linear-gradient(to top, rgba(241, 245, 249, 0.95), transparent);
+      pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.2s;
     }
+    .mbt-theme-dark .scroll-shade { background: linear-gradient(to top, rgba(2, 6, 23, 0.95), transparent); }
 
   </style>
 </head>
@@ -58,7 +75,8 @@
   </div>
 
   <!-- Content -->
-  <div class="flex-1 overflow-y-auto no-scrollbar px-4 py-5">
+  <div class="flex-1 relative min-h-0">
+  <div id="template-body" class="h-full overflow-y-auto no-scrollbar px-4 py-5">
 
     <!-- Section: Industry Standards -->
     <div class="mb-4 flex items-center gap-3">
@@ -81,6 +99,8 @@
       <p class="text-[10px] text-slate-400 max-w-[220px]">Save your current budget as a reusable template using the button above.</p>
     </div>
 
+  </div>
+  <div id="scroll-shade" class="scroll-shade" aria-hidden="true"></div>
   </div>
 
   <!-- Save-as overlay modal -->
@@ -279,7 +299,7 @@
                 '</div>';
             }).join('');
             grid.innerHTML = html;
-
+            updateScrollAffordance();
         }
 
         /* --- Render custom templates (async — reads from IndexedDB) --- */
@@ -300,6 +320,7 @@
                 if (!keys.length) {
                     grid.innerHTML = '';
                     if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
+                    updateScrollAffordance();
                     return;
                 }
 
@@ -338,7 +359,7 @@
                 }).join('');
 
                 grid.innerHTML = html;
-
+                updateScrollAffordance();
             });
         }
 
@@ -810,6 +831,24 @@
             });
         }
 
+        /* Scroll affordance: fade when more content below fold */
+        function updateScrollAffordance() {
+            var body = document.getElementById('template-body');
+            var shade = document.getElementById('scroll-shade');
+            if (!body || !shade) return;
+            var hasMore = body.scrollHeight > body.clientHeight + body.scrollTop + 8;
+            shade.style.opacity = hasMore ? '1' : '0';
+            shade.setAttribute('aria-hidden', hasMore ? 'false' : 'true');
+        }
+
+        function bindScrollAffordance() {
+            var body = document.getElementById('template-body');
+            if (!body || body._scrollAffordanceBound) return;
+            body._scrollAffordanceBound = true;
+            body.addEventListener('scroll', updateScrollAffordance);
+            window.addEventListener('resize', updateScrollAffordance);
+        }
+
         /* --- Init --- */
         function init() {
             var params = new URLSearchParams(location.search);
@@ -827,9 +866,16 @@
                 }
             }
 
+            bindScrollAffordance();
             renderBuiltIn();
             renderCustom();
             wireEvents();
+            updateScrollAffordance();
+
+            /* Standard lifecycle: parent listens for mbt:tool-ready */
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'template' }, '*');
+            }
         }
 
         return {

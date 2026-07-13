@@ -8,6 +8,7 @@
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
+    <script src="../../lib/html2pdf.bundle.min.js"></script>
     <script>
         /* Theme Bridge: Instant Inheritance */
         (function() {
@@ -52,47 +53,90 @@
         .tab-btn.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: #2563eb; box-shadow: 0 0 10px rgba(37,99,235,0.5); }
         .tab-btn[data-tab="panel-setup"] { min-width: 70px; }
         .tab-btn[data-tab="panel-vitals"] { min-width: 70px; }
+        .tab-btn[data-tab="panel-cashflow"] { min-width: 80px; }
         /* Add-item modal */
         #add-item-modal { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.5); }
         #add-item-modal.open { display:flex; }
+        /* Responsive shell: fill iframe/viewport, avoid hard clip on narrow widths */
+        html, body { width: 100%; height: 100%; min-width: 0; box-sizing: border-box; }
+        body { max-width: 100vw; }
+        .mbt-header { min-width: 0; width: 100%; }
+        /* Tab bar overflow: visible thin scrollbar once 8 tabs exceeded fit */
+        #stages-tab-bar-wrap { position: relative; }
+        #stages-tab-bar { width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #94a3b8 #f1f5f9; padding-bottom: 1px; }
+        #stages-tab-bar::-webkit-scrollbar { height: 5px; }
+        #stages-tab-bar::-webkit-scrollbar-track { background: #f1f5f9; }
+        #stages-tab-bar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+        #stages-tab-bar .tab-btn { flex-shrink: 0; }
+        #stages-tab-bar-fade-r { position: absolute; top: 0; right: 0; bottom: 0; width: 32px; pointer-events: none; background: linear-gradient(to right, rgba(248,250,252,0) 0%, #f8fafc 75%); opacity: 0; transition: opacity 0.2s; z-index: 1; }
+        #stages-tab-bar-fade-r.visible { opacity: 1; }
+        #stages-header-right { min-width: 0; flex-shrink: 1; }
+        #active-project-name { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #stages-layout, #stages-skeleton { width: 100%; min-width: 0; }
+        /* Cashflow carousel card: wider than siblings so the week table breathes
+           (reverted full-overlay per user feedback) */
+        #panel-cashflow { min-height: 0; }
+        @media (min-width: 720px) {
+            #panel-setup { width: min(28vw, 380px) !important; min-width: 280px !important; }
+            #panel-vitals { width: min(32vw, 420px) !important; min-width: 300px !important; }
+            #panel-cashflow { width: min(72vw, 920px) !important; min-width: 560px !important; }
+            #stage-cards-container .stage-card { width: min(26vw, 400px) !important; min-width: 260px !important; }
+        }
+        @media (max-width: 640px) {
+            #stages-tab-bar .tab-btn { min-width: 40px !important; padding-left: 5px; padding-right: 5px; font-size: 8px; }
+            #stages-tab-bar .tab-btn[data-tab="panel-setup"],
+            #stages-tab-bar .tab-btn[data-tab="panel-vitals"],
+            #stages-tab-bar .tab-btn[data-tab="panel-cashflow"] { min-width: 40px !important; }
+        }
+        @media (max-width: 520px) {
+            #active-project-name { max-width: 72px; }
+        }
         /* --- Tap targets: 44px minimum for all buttons and links --- */
         button, a { min-height: 44px; }
     </style>
 </head>
-<body class="bg-slate-50 h-screen overflow-hidden flex flex-col">
+<body class="bg-slate-50 h-screen w-full min-w-0 max-w-full overflow-hidden flex flex-col">
 
     <!-- Top Navigation Bar -->
-    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0 z-50">
-        <div class="flex items-center gap-4">
-            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+    <div class="mbt-header h-12 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 shrink-0 z-50 min-w-0 w-full overflow-hidden relative">
+        <div id="stages-watermark-wrap" class="absolute pointer-events-none select-none" style="left:176px;right:0;top:0;bottom:0;overflow:hidden;">
+            <span id="stages-watermark" aria-hidden="true" class="absolute inset-0 flex items-center justify-start text-slate-300 font-black uppercase whitespace-nowrap" style="font-size:34px;line-height:1;letter-spacing:1px;">Stages</span>
+        </div>
+        <div id="stages-header-icons" class="flex items-center gap-2 min-w-0 shrink-0 relative z-10">
+            <button id="btn-back" aria-label="Close" title="Close" class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 hover:text-blue-800 transition-colors shrink-0">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
-            <div class="h-4 w-px bg-slate-800"></div>
-            <div class="flex items-center gap-2">
-                <span class="text-white text-[11px] font-black uppercase tracking-tight">Project Stages</span>
-                <span id="project-tag" class="bg-blue-600 text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase tracking-widest">Loading..</span>
-            </div>
+            <button id="btn-stages-undo" disabled title="Undo (Ctrl+Z)" onclick="stagesUndo();" class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-30 disabled:pointer-events-none shrink-0">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+            </button>
+            <button id="btn-stages-redo" disabled title="Redo (Ctrl+Y)" onclick="stagesRedo();" class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-30 disabled:pointer-events-none shrink-0">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+            </button>
+            <button id="btn-stages-export-pdf" title="Export PDF" onclick="stagesExportPdf();" class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 hover:text-blue-800 transition-colors shrink-0">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </button>
         </div>
-        <div class="flex items-center gap-3">
-            <span id="unsaved-indicator" style="opacity:0;transition:opacity 0.2s;" class="text-[8px] font-black text-amber-400 uppercase tracking-widest">&#9679; Unsaved</span>
-            <div class="flex flex-col items-end">
-                <span id="active-project-name" class="text-white text-[10px] font-black uppercase tracking-tight opacity-90">—</span>
-                <span class="text-slate-500 text-[8px] font-bold uppercase tracking-widest">mBT Stages</span>
-            </div>
+        <div id="stages-header-right" class="flex items-center gap-3 min-w-0 shrink-0 relative z-10 ml-auto">
+            <span id="unsaved-indicator" style="opacity:0;transition:opacity 0.2s;" class="text-[8px] font-black text-amber-600 uppercase tracking-widest shrink-0">&#9679; Unsaved</span>
+            <span id="active-project-name" class="text-slate-900 text-[13px] font-black uppercase tracking-tight truncate max-w-[160px] bg-slate-100/90 px-1 rounded relative z-10">—</span>
         </div>
     </div>
 
     <!-- Sticky Tab Navigation Bar -->
-    <div class="sticky top-0 z-40 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0">
-        <div class="flex items-center gap-1.5">
-            <button data-tab="panel-setup" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">Setup</button>
-            <button data-tab="panel-vitals" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">View</button>
-            <button data-tab="dev" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dev</button>
-            <button data-tab="pre" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Pre</button>
-            <button data-tab="prod" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Prod</button>
-            <button data-tab="post" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Post</button>
-            <button data-tab="dist" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dist</button>
+    <div id="stages-tab-bar-wrap" class="sticky top-0 z-40 shrink-0 min-w-0 w-full">
+        <div id="stages-tab-bar" class="bg-slate-50 border-b border-slate-200 flex items-center px-4 min-w-0 w-full overflow-x-auto">
+            <div class="flex items-center gap-1.5 flex-nowrap shrink-0">
+                <button data-tab="panel-setup" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">Setup</button>
+                <button data-tab="panel-vitals" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">Vitals</button>
+                <button data-tab="panel-cashflow" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[60px] text-center">Cashflow</button>
+                <button data-tab="dev" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dev</button>
+                <button data-tab="pre" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Pre</button>
+                <button data-tab="prod" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Prod</button>
+                <button data-tab="post" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Post</button>
+                <button data-tab="dist" class="tab-btn px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all min-w-[50px] text-center">Dist</button>
+            </div>
         </div>
+        <div id="stages-tab-bar-fade-r" aria-hidden="true"></div>
     </div>
 
     <!-- Skeleton loader — hidden once project data is rendered -->
@@ -190,6 +234,7 @@
                     <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
                         <circle cx="50" cy="50" r="44" stroke="#f1f5f9" stroke-width="12" fill="none"/>
                         <circle id="burn-meter" cx="50" cy="50" r="44" stroke="#2563eb" stroke-width="12" fill="none" stroke-dasharray="276.46" stroke-dashoffset="276.46" class="burn-ring" stroke-linecap="round"/>
+                        <circle id="actual-burn-meter" cx="50" cy="50" r="36" stroke="#10b981" stroke-width="6" fill="none" stroke-dasharray="226.19" stroke-dashoffset="226.19" class="burn-ring" stroke-linecap="round" style="display:none"/>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
                         <span id="burn-pct" class="text-4xl font-black text-slate-900 leading-none tracking-tighter truncate w-full px-2 block">0%</span>
@@ -225,6 +270,15 @@
                     <div id="timeline-audit" class="space-y-3"></div>
                 </div>
             </div>
+        </div>
+
+        <!-- Cashflow Panel (wider carousel card; rejoined carousel after full-overlay over-corrected) -->
+        <div id="panel-cashflow" class="stage-card min-w-[560px] w-[560px] snap-center shrink-0">
+            <div class="p-4 border-b border-slate-100 shrink-0">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Cashflow Schedule</span>
+                <div id="cashflow-meta" class="mt-2 space-y-1"></div>
+            </div>
+            <div id="cashflow-body" class="flex-grow p-3 overflow-y-auto no-scrollbar min-h-0"></div>
         </div>
 
         <!-- Stage Cards (injected by render) -->
@@ -275,6 +329,200 @@
             d.textContent = String(str || '');
             return d.innerHTML;
         }
+
+        var _stagesDialogEl = null;
+        function _stagesRemoveDialog() {
+            if (_stagesDialogEl && _stagesDialogEl.parentNode) {
+                _stagesDialogEl.parentNode.removeChild(_stagesDialogEl);
+                _stagesDialogEl = null;
+            }
+        }
+        function stagesConfirm(message, onConfirm, title) {
+            _stagesRemoveDialog();
+            title = title || 'Confirm';
+            var overlay = document.createElement('div');
+            overlay.id = 'stages-confirm-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:250;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML =
+                '<div role="dialog" aria-modal="true" class="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col" style="font-family:inherit;">' +
+                '<div class="p-4 border-b border-slate-100">' +
+                '<span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#1e293b;">' + esc(title) + '</span>' +
+                '</div>' +
+                '<div class="p-4">' +
+                '<p style="font-size:11px;font-weight:700;color:#64748b;line-height:1.5;margin:0 0 16px;">' + esc(message) + '</p>' +
+                '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+                '<button type="button" id="stages-confirm-cancel" style="padding:8px 14px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">Cancel</button>' +
+                '<button type="button" id="stages-confirm-ok" style="padding:8px 16px;border-radius:12px;border:none;background:#e11d48;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">Confirm</button>' +
+                '</div></div></div>';
+            document.body.appendChild(overlay);
+            _stagesDialogEl = overlay;
+            var cancelBtn = overlay.querySelector('#stages-confirm-cancel');
+            var confirmBtn = overlay.querySelector('#stages-confirm-ok');
+            function dismiss() { _stagesRemoveDialog(); }
+            cancelBtn.addEventListener('click', dismiss);
+            overlay.addEventListener('click', function(e) { if (e.target === overlay) dismiss(); });
+            confirmBtn.addEventListener('click', function() {
+                dismiss();
+                if (typeof onConfirm === 'function') onConfirm();
+            });
+            confirmBtn.focus();
+        }
+
+        function stagesAlert(message, title) {
+            _stagesRemoveDialog();
+            title = title || 'Notice';
+            var overlay = document.createElement('div');
+            overlay.id = 'stages-alert-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:250;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+            overlay.innerHTML =
+                '<div role="dialog" aria-modal="true" class="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col" style="font-family:inherit;">' +
+                '<div class="p-4 border-b border-slate-100">' +
+                '<span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#1e293b;">' + esc(title) + '</span>' +
+                '</div>' +
+                '<div class="p-4">' +
+                '<p style="font-size:11px;font-weight:700;color:#64748b;line-height:1.5;margin:0 0 16px;">' + esc(message) + '</p>' +
+                '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+                '<button type="button" id="stages-alert-ok" style="padding:8px 16px;border-radius:12px;border:none;background:#2563eb;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">OK</button>' +
+                '</div></div></div>';
+            document.body.appendChild(overlay);
+            _stagesDialogEl = overlay;
+            var okBtn = overlay.querySelector('#stages-alert-ok');
+            function dismiss() { _stagesRemoveDialog(); }
+            okBtn.addEventListener('click', dismiss);
+            overlay.addEventListener('click', function(e) { if (e.target === overlay) dismiss(); });
+            okBtn.focus();
+        }
+
+        function _stagesFormatExportDate(d) {
+            var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
+        function _stagesCountItems(b, stageKey) {
+            var count = 0;
+            Object.values(b.sections || {}).forEach(function(sec) {
+                (sec.items || []).forEach(function(item) {
+                    if (item.stageData && item.stageData[stageKey]) count++;
+                });
+            });
+            return count;
+        }
+
+        function _stagesSanitizeFilename(name) {
+            return String(name || 'document').replace(/[^a-z0-9_\-]/gi, '_');
+        }
+
+        function buildStagesExportHtml(b) {
+            var metrics = calculateMetrics(b);
+            var KEYS = mBTStages.state.KEYS;
+            var TITLES = mBTStages.state.TITLES;
+            var projectName = (b.projectName && String(b.projectName).trim()) ? String(b.projectName).trim() : 'UNTITLED';
+            var today = _stagesFormatExportDate(new Date());
+            var actualsCol = metrics.actualsMode
+                ? '<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #cbd5e1;">Actual Cost</th>'
+                : '';
+            var rows = KEYS.map(function(k) {
+                var s = (b.targetLock && b.targetLock.stages && b.targetLock.stages[k]) ? b.targetLock.stages[k] : {};
+                var days = parseFloat(s.days) || 0;
+                var ratio = parseFloat(s.ratio) || 0;
+                var stageCap = metrics.totalCap * (ratio / 100);
+                var planned = metrics.stageTotals[k] || 0;
+                var actual = metrics.stageActuals[k] || 0;
+                var itemCount = _stagesCountItems(b, k);
+                var actualCell = metrics.actualsMode
+                    ? '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + esc(fmt(actual)) + '</td>'
+                    : '';
+                return '<tr>' +
+                    '<td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;font-weight:700;">' + esc(TITLES[k]) + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + days + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + ratio.toFixed(1) + '%</td>' +
+                    '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + esc(fmt(stageCap)) + '</td>' +
+                    '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + esc(fmt(planned)) + '</td>' +
+                    actualCell +
+                    '<td style="padding:8px 10px;text-align:right;border-bottom:1px solid #e2e8f0;">' + itemCount + '</td>' +
+                '</tr>';
+            }).join('');
+            var actualTotalLine = metrics.actualsMode
+                ? '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;"><span style="font-weight:700;">Actual Total</span><span style="font-weight:700;">' + esc(fmt(metrics.actualTotal)) + '</span></div>'
+                : '';
+            return '<style>' +
+                '.stages-export-wrap{font-family:Helvetica,Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff;}' +
+                '.stages-export-wrap h1{font-size:16pt;margin:0 0 4px;color:#0f172a;}' +
+                '.stages-export-wrap .meta{font-size:8pt;color:#64748b;margin-bottom:16px;}' +
+                '.stages-export-wrap table{width:100%;border-collapse:collapse;margin-bottom:16px;}' +
+                '.stages-export-wrap th{font-size:7pt;text-transform:uppercase;letter-spacing:0.06em;color:#475569;text-align:left;}' +
+                '.stages-export-wrap th.num{text-align:right;}' +
+                '.stages-export-wrap .totals{border-top:2px solid #cbd5e1;padding-top:8px;}' +
+                '</style>' +
+                '<div class="stages-export-wrap">' +
+                '<h1>' + esc(projectName) + '</h1>' +
+                '<div class="meta">Stages Summary &middot; ' + esc(today) + '</div>' +
+                '<table>' +
+                '<thead><tr>' +
+                    '<th>Stage</th>' +
+                    '<th class="num">Days</th>' +
+                    '<th class="num">Ratio</th>' +
+                    '<th class="num">Cap</th>' +
+                    '<th class="num">Planned</th>' +
+                    actualsCol +
+                    '<th class="num">Items</th>' +
+                '</tr></thead>' +
+                '<tbody>' + rows + '</tbody>' +
+                '</table>' +
+                '<div class="totals">' +
+                    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;"><span style="font-weight:700;">Total Cap Limit</span><span style="font-weight:700;">' + esc(fmt(metrics.totalCap)) + '</span></div>' +
+                    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;"><span style="font-weight:700;">Grand Total</span><span style="font-weight:700;">' + esc(fmt(metrics.grandTotal)) + '</span></div>' +
+                    actualTotalLine +
+                '</div></div>';
+        }
+
+        function stagesExportPdf() {
+            var b = mBTStages.state.project;
+            if (!b) {
+                stagesAlert('No project loaded.', 'Export PDF');
+                return;
+            }
+            if (typeof window.html2pdf === 'undefined') {
+                stagesAlert('PDF export engine (html2pdf) not loaded.', 'Export PDF');
+                return;
+            }
+            var btn = document.getElementById('btn-stages-export-pdf');
+            var origTitle = btn ? btn.title : 'Export PDF';
+            if (btn) {
+                btn.disabled = true;
+                btn.title = 'Exporting...';
+            }
+            var bodyHtml = buildStagesExportHtml(b);
+            var container = document.createElement('div');
+            container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;';
+            container.innerHTML = bodyHtml;
+            document.body.appendChild(container);
+            var fname = _stagesSanitizeFilename(b.projectName) + '-stages-summary.pdf';
+            var opts = {
+                margin: [0.65, 0.65, 0.65, 0.65],
+                filename: fname,
+                image: { type: 'jpeg', quality: 0.97 },
+                html2canvas: { scale: 2, useCORS: false, logging: false },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            var done = function() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.title = origTitle;
+                }
+            };
+            html2pdf().set(opts).from(container).save().then(function() {
+                if (document.body.contains(container)) document.body.removeChild(container);
+                done();
+            }).catch(function(err) {
+                if (document.body.contains(container)) document.body.removeChild(container);
+                console.error('[mBTStages export]', err);
+                stagesAlert('Export failed. Please try again.', 'Export PDF');
+                done();
+            });
+        }
+
+        window.stagesExportPdf = stagesExportPdf;
 
         /* --- Currency Format (display currency from URL param / live mbt:displayCurrency).
            Amounts in the loaded budget are stored in its base currency — convert for display
@@ -341,6 +589,85 @@
                 var ind = document.getElementById('unsaved-indicator');
                 if (ind) ind.style.opacity = '0';
             }, 500);
+        }
+
+        /* Stages undo/redo: immediate snapshot before discrete mutations; debounced burst for continuous edits */
+        var stagesUndoStack = [];
+        var stagesRedoStack = [];
+        var STAGES_MAX_HISTORY = 50;
+        var stagesUndoDebounceTimer = null;
+        var stagesUndoBurstSnap = null;
+
+        function stagesCaptureSnapshot() {
+            if (!mBTStages || !mBTStages.state || !mBTStages.state.project) return null;
+            return JSON.parse(JSON.stringify(mBTStages.state.project));
+        }
+
+        function stagesPushUndo() {
+            if (!stagesUndoDebounceTimer) {
+                stagesUndoBurstSnap = stagesCaptureSnapshot();
+            }
+            clearTimeout(stagesUndoDebounceTimer);
+            stagesUndoDebounceTimer = setTimeout(function() {
+                if (stagesUndoBurstSnap) {
+                    stagesUndoStack.push(stagesUndoBurstSnap);
+                    stagesUndoBurstSnap = null;
+                    if (stagesUndoStack.length > STAGES_MAX_HISTORY) stagesUndoStack.shift();
+                    stagesRedoStack = [];
+                }
+                stagesUndoDebounceTimer = null;
+                stagesUpdateUndoUI();
+            }, 600);
+        }
+
+        function stagesPushUndoImmediate() {
+            clearTimeout(stagesUndoDebounceTimer);
+            stagesUndoDebounceTimer = null;
+            stagesUndoBurstSnap = null;
+            var snap = stagesCaptureSnapshot();
+            if (!snap) return;
+            stagesUndoStack.push(snap);
+            if (stagesUndoStack.length > STAGES_MAX_HISTORY) stagesUndoStack.shift();
+            stagesRedoStack = [];
+            stagesUpdateUndoUI();
+        }
+
+        function stagesUndo() {
+            if (!stagesUndoStack.length) return;
+            clearTimeout(stagesUndoDebounceTimer);
+            stagesUndoDebounceTimer = null;
+            stagesUndoBurstSnap = null;
+            var snap = stagesCaptureSnapshot();
+            if (snap) stagesRedoStack.push(snap);
+            var prev = stagesUndoStack.pop();
+            mBTStages.state.project = prev;
+            mBTStages.render();
+            mBTStages.save();
+            stagesUpdateUndoUI();
+        }
+
+        function stagesRedo() {
+            if (!stagesRedoStack.length) return;
+            clearTimeout(stagesUndoDebounceTimer);
+            stagesUndoDebounceTimer = null;
+            stagesUndoBurstSnap = null;
+            var snap = stagesCaptureSnapshot();
+            if (snap) stagesUndoStack.push(snap);
+            var next = stagesRedoStack.pop();
+            mBTStages.state.project = next;
+            mBTStages.render();
+            mBTStages.save();
+            stagesUpdateUndoUI();
+        }
+
+        window.stagesUndo = stagesUndo;
+        window.stagesRedo = stagesRedo;
+
+        function stagesUpdateUndoUI() {
+            var undoBtn = document.getElementById('btn-stages-undo');
+            var redoBtn = document.getElementById('btn-stages-redo');
+            if (undoBtn) undoBtn.disabled = stagesUndoStack.length === 0;
+            if (redoBtn) redoBtn.disabled = stagesRedoStack.length === 0;
         }
 
         /* Phase 195: Single source-of-truth cost formula (quantity + TZ-normalised days) */
@@ -420,6 +747,9 @@
             var result = {
                 grandTotal: b.grandTotal || 0,
                 stageTotals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
+                stageActuals: { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 },
+                actualTotal: b.actualTotal || 0,
+                actualsMode: !!b.actualsMode,
                 totalCap: tl.totalCap || 0,
                 totalDays: 0,
                 totalWorkingDays: 0,
@@ -435,6 +765,7 @@
                     KEYS.forEach(function(k) {
                         if (item.stageData[k]) {
                             result.stageTotals[k] += _calculateItemCost(item, k, b);
+                            result.stageActuals[k] += parseFloat(item.actual) || 0;
                         }
                     });
                 });
@@ -566,6 +897,162 @@
             return timeline;
         }
 
+        /* --- calculateCashflow: week-relative draw schedule ---
+         * Project Week 1 starts at the earliest stage start. Each stage's planned
+         * cost is spread evenly per calendar day of its span, then bucketed into
+         * 7-day weeks. Stages may overlap (offsetDays), so a week can sum daily
+         * rates from multiple stages into the same byStage bucket. */
+        function calculateCashflow(b) {
+            var metrics = calculateMetrics(b);
+            var timeline = calculateTimeline(b);
+            var KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+            var MS_DAY = 86400000;
+
+            function emptyByStage() {
+                return { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 };
+            }
+
+            var projectStart = null;
+            var projectEnd = null;
+            var active = [];
+            var unscheduledTotal = 0;
+            var unscheduledStages = [];
+            var i, k, t, spanDays, planned, actual;
+
+            for (i = 0; i < KEYS.length; i++) {
+                k = KEYS[i];
+                t = timeline[k];
+                if (!t || !t.start || !t.end) continue;
+                spanDays = Math.round((t.end.getTime() - t.start.getTime()) / MS_DAY);
+                if (spanDays <= 0) {
+                    planned = metrics.stageTotals[k] || 0;
+                    if (planned > 0) {
+                        unscheduledTotal += planned;
+                        unscheduledStages.push(k);
+                    }
+                    continue;
+                }
+                planned = metrics.stageTotals[k] || 0;
+                actual = metrics.stageActuals[k] || 0;
+                active.push({
+                    key: k,
+                    start: t.start,
+                    end: t.end,
+                    spanDays: spanDays,
+                    planned: planned,
+                    actual: actual
+                });
+                if (!projectStart || t.start.getTime() < projectStart.getTime()) {
+                    projectStart = new Date(t.start.getTime());
+                }
+                if (!projectEnd || t.end.getTime() > projectEnd.getTime()) {
+                    projectEnd = new Date(t.end.getTime());
+                }
+            }
+
+            if (!active.length) {
+                return {
+                    weeks: [],
+                    grandTotal: 0,
+                    actualGrandTotal: 0,
+                    stageTotalsSum: 0,
+                    actualsMode: metrics.actualsMode,
+                    totalCap: metrics.totalCap,
+                    projectStart: null,
+                    projectEnd: null,
+                    weekCount: 0,
+                    unscheduledTotal: unscheduledTotal,
+                    unscheduledStages: unscheduledStages
+                };
+            }
+
+            var totalSpanDays = Math.round((projectEnd.getTime() - projectStart.getTime()) / MS_DAY);
+            var weekCount = Math.max(1, Math.ceil(totalSpanDays / 7));
+            var weeks = [];
+            for (i = 0; i < weekCount; i++) {
+                weeks.push({
+                    weekNumber: i + 1,
+                    total: 0,
+                    byStage: emptyByStage(),
+                    actualTotal: 0,
+                    actualByStage: emptyByStage()
+                });
+            }
+
+            var stageTotalsSum = 0;
+            var si, d, dayMs, daysSince, weekIdx, dailyPlanned, dailyActual, remainderPlanned, remainderActual;
+
+            for (si = 0; si < active.length; si++) {
+                var stage = active[si];
+                stageTotalsSum += stage.planned;
+                dailyPlanned = stage.planned / stage.spanDays;
+                dailyActual = stage.actual / stage.spanDays;
+                /* Assign exact remainder on the last day so week sums stay conservative */
+                remainderPlanned = stage.planned;
+                remainderActual = stage.actual;
+                for (d = 0; d < stage.spanDays; d++) {
+                    dayMs = stage.start.getTime() + d * MS_DAY;
+                    daysSince = Math.floor((dayMs - projectStart.getTime()) / MS_DAY);
+                    if (daysSince < 0) daysSince = 0;
+                    weekIdx = Math.floor(daysSince / 7);
+                    while (weekIdx >= weeks.length) {
+                        weeks.push({
+                            weekNumber: weeks.length + 1,
+                            total: 0,
+                            byStage: emptyByStage(),
+                            actualTotal: 0,
+                            actualByStage: emptyByStage()
+                        });
+                    }
+                    var addP, addA;
+                    if (d === stage.spanDays - 1) {
+                        addP = remainderPlanned;
+                        addA = remainderActual;
+                    } else {
+                        addP = dailyPlanned;
+                        addA = dailyActual;
+                        remainderPlanned -= addP;
+                        remainderActual -= addA;
+                    }
+                    weeks[weekIdx].byStage[stage.key] += addP;
+                    weeks[weekIdx].total += addP;
+                    if (metrics.actualsMode) {
+                        weeks[weekIdx].actualByStage[stage.key] += addA;
+                        weeks[weekIdx].actualTotal += addA;
+                    }
+                }
+            }
+
+            var grandTotal = 0;
+            var actualGrandTotal = 0;
+            for (i = 0; i < weeks.length; i++) {
+                grandTotal += weeks[i].total;
+                actualGrandTotal += weeks[i].actualTotal;
+            }
+
+            return {
+                weeks: weeks,
+                grandTotal: grandTotal,
+                actualGrandTotal: actualGrandTotal,
+                stageTotalsSum: stageTotalsSum,
+                actualsMode: metrics.actualsMode,
+                totalCap: metrics.totalCap,
+                projectStart: projectStart,
+                projectEnd: projectEnd,
+                weekCount: weeks.length,
+                unscheduledTotal: unscheduledTotal,
+                unscheduledStages: unscheduledStages
+            };
+        }
+
+        /* Dev-only test export: exposes pure calc functions for tests/stages-test-suite.js.
+           No behavior change to the tool itself. */
+        window.mBTStagesCalc = {
+            calculateMetrics: calculateMetrics,
+            calculateTimeline: calculateTimeline,
+            calculateCashflow: calculateCashflow
+        };
+
         /* --- analyzeRisk --- */
         function analyzeRisk(metrics, timeline) {
             if (!timeline || !timeline._analysis) return null;
@@ -628,6 +1115,23 @@
                 window.addEventListener('focus', dispatchFocus);
 
                 /* Phase 73B: receive undo/redo routing from parent monolith */
+                window.addEventListener('message', function(e) {
+                    if (!e.data || e.data.type !== 'mbt:tool-action') return;
+                    if (e.data.action === 'undo') stagesUndo();
+                    if (e.data.action === 'redo') stagesRedo();
+                });
+
+                document.addEventListener('keydown', function(e) {
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        stagesUndo();
+                    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                        e.preventDefault();
+                        stagesRedo();
+                    }
+                });
+
                 /* Receive work-week changes from parent monolith settings */
                 window.addEventListener('message', function(e) {
                     if (!e.data || e.data.type !== 'mbt:workWeek') return;
@@ -671,6 +1175,7 @@
                     mBTStages.state.project.targetLock.totalCap = nextCap;
                     var capInput = document.getElementById('total-cap');
                     if (capInput) capInput.value = nextCap || '';
+                    if (typeof mBTStages.renderSliders    === 'function') mBTStages.renderSliders();
                     if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
                     if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
                 });
@@ -690,6 +1195,7 @@
 
                 /* Tab Navigation Bar */
                 self._initTabNavigation();
+                self._initTabBarScrollHint();
 
                 if (!self.state._projectKey && !self.state.projectId) {
                     self._showError('No project selected. Open a project from the dashboard first.');
@@ -756,8 +1262,7 @@
                 if (sl) sl.classList.remove('hidden');
 
                 /* Header */
-                dom.getElementById('active-project-name').textContent = (b.company && b.company.productionTitle) ? b.company.productionTitle : 'UNTITLED';
-                dom.getElementById('project-tag').textContent = b.id ? b.id.slice(-6).toUpperCase() : 'PROJECT';
+                dom.getElementById('active-project-name').textContent = (b.projectName && String(b.projectName).trim()) ? String(b.projectName).trim() : 'UNTITLED';
                 dom.getElementById('start-date').value    = b.startDate || '';
                 // Phase 200: Handled dynamically by renderVitals to support ghost formatting
                 if (b.deliveryDate) {
@@ -773,14 +1278,19 @@
 
             /* --- Sliders --- */
             renderSliders: function() {
-                var b    = this.state.project;
-                var self = this;
+                var b       = this.state.project;
+                var self    = this;
+                var metrics = calculateMetrics(b);
                 var html = this.state.KEYS.map(function(k) {
                     var s = b.targetLock.stages[k];
+                    var stageCap = metrics.totalCap * ((s.ratio || 0) / 100);
                     return '<div class="relative">' +
                         '<div class="flex justify-between items-center mb-1.5">' +
                             '<span class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + esc(self.state.TITLES[k]) + '</span>' +
-                            '<span class="text-[10px] font-black text-white">' + (s.ratio || 0).toFixed(1) + '%</span>' +
+                            '<div class="text-right">' +
+                                '<span class="text-[10px] font-black text-white">' + (s.ratio || 0).toFixed(1) + '%</span>' +
+                                '<span class="text-[8px] font-bold text-slate-400 block">' + fmt(stageCap) + '</span>' +
+                            '</div>' +
                         '</div>' +
                         '<div class="h-2 bg-slate-800 rounded-full relative overflow-hidden">' +
                             '<div class="absolute top-0 left-0 h-full bg-blue-500 rounded-full pointer-events-none" style="width:' + s.ratio + '%"></div>' +
@@ -834,6 +1344,18 @@
                 dom.getElementById('burn-pct').className    = ringClass;
                 dom.getElementById('burn-label').textContent = labelText;
                 dom.getElementById('burn-label').className   = labelClass;
+
+                /* Inner ring: actual burn vs cap (only when project tracks actuals) */
+                var actualMeter = dom.getElementById('actual-burn-meter');
+                if (metrics.actualsMode) {
+                    var actualBurn = getBurnStatus(metrics.actualTotal, metrics.totalCap);
+                    var actualOffset = 226.19 - (Math.min(actualBurn.pct, 100) / 100 * 226.19);
+                    actualMeter.style.display = '';
+                    actualMeter.style.strokeDashoffset = actualOffset;
+                    actualMeter.setAttribute('stroke', actualBurn.stroke);
+                } else {
+                    actualMeter.style.display = 'none';
+                }
 
                 /* Stats */
                 dom.getElementById('stat-grand-total').textContent = fmt(metrics.grandTotal);
@@ -891,6 +1413,167 @@
                         else                                              deliveryInput.classList.add('border-emerald-500');
                     }
                 }
+
+                /* Keep cashflow panel in sync whenever vitals re-render */
+                this.renderCashflow();
+            },
+
+            /* --- Cashflow Panel (week-relative draw schedule) --- */
+            renderCashflow: function() {
+                var b = this.state.project;
+                if (!b) return;
+                var cf = calculateCashflow(b);
+                var metrics = calculateMetrics(b);
+                var metaEl = dom.getElementById('cashflow-meta');
+                var bodyEl = dom.getElementById('cashflow-body');
+                if (!metaEl || !bodyEl) return;
+
+                var fmtD = function(d) {
+                    if (!d) return '';
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                };
+                var KEYS = this.state.KEYS;
+                var TITLES = this.state.TITLES;
+                var shortLabel = { dev: 'Dev', pre: 'Pre', prod: 'Prod', post: 'Post', dist: 'Dist' };
+
+                var buildUnschedNotice = function(cfData) {
+                    if (!cfData.unscheduledTotal || cfData.unscheduledTotal <= 0) return '';
+                    var names = [];
+                    var ui, uk;
+                    for (ui = 0; ui < cfData.unscheduledStages.length; ui++) {
+                        uk = cfData.unscheduledStages[ui];
+                        names.push(shortLabel[uk] || TITLES[uk] || uk);
+                    }
+                    return '<div class="mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200">' +
+                        '<p class="text-[8px] font-bold text-amber-700 leading-relaxed">' +
+                        'Note: ' + fmt(cfData.unscheduledTotal) + ' in assigned costs (' + esc(names.join(', ')) + ') is not included above -- these stages have no days scheduled yet.' +
+                        '</p></div>';
+                };
+
+                if (!cf.weeks.length) {
+                    metaEl.innerHTML =
+                        '<div class="flex justify-between items-end p-2 rounded-lg bg-slate-50 border border-slate-100">' +
+                            '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Cap</span>' +
+                            '<span class="text-[10px] font-black text-slate-800">' + fmt(metrics.totalCap) + '</span>' +
+                        '</div>';
+                    bodyEl.innerHTML =
+                        buildUnschedNotice(cf) +
+                        '<div class="flex flex-col items-center justify-center py-12 gap-3 px-4 text-center">' +
+                            '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>' +
+                            '<p class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">No schedule data yet -- assign days to stages to see a cashflow projection</p>' +
+                        '</div>';
+                    return;
+                }
+
+                var dateRange = fmtD(cf.projectStart) + ' - ' + fmtD(cf.projectEnd);
+                var actualMeta = cf.actualsMode
+                    ? '<div class="flex justify-between items-end p-2 rounded-lg bg-emerald-50 border border-emerald-100">' +
+                        '<span class="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Actual</span>' +
+                        '<span class="text-[10px] font-black text-emerald-700">' + fmt(cf.actualGrandTotal) + '</span>' +
+                      '</div>'
+                    : '';
+                var plannedLabel = cf.unscheduledTotal > 0 ? 'Scheduled' : 'Planned';
+                var plannedHint = cf.unscheduledTotal > 0
+                    ? '<div class="text-[7px] font-bold text-amber-600 uppercase tracking-widest leading-tight mt-0.5">Excl. ' + fmt(cf.unscheduledTotal) + ' unscheduled</div>'
+                    : '';
+                metaEl.innerHTML =
+                    '<p class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">' +
+                        cf.weekCount + ' week' + (cf.weekCount === 1 ? '' : 's') + ' &middot; ' + esc(dateRange) +
+                    '</p>' +
+                    '<div class="grid grid-cols-2 gap-1.5 mt-1">' +
+                        '<div class="flex justify-between items-end p-2 rounded-lg bg-slate-50 border border-slate-100">' +
+                            '<span class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Cap</span>' +
+                            '<span class="text-[10px] font-black text-slate-800">' + fmt(cf.totalCap) + '</span>' +
+                        '</div>' +
+                        '<div class="flex flex-col items-end p-2 rounded-lg bg-blue-50 border border-blue-100">' +
+                            '<div class="flex justify-between items-end w-full">' +
+                                '<span class="text-[8px] font-black text-blue-600 uppercase tracking-widest">' + plannedLabel + '</span>' +
+                                '<span class="text-[10px] font-black text-blue-700">' + fmt(cf.grandTotal) + '</span>' +
+                            '</div>' +
+                            plannedHint +
+                        '</div>' +
+                        actualMeta +
+                    '</div>';
+
+                var thClass = 'px-1.5 py-2 text-[7px] font-black uppercase tracking-widest text-slate-400 text-right border-b border-slate-100 whitespace-nowrap';
+                var thLeft = 'px-1.5 py-2 text-[7px] font-black uppercase tracking-widest text-slate-400 text-left border-b border-slate-100 whitespace-nowrap';
+                var tdClass = 'px-1.5 py-1.5 text-[9px] font-bold text-slate-700 text-right border-b border-slate-50 whitespace-nowrap';
+                var tdLeft = 'px-1.5 py-1.5 text-[9px] font-black text-slate-800 text-left border-b border-slate-50 whitespace-nowrap';
+                var headCells = '<th class="' + thLeft + '">Week</th>';
+                KEYS.forEach(function(k) {
+                    headCells += '<th class="' + thClass + '" title="' + esc(TITLES[k] || k) + '">' + esc(shortLabel[k] || k) + '</th>';
+                });
+                headCells += '<th class="' + thClass + '">Total</th>';
+                headCells += '<th class="' + thClass + '">Cumul</th>';
+
+                var cumul = 0;
+                var actualCumul = 0;
+                var rows = cf.weeks.map(function(w) {
+                    cumul += w.total;
+                    actualCumul += w.actualTotal;
+                    var cells = '<td class="' + tdLeft + '">Week ' + w.weekNumber + '</td>';
+                    KEYS.forEach(function(k) {
+                        var plannedVal = w.byStage[k] || 0;
+                        var actualVal = w.actualByStage[k] || 0;
+                        var showZero = plannedVal === 0 && (!cf.actualsMode || actualVal === 0);
+                        var plannedHtml = showZero
+                            ? '<span class="text-slate-300">-</span>'
+                            : '<span class="text-slate-800">' + fmt(plannedVal) + '</span>';
+                        var actualHtml = '';
+                        if (cf.actualsMode && (plannedVal > 0 || actualVal > 0)) {
+                            actualHtml = '<div class="text-[7px] font-bold text-emerald-600 leading-tight">' + fmt(actualVal) + '</div>';
+                        }
+                        cells += '<td class="' + tdClass + '">' + plannedHtml + actualHtml + '</td>';
+                    });
+                    var totalActualHtml = cf.actualsMode
+                        ? '<div class="text-[7px] font-bold text-emerald-600 leading-tight">' + fmt(w.actualTotal) + '</div>'
+                        : '';
+                    var cumulActualHtml = cf.actualsMode
+                        ? '<div class="text-[7px] font-bold text-emerald-600 leading-tight">' + fmt(actualCumul) + '</div>'
+                        : '';
+                    cells += '<td class="' + tdClass + ' font-black text-slate-900">' + fmt(w.total) + totalActualHtml + '</td>';
+                    cells += '<td class="' + tdClass + ' font-black text-blue-600">' + fmt(cumul) + cumulActualHtml + '</td>';
+                    return '<tr>' + cells + '</tr>';
+                }).join('');
+
+                /* Footer totals row */
+                var footerCells = '<td class="' + tdLeft + ' text-slate-500">Total</td>';
+                KEYS.forEach(function(k) {
+                    var sumP = 0;
+                    var sumA = 0;
+                    cf.weeks.forEach(function(w) {
+                        sumP += w.byStage[k] || 0;
+                        sumA += w.actualByStage[k] || 0;
+                    });
+                    var aHtml = cf.actualsMode
+                        ? '<div class="text-[7px] font-bold text-emerald-600 leading-tight">' + fmt(sumA) + '</div>'
+                        : '';
+                    footerCells += '<td class="' + tdClass + ' border-t border-slate-200">' +
+                        (sumP === 0 && (!cf.actualsMode || sumA === 0) ? '<span class="text-slate-300">-</span>' : fmt(sumP)) +
+                        aHtml + '</td>';
+                });
+                var footActualTotal = cf.actualsMode
+                    ? '<div class="text-[7px] font-bold text-emerald-600 leading-tight">' + fmt(cf.actualGrandTotal) + '</div>'
+                    : '';
+                footerCells += '<td class="' + tdClass + ' border-t border-slate-200 font-black">' + fmt(cf.grandTotal) + footActualTotal + '</td>';
+                footerCells += '<td class="' + tdClass + ' border-t border-slate-200 font-black text-blue-600">' + fmt(cf.grandTotal) + footActualTotal + '</td>';
+
+                var legend = cf.actualsMode
+                    ? '<p class="text-[7px] font-bold text-slate-400 uppercase tracking-widest mt-2 px-1">' +
+                        '<span class="text-slate-700">Planned</span> / <span class="text-emerald-600">Actual</span> per week' +
+                      '</p>'
+                    : '';
+
+                bodyEl.innerHTML =
+                    buildUnschedNotice(cf) +
+                    '<div class="overflow-x-auto no-scrollbar">' +
+                        '<table class="w-full border-collapse">' +
+                            '<thead><tr>' + headCells + '</tr></thead>' +
+                            '<tbody>' + rows + '</tbody>' +
+                            '<tfoot><tr>' + footerCells + '</tr></tfoot>' +
+                        '</table>' +
+                    '</div>' +
+                    legend;
             },
 
             /* --- Stage Cards --- */
@@ -904,8 +1587,14 @@
                 var html = this.state.KEYS.map(function(k) {
                     var s         = b.targetLock.stages[k];
                     var stageCost = metrics.stageTotals[k] || 0;
+                    var stageActual = metrics.stageActuals[k] || 0;
                     var stageCap  = metrics.totalCap * ((s.ratio || 0) / 100);
                     var isOver    = stageCost > stageCap && stageCap > 0;
+                    var isActualOver = metrics.actualsMode && stageActual > stageCost && stageCost > 0;
+                    /* Actuals line only when project uses actuals tracking (actualsMode) */
+                    var actualsLine = metrics.actualsMode
+                        ? '<div class="text-center mt-1"><span class="text-[8px] font-bold uppercase tracking-widest ' + (isActualOver ? 'text-rose-600' : 'text-slate-400') + '">Actual: ' + fmt(stageActual) + ' (of ' + fmt(stageCost) + ' planned)</span></div>'
+                        : '';
                     var val       = validateTimeline(b, k);
                     var conflict  = val.maxNeeded > val.current;
                     var dateLabel = timeline[k] ? esc(timeline[k].label) : '';
@@ -917,10 +1606,17 @@
                           '</button>'
                         : '';
 
-                    /* TIME BANKRUPTCY warning */
                     var dateDisplay = val.isBankrupt
-                        ? '<span class="text-[8px] font-black text-rose-600 animate-pulse">TIME BANKRUPTCY</span>'
+                        ? '<span class="text-[8px] font-black text-rose-600 animate-pulse">UNSCHEDULED</span>'
                         : '<span class="text-[8px] font-bold text-slate-400 mt-0.5 tracking-tight">' + dateLabel + '</span>';
+
+                    /* dev is always first stage; offsetDays has no effect there */
+                    var offsetInput = (k !== 'dev')
+                        ? '<div class="flex items-center gap-1 bg-slate-50 px-1 py-0.5 rounded-lg border border-slate-100">' +
+                            '<input type="number" value="' + (s.offsetDays !== undefined ? s.offsetDays : '') + '" oninput="mBTStages.updateStageOffset(\'' + k + '\', this.value)" class="w-8 text-center bg-transparent text-[10px] font-bold text-slate-500 outline-none no-spinner" title="Starts N days into previous stage">' +
+                            '<span class="text-[6px] font-black text-slate-400 uppercase tracking-widest mr-0.5">Overlap</span>' +
+                          '</div>'
+                        : '';
 
                     return '<div id="' + k + '" class="stage-card min-w-[340px] w-[340px] snap-center shrink-0' + (conflict ? ' conflict-glow' : '') + '">' +
                         '<div class="p-4 border-b border-slate-100 bg-white sticky top-0 z-20 shrink-0">' +
@@ -936,11 +1632,14 @@
                                     '<span class="text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(self.state.TITLES[k]) + '</span>' +
                                     dateDisplay +
                                 '</div>' +
-                                /* Days input + sync button */
-                                '<div class="relative flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100">' +
-                                    syncBtn +
-                                    '<input type="number" value="' + s.days + '" oninput="mBTStages.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
-                                    '<span class="text-[7px] font-black text-slate-400 uppercase tracking-widest mr-1">Days</span>' +
+                                /* Days input + sync button; overlap offset for non-dev stages */
+                                '<div class="flex flex-col items-end gap-0.5">' +
+                                    '<div class="relative flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100">' +
+                                        syncBtn +
+                                        '<input type="number" value="' + s.days + '" oninput="mBTStages.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
+                                        '<span class="text-[7px] font-black text-slate-400 uppercase tracking-widest mr-1">Days</span>' +
+                                    '</div>' +
+                                    offsetInput +
                                 '</div>' +
                             '</div>' +
                             '<div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-1 mt-3">' +
@@ -950,6 +1649,7 @@
                                 '<span class="' + (isOver ? 'text-rose-600' : 'text-slate-400') + '">' + fmt(stageCost) + '</span>' +
                                 '<span class="text-slate-400">Cap: ' + fmt(stageCap) + '</span>' +
                             '</div>' +
+                            actualsLine +
                         '</div>' +
                         '<div class="flex-grow p-3 space-y-2 overflow-y-auto no-scrollbar bg-slate-50/50 stage-drop-zone" data-stage="' + k + '">' +
                             self.renderItems(k) +
@@ -1037,6 +1737,7 @@
             /* ========= Interaction Handlers ========= */
 
             balanceSliders: function(changedKey, value) {
+                stagesPushUndo();
                 var b      = this.state.project;
                 var stages = b.targetLock.stages;
                 var KEYS   = this.state.KEYS;
@@ -1050,6 +1751,8 @@
 
                 if (newVal > maxAvail) newVal = maxAvail;
                 if (newVal < 0)        newVal = 0;
+                /* When all siblings are locked, slack cannot move elsewhere; pin to remaining share */
+                if (unlockedKeys.length === 0) newVal = maxAvail;
                 stages[changedKey].ratio = newVal;
 
                 var remaining          = Math.max(0, 100 - newVal - lockedTotal);
@@ -1060,12 +1763,30 @@
                         : remaining * (stages[k].ratio / currentUnlockedSum);
                 });
 
+                var total = KEYS.reduce(function(s, k) { return s + (stages[k].ratio || 0); }, 0);
+                var drift = 100 - total;
+                if (Math.abs(drift) > 0.01) {
+                    var snapKey = changedKey;
+                    if (unlockedKeys.length > 0) {
+                        var bestVal = stages[unlockedKeys[0]].ratio || 0;
+                        snapKey = unlockedKeys[0];
+                        unlockedKeys.forEach(function(k) {
+                            if ((stages[k].ratio || 0) > bestVal) {
+                                bestVal = stages[k].ratio || 0;
+                                snapKey = k;
+                            }
+                        });
+                    }
+                    stages[snapKey].ratio = (stages[snapKey].ratio || 0) + drift;
+                }
+
                 this.render();
             },
 
             applyPreset: function(name) {
                 var ratios = STAGE_PRESETS[name];
                 if (!ratios) return;
+                stagesPushUndoImmediate();
                 var stages = this.state.project.targetLock.stages;
                 Object.keys(ratios).forEach(function(k) {
                     if (stages[k]) { stages[k].ratio = ratios[k]; stages[k].locked = false; }
@@ -1075,6 +1796,7 @@
             },
 
             toggleLock: function(key) {
+                stagesPushUndoImmediate();
                 var s = this.state.project.targetLock.stages[key];
                 s.locked = !s.locked;
                 this.render();
@@ -1082,7 +1804,16 @@
             },
 
             updateStageDays: function(key, val) {
+                stagesPushUndo();
                 this.state.project.targetLock.stages[key].days = parseFloat(val) || 0;
+                this.renderVitals();
+                this.renderStageCards();
+                this.save();
+            },
+
+            updateStageOffset: function(key, val) {
+                stagesPushUndo();
+                this.state.project.targetLock.stages[key].offsetDays = parseFloat(val) || 0;
                 this.renderVitals();
                 this.renderStageCards();
                 this.save();
@@ -1091,6 +1822,7 @@
             syncDays: function(key) {
                 var val = validateTimeline(this.state.project, key);
                 if (val.maxNeeded > 0) {
+                    stagesPushUndoImmediate();
                     this.state.project.targetLock.stages[key].days = val.maxNeeded;
                     this.renderVitals();
                     this.renderStageCards();
@@ -1102,6 +1834,7 @@
             updateItemDays: function(itemId, stageKey, val) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
+                    stagesPushUndo();
                     item.stageData[stageKey].days = parseFloat(val) || 0;
                     _mBTStagesSurgicalRefresh(itemId, stageKey);
                     _mBTStagesDebouncedSave();
@@ -1111,6 +1844,7 @@
             updateItemRate: function(itemId, stageKey, val) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
+                    stagesPushUndo();
                     item.stageData[stageKey].rate = parseFloat(val) || 0;
                     _mBTStagesSurgicalRefresh(itemId, stageKey);
                     _mBTStagesDebouncedSave();
@@ -1121,6 +1855,7 @@
             updateItemMultiplier: function(itemId, stageKey, val) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
+                    stagesPushUndoImmediate();
                     var _raw = (val === '' || val === null || val === undefined) ? 1 : parseFloat(val);
                     item.stageData[stageKey].multiplier = isNaN(_raw) ? 1 : _raw;
                     _mBTStagesSurgicalRefresh(itemId, stageKey);
@@ -1131,6 +1866,7 @@
             removeItem: function(itemId, stageKey) {
                 var item = this._findItem(itemId);
                 if (item && item.stageData) {
+                    stagesPushUndoImmediate();
                     delete item.stageData[stageKey];
                     this.renderVitals();
                     this.renderStageCards();
@@ -1139,23 +1875,42 @@
             },
 
             updateCap: function(val) {
+                var self = this;
                 var next = parseFloat(val) || 0;
                 var prev = this.state.project.targetLock.totalCap || 0;
+                var applyCap = function() {
+                    stagesPushUndo();
+                    self.state.project.targetLock.totalCap = next;
+                    self.renderSliders();
+                    self.renderVitals();
+                    self.save();
+                };
                 /* Warn when replacing an existing cap -- change cascades to every stage segment cap in the main budget */
                 if (prev > 0 && next !== prev) {
-                    var ok = window.confirm('Changing the Budget Cap will update every stage cap in the main budget. Continue?');
-                    if (!ok) {
-                        var input = document.getElementById('total-cap');
-                        if (input) input.value = prev;
-                        return;
+                    stagesConfirm(
+                        'Changing the Budget Cap will update every stage cap in the main budget. Continue?',
+                        applyCap,
+                        'Budget Cap'
+                    );
+                    var overlay = document.getElementById('stages-confirm-overlay');
+                    if (overlay) {
+                        var revertCap = function() {
+                            var input = document.getElementById('total-cap');
+                            if (input) input.value = prev;
+                        };
+                        var cancelBtn = overlay.querySelector('#stages-confirm-cancel');
+                        if (cancelBtn) cancelBtn.addEventListener('click', revertCap);
+                        overlay.addEventListener('click', function(e) {
+                            if (e.target === overlay) revertCap();
+                        });
                     }
+                    return;
                 }
-                this.state.project.targetLock.totalCap = next;
-                this.renderVitals();
-                this.save();
+                applyCap();
             },
 
             updateDate: function(type, val) {
+                stagesPushUndoImmediate();
                 if (type === 'start')    this.state.project.startDate    = val;
                 else                     this.state.project.deliveryDate = val;
                 this.renderVitals();
@@ -1164,6 +1919,7 @@
             },
 
             bulkAction: function(action) {
+                stagesPushUndoImmediate();
                 var b    = this.state.project;
                 var KEYS = this.state.KEYS;
                 if (action === 'lockAll') {
@@ -1198,6 +1954,7 @@
             },
 
             autoFillAll: function() {
+                stagesPushUndoImmediate();
                 var b    = this.state.project;
                 var tl   = b.targetLock;
                 var KEYS = this.state.KEYS;
@@ -1219,11 +1976,14 @@
             },
 
             clearAll: function() {
-                if (!confirm('Clear all stage assignments? This cannot be undone.')) return;
-                Object.values(this.state.project.sections || {}).forEach(function(sec) {
-                    (sec.items || []).forEach(function(item) { item.stageData = {}; });
-                });
-                this.render(); this.save();
+                var self = this;
+                stagesConfirm('Clear all stage assignments?', function() {
+                    stagesPushUndoImmediate();
+                    Object.values(self.state.project.sections || {}).forEach(function(sec) {
+                        (sec.items || []).forEach(function(item) { item.stageData = {}; });
+                    });
+                    self.render(); self.save();
+                }, 'Clear All Stages');
             },
 
             /* ========= Add Item Modal ========= */
@@ -1302,6 +2062,7 @@
                 var sk   = this.state._modalStage;
                 var item = this._findItem(itemId);
                 if (!item) return;
+                stagesPushUndoImmediate();
                 if (!item.stageData) item.stageData = {};
                 item.stageData[sk] = { days: 1, rate: item.rate || 0, order: 0 };
                 this.closeAddModal();
@@ -1315,6 +2076,7 @@
                 var b        = this.state.project;
                 var ogItem   = (this.state.ogItems || []).find(function(i) { return i.id === ogId; });
                 if (!ogItem) return;
+                stagesPushUndoImmediate();
 
                 /* Guess target section */
                 var secNames = Object.keys(b.sections || {});
@@ -1346,6 +2108,7 @@
                 var rate = parseFloat(dom.getElementById('custom-rate').value) || 0;
                 var unit = dom.getElementById('custom-unit').value;
                 if (!desc) { dom.getElementById('custom-desc').focus(); return; }
+                stagesPushUndoImmediate();
 
                 var secNames  = Object.keys(b.sections || {});
                 var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
@@ -1440,6 +2203,7 @@
                         dragClass: 'sortable-drag',
                         disabled: isViewOnly,  /* Natively kills drag-and-drop for view-only users */
                         onEnd: function(evt) {
+                            stagesPushUndoImmediate();
                             var itemId    = evt.item.dataset.id;
                             var fromStage = evt.from.dataset.stage;
                             var toStage   = evt.to.dataset.stage;
@@ -1491,6 +2255,30 @@
 
             /* ========= Tab Navigation Bar ========= */
 
+            _initTabBarScrollHint: function() {
+                var bar = dom.getElementById('stages-tab-bar');
+                var fadeR = dom.getElementById('stages-tab-bar-fade-r');
+                if (!bar || !fadeR) return;
+                var update = function() {
+                    var overflow = bar.scrollWidth > bar.clientWidth + 1;
+                    var atEnd = bar.scrollLeft >= bar.scrollWidth - bar.clientWidth - 1;
+                    if (overflow && !atEnd) {
+                        fadeR.classList.add('visible');
+                    } else {
+                        fadeR.classList.remove('visible');
+                    }
+                };
+                bar.addEventListener('scroll', update);
+                window.addEventListener('resize', update);
+                if (typeof ResizeObserver !== 'undefined') {
+                    try {
+                        var ro = new ResizeObserver(update);
+                        ro.observe(bar);
+                    } catch (e) { /* ignore */ }
+                }
+                update();
+            },
+
             _initTabNavigation: function() {
                 var self = this;
                 var tabs = dom.querySelectorAll('.tab-btn');
@@ -1528,7 +2316,7 @@
             /* Re-attach scroll spy after every renderStageCards call */
             _observeTabPanels: function() {
                 if (!this._tabObserver) return;
-                var panels = ['panel-setup', 'panel-vitals', 'dev', 'pre', 'prod', 'post', 'dist'];
+                var panels = ['panel-setup', 'panel-vitals', 'panel-cashflow', 'dev', 'pre', 'prod', 'post', 'dist'];
                 this._tabObserver.disconnect();
                 var obs = this._tabObserver;
                 panels.forEach(function(id) {

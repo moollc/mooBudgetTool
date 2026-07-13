@@ -1195,6 +1195,22 @@
 
             if (!r || !t) return null;
 
+            /* Community rates are already region-specific; tier scalar only, no multiplier/JMD conversion */
+            for (var ci = 0; ci < self.rates.length; ci++) {
+                var comm = self.rates[ci];
+                if (comm.description && comm.description.toLowerCase().trim() === d && comm.region === r) {
+                    var commCurrency = (OG_CURRENCIES[r] || 'USD');
+                    var commScalar = MARKET_TIER_SCALARS[t] || 1.0;
+                    return {
+                        rate: Math.round(comm.rate * commScalar),
+                        unit: comm.unit || 'Day',
+                        currency: commCurrency,
+                        baseRate: comm.rate,
+                        source: 'community'
+                    };
+                }
+            }
+
             /* Find role in Master Index (crew, then equipment -- SYNONYM_REGISTRY
                equipment keys resolve to _MASTER_EQUIPMENT_INDEX descriptions) */
             var role = null;

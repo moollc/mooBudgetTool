@@ -155,6 +155,7 @@
     <!-- External Test Suites -->
     <script src="storage-test-suite.js"></script>
     <script src="math-test-suite.js"></script>
+    <script src="stages-test-suite.js"></script>
 
     <script>
         (function () {
@@ -429,9 +430,20 @@
                             });
                         }
 
-                        // Final Render
-                        renderResults();
-                        renderSummary();
+                        // 3. Run Stages Tests
+                        var p2 = (window.mBT.tests && window.mBT.tests.stages && window.mBT.tests.stages.runAll) ?
+                            window.mBT.tests.stages.runAll() : Promise.resolve({ tests: [] });
+
+                        p2.then(function (stagesResults) {
+                            stagesResults.tests.forEach(function (t) {
+                                results.push({ suite: 'Stages (External)', name: t.name, status: t.passed ? 'pass' : 'fail', error: t.message });
+                                if (t.passed) passed++; else failed++;
+                            });
+
+                            // Final Render
+                            renderResults();
+                            renderSummary();
+                        });
                     });
                 };
                 run();
@@ -442,12 +454,12 @@
                 container.innerHTML = '';
                 var suites = {};
 
-                results.forEach(function () {
+                results.forEach(function (r) {
                     if (!suites[r.suite]) suites[r.suite] = [];
                     suites[r.suite].push(r);
                 });
 
-                Object.keys(suites).forEach(function () {
+                Object.keys(suites).forEach(function (suiteName) {
                     var section = document.createElement('div');
                     section.className = 'suite';
 
@@ -456,7 +468,7 @@
                     title.textContent = suiteName;
                     section.appendChild(title);
 
-                    suites[suiteName].forEach(function () {
+                    suites[suiteName].forEach(function (t) {
                         var row = document.createElement('div');
                         row.className = 'test';
 

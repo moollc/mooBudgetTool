@@ -67,7 +67,7 @@ window.mBTRouter = (function () {
         }
         var aiBtn = document.getElementById('openAiToolsBtn');
         if (aiBtn) {
-            aiBtn.className = 'p-3 text-white rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center ' +
+            aiBtn.className = 'relative p-3 text-white rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center ' +
                 (isOnline ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed');
             if (!isOnline) aiBtn.title = 'AI Consultant Offline';
         }
@@ -184,7 +184,9 @@ window.mBTRouter = (function () {
     function generateWiseCSV(budget) {
         var lines = ['Source Currency,Recipient Name,Amount,Reference'];
         if (!budget.ledgers || !budget.ledgers.pos) return lines.join('\n');
-        var currency = (budget.settings && budget.settings.displayCurrency) || 'USD';
+        /* Ledger amounts are base currency: label with budget.currency, never displayCurrency
+           (same rule as export bridge in index.html) */
+        var currency = budget.currency || 'JMD';
         budget.ledgers.pos.forEach(function (po) {
             if (po.status !== 'Invoiced') return;
             lines.push(
@@ -407,9 +409,10 @@ window.mBTRouter = (function () {
         var budget             = _ctx.getBudget();
         var currentProjectName = _ctx.getCurrentProjectName();
 
-        /* --- reconcile: reload budget from storage --- */
-        if (action === 'reconcile' && currentProjectName) {
-            mBT.data.load(currentProjectName);
+        /* --- reconcile: owned by monolith message listener (loadBudget + post-load
+           reconcile/funding/headers). No-op here to avoid dual async reloads. --- */
+        if (action === 'reconcile') {
+            return;
 
         /* --- Phase 73/78: update-fringes + update-ledgers (consolidated save path) --- */
         } else if ((action === 'update-fringes' || action === 'update-ledgers') && currentProjectName && budget) {
@@ -483,7 +486,8 @@ window.mBTRouter = (function () {
         } else if (action === 'update-contact-rate' && budget) {
             var crName = (payload.name || '').toLowerCase();
             var crRate = parseFloat(payload.rate);
-            if (crName && crRate) {
+            /* Rate 0 is valid (free/gratis); only reject missing/NaN rates */
+            if (crName && !isNaN(crRate)) {
                 var crUpdated = _updateSectionRatesByMatch(budget, crName, crRate);
                 if (budget.globalItems) {
                     for (var ci = 0; ci < budget.globalItems.length; ci++) {
@@ -507,7 +511,8 @@ window.mBTRouter = (function () {
         } else if (action === 'og-rate-changed' && budget) {
             var ogDesc = (payload.description || '').toLowerCase();
             var newRate = parseFloat(payload.rate);
-            if (ogDesc && newRate) {
+            /* Rate 0 is valid (free/gratis); only reject missing/NaN rates */
+            if (ogDesc && !isNaN(newRate)) {
                 var ogUpdated = _updateSectionRatesByMatch(budget, ogDesc, newRate);
                 if (budget.globalItems) {
                     for (var ri = 0; ri < budget.globalItems.length; ri++) {
@@ -538,6 +543,26 @@ window.mBTRouter = (function () {
         /* --- Phase 64: Share Hub Link Revocation --- */
         } else if (action === 'revoke-link' || action === 'revoke-user') {
             window.dispatchEvent(new CustomEvent('mbt:auth-changed', { detail: { evictAll: action === 'revoke-link', userId: payload.userId } }));
+
+        /* --- Collab: Share Hub needs mBT Collab session --- */
+        } else if (action === 'collab-auth-needed') {
+            if (typeof window.mBTShowCollabAuth === 'function') {
+                window.mBTShowCollabAuth(function () {
+                    /* Share hub re-inits invite after auth via parent reload of tool or manual regenerate */
+                    if (typeof window.openShareHub === 'function') {
+                        try { window.openShareHub(); } catch (err) { console.warn(err); }
+                    }
+                });
+            }
+
+        /* --- Collab: apply pulled budget from Share Hub --- */
+        } else if (action === 'collab-apply-budget' && payload && payload.budgetData) {
+            if (typeof window.mBTApplyCollabBudget === 'function') {
+                window.mBTApplyCollabBudget(payload.budgetData, payload.collabProjectId).catch(function (err) {
+                    console.error('[mBT] collab-apply-budget failed:', err);
+                    if (typeof mBTME !== 'undefined' && mBTME.alert) mBTME.alert('Collab', (err && err.message) || 'Pull failed');
+                });
+            }
 
         /* --- Phase 68B: approve-pending-edit --- */
         } else if (action === 'approve-pending-edit' && payload.editId) {

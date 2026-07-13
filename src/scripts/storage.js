@@ -913,5 +913,7 @@ var mBTStorage = {
 if (typeof window !== 'undefined') {
   window.mBT = window.mBT || {};
   window.mBT.storage = mBTStorage;
+  /* Canonical global for contacts CRUD, generic IDB kv, tombstones (do not overwrite in index.html) */
+  window.mBTStorage = mBTStorage;
 }
 

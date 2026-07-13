@@ -2069,10 +2069,19 @@
                     if (cast.length === 0) {
                         cast = [{ name: '', role: '', days: {} }];
                     }
+                    var shootDaysVal = '';
+                    if (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod) {
+                        var prodDays = parseInt(b.targetLock.stages.prod.days, 10) || 0;
+                        if (prodDays > 0) shootDaysVal = String(prodDays);
+                    }
+                    if (!shootDaysVal) {
+                        var topDays = parseInt(b.productionDays, 10) || 0;
+                        if (topDays > 0) shootDaysVal = String(topDays);
+                    }
                     return {
                         productionTitle: b.projectName || '',
                         startDate: '',
-                        shootDays: '10',
+                        shootDays: shootDaysVal,
                         cast: cast
                     };
                 },

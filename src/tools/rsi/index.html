@@ -9,7 +9,26 @@
   <script src="../../scripts/engine/mbtle.js"></script>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
+  <script>
+    /* Theme Bridge: Instant Inheritance (matches calendar_benchmark) */
+    (function() {
+      var activeTheme = localStorage.getItem('mbt_active_theme') || 'light';
+      document.documentElement.className = 'mbt-theme-' + activeTheme;
+    })();
+  </script>
   <style type="text/tailwindcss">/* mBT RSI Technical Debt Dashboard */:root{--mBT-theme-primary:#1e88e5;--mBT-theme-danger:#e53935}.debt-item{@apply bg-yellow-50 border border-yellow-200 rounded-lg p-4}.debt-item.critical{@apply bg-red-50 border border-red-200}.debt-item.performance{@apply bg-purple-50 border border-purple-200}.debt-item.security{@apply bg-orange-50 border border-orange-200}</style>
+  <style>
+    /* Theme Bridge: Bilateral Architecture */
+    .mbt-theme-dark { background-color: #020617; color: #e2e8f0; }
+    .mbt-theme-dark body, .mbt-theme-dark .bg-gray-50 { background-color: #020617 !important; }
+    .mbt-theme-dark header.bg-white,
+    .mbt-theme-dark .bg-white { background-color: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+    .mbt-theme-dark .text-gray-800 { color: #f1f5f9 !important; }
+    .mbt-theme-dark .text-gray-700 { color: #e2e8f0 !important; }
+    .mbt-theme-dark .text-gray-500,
+    .mbt-theme-dark .text-gray-600 { color: #94a3b8 !important; }
+    .mbt-theme-dark .debt-item { background-color: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+  </style>
 </head>
 
 <body class="bg-gray-50 font-sans">
@@ -574,7 +593,13 @@
         }
       }
 
-      document.addEventListener('DOMContentLoaded', refreshConsentUI);
+      document.addEventListener('DOMContentLoaded', function () {
+        refreshConsentUI();
+        /* Standard lifecycle: parent listens for mbt:tool-ready */
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'rsi' }, '*');
+        }
+      });
 
       return { setTelemetryConsent: setTelemetryConsent, clearTelemetry: clearTelemetry, toggleOGSharing: toggleOGSharing };
     }());
