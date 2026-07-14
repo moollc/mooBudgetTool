@@ -433,7 +433,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.86";
+    var APP_VERSION = "23.87";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3937,11 +3937,11 @@
             '</button>' +
             '<div id="currencyPopover" class="hidden absolute left-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-1.5 min-w-[130px]"></div>' +
             '</div>' +
-            '<button id="openAiToolsBtn" title="AI Assistant" class="relative p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg transition-all hover:bg-indigo-700 active:scale-95 flex items-center justify-center overflow-visible">' +
-            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">' +
-            '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2Z" fill="rgba(255,255,255,0.14)" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>' +
-            '<path d="M13.2 6.4l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" fill="currentColor"/>' +
-            '<path d="M9 12.6l.35 1 1 .35-1 .35-.35 1-.35-1-1-.35 1-.35Z" fill="currentColor"/>' +
+            '<button id="openAiToolsBtn" title="AI Assistant" class="relative w-[38px] h-[38px] p-0 bg-transparent text-indigo-600 hover:text-indigo-700 transition-all active:scale-95 flex items-center justify-center overflow-visible drop-shadow-lg">' +
+            '<svg width="38" height="38" viewBox="0 0 38 36" aria-hidden="true" focusable="false">' +
+            '<path fill="currentColor" d="M7 2h24a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H15l-8 8v-8H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z"/>' +
+            '<path fill="#fff" d="M22 7.2l1.05 2.85 2.85 1.05-2.85 1.05-1.05 2.85-1.05-2.85-2.85-1.05 2.85-1.05z"/>' +
+            '<path fill="#fff" d="M14.2 16.2l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4z"/>' +
             '</svg>' +
             '</button>' +
             '<span id="shareHubBtnWrap" style="position:relative;display:inline-flex;">' +
@@ -3994,6 +3994,23 @@
             var safeKey = sectionKey.replace(/"/g, '\\"');
             var sectionTotalEl = document.querySelector('[data-section-total="' + safeKey + '"]');
             if (sectionTotalEl) sectionTotalEl.textContent = fmt(section.total);
+            /* Lock/unlock rates only mutates item.rateType, which never changes the
+               section's item count -- so the surgical path never rebuilds the section
+               header, and the lock button's icon/color/title (baked into that header's
+               HTML at render time) went stale until a manual refresh. Recompute the
+               locked state the same way lockSectionRates does and repaint the button
+               in place, matching the pattern already used for section totals/badges. */
+            var lockBtn = document.querySelector('[data-section-lock-btn="' + safeKey + '"]');
+            if (lockBtn && section.items && section.items.length) {
+                var isSecLocked = section.items.every(function (i) { return i.rateType === 'fixed'; });
+                var lockIcon = isSecLocked
+                    ? ((typeof mBTAssets !== "undefined" && mBTAssets.lock) ? mBTAssets.lock : '🔒')
+                    : ((typeof mBTAssets !== "undefined" && mBTAssets.link) ? mBTAssets.link : '🔗');
+                lockBtn.title = isSecLocked ? 'Unlock all rates in this category' : 'Lock all rates in this category';
+                lockBtn.className = 'pointer-events-auto px-2 py-1 rounded-lg transition-all ' + (isSecLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-rose-500');
+                var lockIconSpan = lockBtn.querySelector('span');
+                if (lockIconSpan) lockIconSpan.innerHTML = lockIcon;
+            }
             /* Phase 114: targetCap overage -- red badge when section total exceeds cap */
             var capBadge = document.querySelector('[data-section-cap-badge="' + safeKey + '"]');
             if (capBadge) {
@@ -4378,7 +4395,7 @@
                 '<h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">' + safeName + '</h2>' +
                 '</div>' +
                 '<div class="flex items-center gap-1.5 flex-shrink-0">' +
-                '<button type="button" onclick="event.stopPropagation(); window.lockSectionRates(\'' + rawId + '\');" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
+                '<button type="button" data-section-lock-btn="' + safeName + '" onclick="event.stopPropagation(); window.lockSectionRates(\'' + rawId + '\');" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
                 '<span class="scale-75">' + secLockIcon + '</span>' +
                 '</button>' +
                 '<span data-section-cap-badge="' + safeName + '" class="hidden text-[8px] font-black text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none pointer-events-none"></span>' +
@@ -8522,32 +8539,45 @@
                 return;
             }
             var content = '<div class="flex flex-col h-[88vh] bg-slate-900 text-white font-sans">' +
-                '<!-- Top Bar: Blueprint chips + Inject Rates inline (single row ~48px) -->' +
-                '<div class="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-slate-950/60 flex-wrap">' +
-                '<span class="text-[10px] font-black uppercase tracking-widest text-white/40 mr-1 shrink-0">Start From</span>' +
-                '<button onclick="mBT.features.blueprints.applyFromHub(\'commercial\')" class="sh-chip"><span class="sh-chip-tag text-blue-400">Std</span>TV Commercial</button>' +
-                '<button onclick="mBT.features.blueprints.applyFromHub(\'documentary\')" class="sh-chip"><span class="sh-chip-tag text-emerald-400">R&amp;G</span>Documentary</button>' +
-                '<button onclick="mBT.features.blueprints.applyFromHub(\'live_stream\')" class="sh-chip"><span class="sh-chip-tag text-amber-400">Tech</span>Live Broadcast</button>' +
-                '<button onclick="mBT.features.blueprints.applyFromHub(\'music_video\')" class="sh-chip"><span class="sh-chip-tag text-rose-400">Crtv</span>Music Video</button>' +
-                '<label class="flex items-center gap-2 cursor-pointer group ml-auto shrink-0 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">' +
-                '<input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">' +
-                '<div class="w-7 h-3.5 bg-slate-700 rounded-full relative transition-colors peer-checked:bg-blue-600">' +
-                '<div class="absolute left-0.5 top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform peer-checked:translate-x-3.5"></div>' +
+                '<!-- Secondary strip: optional blueprint shortcuts + Inject Rates (single quiet row) -->' +
+                '<div class="sh-hub-strip">' +
+                '<span class="sh-hub-strip-label">Template</span>' +
+                '<div class="sh-hub-chip-scroll">' +
+                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'commercial\')" class="sh-chip" title="Commercial (TVC)">TVC</button>' +
+                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'documentary\')" class="sh-chip" title="Documentary">DOCU</button>' +
+                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'live_stream\')" class="sh-chip" title="Broadcast">BCAST</button>' +
+                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'music_video\')" class="sh-chip" title="Music Video">MV</button>' +
                 '</div>' +
-                '<span class="text-[9px] font-black uppercase tracking-widest text-white/60 group-hover:text-white transition-colors">Inject Rates</span>' +
+                '<label class="sh-hub-rates" title="Inject industry rates when applying a template">' +
+                '<input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">' +
+                '<div class="sh-hub-rates-track">' +
+                '<div class="sh-hub-rates-knob"></div>' +
+                '</div>' +
+                '<span class="sh-hub-rates-text">Rates</span>' +
                 '</label>' +
                 '</div>' +
-                '<!-- Main: Assistant Iframe -->' +
+                '<!-- Main: Assistant Iframe (primary focus of this modal) -->' +
                 '<div class="flex-1 relative bg-black/20 min-h-0">' +
                 '<iframe id="mbtHubAiIframe" src="./src/tools/ai/index.html?embedded=true&v=' + Date.now() + '" class="w-full h-full border-none block"></iframe>' +
                 '</div>' +
                 '</div>' +
                 '<style id="sh-chips-css">' +
-                '.sh-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:11px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:all .15s;min-height:32px}' +
-                '.sh-chip:hover{background:rgba(255,255,255,0.12);transform:translateY(-1px)}' +
-                '.sh-chip:active{transform:translateY(0) scale(.97)}' +
-                '.sh-chip-tag{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.9}' +
-                '@media (max-width:640px){ .sh-chip{padding:5px 9px;font-size:10px} }' +
+                /* Quiet utility strip: secondary to chat UI below */
+                '.sh-hub-strip{display:flex;align-items:center;gap:6px;padding:3px 10px;border-bottom:1px solid rgba(255,255,255,0.04);background:transparent;flex-shrink:0;min-height:0}' +
+                '.sh-hub-strip-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.26);flex-shrink:0}' +
+                '.sh-hub-chip-scroll{display:flex;align-items:center;gap:3px;flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}' +
+                '.sh-hub-chip-scroll::-webkit-scrollbar{height:3px}' +
+                '.sh-hub-chip-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:999px}' +
+                '.sh-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.45);font-size:10px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background .15s,border-color .15s,color .15s;flex-shrink:0;line-height:1.3;min-height:0;white-space:nowrap}' +
+                '.sh-chip:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14);color:rgba(255,255,255,0.72)}' +
+                '.sh-chip:active{background:rgba(255,255,255,0.09)}' +
+                '.sh-hub-rates{display:inline-flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;padding:2px 0 2px 6px;border-left:1px solid rgba(255,255,255,0.06)}' +
+                '.sh-hub-rates-track{width:22px;height:12px;background:rgba(255,255,255,0.12);border-radius:999px;position:relative;transition:background .15s}' +
+                '.sh-hub-rates .peer:checked ~ .sh-hub-rates-track{background:rgba(59,130,246,0.5)}' +
+                '.sh-hub-rates-knob{position:absolute;left:2px;top:2px;width:8px;height:8px;background:rgba(255,255,255,0.85);border-radius:999px;transition:transform .15s}' +
+                '.sh-hub-rates .peer:checked ~ .sh-hub-rates-track .sh-hub-rates-knob{transform:translateX(10px)}' +
+                '.sh-hub-rates-text{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,0.3)}' +
+                '.sh-hub-rates:hover .sh-hub-rates-text{color:rgba(255,255,255,0.55)}' +
                 '</style>';
 
             mBTME.open('assistant-hub', 'Assistant Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
@@ -12605,7 +12635,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.86', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.87', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
