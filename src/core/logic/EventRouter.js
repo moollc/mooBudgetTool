@@ -67,9 +67,11 @@ window.mBTRouter = (function () {
         }
         var aiBtn = document.getElementById('openAiToolsBtn');
         if (aiBtn) {
-            aiBtn.className = 'relative p-3 text-white rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center ' +
-                (isOnline ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed');
+            /* Bubble silhouette is the SVG fill (currentColor); keep chrome transparent so the shape reads as a chat bubble, not a rounded pill. */
+            aiBtn.className = 'relative w-[38px] h-[38px] p-0 bg-transparent transition-all active:scale-95 flex items-center justify-center overflow-visible drop-shadow-lg ' +
+                (isOnline ? 'text-indigo-600 hover:text-indigo-700' : 'text-slate-400 cursor-not-allowed');
             if (!isOnline) aiBtn.title = 'AI Consultant Offline';
+            else aiBtn.title = 'AI Assistant';
         }
     }
 
