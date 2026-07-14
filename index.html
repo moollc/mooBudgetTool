@@ -433,7 +433,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.81";
+    var APP_VERSION = "23.86";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -983,6 +983,34 @@
                         if (window.mBT && window.mBT.state && !isInternal) window.mBT.state.isDirty = true;
                     }
                     return true;
+                },
+
+                /* `delete obj.prop` (e.g. clearing a crew assignment, a schedule phase,
+                   or a block's default phase) bypassed the `set` trap entirely, so those
+                   changes were invisible to both the activity log and the undo stack --
+                   Undo/Redo silently could not restore them. Mirror `set`'s audit +
+                   reconcile logic here so a delete is tracked the same way a set is. */
+                deleteProperty: function (target, prop) {
+                    if (mBT.data.state._isAuditing) return Reflect.deleteProperty(target, prop);
+
+                    if (!(prop in target)) return true;
+
+                    var pKey = prop.toString();
+                    var isInternal = pKey.indexOf('_') === 0 || pKey === 'activityLog' || pKey === 'isOpen';
+
+                    if (!mBT.data.state._isInitialLoad && !isInternal) {
+                        var itemId = target.id || (target.projectName ? 'Project' : 'Root');
+                        var label = target.description || target.name || target.projectName || pKey;
+                        var diff = { field: pKey, oldValue: target[prop], newValue: undefined };
+                        mBT.data.state.audit('UPDATE', label, { diff: diff, itemId: itemId });
+                    }
+
+                    var result = Reflect.deleteProperty(target, prop);
+                    if (!mBT.data.state._isInitialLoad) {
+                        mBT.data.state.requestReconciliation();
+                        if (window.mBT && window.mBT.state && !isInternal) window.mBT.state.isDirty = true;
+                    }
+                    return result;
                 }
             },
 
@@ -1081,6 +1109,12 @@
                     }
                     if (typeof render === 'function') render();
                     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+                    /* Undo/Redo only reassigned the in-memory budget and never persisted it --
+                       a page reload (or any later save firing with stale state) silently
+                       discarded the revert, so Undo appeared to work on screen but never
+                       actually stuck. Explicit save here matches every other mutation path
+                       in this file (e.g. finalizeImport calls self.save() after mutating). */
+                    mBT.data.save();
                 }
             },
             redoSnapshot: function () {
@@ -1093,6 +1127,7 @@
                     }
                     if (typeof render === 'function') render();
                     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+                    mBT.data.save();
                 }
             }
         },
@@ -4005,6 +4040,7 @@
                         input.value = val;
                     }
                 };
+                updateInput('description', item.description);
                 updateInput('quantity', item.quantity);
                 updateInput('rate', toDisp(item.rate).toFixed(2));
                 updateInput('actual', toDisp(item.actual || 0).toFixed(2));
@@ -4744,6 +4780,12 @@
         function commitSheet(item) {
             var container = document.getElementById('scheduleModal');
             if (!container) return;
+            /* Immediate pre-commit snapshot -- unchecking a phase below uses `delete
+               item.stageData[k]`, which only reaches historyStack via the Proxy's
+               debounced reconciliation (unpredictable Undo click count, or none if no
+               prior snapshot exists yet this session). Snapshot before any mutation so
+               Undo can always reach the pre-commit schedule in one click. */
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Schedule Update');
             if (!item.stageData) item.stageData = {};
             var checks = container.querySelectorAll('.mbt-sched-check');
             for (var i = 0; i < checks.length; i++) {
@@ -4926,6 +4968,10 @@
                 /* Set / clear default phase on the (possibly renamed) section */
                 var tSec = budget.sections[targetName];
                 if (tSec) {
+                    /* Immediate snapshot before the set/delete -- saveBudget() alone does
+                       not push historyStack, and clearing (delete) only reaches it via the
+                       Proxy's debounced reconciliation. */
+                    if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Default Phase Update');
                     if (phaseVal && KEYS.indexOf(phaseVal) > -1) tSec.defaultPhase = phaseVal;
                     else delete tSec.defaultPhase;
                     saveBudget();
@@ -9200,6 +9246,10 @@
                     // Enhanced Confirmation with item name
                     mBTME.confirm("Remove from Stage", 'Remove "' + item.description + '" from this stage? The main budget item will remain.', function () {
                         if (item.stageData && item.stageData[stageKey]) {
+                            /* Immediate pre-delete snapshot -- saveBudget() alone does not
+                               push historyStack, and the `delete` only reaches it via the
+                               Proxy's debounced reconciliation. */
+                            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Removed From Stage');
                             delete item.stageData[stageKey];
                             saveBudget();
                             if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -11586,6 +11636,11 @@
                 }
             }
             if (item) {
+                /* Immediate pre-delete snapshot, matching handleRemoveItem's pattern --
+                   `delete item.crew` alone only reaches historyStack via the Proxy's
+                   debounced reconciliation, which can leave Undo needing an unpredictable
+                   number of clicks (or none, if no prior snapshot exists yet this session). */
+                if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Unassigned Crew');
                 delete item.crew;
                 mBTME.close('crewProfileModal');
                 if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
@@ -12550,7 +12605,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.81', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.86', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13817,6 +13872,19 @@
                 if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingLock === 'function') {
                     mBTRealtime.broadcastTypingLock(fieldId);
                 }
+                /* Snapshot BEFORE the edit starts, not just after it finishes on blur.
+                   Every existing snapshot path (the debounced 'Field Edit' on reconcile,
+                   and the blur-triggered one added alongside this) only captures state
+                   AFTER item.description/rate/etc. has already been mutated on the live
+                   proxy object -- so there was never a stack entry representing "value
+                   before this edit", and Undo could never actually restore the pre-edit
+                   value, only the state after some other later action. Push one snapshot
+                   here, guarded so a focus without any actual change doesn't spam the
+                   stack (only meaningfully differs once the field's value first changes,
+                   handled implicitly since this fires once per focus, not per keystroke). */
+                if (mBT.data && mBT.data.recorder) {
+                    mBT.data.recorder.snapshot('Before edit: ' + (input.dataset.field || 'value'));
+                }
             }
         }, true);
 
@@ -13826,6 +13894,17 @@
                 var fieldId = (input.dataset.section || '') + '::' + (input.dataset.id || '') + '::' + (input.dataset.field || '');
                 if (window.mBTRealtime && typeof mBTRealtime.broadcastTypingRelease === 'function') {
                     mBTRealtime.broadcastTypingRelease(fieldId);
+                }
+                /* Line-item field edits only reach the undo stack via a single shared
+                   debounce timer (mBT.data.state.requestReconciliation's _saveTimer),
+                   so an edit immediately followed by an unrelated action can have its
+                   snapshot silently coalesced away and skipped by Undo, even though the
+                   Activity Log (which tracks every diff individually) still shows it.
+                   Push an immediate snapshot on blur so each finished field edit always
+                   gets its own undo-stack entry, matching the pattern already used for
+                   delete/add/reorder actions elsewhere in this file. */
+                if (mBT.data && mBT.data.recorder) {
+                    mBT.data.recorder.snapshot('Field Edit: ' + (input.dataset.field || 'value'));
                 }
             }
         }, true);

@@ -197,26 +197,39 @@
     ];
 
     /* ========= EQUIPMENT RENTAL INDEX (Phase 202, block OG-Equipment-v1) =========
-       Same shape as crew roles minus 'intelligence' text; itemType/category are
-       stamped by _expandIndex, not stored here (keeps master rows uniform).
-       Multipliers = round(regional equipment midpoint USD / USA baseRate, 2) from
-       research/rates/{SOUTHEAST_ASIA,INDIA_PRODUCTION,SOUTH_AFRICA,
-       MEXICO_LATIN_AMERICA,EASTERN_EUROPE}_RATES.md. Where a region's table gives
-       one combined camera-kit row (no RED/ARRI vs Sony split -- Brazil, Colombia,
-       Poland), that single ratio is used for both camera SKUs.
+       Same shape as crew roles; category stored on equipment rows (itemType is
+       stamped by _expandIndex). Multipliers = round(regional equipment midpoint
+       USD / USA baseRate, 2) from research/rates/{SOUTHEAST_ASIA,INDIA_PRODUCTION,
+       SOUTH_AFRICA,MEXICO_LATIN_AMERICA,EASTERN_EUROPE}_RATES.md. Where a region's
+       table gives one combined camera-kit row (no RED/ARRI vs Sony split -- Brazil,
+       Colombia, Poland), that single ratio is used for both camera SKUs.
        No Jamaica/Caribbean/UK/Canada/Australia equipment tables exist -- those
        anchor to the related crew role's regional multiplier per brief (Camera
        Kit->Camera Operator, Light Kit->Gaffer, Sound Kit->Sound Mixer,
        Grip/Drone->Key Grip), Jamaica fixed at 0.28 for all equipment. Same rule
        covers Drone Package where a region's table has no drone row (Philippines,
-       Mexico, Brazil, Colombia, Poland). */
+       Mexico, Brazil, Colombia, Poland).
+       PA / live-event audio: no PA-specific regional tables in research/rates.
+       PA rows reuse the Sound Kit multiplier profile (Audio Package midpoints
+       in those files; gap countries already Sound Mixer-anchored via Sound Kit).
+       Wireless video TX/RX: no wireless-transmission tables in research/rates.
+       Wireless rows reuse the Camera Kit (4K Cinema) multiplier profile (globally
+       traded video capital gear; gap countries already Camera Operator-anchored). */
     var _MASTER_EQUIPMENT_INDEX = [
         { "description": "Camera Kit (4K Cinema Package)", "unit": "Day", "baseRate": 850, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
         { "description": "Camera Kit (Sony FX6/FX9)", "unit": "Day", "baseRate": 475, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.11, "Thailand": 0.90, "Philippines": 0.71, "Vietnam": 0.84, "Poland": 0.94, "Mexico": 0.95, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.29 } },
         { "description": "Light Kit (3-Light)", "unit": "Day", "baseRate": 350, "category": "lighting", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 0.86, "Thailand": 0.86, "Philippines": 0.71, "Vietnam": 0.86, "Poland": 0.86, "Mexico": 1.29, "Brazil": 1.50, "Colombia": 0.86, "South Africa": 1.08 } },
         { "description": "Sound Kit (Mixer + Wireless)", "unit": "Day", "baseRate": 225, "category": "sound", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
         { "description": "Grip Kit (Dolly + Stands)", "unit": "Day", "baseRate": 325, "category": "arsenal", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.78, "Australia": 0.68, "India": 1.15, "Thailand": 0.92, "Philippines": 0.69, "Vietnam": 0.69, "Poland": 0.92, "Mexico": 1.15, "Brazil": 1.38, "Colombia": 0.69, "South Africa": 0.99 } },
-        { "description": "Drone Package", "unit": "Day", "baseRate": 300, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.68, "Australia": 0.68, "India": 1.17, "Thailand": 1.00, "Philippines": 0.39, "Vietnam": 1.00, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.81 } }
+        { "description": "Drone Package", "unit": "Day", "baseRate": 300, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.68, "Australia": 0.68, "India": 1.17, "Thailand": 1.00, "Philippines": 0.39, "Vietnam": 1.00, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.81 } },
+        { "description": "PA System (Small Venue/Corporate)", "unit": "Day", "baseRate": 350, "category": "sound", "intelligence": "USA gear day rate from basic PA packages (powered tops + mixer, ~$200-$500). Multipliers reuse Sound Kit profile (no PA regional tables; Sound Mixer anchor for Caribbean/UK/Canada/Australia).", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
+        { "description": "PA System (Live Event/Concert)", "unit": "Day", "baseRate": 1500, "category": "sound", "intelligence": "USA gear day rate for small-medium line array packages (~$1,250-$2,500). Multipliers reuse Sound Kit profile (no PA regional tables; Sound Mixer anchor for Caribbean/UK/Canada/Australia).", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
+        { "description": "QSC K12.2 PA Package (2 Tops + Mixer)", "unit": "Day", "baseRate": 300, "category": "sound", "intelligence": "USA day rate: 2x QSC K12.2 (~$75-$105 each) plus mixer/stands package (~$250-$350). Multipliers reuse Sound Kit profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
+        { "description": "JBL SRX Line Array Package", "unit": "Day", "baseRate": 1250, "category": "sound", "intelligence": "USA day rate aligned to published JBL SRX small-medium line array package (~$1,250). Multipliers reuse Sound Kit profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.85, "Australia": 0.68, "India": 1.00, "Thailand": 0.94, "Philippines": 0.67, "Vietnam": 0.78, "Poland": 1.00, "Mexico": 1.33, "Brazil": 1.33, "Colombia": 0.78, "South Africa": 1.02 } },
+        { "description": "Wireless Video TX/RX System", "unit": "Day", "baseRate": 175, "category": "camera", "intelligence": "Generic wireless HD-SDI/HDMI TX+RX pair. USA mid between indie (~$35-$85) and pro Bolt-class (~$200-$275). Multipliers reuse Camera Kit 4K profile (no wireless regional tables; Camera Operator anchor for Caribbean/UK/Canada/Australia).", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
+        { "description": "Teradek Bolt 4K (750ft)", "unit": "Day", "baseRate": 250, "category": "camera", "intelligence": "USA production-house day rate for Bolt 4K / Bolt 4K LT 750 TX/RX kits (~$200-$275; CSI Rentals $275 deluxe). Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
+        { "description": "Teradek Bolt 4K (1500ft)", "unit": "Day", "baseRate": 350, "category": "camera", "intelligence": "USA day rate for longer-range Bolt 4K 1500 TX/RX kits; premium over 750ft tier. Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
+        { "description": "Accsoon CineView 2 (SDI)", "unit": "Day", "baseRate": 85, "category": "camera", "intelligence": "USA day rate for Accsoon CineView 2 SDI TX/RX (ShareGrid ~$35 peer; production-house kits ~$75-$100). Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
@@ -463,7 +476,7 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.07.09_equipment_v1';
+            var CURRENT_VERSION = '2026.07.13_equipment_v2';
 
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
