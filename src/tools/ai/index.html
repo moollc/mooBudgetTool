@@ -506,6 +506,7 @@
   </div><!-- /.asst-shell -->
 
   <!-- Core scripts -->
+  <script src="../../lib/localforage.min.js"></script>
   <script src="../../scripts/storage.js"></script>
   <script src="../../scripts/engine/mbtle.js"></script>
   <script src="../../config/ai.js"></script>
@@ -993,7 +994,20 @@ window.openSourceModal   = openSourceModal;
     window.addEventListener('message', function (e) {
         if (!e.data || e.data.type !== 'budget-sync') return;
         var payload = e.data.payload || e.data;
-        var newCtx = payload.context || context;
+        /* Parent sends a thin {projectName, budget, currency}; budgetDoc has the real sections.
+           Merge into a full context so Inject budget context is not wiped to name+total only. */
+        var newCtx = {};
+        var baseCtx = payload.context || context || {};
+        for (var bk in baseCtx) {
+            if (Object.prototype.hasOwnProperty.call(baseCtx, bk)) newCtx[bk] = baseCtx[bk];
+        }
+        if (payload.budgetDoc && window.mBTAIContext && typeof window.mBTAIContext.enrichContextFromBudgetDoc === 'function') {
+            newCtx = window.mBTAIContext.enrichContextFromBudgetDoc(newCtx, payload.budgetDoc);
+        } else if (payload.budgetDoc) {
+            newCtx._budgetDoc = payload.budgetDoc;
+        }
+        if (!newCtx.allocations) newCtx.allocations = [];
+        if (!newCtx.sections) newCtx.sections = [];
         context = newCtx;
         _contextGeneration++;
         var _oldProjectKey = _llmProjectKey;
@@ -1009,7 +1023,6 @@ window.openSourceModal   = openSourceModal;
                 restoreLLMHistory();
             }
         }
-        if (newCtx && payload.budgetDoc) newCtx._budgetDoc = payload.budgetDoc;
         paintProjectKnowledge(newCtx, payload.budgetDoc || null);
         renderBudgetStateCards(newCtx, payload.budgetDoc || null);
         /* Keep version badge in sync with monolith */
@@ -1372,7 +1385,9 @@ window.openSourceModal   = openSourceModal;
             '--- PROPOSAL PROTOCOL ---',
             'When you recommend a concrete change the user can apply, emit a proposal block AFTER your prose explanation, using exactly this format:',
             '[[PROPOSAL]]{"title":"short label","rationale":"one or two sentences","mutations":[{"intent":"update-budget-field","payload":{"field":"contingencyPercentage","value":10}}]}[[/PROPOSAL]]',
-            'Valid intents: update-budget-field, add-line-item, adjust-section-total. Only emit proposals for changes the user explicitly asked to evaluate. Keep rationale short. One proposal per recommendation. No markdown fences around the block.',
+            'Valid intents: add-section, update-budget-field, add-line-item, adjust-section-total.',
+            'For a new budget block use: {"intent":"add-section","payload":{"name":"Section Name"}} (e.g. Catering, Camera). Do not invent sections unless the user asked to add one.',
+            'Only emit proposals for changes the user explicitly asked to evaluate. Keep rationale short. One proposal per recommendation. No markdown fences around the block.',
             ''
         ];
 
@@ -1382,14 +1397,94 @@ window.openSourceModal   = openSourceModal;
 
         /* Budget context */
         if (ctx) {
+            /* Defensive: if parent budget-sync left _budgetDoc but no sections yet, fill now */
+            if ((!ctx.sections || !ctx.sections.length) && ctx._budgetDoc &&
+                window.mBTAIContext && typeof window.mBTAIContext.enrichContextFromBudgetDoc === 'function') {
+                window.mBTAIContext.enrichContextFromBudgetDoc(ctx, ctx._budgetDoc);
+            }
+
             lines.push('--- PROJECT CONTEXT ---');
             lines.push('Project: ' + (ctx.projectName || 'Unnamed'));
-            lines.push('Total Budget: $' + (ctx.budget ? ctx.budget.toLocaleString() : 'N/A'));
+            lines.push('Total Budget (grand total): $' + (ctx.budget ? Number(ctx.budget).toLocaleString() : 'N/A'));
+
+            if (ctx.contingencyPercentage != null && !isNaN(ctx.contingencyPercentage)) {
+                lines.push('Contingency: ' + ctx.contingencyPercentage + '%');
+            }
+            if (ctx.discountPercentage != null && !isNaN(ctx.discountPercentage)) {
+                lines.push('Discount: ' + ctx.discountPercentage + '%');
+            }
+            if (ctx.salesTaxPercentage != null && !isNaN(ctx.salesTaxPercentage)) {
+                lines.push('Sales tax: ' + ctx.salesTaxPercentage + '%');
+            }
+
+            /* Funding sources from Budget Editor (name + amount) */
+            if (ctx.fundingSources && ctx.fundingSources.length) {
+                lines.push('');
+                lines.push('Funding Sources:');
+                for (var fi = 0; fi < ctx.fundingSources.length; fi++) {
+                    var fs = ctx.fundingSources[fi];
+                    if (!fs) continue;
+                    var fsName = fs.name || 'Unnamed source';
+                    var fsAmt = parseFloat(fs.amount);
+                    if (isNaN(fsAmt)) fsAmt = 0;
+                    var fsStatus = fs.status ? ' [' + fs.status + ']' : '';
+                    lines.push('  - ' + fsName + ': $' + fsAmt.toLocaleString() + fsStatus);
+                }
+            }
+
+            /* Real Budget Editor sections / line items (primary path for normal projects) */
+            if (ctx.sections && ctx.sections.length) {
+                var MAX_ITEMS_TOTAL = 40;
+                var MAX_PER_SECTION = 12;
+                var itemsEmitted = 0;
+                lines.push('');
+                lines.push('Budget Sections (from Budget Editor):');
+                for (var si = 0; si < ctx.sections.length; si++) {
+                    var sec = ctx.sections[si];
+                    if (!sec) continue;
+                    var secTotal = parseFloat(sec.total);
+                    if (isNaN(secTotal)) secTotal = 0;
+                    lines.push('');
+                    lines.push('Section: ' + (sec.name || 'Untitled') + ' (subtotal $' + secTotal.toLocaleString() + ')');
+                    var items = sec.items || [];
+                    var shown = 0;
+                    for (var ii = 0; ii < items.length; ii++) {
+                        if (itemsEmitted >= MAX_ITEMS_TOTAL) break;
+                        if (shown >= MAX_PER_SECTION) break;
+                        var item = items[ii];
+                        if (!item) continue;
+                        var iTotal = parseFloat(item.total);
+                        if (isNaN(iTotal)) iTotal = 0;
+                        var qtyStr = '';
+                        var qty = parseFloat(item.quantity);
+                        if (!isNaN(qty) && qty > 0) {
+                            qtyStr = ' x' + qty + (item.unit ? ' ' + item.unit : '');
+                        }
+                        lines.push('  - ' + (item.description || 'Item') + qtyStr + ': $' + iTotal.toLocaleString());
+                        shown++;
+                        itemsEmitted++;
+                    }
+                    var remainingInSec = items.length - shown;
+                    if (remainingInSec > 0) {
+                        lines.push('  ...and ' + remainingInSec + ' more item' + (remainingInSec === 1 ? '' : 's') + ' in this section');
+                    }
+                    if (itemsEmitted >= MAX_ITEMS_TOTAL) {
+                        var moreSecs = ctx.sections.length - si - 1;
+                        if (moreSecs > 0) {
+                            lines.push('...and ' + moreSecs + ' more section' + (moreSecs === 1 ? '' : 's') + ' not listed in full');
+                        }
+                        break;
+                    }
+                }
+            }
+
+            /* Legacy shell execution allocations (rare; keep for execution-tracking projects) */
             if (ctx.allocations && ctx.allocations.length) {
                 var spent = ctx.allocations.reduce(function (s, a) { return s + (parseFloat(a.amount) || 0); }, 0);
+                lines.push('');
+                lines.push('Execution Allocations (shell):');
                 lines.push('Total Spent: $' + spent.toFixed(2));
                 lines.push('Remaining: $' + ((ctx.budget || 0) - spent).toFixed(2));
-                lines.push('');
                 lines.push('Stage Breakdown:');
                 ctx.allocations.slice(0, 10).forEach(function (a) {
                     lines.push('  ' + (a.description || a.stage || 'Stage') + ': $' + (parseFloat(a.amount) || 0).toFixed(2));

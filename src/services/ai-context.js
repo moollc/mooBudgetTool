@@ -4,8 +4,100 @@
 
     /* --- 1. PROJECT CONTEXT --- */
 
+    /* Map Budget Editor doc.sections into a compact AI-friendly tree.
+       Keeps allocations untouched: analyzeBudgetRisks/buildTimeline expect
+       shell execution records ({amount, category, description, createdAt}),
+       not line-item rows. */
+    function extractBudgetSections(doc) {
+        var out = [];
+        var sections = doc && doc.sections;
+        if (!sections || typeof sections !== 'object') return out;
+
+        var names = Object.keys(sections);
+        for (var i = 0; i < names.length; i++) {
+            var name = names[i];
+            var sec = sections[name];
+            if (!sec) continue;
+            var rawItems = sec.items || [];
+            var items = [];
+            for (var j = 0; j < rawItems.length; j++) {
+                var it = rawItems[j];
+                if (!it) continue;
+                var desc = (it.description != null ? String(it.description) : '').trim();
+                var qty = parseFloat(it.quantity);
+                if (isNaN(qty)) qty = 0;
+                var rate = parseFloat(it.rate != null ? it.rate : it.baseRate);
+                if (isNaN(rate)) rate = 0;
+                var total = parseFloat(it.total);
+                if (isNaN(total)) total = 0;
+                /* Skip empty placeholder rows */
+                if (!desc && total === 0 && qty === 0 && rate === 0) continue;
+                items.push({
+                    description: desc || 'Untitled item',
+                    quantity: qty,
+                    unit: it.unit || '',
+                    rate: rate,
+                    total: total
+                });
+            }
+            var secTotal = parseFloat(sec.total);
+            if (isNaN(secTotal)) {
+                secTotal = 0;
+                for (var k = 0; k < items.length; k++) secTotal += items[k].total;
+            }
+            if (!items.length && secTotal === 0) continue;
+            out.push({ name: name, total: secTotal, items: items });
+        }
+        return out;
+    }
+
+    /* Merge Budget Editor doc fields into a context object (localforage path + budget-sync). */
+    function enrichContextFromBudgetDoc(context, doc) {
+        if (!context) context = {};
+        if (!doc) return context;
+
+        context._budgetDoc = doc;
+        if (!context.projectName) {
+            context.projectName = doc.projectName || doc.name || 'Untitled';
+        }
+        /* Prefer Budget Editor grandTotal when present; it is the persisted real total */
+        var gt = parseFloat(doc.grandTotal);
+        var bl = parseFloat(doc.budgetLimit);
+        if (!isNaN(gt) && gt > 0) {
+            context.budget = gt;
+        } else if (!context.budget && !isNaN(bl) && bl > 0) {
+            context.budget = bl;
+        }
+        context.fundingSources = doc.fundingSources || context.fundingSources || [];
+        if (doc.contingencyPercentage != null && doc.contingencyPercentage !== '') {
+            context.contingencyPercentage = parseFloat(doc.contingencyPercentage);
+        }
+        if (doc.discountPercentage != null && doc.discountPercentage !== '') {
+            context.discountPercentage = parseFloat(doc.discountPercentage);
+        }
+        if (doc.salesTaxPercentage != null && doc.salesTaxPercentage !== '') {
+            context.salesTaxPercentage = parseFloat(doc.salesTaxPercentage);
+        }
+        context.sections = extractBudgetSections(doc);
+        return context;
+    }
+
     function getCurrentProjectContext() {
-        var context = { projectId: null, projectName: null, budget: 0, stages: [], allocations: [], risks: [], timeline: { entries: [], total: 0 }, schedule: null, fundingSources: [] };
+        var context = {
+            projectId: null,
+            projectName: null,
+            budget: 0,
+            stages: [],
+            allocations: [],
+            sections: [],
+            risks: [],
+            timeline: { entries: [], total: 0 },
+            schedule: null,
+            fundingSources: [],
+            contingencyPercentage: null,
+            discountPercentage: null,
+            salesTaxPercentage: null
+        };
 
         /* --- Primary path: Shell storage (IndexedDB via mBT.storage) --- */
         var shellPromise = (function () {
@@ -57,10 +149,7 @@
                 });
             }).then(function (doc) {
                 if (doc) {
-                    if (!context.projectName) context.projectName = doc.projectName || doc.name || 'Untitled';
-                    if (!context.budget)      context.budget      = parseFloat(doc.grandTotal || doc.budgetLimit || 0);
-                    context._budgetDoc = doc; /* cache for Budget State panel */
-                    context.fundingSources = doc.fundingSources || [];
+                    enrichContextFromBudgetDoc(context, doc);
                 }
                 context.risks    = analyzeBudgetRisks(context.allocations, context.budget);
                 context.timeline = buildTimeline(context.allocations);
@@ -263,6 +352,8 @@
 
     window.mBTAIContext = {
         getCurrentProjectContext: getCurrentProjectContext,
+        extractBudgetSections:    extractBudgetSections,
+        enrichContextFromBudgetDoc: enrichContextFromBudgetDoc,
         analyzeBudgetPatterns:    analyzeBudgetPatterns,
         analyzeBudgetRisks:       analyzeBudgetRisks,
         buildTimeline:            buildTimeline,
