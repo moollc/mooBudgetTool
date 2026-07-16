@@ -420,6 +420,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var budget = null;
   var currency = 'JMD';
   var conversionRate = 1;
+  var _syncedRates = null;     /* live rate table from parent mbt:displayCurrency (USD-pivot) */
   var weatherFetchController = null; /* AbortController — cancelled on new fetch to prevent race conditions */
   var activeTemplateId = null;
   var activeTab = 'preview';   /* 'edit' | 'preview' */
@@ -522,6 +523,46 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   function saveRate(cur, val) {
     localStorage.setItem('mbtdb_rate_' + cur, val);
+  }
+
+  /* Parent / live rate table (same USD-pivot shape as Budget Editor). */
+  function getRateTable() {
+    if (_syncedRates) return _syncedRates;
+    try {
+      if (window.parent && window.parent !== window && window.parent.mBT &&
+          window.parent.mBT.logic && window.parent.mBT.logic.currency &&
+          typeof window.parent.mBT.logic.currency._getRates === 'function') {
+        return window.parent.mBT.logic.currency._getRates();
+      }
+    } catch (e) { /* cross-origin or unavailable */ }
+    try {
+      if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
+        var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
+        if (snap) return JSON.parse(snap);
+      }
+      var live = localStorage.getItem('prodBudget_v5_rates');
+      if (live) return JSON.parse(live);
+    } catch (e2) { /* ignore */ }
+    return null;
+  }
+
+  /* Multiplier: 1 base unit -> display units. Matches stages/parent convert math. */
+  function computeConversionRate(displayCode) {
+    var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
+    var code = displayCode || currency || 'JMD';
+    if (base === code) return 1;
+    var rates = getRateTable();
+    if (rates && rates[base] && rates[code]) {
+      return rates[code] / rates[base];
+    }
+    /* Legacy mBTDB JMD-from rates only valid when budget base is JMD */
+    if (base === 'JMD') return getRate(code);
+    return 1;
+  }
+
+  function syncConversionFromUI() {
+    conversionRate = computeConversionRate(currency);
+    updateRateUI();
   }
 
   /* ======== URL Params ======== */
@@ -700,10 +741,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === code) { has = true; break; } }
       if (has) sel.value = code;
     }
+    if (e.data.rates) _syncedRates = e.data.rates;
     currency = code;
-    conversionRate = getRate(currency);
+    conversionRate = computeConversionRate(currency);
     updateRateUI();
     if (activeTab === 'preview' && activeTemplateId) renderPreview();
+  });
+
+  /* Parent reconcile: reload live budget (same pattern as stages/calendar) */
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
+    refreshBudget(function () {
+      if (activeTab === 'preview' && activeTemplateId) paintPreview();
+    });
   });
 
   /* ======== Back Button ======== */
@@ -721,12 +771,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var wrap = dom.getElementById('rate-wrap');
     var rateInput = dom.getElementById('opt-rate');
     var hint = dom.getElementById('rate-hint');
-    if (currency === BASE_CURRENCY) {
+    var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
+    if (currency === base) {
       wrap.style.display = 'none';
     } else {
       wrap.style.display = 'inline-flex';
       rateInput.value = conversionRate;
-      hint.textContent = '1 ' + BASE_CURRENCY + ' = ' + conversionRate + ' ' + currency;
+      hint.textContent = '1 ' + base + ' = ' + conversionRate + ' ' + currency;
     }
   }
 
@@ -735,16 +786,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!v || v <= 0) return;
     conversionRate = v;
     saveRate(currency, v);
-    dom.getElementById('rate-hint').textContent = '1 ' + BASE_CURRENCY + ' = ' + v + ' ' + currency;
-    if (activeTab === 'preview' && activeTemplateId) renderPreview();
+    var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
+    dom.getElementById('rate-hint').textContent = '1 ' + base + ' = ' + v + ' ' + currency;
+    if (activeTab === 'preview' && activeTemplateId) paintPreview();
   });
 
   /* ======== Currency ======== */
   dom.getElementById('opt-currency').addEventListener('change', function () {
     currency = this.value;
-    conversionRate = getRate(currency);
+    conversionRate = computeConversionRate(currency);
     updateRateUI();
-    if (activeTab === 'preview' && activeTemplateId) renderPreview();
+    if (activeTab === 'preview' && activeTemplateId) paintPreview();
   });
 
   /* ======== Tab Switching ======== */
@@ -1078,8 +1130,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== XLSX Export ======== */
   dom.getElementById('btn-xlsx').addEventListener('click', function () {
-    if (!budget || !activeTemplateId) return;
+    if (!activeTemplateId) return;
     if (!window.XLSX) { dbAlert('XLSX library not loaded.', 'Error'); return; }
+    withFreshBudget(function () {
     var XL = window.XLSX;
     var wb = XL.utils.book_new();
     var projectName = (budget && budget.projectName) || 'Budget';
@@ -1150,6 +1203,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (wb.SheetNames.length === 0) return;
     var filename = (projectName + '_' + activeTemplateId + '.xlsx').replace(/[^a-z0-9_\-\.]/gi, '_');
     XL.writeFile(wb, filename);
+    }); /* withFreshBudget */
   });
 
   /* ======== Snapshot Button ======== */
@@ -1167,52 +1221,55 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Export Package Button ======== */
   dom.getElementById('btn-package').addEventListener('click', function () {
-    if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
-    var opts = Object.assign({}, getExportOpts(), { toc: true });
-    var p = pub.templates.toPackagePdf(['topSheet', 'detailBudget', 'costReport'], budget, opts);
-    if (p && typeof p.then === 'function') { p.then(done, done); }
-    else { setTimeout(done, 6000); }
+    withFreshBudget(function () {
+      var opts = Object.assign({}, getExportOpts(), { toc: true });
+      var p = pub.templates.toPackagePdf(['topSheet', 'detailBudget', 'costReport'], budget, opts);
+      if (p && typeof p.then === 'function') { p.then(done, done); }
+      else { setTimeout(done, 6000); }
+    }, done);
   });
 
   /* ======== Export All Financial Button ======== */
   dom.getElementById('btn-all-financial').addEventListener('click', function () {
-    if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
-    var opts = Object.assign({}, getExportOpts(), { toc: true });
-    var p = pub.templates.toPackagePdf(['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash'], budget, opts);
-    if (p && typeof p.then === 'function') { p.then(done, done); }
-    else { setTimeout(done, 10000); }
+    withFreshBudget(function () {
+      var opts = Object.assign({}, getExportOpts(), { toc: true });
+      var p = pub.templates.toPackagePdf(['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash'], budget, opts);
+      if (p && typeof p.then === 'function') { p.then(done, done); }
+      else { setTimeout(done, 10000); }
+    }, done);
   });
 
   /* ======== PDF (Alt) — jsPDF autoTable ======== */
   dom.getElementById('btn-pdf-jspdf').addEventListener('click', function () {
-    if (!budget) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
-    if (!pub || !pub.format || typeof pub.format.professionalPdf !== 'function') {
-      dbAlert('jsPDF export not available.', 'Error');
-      return done();
-    }
-    try {
-      pub.format.professionalPdf(budget, currency);
-      setTimeout(done, 1000);
-    } catch (e) {
-      console.error('jsPDF export error:', e);
-      dbAlert('jsPDF export failed: ' + e.message, 'Error');
-      done();
-    }
+    withFreshBudget(function () {
+      if (!pub || !pub.format || typeof pub.format.professionalPdf !== 'function') {
+        dbAlert('jsPDF export not available.', 'Error');
+        return done();
+      }
+      try {
+        pub.format.professionalPdf(budget, currency);
+        setTimeout(done, 1000);
+      } catch (e) {
+        console.error('jsPDF export error:', e);
+        dbAlert('jsPDF export failed: ' + e.message, 'Error');
+        done();
+      }
+    }, done);
   });
 
   /* ======== Template Picker ======== */
@@ -1433,22 +1490,73 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* ======== Load Budget ======== */
-  function loadBudget() {
+  /* Prefer live parent.budget when embedded (always freshest, no async-save race).
+     Fall back to parent dual storage (OPFS+localforage), then localforage, then projectId. */
+  function applyLoadedBudget(data) {
+    if (!data) return false;
+    budget = data;
+    var nameEl = dom.getElementById('topbar-project');
+    if (nameEl) nameEl.textContent = data.projectName || 'Untitled';
+    conversionRate = computeConversionRate(currency);
+    updateRateUI();
+    applyCompactMode();
+    return true;
+  }
+
+  function projectKeyMatches(live) {
+    if (!live || !live.projectName) return false;
+    if (!projectKey) return true;
+    return projectKey === ('prodBudget_v5_' + live.projectName) ||
+      projectKey.indexOf(live.projectName) !== -1;
+  }
+
+  function refreshBudget(cb) {
+    /* 1) Live in-memory budget from parent Budget Editor (embedded iframe) */
+    try {
+      if (window.parent && window.parent !== window && window.parent.budget &&
+          projectKeyMatches(window.parent.budget)) {
+        applyLoadedBudget(JSON.parse(JSON.stringify(window.parent.budget)));
+        if (cb) cb(budget);
+        return;
+      }
+    } catch (eLive) { /* ignore */ }
+
+    /* 2) Parent dual storage (OPFS + localforage, same path as Budget Editor) */
     var loadPromise = null;
-    if (projectKey && typeof localforage !== 'undefined') loadPromise = localforage.getItem(projectKey);
-    else if (projectId && window.mBT && window.mBT.storage) loadPromise = window.mBT.storage.getProject(projectId);
-    else { return; } /* No project param — picker still shows, preview stays on empty state */
+    try {
+      if (projectKey && window.parent && window.parent !== window &&
+          window.parent.mBT && window.parent.mBT.data && window.parent.mBT.data.storage &&
+          typeof window.parent.mBT.data.storage.load === 'function') {
+        loadPromise = window.parent.mBT.data.storage.load(projectKey);
+      }
+    } catch (eStor) { /* ignore */ }
+
+    /* 3) Direct localforage / projectId */
+    if (!loadPromise) {
+      if (projectKey && typeof localforage !== 'undefined') {
+        loadPromise = localforage.getItem(projectKey);
+      } else if (projectId && window.mBT && window.mBT.storage) {
+        loadPromise = window.mBT.storage.getProject(projectId);
+      }
+    }
+
+    if (!loadPromise) {
+      if (cb) cb(budget);
+      return;
+    }
 
     loadPromise.then(function (data) {
-      if (!data) { return; } /* Project key given but not found — keep empty state */
-      budget = data;
-      var nameEl = dom.getElementById('topbar-project');
-      if (nameEl) nameEl.textContent = data.projectName || 'Untitled';
-      applyCompactMode();
-      /* Re-render active template now that budget is available */
-      if (activeTemplateId && activeTab === 'preview') renderPreview();
+      if (data) applyLoadedBudget(data);
+      if (cb) cb(budget);
     }).catch(function (err) {
       console.error('[mBTDB] Load error:', err);
+      if (cb) cb(budget);
+    });
+  }
+
+  function loadBudget() {
+    refreshBudget(function () {
+      if (activeTemplateId && activeTab === 'preview') paintPreview();
     });
   }
 
@@ -1516,12 +1624,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* ======== Render Preview ======== */
-  function renderPreview() {
+  /* paintPreview uses in-memory budget as-is (after a refresh). renderPreview always re-reads. */
+  function paintPreview() {
     if (!pub || !activeTemplateId) return;
     if (!budget) {
       showEmpty('Open a project from the budget view to generate documents.');
       return;
     }
+    conversionRate = computeConversionRate(currency);
     var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
     var frame = dom.getElementById('preview-frame');
     var empty = dom.getElementById('empty-state');
@@ -1536,6 +1646,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     doc.open(); doc.write(html); doc.close();
   }
 
+  function renderPreview() {
+    if (!pub || !activeTemplateId) return;
+    refreshBudget(function () {
+      paintPreview();
+    });
+  }
+
   /* ======== Export Actions ======== */
   function getExportOpts() {
     var brand = { name: brandSettings.name, address: brandSettings.address, logo: logoData };
@@ -1544,21 +1661,34 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return o;
   }
 
+  function withFreshBudget(fn, onEmpty) {
+    refreshBudget(function () {
+      if (!budget || !activeTemplateId) {
+        if (typeof onEmpty === 'function') onEmpty();
+        return;
+      }
+      conversionRate = computeConversionRate(currency);
+      fn();
+    });
+  }
+
   dom.getElementById('btn-pdf').addEventListener('click', function () {
-    if (!budget || !activeTemplateId) return;
+    if (!activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
-    var p = pub.templates.toPdf(activeTemplateId, budget, getExportOpts());
-    if (p && typeof p.then === 'function') { p.then(done, done); }
-    else { setTimeout(done, 4000); }
+    withFreshBudget(function () {
+      var p = pub.templates.toPdf(activeTemplateId, budget, getExportOpts());
+      if (p && typeof p.then === 'function') { p.then(done, done); }
+      else { setTimeout(done, 4000); }
+    }, done);
   });
 
   /* Phase 72: Web Share Pipeline */
   dom.getElementById('btn-share').addEventListener('click', function () {
-    if (!budget || !activeTemplateId) return;
+    if (!activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
@@ -1571,6 +1701,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       done();
     }
 
+    withFreshBudget(function () {
     if (typeof window.html2pdf === 'undefined') { mailtoFallback(); return; }
 
     /* Build PDF as blob using html2pdf builder API, then share */
@@ -1609,36 +1740,42 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       console.error('[mBTDB share]', err);
       mailtoFallback();
     });
+    }, done); /* withFreshBudget */
   });
 
   dom.getElementById('btn-print').addEventListener('click', function () {
-    if (!budget || !activeTemplateId) return;
+    if (!activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = origHtml.replace('Print', 'Opening\u2026');
-    var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
-    var win = window.open('', '_blank');
-    if (!win) { btn.disabled = false; btn.innerHTML = origHtml; dbAlert('Allow popups for this page to use Print.'); return; }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(function () { win.print(); btn.disabled = false; btn.innerHTML = origHtml; }, 400);
+    var restore = function () { btn.disabled = false; btn.innerHTML = origHtml; };
+    withFreshBudget(function () {
+      var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
+      var win = window.open('', '_blank');
+      if (!win) { restore(); dbAlert('Allow popups for this page to use Print.'); return; }
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(function () { win.print(); restore(); }, 400);
+    }, restore);
   });
 
   dom.getElementById('btn-html').addEventListener('click', function () {
-    if (!budget || !activeTemplateId) return;
+    if (!activeTemplateId) return;
     var btn = this;
     var origHtml = btn.innerHTML;
-    var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
-    var blob = new Blob([html], { type: 'text/html' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (budget.projectName || 'document').replace(/[^a-z0-9_\-]/gi, '_') + '_' + activeTemplateId + '.html';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-    btn.innerHTML = origHtml.replace('HTML', 'Downloaded \u2713');
-    setTimeout(function () { btn.innerHTML = origHtml; }, 1500);
+    withFreshBudget(function () {
+      var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
+      var blob = new Blob([html], { type: 'text/html' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (budget.projectName || 'document').replace(/[^a-z0-9_\-]/gi, '_') + '_' + activeTemplateId + '.html';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      btn.innerHTML = origHtml.replace('HTML', 'Downloaded \u2713');
+      setTimeout(function () { btn.innerHTML = origHtml; }, 1500);
+    });
   });
 
   /* Warn before navigating away with unsaved editor changes */
