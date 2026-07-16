@@ -1107,7 +1107,7 @@ window.mBTRouter = (function () {
             function els() {
                 _left  = _left  || document.getElementById('nav-left');
                 _right = _right || document.getElementById('nav-right');
-                _nav   = _nav   || document.getElementById('nav');
+                _nav   = _nav   || document.getElementById('footer-nav');
             }
 
             function measure() {
