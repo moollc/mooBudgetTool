@@ -670,6 +670,26 @@ window.mBTRouter = (function () {
             _ctx.setMBTActiveTool(null);
             if (window.mBTME) mBTME.alert('Budget Loaded', '\u201c' + lbSanitized.projectName + '\u201d is now active in the editor.');
 
+        /* --- add-section: AI proposal / tool bridge to mBT.features.sections.addSection --- */
+        } else if (action === 'add-section' && budget) {
+            var asName = (payload && (payload.name || payload.sectionName)) || '';
+            if (!mBT.features || !mBT.features.sections || typeof mBT.features.sections.addSection !== 'function') {
+                if (window.mBTME) mBTME.alert('Unavailable', 'Add Section is not available in this build.');
+                return;
+            }
+            var asResult = mBT.features.sections.addSection(asName, { silent: true });
+            if (!asResult.ok) {
+                if (window.mBTME) mBTME.alert('Cannot Add Section', asResult.msg || 'Invalid section name.');
+                return;
+            }
+            /* Re-sync AI iframe context so chat sees the new section */
+            if (window.mBTAIContext) {
+                mBTAIContext.getCurrentProjectContext().then(function (ctx) {
+                    _broadcastToTool('budget-sync', { context: ctx, budgetDoc: budget });
+                }).catch(function () { /* ignore */ });
+            }
+            if (window.mBTME) mBTME.alert('Section Added', '"' + asResult.name + '" is now in the budget.');
+
         /* --- Phase 150: push-funding — AI tool pushes funding source proposals into the active budget --- */
         } else if (action === 'push-funding' && Array.isArray(payload.sources) && payload.sources.length) {
             if (!budget) {

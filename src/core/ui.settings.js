@@ -50,7 +50,13 @@
             var lastSyncRaw = localStorage.getItem('moo_og_last_sync');
             var lastSyncLabel = lastSyncRaw ? new Date(lastSyncRaw).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
 
-            var rates = og.rates || [];
+            var rates = (og.rates || []).slice().sort(function (a, b) {
+                var da = (a.description || '').toLowerCase();
+                var db = (b.description || '').toLowerCase();
+                if (da < db) return -1;
+                if (da > db) return 1;
+                return 0;
+            });
             var avgsRaw = localStorage.getItem('moo_og_rate_averages');
             var avgs = {};
             try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
@@ -92,7 +98,6 @@
                         '<button onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400') + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
                         '<button onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400') + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
                     '</div>' +
-                    '<div class="text-[9px] text-slate-400 font-medium px-1">Last sync: ' + lastSyncLabel + '</div>' +
                     '<div class="flex items-center gap-2">' +
                         '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
                         '<div class="flex gap-1 shrink-0">' +
@@ -109,7 +114,7 @@
                     '</div>' +
                 '</div>' +
                 '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">' + rateRows + '</div>' +
-                (citation ? '<div class="p-3 bg-blue-50/50 border-t border-blue-100 shrink-0"><p class="text-[8px] font-black uppercase tracking-widest text-blue-600 leading-relaxed">' + esc(citation) + '</p></div>' : '') +
+                (citation ? '<div class="p-2 bg-blue-50/50 border-t border-blue-100 shrink-0 space-y-0.5"><p class="text-[7px] font-medium text-blue-500 leading-snug">' + esc(citation.replace(/^INTELLIGENCE:\s*/i, '')) + '</p><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>' : '<div class="p-2 border-t border-slate-100 shrink-0"><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>') +
             '</div>';
         }
 
@@ -161,7 +166,13 @@
         var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
         function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
         var region = (og.settings && og.settings.location) || 'Jamaica';
-        var rates = og.rates || [];
+        var rates = (og.rates || []).slice().sort(function (a, b) {
+            var da = (a.description || '').toLowerCase();
+            var db = (b.description || '').toLowerCase();
+            if (da < db) return -1;
+            if (da > db) return 1;
+            return 0;
+        });
         var avgsRaw = localStorage.getItem('moo_og_rate_averages');
         var avgs = {};
         try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) {}
@@ -719,11 +730,11 @@
                 dbTabs.map(function (t) {
                     var isActive = t.id === dbSubTab;
                     var cls = isActive ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50';
-                    return '<button type="button" data-action="nav-settings-db" data-tab="' + t.id + '" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ' + cls + '">' + t.label + '</button>';
+                    return '<button type="button" data-action="nav-settings-db" data-tab="' + t.id + '" class="flex-1 py-0.5 leading-none text-[10px] font-black uppercase tracking-widest transition-all ' + cls + '">' + t.label + '</button>';
                 }).join('') +
                 '</div>';
 
-            return '<div class="flex flex-col h-full p-4 pb-0 space-y-2">' +
+            return '<div class="flex flex-col h-full p-2 pb-0 space-y-0.5">' +
                     nav +
                     '<div class="flex-grow flex flex-col min-h-0 overflow-hidden">' +
                         renderDbView(dbSubTab) +
@@ -738,7 +749,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.87';
+            var currentVersion = updateStatus.localVersion || 'v23.88';
 
             var statusMsg = '';
             if (isChecking) {

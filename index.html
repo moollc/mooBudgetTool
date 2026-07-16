@@ -433,7 +433,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.87";
+    var APP_VERSION = "23.88";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -534,7 +534,7 @@
             var actionName = el.dataset.action;
 
             // Phase 115: Block write actions in Client/Review mode
-            var CLIENT_BLOCKED = ['section-cap', 'section-add', 'row-delete', 'row-lock', 'item-qualifying-toggle', 'crew-toggle', 'crew-profile', 'quick-pay'];
+            var CLIENT_BLOCKED = ['section-cap', 'section-add', 'section-create', 'row-delete', 'row-lock', 'item-qualifying-toggle', 'crew-toggle', 'crew-profile', 'quick-pay'];
             if (window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false) {
                 if (CLIENT_BLOCKED.indexOf(actionName) !== -1) { e.preventDefault(); return true; }
             }
@@ -3880,13 +3880,19 @@
         } else {
             // Path 2: Surgical Update
 
-            // Sub-check: Has the structure changed? (Row count mismatch)
-            // This allows us to handle "Add Item" without a full app flash, but keeps typing fast.
+            // Sub-check: Has the structure changed? (Row count OR section count mismatch)
+            // Item-only check misses empty section add/remove/undo (0 items both sides).
             var dataCount = 0;
-            Object.values(budget.sections).forEach(function (s) { return dataCount += s.items.length; });
+            var sectionKeys = Object.keys(budget.sections || {});
+            sectionKeys.forEach(function (sk) {
+                var s = budget.sections[sk];
+                if (s && s.items) dataCount += s.items.length;
+            });
             var domCount = document.querySelectorAll('.draggable-row').length;
+            var dataSectionCount = sectionKeys.length;
+            var domSectionCount = document.querySelectorAll('#budget-sections [data-action="section-toggle"]').length;
 
-            if (dataCount !== domCount) {
+            if (dataCount !== domCount || dataSectionCount !== domSectionCount) {
                 // Structural Mismatch: Rebuild only the list container
                 var sectionContainer = document.getElementById('budget-sections');
                 if (sectionContainer) sectionContainer.innerHTML = renderBudgetSections();
@@ -5016,8 +5022,11 @@
     function renderBudgetSections() {
         if (!budget || !budget.sections) return '';
         var filter = (mBT.ui && mBT.ui.state) ? mBT.ui.state.activeFilter : null;
+        var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
+        var sectionKeys = Object.keys(budget.sections);
+        var isClient = window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false;
 
-        return Object.keys(budget.sections).map(function (name) {
+        var sectionsHtml = sectionKeys.map(function (name) {
             var section = budget.sections[name];
             if (filter && name !== filter) return '';
 
@@ -5025,7 +5034,6 @@
             var _isCompact = (typeof budget !== 'undefined' && budget.settings && budget.settings.compactMode) || false;
             var _isActuals = (typeof budget !== 'undefined' && budget.actualsMode) || false;
             var _hasIncentive = typeof budget !== 'undefined' && budget.jurisdiction && budget.jurisdiction.incentiveRate > 0;
-            var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
 
             var bodyContent = '<div class="mbt-table-scroll-wrap">' +
                 '<div class="table-container overflow-x-auto mbt-table-scroll relative mbt-mobile-safe">' +
@@ -5071,6 +5079,36 @@
 
             return mBT.ui.render.section({ name: name, total: fmtDisplay(section.total, false), isOpen: section.isOpen, content: bodyContent, isLocked: isLocked });
         }).join('');
+
+        /* Empty budget: unmissable first-section CTA (no sections at all) */
+        var emptyHtml = '';
+        if (!sectionKeys.length && !filter) {
+            emptyHtml =
+                '<div id="mbt-empty-sections" class="mb-3 p-8 bg-white border-2 border-dashed border-indigo-200 rounded-2xl text-center shadow-sm">' +
+                '<p class="text-sm font-black uppercase tracking-widest text-slate-800 mb-2">No budget sections yet</p>' +
+                '<p class="text-xs text-slate-500 font-bold mb-5 max-w-sm mx-auto leading-relaxed">Add a section (for example Catering or Camera) to start building line items. You can also apply a full blueprint from the Assistant Hub.</p>' +
+                (isClient ? '' :
+                    '<button type="button" data-action="section-create" class="inline-flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all active:scale-95 min-h-[44px]">' +
+                    (assets.plus ? assets.plus + ' ' : '+ ') + 'Add Section' +
+                    '</button>') +
+                '</div>';
+        }
+
+        /* Persistent add control when sections exist (and not filtered to a single block) */
+        var addBtnHtml = '';
+        if (!isClient && !filter) {
+            var addBtnClass = sectionKeys.length
+                ? 'w-full flex items-center justify-center gap-2 py-2.5 mt-1 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-indigo-50 hover:bg-indigo-100 border border-dashed border-indigo-200 hover:border-indigo-300 rounded-xl transition-all'
+                : 'hidden';
+            if (sectionKeys.length) {
+                addBtnHtml =
+                    '<button type="button" data-action="section-create" class="' + addBtnClass + ' min-h-[44px]">' +
+                    (assets.plus ? assets.plus + ' ' : '+ ') + 'Add Section' +
+                    '</button>';
+            }
+        }
+
+        return sectionsHtml + emptyHtml + addBtnHtml;
     }
 
     function handleToggleSection(sectionName, triggerEl) {
@@ -8666,6 +8704,78 @@
     // Core Action Binding for Blueprint
     mBT.core.action('blueprint-save', function () { return mBT.features.blueprints.saveCurrentAsBlueprint(); });
 
+    /* ========= ADDITIVE SECTION BUILDER (mBT.features.sections) =========
+       Single-section add for empty or existing budgets. Does not touch blueprints. */
+    mBT.features.sections = {
+        /* Shared name rules with block rename (mBTSchedule.renameSection) */
+        nameIsLegal: function (n) {
+            return !!n && !/["<>\/\\]/.test(n);
+        },
+
+        /**
+         * Programmatic add. Used by UI prompt, EventRouter (AI proposal), tests.
+         * @param {string} name - section key / display name
+         * @param {object} [opts] - { silent: true skips alerts (AI path still returns result) }
+         * @returns {{ ok: boolean, msg: string, name?: string }}
+         */
+        addSection: function (name, opts) {
+            opts = opts || {};
+            if (!budget) return { ok: false, msg: 'No budget open.' };
+            if (!budget.sections || typeof budget.sections !== 'object') budget.sections = {};
+
+            var trimmed = String(name == null ? '' : name).trim();
+            if (!trimmed) return { ok: false, msg: 'Section name cannot be empty.' };
+            if (trimmed.length > 100) trimmed = trimmed.substring(0, 100);
+            if (!this.nameIsLegal(trimmed)) {
+                return { ok: false, msg: 'Remove quotes, slashes, and < > characters.' };
+            }
+            if (budget.sections[trimmed]) {
+                return { ok: false, msg: 'A section named "' + trimmed + '" already exists.' };
+            }
+
+            /* Snapshot before mutation so Undo restores prior section map */
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Added Section');
+
+            budget.sections[trimmed] = {
+                id: 'section_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                isOpen: true,
+                items: []
+            };
+
+            if (typeof saveBudget === 'function') saveBudget();
+            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+            if (typeof render === 'function') render();
+
+            return { ok: true, msg: '', name: trimmed };
+        },
+
+        /** UI entry: prompt for name, then addSection. */
+        promptAddSection: function () {
+            var self = this;
+            if (!budget) {
+                if (typeof mBTME !== 'undefined') mBTME.alert('No Budget', 'Open or create a project first.');
+                return;
+            }
+            if (window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false) {
+                return;
+            }
+            mBTME.prompt('Add Section', 'Name this budget section:', '', function (val) {
+                var result = self.addSection(val);
+                if (!result.ok) {
+                    /* Instant-dismiss any leftover prompt layer so the error is clickable */
+                    if (typeof mBTME !== 'undefined') {
+                        if (mBTME.close) mBTME.close('promptModal', true);
+                        mBTME.alert('Cannot Add Section', result.msg);
+                    }
+                }
+            });
+        }
+    };
+
+    mBT.core.action('section-create', function () {
+        if (mBT.features && mBT.features.sections) mBT.features.sections.promptAddSection();
+    });
+
     /* ========= v19.54 ACTIVITY HISTORY (mBT.features.history) ========= */
     mBT.features.history = {
         open: function () {
@@ -9584,14 +9694,15 @@
                 { id: 'updates', label: 'Updates' }
             ];
 
-            /* Build top-level tab nav */
-            var tabsHtml = '<div class="flex border-b border-slate-100 mb-3 px-1">';
+            /* Build top-level tab nav — compact height, app-nav feel (not spreadsheet header) */
+            var tabsHtml = '<div class="flex items-stretch justify-between border-b border-slate-100 mb-0.5 px-1.5">';
             TABS.forEach(function (t) {
                 var active = (t.id === tab);
-                tabsHtml += '<button data-settings-tab="' + t.id + '" class="flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ' +
+                /* Title case + medium weight: legible at mobile without tall py-3 bars */
+                tabsHtml += '<button data-settings-tab="' + t.id + '" class="min-w-0 py-0.5 px-1 text-center text-[11px] leading-snug tracking-wide transition-colors ' +
                     (active
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-slate-300 hover:text-slate-500 border-b-2 border-transparent') +
+                        ? 'font-bold text-blue-600 border-b-2 border-blue-600'
+                        : 'font-medium text-slate-400 hover:text-slate-600 border-b-2 border-transparent') +
                     '">' + t.label + '</button>';
             });
             tabsHtml += '</div>';
@@ -9605,7 +9716,7 @@
                 : '<div class="p-8 text-center text-slate-400 text-[9px] font-black uppercase tracking-widest">Loading...</div>';
 
             var content = tabsHtml +
-                '<div id="settingsTabBody" class="flex flex-col min-h-0" style="height:70vh;">' + bodyHtml + '</div>';
+                '<div id="settingsTabBody" class="flex flex-col min-h-0" style="height:76vh;">' + bodyHtml + '</div>';
 
             /* Open modal (or refresh if already open) */
             var existing = document.getElementById('settingsModal');
@@ -9682,7 +9793,15 @@
                     if (_footerEl) _footerEl.textContent = _intel;
                 }
                 if (window.mBTME && typeof mBTME.attachSearch === 'function' && mBTOG.rates) {
-                    mBTME.attachSearch('dbSearchInput', 'dbListBody', mBTOG.rates, function (r) {
+                    /* Sorted copy so filter results stay A-Z (filter preserves relative order). */
+                    var ratesForSearch = mBTOG.rates.slice().sort(function (a, b) {
+                        var da = (a.description || '').toLowerCase();
+                        var db = (b.description || '').toLowerCase();
+                        if (da < db) return -1;
+                        if (da > db) return 1;
+                        return 0;
+                    });
+                    mBTME.attachSearch('dbSearchInput', 'dbListBody', ratesForSearch, function (r) {
                         var avgsRaw = localStorage.getItem('moo_og_rate_averages');
                         var avgs = {};
                         try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
@@ -12635,7 +12754,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.87', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.88', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
