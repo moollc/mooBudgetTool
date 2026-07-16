@@ -334,6 +334,16 @@
         .mbt-table-fade-r.visible {
             opacity: 1;
         }
+
+        /* Section block drag handle: scoped touch target (not blanket button/a min-height) */
+        .section-drag-handle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 
@@ -433,7 +443,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.88";
+    var APP_VERSION = "23.89";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3891,14 +3901,24 @@
             var domCount = document.querySelectorAll('.draggable-row').length;
             var dataSectionCount = sectionKeys.length;
             var domSectionCount = document.querySelectorAll('#budget-sections [data-action="section-toggle"]').length;
+            /* Section reorder keeps counts equal but changes key-insertion order; compare
+               data-section-block order so Undo/Redo of a pure reorder rebuilds the list. */
+            var domSectionOrder = [];
+            var _domBlocks = document.querySelectorAll('#budget-sections [data-section-block]');
+            for (var _dbi = 0; _dbi < _domBlocks.length; _dbi++) {
+                domSectionOrder.push(_domBlocks[_dbi].getAttribute('data-section-block'));
+            }
+            var sectionOrderMismatch = domSectionOrder.length === sectionKeys.length &&
+                domSectionOrder.join('\u0001') !== sectionKeys.join('\u0001');
 
-            if (dataCount !== domCount || dataSectionCount !== domSectionCount) {
+            if (dataCount !== domCount || dataSectionCount !== domSectionCount || sectionOrderMismatch) {
                 // Structural Mismatch: Rebuild only the list container
                 var sectionContainer = document.getElementById('budget-sections');
                 if (sectionContainer) sectionContainer.innerHTML = renderBudgetSections();
 
                 // Re-bind specific list listeners
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                if (typeof initializeSectionDragAndDrop === 'function') initializeSectionDragAndDrop();
                 if (typeof initTableScrollHints === 'function') initTableScrollHints();
                 /* Phase 62: Re-apply RBAC lockdown after DOM rebuild */
                 if (typeof mBTRBACPostRender === 'function') mBTRBACPostRender();
@@ -3962,6 +3982,7 @@
         /* Re-bind all initial listeners for a fresh DOM */
         if (typeof initializeInteractiveInputs === 'function') initializeInteractiveInputs();
         if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+        if (typeof initializeSectionDragAndDrop === 'function') initializeSectionDragAndDrop();
         if (typeof initTableScrollHints === 'function') initTableScrollHints();
         this.paint();
     };
@@ -4090,6 +4111,7 @@
                     newRow.classList.add('bg-blue-50');
                     setTimeout(function () { return newRow.classList.remove('bg-blue-50'); }, 500);
                     if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                    if (typeof initializeSectionDragAndDrop === 'function') initializeSectionDragAndDrop();
                 }
             }
         },
@@ -4394,13 +4416,18 @@
             var secLockTitle = isLocked ? 'Unlock all rates in this category' : 'Lock all rates in this category';
             var secLockColor = isLocked ? 'text-rose-500 bg-rose-50' : 'text-slate-400 hover:text-rose-500';
 
-            return '<div class="mb-3 bg-white shadow-sm border border-slate-100">' +
+            var secDragIcon = (typeof mBTAssets !== "undefined" && mBTAssets.drag) ? mBTAssets.drag : '';
+
+            return '<div class="mb-3 bg-white shadow-sm border border-slate-100" data-section-block="' + safeName + '">' +
                 '<div class="sticky-section-header relative min-h-[40px] bg-slate-50 border-b border-slate-100 select-none group z-30">' +
                 '<div class="px-4 py-2.5 flex justify-between items-center cursor-pointer z-40 active:bg-slate-100 transition-colors" data-action="section-toggle" data-id="' + rawId + '">' +
                 '<div class="flex items-center gap-3 pointer-events-none">' +
                 '<h2 class="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-none pl-1">' + safeName + '</h2>' +
                 '</div>' +
                 '<div class="flex items-center gap-1.5 flex-shrink-0">' +
+                '<span class="drag-handle section-drag-handle pointer-events-auto text-slate-300 hover:text-slate-400 cursor-grab active:cursor-grabbing" title="Drag to reorder section" onclick="event.stopPropagation();">' +
+                secDragIcon +
+                '</span>' +
                 '<button type="button" data-section-lock-btn="' + safeName + '" onclick="event.stopPropagation(); window.lockSectionRates(\'' + rawId + '\');" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
                 '<span class="scale-75">' + secLockIcon + '</span>' +
                 '</button>' +
@@ -4898,6 +4925,7 @@
             if (sectionContainer && typeof window.renderBudgetSections === 'function') {
                 sectionContainer.innerHTML = window.renderBudgetSections();
                 if (typeof window.initializeDragAndDrop === 'function') window.initializeDragAndDrop();
+                if (typeof window.initializeSectionDragAndDrop === 'function') window.initializeSectionDragAndDrop();
                 if (typeof window.mBTRBACPostRender === 'function') window.mBTRBACPostRender();
             } else if (typeof window.render === 'function') {
                 window.render();
@@ -4941,6 +4969,10 @@
                         '<button type="button" id="mbt-block-lock" class="py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ' + (isLocked ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') + '" style="min-height:44px;">' + (isLocked ? 'Unlock rates' : 'Lock rates') + '</button>' +
                         '<button type="button" id="mbt-block-cap" class="py-2.5 rounded-xl bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all" style="min-height:44px;">Section cap</button>' +
                     '</div>' +
+                    /* Delete block (danger): full-width row between Lock/Cap and Save/Cancel */
+                    '<div class="pt-1">' +
+                        '<button type="button" id="mbt-block-delete" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all" style="min-height:44px;">Delete block</button>' +
+                    '</div>' +
                     /* Save / cancel */
                     '<div class="flex gap-2 pt-1">' +
                         '<button type="button" onclick="mBTME.close(\'blockMenuModal\');" class="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all" style="min-height:44px;">Cancel</button>' +
@@ -4970,6 +5002,14 @@
                 mBTME.close('blockMenuModal');
                 if (mBT.core && mBT.core.actions && mBT.core.actions['section-cap']) {
                     mBT.core.actions['section-cap']({ stopPropagation: function () {} }, { dataset: { id: sectionName } });
+                }
+            });
+
+            /* Delete block: tiered confirm via features.sections (does not mutate until confirmed) */
+            var delBtn = document.getElementById('mbt-block-delete');
+            if (delBtn) delBtn.addEventListener('click', function () {
+                if (mBT.features && mBT.features.sections && typeof mBT.features.sections.promptDeleteSection === 'function') {
+                    mBT.features.sections.promptDeleteSection(sectionName);
                 }
             });
 
@@ -5014,7 +5054,8 @@
             applyDefaultPhase: applyDefaultPhase,
             openSheet: openSheet,
             renameSection: renameSection,
-            openBlockMenu: openBlockMenu
+            openBlockMenu: openBlockMenu,
+            forceSectionRebuild: forceSectionRebuild
         };
     })();
     window.mBTSchedule = mBTSchedule;
@@ -5381,6 +5422,42 @@
                 el.classList.add('sortable-initialized');
             }
         });
+    }
+
+    // Section block drag-reorder: rebuilds budget.sections key order (no sectionOrder array).
+    // Handle is .section-drag-handle so nested item-row .drag-handle does not start a section drag.
+    function initializeSectionDragAndDrop() {
+        var container = document.getElementById('budget-sections');
+        if (!container) return;
+        if (container.classList.contains('sortable-section-initialized')) return;
+
+        if (typeof Sortable !== 'undefined') {
+            new Sortable(container, {
+                handle: '.section-drag-handle',
+                animation: 150,
+                filter: 'input, button, select, textarea, .no-drag',
+                preventOnFilter: false,
+                draggable: '[data-section-block]',
+                onEnd: function (evt) {
+                    var oldIdx = evt.oldIndex;
+                    var newIdx = evt.newIndex;
+                    if (oldIdx === newIdx) return;
+
+                    var currentOrder = Object.keys(budget.sections);
+                    var moved = currentOrder.splice(oldIdx, 1)[0];
+                    currentOrder.splice(newIdx, 0, moved);
+
+                    mBT.features.sections.reorder(currentOrder);
+                    /* forceSectionRebuild lives on mBTSchedule (not a free global) */
+                    if (typeof mBTSchedule !== 'undefined' && typeof mBTSchedule.forceSectionRebuild === 'function') {
+                        mBTSchedule.forceSectionRebuild();
+                    } else if (typeof render === 'function') {
+                        render();
+                    }
+                }
+            });
+            container.classList.add('sortable-section-initialized');
+        }
     }
 
     // Logic Resolution: Stage Drag and Drop initialization.
@@ -8747,6 +8824,125 @@
             if (typeof render === 'function') render();
 
             return { ok: true, msg: '', name: trimmed };
+        },
+
+        /**
+         * Rebuild budget.sections in a new key-insertion order (no sectionOrder array).
+         * Snapshot before mutate so Undo/Redo restores prior order + data.
+         * @param {string[]} orderedNames - full list of existing section keys in desired order
+         * @returns {{ ok: boolean, msg: string }}
+         */
+        reorder: function (orderedNames) {
+            if (!budget || !budget.sections) return { ok: false, msg: 'No budget open.' };
+            var current = Object.keys(budget.sections);
+            if (orderedNames.length !== current.length) return { ok: false, msg: 'Section list mismatch.' };
+            var currentSet = {};
+            for (var i = 0; i < current.length; i++) currentSet[current[i]] = true;
+            for (var j = 0; j < orderedNames.length; j++) {
+                if (!currentSet[orderedNames[j]]) return { ok: false, msg: 'Unknown section in reorder payload.' };
+            }
+
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Reordered Sections');
+
+            var rebuilt = {};
+            for (var k = 0; k < orderedNames.length; k++) {
+                rebuilt[orderedNames[k]] = budget.sections[orderedNames[k]];
+            }
+            budget.sections = rebuilt;
+
+            if (typeof saveBudget === 'function') saveBudget();
+            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+
+            return { ok: true, msg: '' };
+        },
+
+        /**
+         * Pure data mutation: remove a section by name. No confirm dialog.
+         * Caller (promptDeleteSection / block menu) must confirm first.
+         * @param {string} name - section key
+         * @returns {{ ok: boolean, msg: string }}
+         */
+        deleteSection: function (name) {
+            if (!budget || !budget.sections || !budget.sections[name]) {
+                return { ok: false, msg: 'Section not found.' };
+            }
+
+            if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Deleted Section');
+
+            delete budget.sections[name];
+
+            if (typeof saveBudget === 'function') saveBudget();
+            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+
+            return { ok: true, msg: '' };
+        },
+
+        /**
+         * UI entry: tiered confirm, then deleteSection. Used by block menu Delete button.
+         * Empty / items-only / financial-or-PO tiers before mutation.
+         */
+        promptDeleteSection: function (name) {
+            var self = this;
+            if (!budget || !budget.sections || !budget.sections[name]) {
+                if (typeof mBTME !== 'undefined') mBTME.alert('Delete Section', 'Section not found.');
+                return;
+            }
+            if (window.mBT && window.mBT.ui && window.mBT.ui.state && window.mBT.ui.state.isEditing === false) {
+                return;
+            }
+
+            var sec = budget.sections[name];
+            var items = (sec && sec.items) ? sec.items : [];
+            var itemCount = items.length;
+            var hasFinancial = false;
+            var i;
+            for (i = 0; i < itemCount; i++) {
+                var it = items[i];
+                if ((parseFloat(it.actual) || 0) > 0 || (parseFloat(it.committedCost) || 0) > 0) {
+                    hasFinancial = true;
+                    break;
+                }
+            }
+
+            var hasPoRef = false;
+            if (!hasFinancial && budget.ledgers && budget.ledgers.pos && budget.ledgers.pos.length) {
+                for (i = 0; i < budget.ledgers.pos.length; i++) {
+                    if (budget.ledgers.pos[i].sectionKey === name) {
+                        hasPoRef = true;
+                        break;
+                    }
+                }
+            }
+
+            /* mBTME.confirm injects message as HTML; esc section name for safety */
+            var safeLabel = (typeof esc === 'function') ? esc(name) : String(name);
+            var title = 'Delete Section';
+            var message;
+            /* Financial/PO first so orphan PO refs escalate even on empty sections */
+            if (hasFinancial || hasPoRef) {
+                message = '"' + safeLabel + '" has committed costs or actuals recorded. Deleting it will not remove those PO/ledger records, which will become disconnected from this section. Delete anyway?';
+            } else if (itemCount === 0) {
+                message = 'Delete this empty section?';
+            } else {
+                message = 'Delete "' + safeLabel + '" and its ' + itemCount + ' item(s)? This cannot be undone from other budgets.';
+            }
+
+            function doDelete() {
+                var r = self.deleteSection(name);
+                if (!r.ok) {
+                    if (typeof mBTME !== 'undefined') mBTME.alert('Delete Section', r.msg || 'Could not delete section.');
+                    return;
+                }
+                if (typeof mBTME !== 'undefined') mBTME.close('blockMenuModal');
+                /* Prefer force rebuild (same path as rename); fall back to render. */
+                if (typeof window.mBTSchedule !== 'undefined' && typeof window.mBTSchedule.forceSectionRebuild === 'function') {
+                    window.mBTSchedule.forceSectionRebuild();
+                } else if (typeof render === 'function') {
+                    render();
+                }
+            }
+
+            mBTME.confirm(title, message, doDelete);
         },
 
         /** UI entry: prompt for name, then addSection. */
@@ -12754,7 +12950,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.88', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.89', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -12988,6 +13184,7 @@
             if (sectionContainer) {
                 sectionContainer.innerHTML = renderBudgetSections();
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
+                if (typeof initializeSectionDragAndDrop === 'function') initializeSectionDragAndDrop();
             }
 
             render(); // Update totals/status bars
