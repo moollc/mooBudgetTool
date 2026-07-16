@@ -784,14 +784,23 @@
            or passed to html2pdf for PDF export. No DOM required at render time. */
         templates: {
 
-            /* Phase classification maps — match section id to Top Sheet group */
+            /* Phase classification maps — match section id to Top Sheet group.
+               Includes template structure ids from mBT.templates (btl_pre/prod/post, logistics). */
             _phaseMap: {
-                atl:    'atl',
-                prod:   'btl', tech:  'btl', gear: 'btl', conn: 'btl',
-                post:   'post',
-                pub:    'pub',  dist:  'pub',
-                travel: 'travel',
-                other:  'other'
+                atl:       'atl',
+                prod:      'btl',
+                btl_pre:   'btl',
+                btl_prod:  'btl',
+                tech:      'btl',
+                gear:      'btl',
+                conn:      'btl',
+                btl_post:  'post',
+                post:      'post',
+                pub:       'pub',
+                dist:      'pub',
+                travel:    'travel',
+                logistics: 'travel',
+                other:     'other'
             },
 
             _phaseLabels: {
@@ -818,11 +827,15 @@
                 return { groups: groups, order: order };
             },
 
-            /* Sum estimated amounts from a section's items (uses item.total if reconciled, else qty*rate) */
+            /* Sum estimated amounts from a section's items (uses item.total if reconciled, else qty*rate*mult) */
             _sectionEst: function (sec) {
                 return (sec.items || []).reduce(function (sum, item) {
                     var est = parseFloat(item.total);
-                    if (!est) est = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                    if (!est) {
+                        est = (parseFloat(item.quantity) || 0) *
+                            (parseFloat(item.rate) || 0) *
+                            (parseFloat(item.multiplier) || 1);
+                    }
                     return sum + (est || 0);
                 }, 0);
             },

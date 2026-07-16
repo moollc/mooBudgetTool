@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.77</title>
+    <title>mooBudgetTool v23.90</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -443,7 +443,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.89";
+    var APP_VERSION = "23.90";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -2294,8 +2294,16 @@
             }
         } catch (err) { /* reconcile failure must not block save+paint */ }
 
-        if (typeof window.saveBudget === 'function') { window.saveBudget(true); }
-        if (window.mBT && window.mBT.ui && typeof window.mBT.ui.paint === 'function') { window.mBT.ui.paint(); }
+        /* Do not call saveBudget here. Field writes already hit the Proxy set trap, which
+           debounces persistence via requestReconciliation (~1s). An immediate full
+           JSON.stringify + dual-write on every qty/rate change doubled I/O and caused
+           progressive multi-second freezes on large budgets (especially after a section
+           drag had just forced another heavy save). */
+        if (window.mBT && window.mBT.ui && typeof window.mBT.ui.paint === 'function') {
+            /* Mark so the Proxy-driven budget:updated refresh skips a second full paint. */
+            window.mBT.ui._skipNextPaint = true;
+            window.mBT.ui.paint();
+        }
     };
 
     // --- 5. Global Aliases for Migrated Globals ---
@@ -3902,19 +3910,29 @@
             var dataSectionCount = sectionKeys.length;
             var domSectionCount = document.querySelectorAll('#budget-sections [data-action="section-toggle"]').length;
             /* Section reorder keeps counts equal but changes key-insertion order; compare
-               data-section-block order so Undo/Redo of a pure reorder rebuilds the list. */
-            var domSectionOrder = [];
-            var _domBlocks = document.querySelectorAll('#budget-sections [data-section-block]');
-            for (var _dbi = 0; _dbi < _domBlocks.length; _dbi++) {
-                domSectionOrder.push(_domBlocks[_dbi].getAttribute('data-section-block'));
+               data-section-block order so Undo/Redo of a pure reorder rebuilds the list.
+               Only pay for the DOM order walk when counts already match (otherwise we
+               rebuild anyway). Live drag already moves the DOM, so this path is for
+               Undo/Redo and other non-Sortable order restores. */
+            var sectionOrderMismatch = false;
+            if (dataCount === domCount && dataSectionCount === domSectionCount && dataSectionCount > 0) {
+                var domSectionOrder = [];
+                var _domBlocks = document.querySelectorAll('#budget-sections [data-section-block]');
+                for (var _dbi = 0; _dbi < _domBlocks.length; _dbi++) {
+                    domSectionOrder.push(_domBlocks[_dbi].getAttribute('data-section-block'));
+                }
+                sectionOrderMismatch = domSectionOrder.length === sectionKeys.length &&
+                    domSectionOrder.join('\u0001') !== sectionKeys.join('\u0001');
             }
-            var sectionOrderMismatch = domSectionOrder.length === sectionKeys.length &&
-                domSectionOrder.join('\u0001') !== sectionKeys.join('\u0001');
 
+            var didStructuralRebuild = false;
             if (dataCount !== domCount || dataSectionCount !== domSectionCount || sectionOrderMismatch) {
                 // Structural Mismatch: Rebuild only the list container
                 var sectionContainer = document.getElementById('budget-sections');
-                if (sectionContainer) sectionContainer.innerHTML = renderBudgetSections();
+                if (sectionContainer) {
+                    if (typeof destroyBudgetListSortables === 'function') destroyBudgetListSortables(sectionContainer);
+                    sectionContainer.innerHTML = renderBudgetSections();
+                }
 
                 // Re-bind specific list listeners
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
@@ -3922,10 +3940,16 @@
                 if (typeof initTableScrollHints === 'function') initTableScrollHints();
                 /* Phase 62: Re-apply RBAC lockdown after DOM rebuild */
                 if (typeof mBTRBACPostRender === 'function') mBTRBACPostRender();
+                didStructuralRebuild = true;
             }
 
-            // Always Paint values (covers typing, calculations, and the new rows)
-            this.paint();
+            /* handleLineItemUpdate already paints after reconcile. The Proxy then emits
+               budget:updated ~50ms later and would paint the full grid again (very costly
+               on large budgets). Skip that duplicate paint when structure did not change. */
+            if (didStructuralRebuild || !mBT.ui._skipNextPaint) {
+                this.paint();
+            }
+            mBT.ui._skipNextPaint = false;
             if (typeof initTableScrollHints === 'function') initTableScrollHints();
         }
 
@@ -4923,6 +4947,9 @@
                shared window.budget (avoids any lexical-scope binding ambiguity). */
             var sectionContainer = document.getElementById('budget-sections');
             if (sectionContainer && typeof window.renderBudgetSections === 'function') {
+                if (typeof window.destroyBudgetListSortables === 'function') {
+                    window.destroyBudgetListSortables(sectionContainer);
+                }
                 sectionContainer.innerHTML = window.renderBudgetSections();
                 if (typeof window.initializeDragAndDrop === 'function') window.initializeDragAndDrop();
                 if (typeof window.initializeSectionDragAndDrop === 'function') window.initializeSectionDragAndDrop();
@@ -5378,6 +5405,31 @@
         }
     }
 
+    /* Tear down Sortable instances under a list root before replacing innerHTML.
+       Without destroy, prior instances keep detached-node refs and the section
+       container stays marked initialized so it never re-binds after a rebuild. */
+    function destroyBudgetListSortables(root) {
+        if (!root) return;
+        if (typeof Sortable !== 'undefined' && typeof Sortable.get === 'function') {
+            var nodes = root.querySelectorAll('.sortable-initialized');
+            for (var di = 0; di < nodes.length; di++) {
+                var inst = Sortable.get(nodes[di]);
+                if (inst) {
+                    try { inst.destroy(); } catch (eDestroy) { /* ignore */ }
+                }
+                nodes[di].classList.remove('sortable-initialized');
+            }
+            if (root.classList && root.classList.contains('sortable-section-initialized')) {
+                var cInst = Sortable.get(root);
+                if (cInst) {
+                    try { cInst.destroy(); } catch (eDestroyC) { /* ignore */ }
+                }
+            }
+        }
+        if (root.classList) root.classList.remove('sortable-section-initialized');
+    }
+    window.destroyBudgetListSortables = destroyBudgetListSortables;
+
     // Logic Resolution: Drag and drop initialization.
     function initializeDragAndDrop() {
         document.querySelectorAll('tbody').forEach(function (el) {
@@ -5448,17 +5500,18 @@
                     currentOrder.splice(newIdx, 0, moved);
 
                     mBT.features.sections.reorder(currentOrder);
-                    /* forceSectionRebuild lives on mBTSchedule (not a free global) */
-                    if (typeof mBTSchedule !== 'undefined' && typeof mBTSchedule.forceSectionRebuild === 'function') {
-                        mBTSchedule.forceSectionRebuild();
-                    } else if (typeof render === 'function') {
-                        render();
-                    }
+                    /* Sortable already moved the section blocks in the DOM (same pattern as
+                       item-row reorder: persist data only, do not tear down the list).
+                       A full forceSectionRebuild here re-serialized every section and every
+                       line item, then re-bound Sortable, and was the main post-drag lag source.
+                       Undo/Redo of a pure reorder still rebuilds via sectionOrderMismatch. */
                 }
             });
             container.classList.add('sortable-section-initialized');
         }
     }
+    window.initializeSectionDragAndDrop = initializeSectionDragAndDrop;
+    window.initializeDragAndDrop = initializeDragAndDrop;
 
     // Logic Resolution: Stage Drag and Drop initialization.
     function initializeStageDragAndDrop() {
@@ -12950,7 +13003,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.89', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.90', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13182,6 +13235,7 @@
             /* The Fix: Force rebuild of the sections HTML since row count didn't change */
             var sectionContainer = document.getElementById('budget-sections');
             if (sectionContainer) {
+                if (typeof destroyBudgetListSortables === 'function') destroyBudgetListSortables(sectionContainer);
                 sectionContainer.innerHTML = renderBudgetSections();
                 if (typeof initializeDragAndDrop === 'function') initializeDragAndDrop();
                 if (typeof initializeSectionDragAndDrop === 'function') initializeSectionDragAndDrop();
