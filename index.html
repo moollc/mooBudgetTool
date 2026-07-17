@@ -16,7 +16,7 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.90</title>
+    <title>mooBudgetTool v23.91</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -443,7 +443,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.90";
+    var APP_VERSION = "23.91";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -492,6 +492,10 @@
     var _preFeatures = (window.mBT && window.mBT.features) || {};
     var _preRegistry = (window.mBT && window.mBT.registry) || {};
     var _preLE = (window.mBT && window.mBT.le) || {};
+    /* storage.js attaches window.mBT.storage + window.mBTStorage before this hoist.
+       Without preserving storage here, crew "Select Contact" never queries IndexedDB
+       and only sees mBTOG.contacts -- Contacts CRM saves become invisible to search. */
+    var _preStorage = (window.mBT && window.mBT.storage) || window.mBTStorage || null;
 
     window.mBT = {
         config: { version: APP_VERSION },
@@ -502,8 +506,11 @@
         ui: _preUI,
         features: _preFeatures,  // Tier 5 -- preserved across hoist for modular pre-registration
         registry: _preRegistry,  // Phase 137 Stabilization: global registry hoisted from IIFE scope
+        storage: _preStorage,    // IndexedDB contacts/projects (storage.js); required by contact picker
         state: { isDirty: false } // Task 13: Dirty-state guard for safe SW update activation
     };
+    /* Defensive re-bind if hoist ran before storage.js or storage was null */
+    if (!window.mBT.storage && window.mBTStorage) window.mBT.storage = window.mBTStorage;
     window.mBT.ui.render = window.mBT.ui.render || {};
     window.mBT.ui.render.esc = function (str) { var d = document.createElement('div'); d.textContent = String(str || ''); return d.innerHTML; };
 
@@ -11921,20 +11928,22 @@
                 }
 
                 function openSavedContactPicker() {
-                    /* Merge mBTOG.contacts + Contacts DB, then show picker */
+                    /* Merge IndexedDB contacts + mBTOG.contacts, then show picker.
+                       Prefer window.mBT.storage; fall back to window.mBTStorage (same engine)
+                       so a missing mBT.storage bind never hides the CRM contacts store. */
                     var _ogContacts = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
-                    var _idb = window.mBT && window.mBT.storage;
+                    var _idb = (window.mBT && window.mBT.storage) || window.mBTStorage || null;
                     var _dbPromise = (_idb && typeof _idb.getAllContacts === 'function')
                         ? _idb.getAllContacts() : Promise.resolve([]);
                     _dbPromise.catch(function () { return []; }).then(function (_dbContacts) {
                         /* Merge: prefer DB contacts, fill in mBTOG contacts not already present by name */
                         var seen = {};
                         var roster = [];
-                        _dbContacts.forEach(function (c) {
-                            if (c.name) { seen[c.name.toLowerCase()] = true; roster.push(c); }
+                        (_dbContacts || []).forEach(function (c) {
+                            if (c && c.name) { seen[String(c.name).toLowerCase()] = true; roster.push(c); }
                         });
                         _ogContacts.forEach(function (c) {
-                            if (c.name && !seen[c.name.toLowerCase()]) roster.push(c);
+                            if (c && c.name && !seen[String(c.name).toLowerCase()]) roster.push(c);
                         });
                         if (!roster.length) {
                             mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
@@ -13003,7 +13012,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.90', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.91', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};

@@ -448,35 +448,78 @@ window.mBTRouter = (function () {
                 mBTSync.pushAll().catch(function (e2) { console.warn('[mBT] Lifecycle push on tool close failed:', e2); });
             }
 
-        /* --- inject-contact: push a contact as a crew line item in the budget grid --- */
+        /* --- inject-contact: push a contact as a crew line item in the budget grid ---
+           If a line already exists for this person (description or crew.name match),
+           update that row's crew fields instead of inserting a second identical row.
+           That matches Contacts "Push to Budget" for people already on the sheet. */
         } else if (action === 'inject-contact' && currentProjectName) {
             if (payload.name && budget) {
-                var targetSection = _resolveContactSection(budget, payload.department);
-                var section = targetSection ? budget.sections[targetSection] : null;
-                if (section) {
-                    var lineRate = parseFloat(payload.rate) || 0;
-                    var newCrewItem = {
-                        id:          'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                        description: payload.name,
-                        quantity:    1,
-                        unit:        'Day',
-                        baseRate:    lineRate,
-                        rate:        lineRate,
-                        multiplier:  1,
-                        actual:      0,
-                        rateType:    'negotiable',
-                        contact_id:  payload.email || null,
-                        crew:        { name: payload.name, phone: payload.phone || '', email: payload.email || '' }
-                    };
-                    section.items.push(newCrewItem);
-                    _mirrorGlobalContactItem(budget, newCrewItem);
-                    if (window.mBT && mBT.ui && mBT.ui.ops && typeof mBT.ui.ops.add === 'function') {
-                        mBT.ui.ops.add(targetSection, newCrewItem);
+                var pushName = String(payload.name).trim();
+                var pushNameKey = pushName.toLowerCase();
+                var existingItem = null;
+                var existingSectionKey = null;
+                var secKeys = budget.sections ? Object.keys(budget.sections) : [];
+                var si, ii, secItems, cand;
+                for (si = 0; si < secKeys.length && !existingItem; si++) {
+                    secItems = budget.sections[secKeys[si]].items || [];
+                    for (ii = 0; ii < secItems.length; ii++) {
+                        cand = secItems[ii];
+                        if (!cand) continue;
+                        if (String(cand.description || '').trim().toLowerCase() === pushNameKey) {
+                            existingItem = cand;
+                            existingSectionKey = secKeys[si];
+                            break;
+                        }
+                        if (cand.crew && String(cand.crew.name || '').trim().toLowerCase() === pushNameKey) {
+                            existingItem = cand;
+                            existingSectionKey = secKeys[si];
+                            break;
+                        }
                     }
+                }
+                if (existingItem) {
+                    var upRate = parseFloat(payload.rate);
+                    existingItem.crew = {
+                        name: pushName,
+                        phone: payload.phone || (existingItem.crew && existingItem.crew.phone) || '',
+                        email: payload.email || (existingItem.crew && existingItem.crew.email) || ''
+                    };
+                    if (payload.email) existingItem.contact_id = payload.email;
+                    if (!isNaN(upRate) && upRate > 0) {
+                        existingItem.rate = upRate;
+                        if (existingItem.baseRate == null || existingItem.baseRate === 0) existingItem.baseRate = upRate;
+                    }
+                    _mirrorGlobalContactItem(budget, existingItem);
                     _persistBudget(e.source, action, budget);
-                    console.log('[mBT] Injected contact into section:', targetSection, payload.name);
+                    console.log('[mBT] Linked contact to existing line:', existingSectionKey, pushName);
                 } else {
-                    console.warn('[mBT] inject-contact: no section found for', payload.name);
+                    var targetSection = _resolveContactSection(budget, payload.department);
+                    var section = targetSection ? budget.sections[targetSection] : null;
+                    if (section) {
+                        var lineRate = parseFloat(payload.rate) || 0;
+                        var newCrewItem = {
+                            id:          'crew_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            description: pushName,
+                            quantity:    1,
+                            unit:        'Day',
+                            baseRate:    lineRate,
+                            rate:        lineRate,
+                            multiplier:  1,
+                            actual:      0,
+                            rateType:    'negotiable',
+                            contact_id:  payload.email || null,
+                            crew:        { name: pushName, phone: payload.phone || '', email: payload.email || '' }
+                        };
+                        section.items.push(newCrewItem);
+                        _mirrorGlobalContactItem(budget, newCrewItem);
+                        if (window.mBT && mBT.ui && mBT.ui.ops && typeof mBT.ui.ops.add === 'function') {
+                            mBT.ui.ops.add(targetSection, newCrewItem);
+                        }
+                        _persistBudget(e.source, action, budget);
+                        console.log('[mBT] Injected contact into section:', targetSection, pushName);
+                    } else {
+                        console.warn('[mBT] inject-contact: no section found for', pushName);
+                    }
                 }
             }
 
