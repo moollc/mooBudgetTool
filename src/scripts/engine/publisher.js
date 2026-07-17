@@ -3598,6 +3598,105 @@
                 return { css: css, body: body };
             },
 
+            /**
+             * Extract CSS + body from a full template HTML document string.
+             * Setting a full <!DOCTYPE> document as div.innerHTML strips html/head/body,
+             * so callers must inject only style+body fragments.
+             */
+            _extractHtmlParts: function (html) {
+                var css = '';
+                var re = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+                var m;
+                while ((m = re.exec(html)) !== null) {
+                    css += m[1] + '\n';
+                }
+                var bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                return {
+                    css: css,
+                    body: bodyMatch ? bodyMatch[1] : html
+                };
+            },
+
+            /**
+             * Mount an off-screen export container for html2pdf/html2canvas.
+             * Root cause of blank PDFs (2026-07):
+             * 1) opacity:0 makes html2canvas paint fully transparent (blank page).
+             * 2) On Document Builder (html/body height:100% flex layout), bundled
+             *    html2canvas often measures capture height as 0 unless height and
+             *    windowHeight are set explicitly from scrollHeight.
+             * Fix: full opacity, parked off-screen at left:-10000px, then pass
+             * measured height into html2canvas options (see _html2pdfOptions).
+             */
+            _mountExportContainer: function (css, bodyHtml) {
+                var container = document.createElement('div');
+                container.setAttribute('data-mbt-pdf-export', '1');
+                container.style.cssText = 'position:fixed;left:-10000px;top:0;width:8.5in;background:#ffffff;opacity:1;pointer-events:none;z-index:2147483646;font-family:Helvetica,Arial,sans-serif;font-size:9pt;color:#1a1a2e;';
+                /* Template CSS targets body / body::before (watermark). Inside a bare div those
+                   selectors never match, so retarget them at the export root. */
+                var scopedCss = String(css || '')
+                    .replace(/body::before/gi, '[data-mbt-pdf-export="1"]::before')
+                    .replace(/body::after/gi, '[data-mbt-pdf-export="1"]::after')
+                    .replace(/(^|}|,)\s*body\s*\{/gi, '$1[data-mbt-pdf-export="1"]{');
+                container.innerHTML = '<style>' + scopedCss + '</style>' + (bodyHtml || '');
+                document.body.appendChild(container);
+                /* Force layout so scrollHeight is real before html2canvas reads it */
+                void container.offsetHeight;
+                return container;
+            },
+
+            /** html2pdf options that force a non-zero capture height on flex/100% pages. */
+            _html2pdfOptions: function (filename, container) {
+                var h = Math.max(
+                    (container && container.scrollHeight) || 0,
+                    (container && container.offsetHeight) || 0,
+                    1
+                );
+                return {
+                    margin: [0.65, 0.65, 0.65, 0.65],
+                    filename: filename || 'document.pdf',
+                    image: { type: 'jpeg', quality: 0.97 },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: false,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        height: h,
+                        windowHeight: h,
+                        scrollX: 0,
+                        scrollY: 0
+                    },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                };
+            },
+
+            _unmountExportContainer: function (container) {
+                if (container && container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
+            },
+
+            /**
+             * Run html2pdf against a mounted container, always cleaning up.
+             * @param {HTMLElement} container
+             * @param {object} opts - from _html2pdfOptions
+             * @param {string} mode - 'save' | 'blob'
+             * @returns Promise (void for save, Blob for blob)
+             */
+            _runHtml2pdf: function (container, opts, mode) {
+                var self = this;
+                var worker = window.html2pdf().set(opts).from(container);
+                var p = (mode === 'blob')
+                    ? worker.outputPdf('blob')
+                    : worker.save();
+                return p.then(function (result) {
+                    self._unmountExportContainer(container);
+                    return result;
+                }).catch(function (err) {
+                    self._unmountExportContainer(container);
+                    throw err;
+                });
+            },
+
             /** Export multiple templates as one combined PDF (page break between each).
                 @param {string[]} templateIds  - ordered list of template ids to include
                 @param {object}   budgetData
@@ -3615,12 +3714,7 @@
                 /* Render each template and extract its style+body */
                 var parts = templateIds.map(function (id) {
                     var html = self.render(id, budgetData, opts);
-                    var styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
-                    var bodyMatch  = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-                    return {
-                        css:  styleMatch ? styleMatch[1] : '',
-                        body: bodyMatch  ? bodyMatch[1]  : html
-                    };
+                    return self._extractHtmlParts(html);
                 });
 
                 /* Prepend TOC cover page when requested */
@@ -3635,23 +3729,8 @@
                     return (i > 0 ? '<div style="page-break-before:always;"></div>' : '') + p.body;
                 }).join('');
 
-                var container = document.createElement('div');
-                container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;font-family:Helvetica,Arial,sans-serif;font-size:9pt;color:#1a1a2e;';
-                container.innerHTML = '<style>' + mergedCss + '</style>' + mergedBody;
-                document.body.appendChild(container);
-
-                return window.html2pdf(container, {
-                    margin: [0.65, 0.65, 0.65, 0.65],
-                    filename: fname,
-                    image: { type: 'jpeg', quality: 0.97 },
-                    html2canvas: { scale: 2, useCORS: false, logging: false },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-                }).then(function () {
-                    document.body.removeChild(container);
-                }).catch(function (err) {
-                    document.body.removeChild(container);
-                    throw err;
-                });
+                var container = this._mountExportContainer(mergedCss, mergedBody);
+                return this._runHtml2pdf(container, this._html2pdfOptions(fname, container), 'save');
             },
 
             /** Download PDF of a rendered template using html2pdf.js */
@@ -3674,35 +3753,28 @@
                 }
                 var html = this.render(templateId, budgetData, options);
                 var fname = slugify((budgetData && budgetData.projectName) || templateId) + '_' + templateId + '.pdf';
+                var parts = this._extractHtmlParts(html);
+                var container = this._mountExportContainer(parts.css, parts.body);
 
-                /* Extract <style> and <body> content — setting innerHTML to a full <!DOCTYPE> document
-                   causes the parser to strip html/head/body tags, producing a blank container. */
-                var styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
-                var bodyMatch  = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-                var css      = styleMatch ? styleMatch[1] : '';
-                var bodyHtml = bodyMatch  ? bodyMatch[1]  : html;
+                return this._runHtml2pdf(container, this._html2pdfOptions(fname, container), 'save')
+                    .catch(function (err) {
+                        notify('PDF Error', 'Export failed. Try Print instead.');
+                        console.error('[mBTPublisher toPdf]', err);
+                        throw err;
+                    });
+            },
 
-                /* Container must be in the viewport for html2canvas to compute dimensions.
-                   opacity:0 + pointer-events:none keeps it invisible and non-interactive. */
-                var container = document.createElement('div');
-                container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;font-family:Helvetica,Arial,sans-serif;font-size:9pt;color:#1a1a2e;';
-                container.innerHTML = '<style>' + css + '</style>' + bodyHtml;
-                document.body.appendChild(container);
-
-                return window.html2pdf(container, {
-                    margin: [0.65, 0.65, 0.65, 0.65],
-                    filename: fname,
-                    image: { type: 'jpeg', quality: 0.97 },
-                    html2canvas: { scale: 2, useCORS: false, logging: false },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-                }).then(function () {
-                    document.body.removeChild(container);
-                }).catch(function (err) {
-                    document.body.removeChild(container);
-                    notify('PDF Error', 'Export failed. Try Print instead.');
-                    console.error('[mBTPublisher toPdf]', err);
-                    throw err;
-                });
+            /** Build a PDF Blob for share pipelines (same capture path as toPdf).
+                @returns Promise<Blob> */
+            toPdfBlob: function (templateId, budgetData, options) {
+                if (typeof window.html2pdf === 'undefined') {
+                    return Promise.reject(new Error('html2pdf not loaded'));
+                }
+                var html = this.render(templateId, budgetData, options);
+                var fname = slugify((budgetData && budgetData.projectName) || templateId) + '_' + templateId + '.pdf';
+                var parts = this._extractHtmlParts(html);
+                var container = this._mountExportContainer(parts.css, parts.body);
+                return this._runHtml2pdf(container, this._html2pdfOptions(fname, container), 'blob');
             }
         },
 

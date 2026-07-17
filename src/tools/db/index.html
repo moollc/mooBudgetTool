@@ -1702,30 +1702,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
 
     withFreshBudget(function () {
-    if (typeof window.html2pdf === 'undefined') { mailtoFallback(); return; }
+    if (!pub || !pub.templates || typeof pub.templates.toPdfBlob !== 'function') {
+      mailtoFallback();
+      return;
+    }
 
-    /* Build PDF as blob using html2pdf builder API, then share */
-    var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
-    var styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
-    var bodyMatch  = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    var css      = styleMatch ? styleMatch[1] : '';
-    var bodyHtml = bodyMatch  ? bodyMatch[1]  : html;
-    var container = document.createElement('div');
-    container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;';
-    container.innerHTML = '<style>' + css + '</style>' + bodyHtml;
-    document.body.appendChild(container);
-
+    /* Same capture path as primary PDF (publisher.toPdfBlob) so Share cannot drift blank */
     var fname = ((budget.projectName || 'document').replace(/[^a-z0-9_\-]/gi, '_')) + '_' + activeTemplateId + '.pdf';
-    var opts = {
-      margin: [0.65, 0.65, 0.65, 0.65],
-      filename: fname,
-      image: { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: false, logging: false },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opts).from(container).outputPdf('blob').then(function (blob) {
-      document.body.removeChild(container);
+    pub.templates.toPdfBlob(activeTemplateId, budget, getExportOpts()).then(function (blob) {
+      if (!blob || !blob.size || blob.size < 5000) {
+        console.error('[mBTDB share] blank or tiny PDF blob', blob && blob.size);
+        mailtoFallback();
+        return;
+      }
       var file = new File([blob], fname, { type: 'application/pdf' });
       var shareData = { files: [file], title: (editorData && editorData.productionTitle) || budget.projectName || 'Document' };
       if (navigator.canShare && navigator.canShare(shareData)) {
@@ -1733,10 +1722,21 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           if (err.name !== 'AbortError') mailtoFallback(); else done();
         });
       } else {
-        mailtoFallback();
+        /* Desktop without Web Share: download the PDF so Share still delivers a real file */
+        try {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = fname;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+          done();
+        } catch (e) {
+          mailtoFallback();
+        }
       }
     }).catch(function (err) {
-      if (document.body.contains(container)) document.body.removeChild(container);
       console.error('[mBTDB share]', err);
       mailtoFallback();
     });
