@@ -81,12 +81,21 @@ function helpOverlayTemplate(activeTool) {
 /* Expose on window for mBT/index.html access */
 window.helpOverlayTemplate = helpOverlayTemplate;
 
-/* --- 5. Production Presets (Industry standard stage ratios) --- */
+/* --- 5. Production Presets (industry standard stage ratios) --- */
+/* Keys match BUDGET_TEMPLATES labels where possible (TVC keeps short key). */
+/* Ratios are % of total timeline; each row sums to 100. */
+/* Event Coverage / Live: prep and promo share pre; event day is prod; recap is post. */
+/* Streaming / Broadcast: one season/cycle; prod is the recurring air window. */
 var STAGE_PRESETS = {
     'TVC': { 'dev': 10, 'pre': 25, 'prod': 15, 'post': 35, 'dist': 15 },
     'Music Video': { 'dev': 10, 'pre': 20, 'prod': 15, 'post': 40, 'dist': 15 },
     'Documentary': { 'dev': 20, 'pre': 15, 'prod': 35, 'post': 20, 'dist': 10 },
-    'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 }
+    'Feature Film': { 'dev': 25, 'pre': 20, 'prod': 20, 'post': 25, 'dist': 10 },
+    'Short Film': { 'dev': 10, 'pre': 25, 'prod': 10, 'post': 40, 'dist': 15 },
+    'Corporate / Brand Film': { 'dev': 15, 'pre': 25, 'prod': 10, 'post': 40, 'dist': 10 },
+    'Event Coverage / Live': { 'dev': 5, 'pre': 35, 'prod': 25, 'post': 25, 'dist': 10 },
+    'Scripted Web Series': { 'dev': 15, 'pre': 20, 'prod': 30, 'post': 25, 'dist': 10 },
+    'Streaming / Broadcast': { 'dev': 10, 'pre': 25, 'prod': 50, 'post': 10, 'dist': 5 }
 };
 
 /* --- 5.1. Payment Methods (Foundations Phase 3) --- */
@@ -174,11 +183,13 @@ var BUDGET_TEMPLATES = {
     'event_coverage': {
         icon: 'zap',
         label: 'Event Coverage / Live',
-        desc: 'Multi-cam setup. Focus on switching, connectivity, and rapid turnaround.',
+        desc: 'Multi-cam live coverage. Pre-event promo, technical advance, event window, post-event recap, and release.',
         structure: [
-            { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Camera Operator', 'Sound Mixer', 'Digital Imaging Tech (DIT)'] },
-            { id: 'gear', name: 'Hardware & Connectivity', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
-            { id: 'post', name: 'Quick Turnaround', items: ['Editor', 'Colorist'] },
+            /* Ordered top-to-bottom as the real live-event stretch (promo and advance can overlap on the calendar). */
+            { id: 'promo', name: 'Pre-Event Promo Content', items: ['Graphics Artist'] },
+            { id: 'advance', name: 'Technical Advance & Connectivity', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
+            { id: 'event', name: 'Event Day Crew', items: ['Technical Director', 'Camera Operator', 'Sound Mixer', 'Digital Imaging Tech (DIT)'] },
+            { id: 'post', name: 'Post-Event Recap & Delivery', items: ['Editor', 'Colorist'] },
             { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] }
         ]
     },
@@ -191,6 +202,18 @@ var BUDGET_TEMPLATES = {
             { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', '1st Assistant Camera (Focus)', 'Sound Mixer', 'Gaffer', 'Set PA'] },
             { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Music Editor'] },
             { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager'] }
+        ]
+    },
+    'streaming_broadcast': {
+        icon: 'globe',
+        label: 'Streaming / Broadcast',
+        desc: 'Ongoing studio or streaming show. Build infrastructure once, air on a recurring cadence.',
+        structure: [
+            { id: 'atl', name: 'Show Leadership & Talent', items: ['Executive Producer', 'Producer', 'Director', 'Cast - Lead'] },
+            { id: 'tech', name: 'Control Room & Floor', items: ['Technical Director', 'Broadcast Engineer', 'Camera Operator', 'Sound Mixer', 'Graphics Artist'] },
+            { id: 'infra', name: 'Studio Infrastructure', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
+            { id: 'post', name: 'Highlights & Package', items: ['Editor', 'Colorist'] },
+            { id: 'other', name: 'Logistics & Ops', items: ['Catering (Per Head)', 'Publicist'] }
         ]
     }
 };
