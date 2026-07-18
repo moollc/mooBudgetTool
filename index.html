@@ -6026,6 +6026,104 @@
             alert: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
         },
 
+        /* Mobile keyboard: layout viewport often stays full height while visualViewport
+           shrinks. Centered fixed modals sit under the keyboard. Reposition open modals
+           into the visual viewport when it shrinks significantly. Desktop unchanged. */
+        _ensureViewportHook: function () {
+            if (this._vvHooked) return;
+            this._vvHooked = true;
+            var self = this;
+            var onViewportChange = function () {
+                self._syncKeyboardLayout();
+            };
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', onViewportChange);
+                window.visualViewport.addEventListener('scroll', onViewportChange);
+            }
+            window.addEventListener('resize', onViewportChange);
+            document.addEventListener('focusin', function (e) {
+                if (!self.stack || !self.stack.length) return;
+                var t = e.target;
+                if (!t || !t.tagName) return;
+                var tag = String(t.tagName).toLowerCase();
+                if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+                /* Wait for OS keyboard animation, then pin modal and scroll focused field */
+                setTimeout(function () {
+                    self._syncKeyboardLayout();
+                    try {
+                        if (t.scrollIntoView) {
+                            t.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+                        }
+                    } catch (ex) {
+                        try { t.scrollIntoView(true); } catch (ex2) { }
+                    }
+                }, 280);
+            });
+        },
+
+        _syncKeyboardLayout: function () {
+            if (!this.stack || !this.stack.length) return;
+            var vv = window.visualViewport;
+            var layoutH = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
+            var visualH = vv && typeof vv.height === 'number' ? vv.height : layoutH;
+            var offsetTop = vv && typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
+            /* Substantial shrink = keyboard (or browser chrome) covering lower layout area */
+            var keyboardOpen = layoutH > 0 && visualH < (layoutH - 120);
+            var i, modalId, modal, contentEl, pad, maxH;
+            for (i = 0; i < this.stack.length; i++) {
+                modalId = this.stack[i];
+                modal = document.getElementById(modalId);
+                if (!modal) continue;
+                contentEl = document.getElementById(modalId + 'Content');
+                if (keyboardOpen) {
+                    modal.classList.remove('items-center');
+                    modal.classList.add('items-start');
+                    /* Pin overlay to the visible visual viewport, not full layout viewport */
+                    modal.style.top = offsetTop + 'px';
+                    modal.style.height = visualH + 'px';
+                    modal.style.bottom = 'auto';
+                    modal.style.paddingTop = '4px';
+                    modal.style.paddingBottom = '4px';
+                    pad = 8;
+                    maxH = Math.max(180, visualH - pad);
+                    if (contentEl) {
+                        /* height (not only maxHeight) so flex children get a real box
+                           and form fields remain scrollable instead of collapsing */
+                        contentEl.style.maxHeight = maxH + 'px';
+                        contentEl.style.height = maxH + 'px';
+                    }
+                } else {
+                    modal.classList.add('items-center');
+                    modal.classList.remove('items-start');
+                    modal.style.top = '';
+                    modal.style.height = '';
+                    modal.style.bottom = '';
+                    modal.style.paddingTop = '';
+                    modal.style.paddingBottom = '';
+                    if (contentEl) {
+                        contentEl.style.maxHeight = '';
+                        contentEl.style.height = '';
+                    }
+                }
+            }
+            /* Keep focused field inside the visual viewport when keyboard is open */
+            if (keyboardOpen) {
+                var ae = document.activeElement;
+                if (ae && ae.tagName) {
+                    var at = String(ae.tagName).toLowerCase();
+                    if (at === 'input' || at === 'textarea' || at === 'select') {
+                        try {
+                            if (ae.scrollIntoView) {
+                                ae.scrollIntoView({ block: 'center', inline: 'nearest' });
+                            }
+                        } catch (ex3) {
+                            try { ae.scrollIntoView(true); } catch (ex4) { }
+                        }
+                    }
+                }
+            }
+        },
+
         /* --- Portal Generation: Dynamic injection of overlay layers --- */
         open: function (id, title, contentHtml, maxWidth, options) {
             maxWidth = maxWidth || 'max-w-2xl';
@@ -6059,11 +6157,15 @@
                 '<div id="' + modalId + '" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 hidden" style="z-index:' + newZ + '; transition: opacity 300ms;" tabindex="-1">' +
                 '<div id="' + modalId + 'Content" class="bg-white rounded-2xl shadow-2xl w-full ' + maxWidth + ' mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">' +
                 headerHtml +
-                '<div class="flex-grow overflow-hidden" id="' + modalId + 'Body">' + contentHtml + '</div>' +
+                '<div class="flex-grow overflow-hidden min-h-0 flex flex-col" id="' + modalId + 'Body">' + contentHtml + '</div>' +
                 '</div></div>';
             container.insertAdjacentHTML('beforeend', fullHtml);
             var modal = document.getElementById(modalId);
             modal.classList.remove('hidden');
+
+            /* Bind once: visualViewport keyboard reflow for all open modals */
+            this._ensureViewportHook();
+            this._syncKeyboardLayout();
 
             /* Animation & Focus Trapping */
             setTimeout(function () {
@@ -6080,6 +6182,7 @@
                 } else {
                     modal.focus();
                 }
+                self._syncKeyboardLayout();
             }, 50);
 
             modal.addEventListener('click', function (e) { if (e.target === modal) self.close(modalId); });
@@ -6116,6 +6219,8 @@
                     var el = self.focusStack.pop();
                     if (el && document.body.contains(el)) el.focus();
                 }
+                /* Refresh remaining modals if keyboard still open */
+                if (self.stack && self.stack.length) self._syncKeyboardLayout();
             };
 
             if (instant) { finalize(); } else {
@@ -11721,6 +11826,64 @@
         }
     };
 
+    /* Shared roster: IndexedDB Contacts CRM + mBTOG.contacts, deduped by name.
+       Used by Import Contact picker and crew-profile inline pre-search. */
+    window.mBTFetchMergedContactRoster = function () {
+        var ogContacts = (typeof mBTOG !== 'undefined' && mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
+        var idb = (window.mBT && window.mBT.storage) || window.mBTStorage || null;
+        var dbPromise = (idb && typeof idb.getAllContacts === 'function')
+            ? idb.getAllContacts() : Promise.resolve([]);
+        return dbPromise.catch(function () { return []; }).then(function (dbContacts) {
+            var seen = {};
+            var roster = [];
+            (dbContacts || []).forEach(function (c) {
+                if (c && c.name) {
+                    seen[String(c.name).toLowerCase()] = true;
+                    roster.push(c);
+                }
+            });
+            ogContacts.forEach(function (c) {
+                if (c && c.name && !seen[String(c.name).toLowerCase()]) roster.push(c);
+            });
+            return roster;
+        });
+    };
+
+    /* Populate crew profile fields from a contact (picker or inline suggestion). */
+    window.mBTApplyCrewContactPick = function (c) {
+        if (!c) return;
+        var n = document.getElementById('crewName');
+        var p = document.getElementById('crewPhone');
+        var e = document.getElementById('crewEmail');
+        var h = document.getElementById('crewImportData');
+        if (n) n.value = c.name || '';
+        if (p) p.value = c.phone || '';
+        if (e) e.value = c.email || '';
+        if (h) {
+            try {
+                h.value = JSON.stringify({
+                    id: c.id || '',
+                    name: c.name || '',
+                    phone: c.phone || '',
+                    email: c.email || '',
+                    role: c.role || c.department || '',
+                    department: c.department || c.role || '',
+                    rate: c.rate || null,
+                    walletType: c.walletType || '',
+                    walletAddress: c.walletAddress || '',
+                    portfolio: c.portfolio || []
+                });
+            } catch (ex) {
+                h.value = '';
+            }
+        }
+        var sug = document.getElementById('crewNameSuggestions');
+        if (sug) {
+            sug.classList.add('hidden');
+            sug.innerHTML = '';
+        }
+    };
+
     window.openCrewProfile = function (el, event, itemId, sectionName) {
         if (event) event.stopPropagation();
 
@@ -11806,7 +11969,11 @@
             /* Hidden field carries the full contact JSON from picker */
             '<input type="hidden" id="crewImportData" value="">' +
             '<div class="space-y-2">' +
-            '<input type="text" id="crewName" value="' + mBT.ui.render.esc(crew.name || '') + '" placeholder="FULL NAME" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
+            /* Relative wrapper hosts inline contact pre-search under Full Name */
+            '<div class="relative" id="crewNameSuggestWrap">' +
+            '<input type="text" id="crewName" value="' + mBT.ui.render.esc(crew.name || '') + '" placeholder="FULL NAME" autocomplete="off" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-black uppercase tracking-tighter outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
+            '<div id="crewNameSuggestions" class="hidden absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-slate-100 rounded-xl shadow-lg max-h-40 overflow-y-auto no-scrollbar"></div>' +
+            '</div>' +
             '<div class="grid grid-cols-2 gap-2">' +
             '<input type="tel" id="crewPhone" value="' + mBT.ui.render.esc(crew.phone || '') + '" placeholder="PHONE" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
             '<input type="email" id="crewEmail" value="' + mBT.ui.render.esc(crew.email || '') + '" placeholder="EMAIL" class="w-full p-3 bg-white border-none rounded-xl shadow-sm text-xs font-mono font-bold outline-none focus:ring-4 focus:ring-blue-50 transition-all">' +
@@ -11819,7 +11986,8 @@
             '</div>' +
             '</div>';
 
-        var content = '<form id="crewProfileForm" class="flex flex-col h-[500px]">' +
+        /* max-h + h-full so keyboard reflow can shrink the sheet; min-h-0 for flex scroll */
+        var content = '<form id="crewProfileForm" class="flex flex-col h-full max-h-[500px] min-h-0">' +
             '<!-- Header -->' +
             '<div class="text-center relative shrink-0 mb-4">' +
             '<div class="w-20 h-20 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-white">' +
@@ -11928,23 +12096,8 @@
                 }
 
                 function openSavedContactPicker() {
-                    /* Merge IndexedDB contacts + mBTOG.contacts, then show picker.
-                       Prefer window.mBT.storage; fall back to window.mBTStorage (same engine)
-                       so a missing mBT.storage bind never hides the CRM contacts store. */
-                    var _ogContacts = (mBTOG && mBTOG.contacts) ? mBTOG.contacts : [];
-                    var _idb = (window.mBT && window.mBT.storage) || window.mBTStorage || null;
-                    var _dbPromise = (_idb && typeof _idb.getAllContacts === 'function')
-                        ? _idb.getAllContacts() : Promise.resolve([]);
-                    _dbPromise.catch(function () { return []; }).then(function (_dbContacts) {
-                        /* Merge: prefer DB contacts, fill in mBTOG contacts not already present by name */
-                        var seen = {};
-                        var roster = [];
-                        (_dbContacts || []).forEach(function (c) {
-                            if (c && c.name) { seen[String(c.name).toLowerCase()] = true; roster.push(c); }
-                        });
-                        _ogContacts.forEach(function (c) {
-                            if (c && c.name && !seen[String(c.name).toLowerCase()]) roster.push(c);
-                        });
+                    /* Same merge as inline pre-search via mBTFetchMergedContactRoster */
+                    window.mBTFetchMergedContactRoster().then(function (roster) {
                         if (!roster.length) {
                             mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
                             return;
@@ -12024,6 +12177,107 @@
                     } else {
                         openSavedContactPicker();
                     }
+                });
+            }
+
+            /* Inline contact pre-search under Full Name (same roster as Import Contact) */
+            var nameInput = document.getElementById('crewName');
+            var suggestBox = document.getElementById('crewNameSuggestions');
+            if (nameInput && suggestBox) {
+                var suggestTimer = null;
+                var cachedRoster = null;
+                var rosterLoading = false;
+
+                function hideCrewSuggestions() {
+                    suggestBox.classList.add('hidden');
+                    suggestBox.innerHTML = '';
+                }
+
+                function renderCrewSuggestions(matches) {
+                    if (!matches || !matches.length) {
+                        hideCrewSuggestions();
+                        return;
+                    }
+                    var html = '';
+                    var maxShow = Math.min(matches.length, 8);
+                    var mi;
+                    for (mi = 0; mi < maxShow; mi++) {
+                        (function (c) {
+                            var roleLabel = c.role || c.department || c.category || '';
+                            html += '<div class="crew-suggest-item flex items-center gap-3 p-2.5 hover:bg-blue-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0" ' +
+                                'data-idx="' + mi + '">' +
+                                '<div class="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">' +
+                                mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                                '<div class="min-w-0"><div class="text-xs font-black text-slate-800 truncate">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                                (roleLabel ? '<div class="text-[9px] text-slate-400 font-bold truncate">' + mBT.ui.render.esc(roleLabel) + '</div>' : '') +
+                                '</div></div>';
+                        })(matches[mi]);
+                    }
+                    suggestBox.innerHTML = html;
+                    suggestBox.classList.remove('hidden');
+                    var items = suggestBox.querySelectorAll('.crew-suggest-item');
+                    for (var ii = 0; ii < items.length; ii++) {
+                        (function (el, contact) {
+                            el.addEventListener('mousedown', function (ev) {
+                                /* mousedown before blur so selection applies before hide */
+                                ev.preventDefault();
+                                window.mBTApplyCrewContactPick(contact);
+                            });
+                        })(items[ii], matches[ii]);
+                    }
+                }
+
+                function filterAndShowSuggestions(q) {
+                    var query = (q || '').trim().toLowerCase();
+                    if (query.length < 1) {
+                        hideCrewSuggestions();
+                        return;
+                    }
+                    function applyFilter(roster) {
+                        var matches = [];
+                        var ri;
+                        for (ri = 0; ri < roster.length; ri++) {
+                            var c = roster[ri];
+                            if (!c || !c.name) continue;
+                            var hay = String(c.name || '').toLowerCase() + ' ' +
+                                String(c.role || '').toLowerCase() + ' ' +
+                                String(c.department || '').toLowerCase();
+                            if (hay.indexOf(query) > -1) matches.push(c);
+                        }
+                        renderCrewSuggestions(matches);
+                    }
+                    if (cachedRoster) {
+                        applyFilter(cachedRoster);
+                        return;
+                    }
+                    if (rosterLoading) return;
+                    rosterLoading = true;
+                    window.mBTFetchMergedContactRoster().then(function (roster) {
+                        rosterLoading = false;
+                        cachedRoster = roster || [];
+                        applyFilter(cachedRoster);
+                    }).catch(function () {
+                        rosterLoading = false;
+                        cachedRoster = [];
+                        hideCrewSuggestions();
+                    });
+                }
+
+                nameInput.addEventListener('input', function () {
+                    if (suggestTimer) clearTimeout(suggestTimer);
+                    var val = nameInput.value;
+                    suggestTimer = setTimeout(function () {
+                        filterAndShowSuggestions(val);
+                    }, 160);
+                });
+                nameInput.addEventListener('focus', function () {
+                    if ((nameInput.value || '').trim().length >= 1) {
+                        filterAndShowSuggestions(nameInput.value);
+                    }
+                });
+                nameInput.addEventListener('blur', function () {
+                    /* Delay so mousedown on a suggestion can fire first */
+                    setTimeout(function () { hideCrewSuggestions(); }, 180);
                 });
             }
         }, 50);

@@ -8,6 +8,8 @@
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
+    <script src="../../core/mBT.assets.js"></script>
+    <script src="../../core/mBT.templates.js"></script>
     <script src="../../lib/html2pdf.bundle.min.js"></script>
     <script>
         /* Theme Bridge: Instant Inheritance */
@@ -197,12 +199,8 @@
                 <!-- Industry Preset -->
                 <div class="pt-4 border-t border-slate-800">
                     <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Distribution Model</label>
-                    <select aria-label="Distribution model preset" onchange="mBTStages.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
+                    <select id="stages-preset-select" aria-label="Distribution model preset" onchange="mBTStages.applyPreset(this.value); this.value=''" class="w-full bg-slate-800 text-white text-[10px] font-bold p-3 rounded-xl outline-none border border-slate-700 focus:border-blue-600 cursor-pointer appearance-none">
                         <option value="" disabled selected>Load Industry Preset..</option>
-                        <option value="TVC">TVC</option>
-                        <option value="Music Video">Music Video</option>
-                        <option value="Documentary">Documentary</option>
-                        <option value="Feature Film">Feature Film</option>
                     </select>
                 </div>
                 <!-- Bulk Operations -->
@@ -562,13 +560,7 @@
             }
         }
 
-        /* ========= STAGE_PRESETS (from mBT-Old.html L739) ========= */
-        var STAGE_PRESETS = {
-            'TVC':          { dev: 10, pre: 15, prod: 45, post: 20, dist: 10 },
-            'Music Video':  { dev:  5, pre: 15, prod: 50, post: 25, dist:  5 },
-            'Documentary':  { dev: 15, pre: 10, prod: 40, post: 25, dist: 10 },
-            'Feature Film': { dev: 10, pre: 20, prod: 35, post: 25, dist: 10 }
-        };
+        /* STAGE_PRESETS: single source in ../../core/mBT.templates.js (global). */
 
         /* ========= Logic Engine (ported from mBT-Old.html L2233–L2421) ========= */
 
@@ -1098,6 +1090,15 @@
                 self.state._projectKey = params.get('projectKey') || null;
                 self.state.projectId   = params.get('projectId') || null;
                 self.state._currency   = params.get('currency') || 'JMD';
+
+                /* Options from shared STAGE_PRESETS (mBT.templates.js); same order as Object.keys */
+                var presetSelect = document.getElementById('stages-preset-select');
+                if (presetSelect && typeof STAGE_PRESETS !== 'undefined') {
+                    presetSelect.innerHTML = '<option value="" disabled selected>Load Industry Preset..</option>' +
+                        Object.keys(STAGE_PRESETS).map(function (k) {
+                            return '<option value="' + k + '">' + k + '</option>';
+                        }).join('');
+                }
 
                 /* Phase 62: Stamp RBAC role on body for CSS-driven lockdown */
                 try {
