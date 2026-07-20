@@ -474,7 +474,10 @@
                                             '</select>' +
                                         '</div>' +
                                         '<div>' +
-                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Model</label>' +
+                                            '<div class="flex justify-between items-center mb-1.5 px-1">' +
+                                                '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest">Model</label>' +
+                                                '<button id="fetchChatModelsBtn" type="button" onclick="window.mBT_UI_Settings_fetchChatModels()" class="text-[7px] font-black text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors bg-transparent border-none cursor-pointer p-0">Fetch</button>' +
+                                            '</div>' +
                                             '<select id="chatModelSelect" onchange="window.mBT_UI_Settings_handleChatModelChange(this.value)" class="w-full bg-slate-800 text-white border-none rounded-xl p-3 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-600/50 cursor-pointer transition-all">' + chatModelOpts + '</select>' +
                                         '</div>' +
                                     '</div>' +
@@ -749,7 +752,7 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v23.92';
+            var currentVersion = updateStatus.localVersion || 'v23.96';
 
             var statusMsg = '';
             if (isChecking) {
@@ -843,7 +846,16 @@
             if (!m || !String(m).trim()) { console.warn('[Settings] Chat model value is empty; ignoring.'); return; }
             var pSel = document.getElementById('aiProviderSelect');
             var p = pSel ? pSel.value : 'openai';
-            localStorage.setItem('mbt_ai_chat_model_' + p, String(m).trim());
+            var val = String(m).trim();
+            var ma = window.mBTAssistant;
+            if (ma && typeof ma.setChatModel === 'function') {
+                ma.setChatModel(p, val);
+            } else {
+                localStorage.setItem('mbt_ai_chat_model_' + p, val);
+                if (p === 'openrouter') {
+                    localStorage.setItem('mbt_openrouter_model', val);
+                }
+            }
         } catch (err) {
             console.error('[Settings] Failed to persist chat model:', err);
         }
@@ -944,32 +956,80 @@
         return merged;
     }
 
-    /* Shared helper — called by fetchImgModels AND syncAIProvider (and any future handler) */
+    /* Shared helper — called by fetchImgModels, fetchChatModels, syncAIProvider.
+       If saved id is missing from the fresh list, pick first free (or first) and persist
+       so a retired model (e.g. Ling-2.6-flash) cannot stay as a ghost selection. */
     function _populateSelect(sel, models, savedKey, groupByFree) {
         if (!sel || !models || !models.length) return;
         var saved = localStorage.getItem(savedKey) || '';
+        var list = models;
         var html = '';
+        var pick = saved;
+        var found = false;
+        var i, id, mid, m, lbl, tag;
+
         if (groupByFree) {
-            var sorted = models.slice().sort(function (a, b) {
+            list = models.slice().sort(function (a, b) {
                 var pa = a.price != null ? a.price : (a.free ? 0 : Infinity);
                 var pb = b.price != null ? b.price : (b.free ? 0 : Infinity);
                 if (pa !== pb) return pa - pb;
                 return (a.id || '').localeCompare(b.id || '');
             });
-            for (var j = 0; j < sorted.length; j++) {
-                var m = sorted[j];
-                var mid = m.id || m;
-                var tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
-                html += '<option value="' + mid + '"' + (mid === saved ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
+        }
+
+        for (i = 0; i < list.length; i++) {
+            mid = list[i].id || list[i];
+            if (saved && mid === saved) {
+                found = true;
+                break;
+            }
+        }
+        if (!found || !saved) {
+            pick = '';
+            if (groupByFree) {
+                for (i = 0; i < list.length; i++) {
+                    if (list[i].free) {
+                        pick = list[i].id || list[i];
+                        break;
+                    }
+                }
+            }
+            if (!pick) {
+                pick = list[0].id || list[0];
+            }
+            if (pick) {
+                localStorage.setItem(savedKey, pick);
+                /* Dual-write chat model through mBTAssistant when key is chat model */
+                if (savedKey.indexOf('mbt_ai_chat_model_') === 0) {
+                    var prov = savedKey.replace('mbt_ai_chat_model_', '');
+                    var maPop = window.mBTAssistant;
+                    if (maPop && typeof maPop.setChatModel === 'function') {
+                        maPop.setChatModel(prov, pick);
+                    } else if (prov === 'openrouter') {
+                        localStorage.setItem('mbt_openrouter_model', pick);
+                    }
+                }
+            }
+        }
+
+        if (groupByFree) {
+            for (i = 0; i < list.length; i++) {
+                m = list[i];
+                mid = m.id || m;
+                tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
+                html += '<option value="' + mid + '"' + (mid === pick ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
             }
         } else {
-            for (var i = 0; i < models.length; i++) {
-                var id  = models[i].id  || models[i];
-                var lbl = models[i].name || models[i].id || models[i];
-                html += '<option value="' + id + '"' + (id === saved ? ' selected' : '') + '>' + lbl + '</option>';
+            for (i = 0; i < list.length; i++) {
+                id  = list[i].id  || list[i];
+                lbl = list[i].name || list[i].id || list[i];
+                html += '<option value="' + id + '"' + (id === pick ? ' selected' : '') + '>' + lbl + '</option>';
             }
         }
         sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
+        if (pick && sel.value !== pick) {
+            try { sel.value = pick; } catch (eSel) {}
+        }
     }
 
     function _refreshImgHint(ip) {
@@ -1131,19 +1191,10 @@
         }
     };
 
-    window.mBT_UI_Settings_autoFetchModelsOnKeyBlur = function () {
-        var keyEl = document.getElementById('apiKeyInput');
-        var pSel = document.getElementById('aiProviderSelect');
-        var p = pSel ? pSel.value : mBT.features.ai.getSelectedProvider();
-        var k = (keyEl && keyEl.value) ? keyEl.value.trim() : '';
-
-        if (!k || p === 'lmstudio') return;
-
-        var cSel = document.getElementById('chatModelSelect');
-        if (cSel) {
-            cSel.innerHTML = '<option value="" disabled>⏳ Fetching models...</option>';
-        }
-
+    /* Shared chat-model fetch used by key blur, explicit Fetch button, and sync.
+       Returns a Promise so callers can chain. */
+    function _fetchChatModelsForProvider(p, k, cSel) {
+        if (!k || p === 'lmstudio') return Promise.resolve();
         var cachedKey = 'mbt_cached_chat_models_' + p;
         var modelFetch;
 
@@ -1151,11 +1202,20 @@
             modelFetch = mBT.features.ai.fetchGeminiModels(k).then(function (models) {
                 localStorage.setItem(cachedKey, JSON.stringify(models));
                 _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+                return models;
             });
         } else if (p === 'openrouter') {
             modelFetch = mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
                 localStorage.setItem(cachedKey, JSON.stringify(models));
                 _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, true);
+                /* Persist selected id via setChatModel so legacy OR key stays aligned */
+                if (cSel && cSel.value) {
+                    var maF = window.mBTAssistant;
+                    if (maF && typeof maF.setChatModel === 'function') {
+                        maF.setChatModel(p, cSel.value);
+                    }
+                }
+                return models;
             });
         } else {
             var MODELS_URLS = {
@@ -1176,12 +1236,69 @@
                         _tierSort(models, p);
                         localStorage.setItem(cachedKey, JSON.stringify(models));
                         _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
+                        return models;
                     });
             } else {
                 modelFetch = Promise.resolve();
             }
         }
-        if (modelFetch) modelFetch.catch(function () {});
+        return modelFetch || Promise.resolve();
+    }
+
+    window.mBT_UI_Settings_autoFetchModelsOnKeyBlur = function () {
+        var keyEl = document.getElementById('apiKeyInput');
+        var pSel = document.getElementById('aiProviderSelect');
+        var p = pSel ? pSel.value : mBT.features.ai.getSelectedProvider();
+        var k = (keyEl && keyEl.value) ? keyEl.value.trim() : '';
+
+        if (!k || p === 'lmstudio') return;
+
+        var cSel = document.getElementById('chatModelSelect');
+        if (cSel) {
+            cSel.innerHTML = '<option value="" disabled>Fetching models...</option>';
+        }
+
+        _fetchChatModelsForProvider(p, k, cSel).catch(function () {});
+    };
+
+    /* Explicit Fetch for chat models — parity with image Fetch button */
+    window.mBT_UI_Settings_fetchChatModels = function () {
+        var keyEl = document.getElementById('apiKeyInput');
+        var pSel = document.getElementById('aiProviderSelect');
+        var p = pSel ? pSel.value : mBT.features.ai.getSelectedProvider();
+        var k = (keyEl && keyEl.value) ? keyEl.value.trim() : '';
+        var cSel = document.getElementById('chatModelSelect');
+        var btn = document.getElementById('fetchChatModelsBtn');
+        var done = function () {
+            if (btn) { btn.disabled = false; btn.textContent = 'Fetch'; }
+        };
+
+        if (p === 'lmstudio') {
+            if (typeof mBTME !== 'undefined') mBTME.alert('Local Model', 'LM Studio uses the model name field, not a remote list.');
+            return;
+        }
+        if (!k) {
+            if (typeof mBTME !== 'undefined') mBTME.alert('No Key', 'Enter an API key before fetching models.');
+            return;
+        }
+
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        if (cSel) {
+            cSel.innerHTML = '<option value="" disabled>Fetching models...</option>';
+        }
+
+        _fetchChatModelsForProvider(p, k, cSel)
+            .then(function (models) {
+                if (!models || !models.length) {
+                    if (cSel) cSel.innerHTML = '<option value="" disabled selected>No models found</option>';
+                }
+                done();
+            })
+            .catch(function (err) {
+                console.error('[Settings] Chat model fetch failed:', err);
+                if (cSel) cSel.innerHTML = '<option value="" disabled selected>Error fetching models</option>';
+                done();
+            });
     };
 
     /* --- Unified AI Sync: tests connection, fetches + caches chat and image models, saves all --- */
@@ -1210,6 +1327,16 @@
         localStorage.setItem('mbt_ai_image_provider', ip);
         ma.setImageApiKey(ip, ik);
 
+        /* Persist visible chat model BEFORE connection test so callChat uses UI selection */
+        if (cSel && cSel.value) {
+            if (typeof ma.setChatModel === 'function') {
+                ma.setChatModel(p, cSel.value);
+            } else {
+                localStorage.setItem('mbt_ai_chat_model_' + p, cSel.value);
+                if (p === 'openrouter') localStorage.setItem('mbt_openrouter_model', cSel.value);
+            }
+        }
+
         if (p === 'lmstudio') {
             var epEl = document.getElementById('lmEndpointInput');
             var mdEl = document.getElementById('lmModelInput');
@@ -1224,43 +1351,8 @@
 
         if (btn) { btn.textContent = 'Fetching..'; btn.disabled = true; }
 
-        /* Fetch chat models for the chat provider */
-        var chatFetch;
-        if (p === 'gemini') {
-            chatFetch = mBT.features.ai.fetchGeminiModels(k).then(function (models) {
-                localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
-                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
-            });
-        } else if (p === 'openrouter') {
-            chatFetch = mBT.features.ai.fetchOpenRouterModels(k).then(function (models) {
-                localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
-                _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, true);
-            });
-        } else {
-            /* OpenAI, DeepSeek, Grok, Anthropic — all support /models endpoint */
-            var MODELS_URLS = {
-                'openai':    'https://api.openai.com/v1/models',
-                'deepseek':  'https://api.deepseek.com/models',
-                'grok':      'https://api.x.ai/v1/models',
-                'anthropic': 'https://api.anthropic.com/v1/models'
-            };
-            var modelsUrl = MODELS_URLS[p];
-            if (modelsUrl) {
-                var hdrs = { 'Authorization': 'Bearer ' + k };
-                if (p === 'anthropic') { hdrs['x-api-key'] = k; hdrs['anthropic-version'] = '2023-06-01'; delete hdrs['Authorization']; }
-                chatFetch = fetch(modelsUrl, { headers: hdrs })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        var items = data.models || data.data || [];
-                        var models = items.map(function (m) { return { id: m.id, name: m.display_name || m.id }; });
-                        _tierSort(models, p);
-                        localStorage.setItem('mbt_cached_chat_models_' + p, JSON.stringify(models));
-                        _populateSelect(cSel, models, 'mbt_ai_chat_model_' + p, false);
-                    });
-            } else {
-                chatFetch = Promise.resolve();
-            }
-        }
+        /* Fetch chat models for the chat provider (shared path with Fetch button) */
+        var chatFetch = _fetchChatModelsForProvider(p, k, cSel);
 
         /* Fetch image models for the image provider (uses independent key) */
         var imgKey = ik || mBT.features.ai.getStoredImageApiKey(ip) || k;
@@ -1306,19 +1398,43 @@
 
         Promise.all([chatFetch, imgFetch])
             .then(function () {
-                /* Test connection with a lightweight chat call */
+                /* Re-save model after fetch may have re-picked a free model */
+                if (cSel && cSel.value && typeof ma.setChatModel === 'function') {
+                    ma.setChatModel(p, cSel.value);
+                }
+                /* Test connection with a lightweight chat call (same model resolution as callChat) */
                 return mBT.features.ai.callUnifiedAI(p, k, 'Reply with the single word: connected', 'You are a connection test. Reply only with the word: connected');
             })
-            .then(function () {
+            .then(function (result) {
                 if (btn) { btn.textContent = 'Synchronize Link'; btn.disabled = false; }
-                /* Save selected models from populated selects */
-                if (cSel && cSel.value) localStorage.setItem('mbt_ai_chat_model_' + p, cSel.value);
+                /* callUnifiedAI swallows rejections into "Analysis Failed: ..." strings */
+                var text = (result && typeof result === 'string') ? result : '';
+                if (text.indexOf('Analysis Failed') === 0) {
+                    var failDetail = text.replace(/^Analysis Failed:\s*/, '');
+                    if (typeof mBTME !== 'undefined') {
+                        mBTME.alert('Connection Failed', 'Could not reach ' + p + '. ' + failDetail);
+                    }
+                    return;
+                }
+                /* Save selected models from populated selects (dual-write OpenRouter keys) */
+                if (cSel && cSel.value) {
+                    if (typeof ma.setChatModel === 'function') {
+                        ma.setChatModel(p, cSel.value);
+                    } else {
+                        localStorage.setItem('mbt_ai_chat_model_' + p, cSel.value);
+                        if (p === 'openrouter') localStorage.setItem('mbt_openrouter_model', cSel.value);
+                    }
+                }
                 if (iSel && iSel.value) localStorage.setItem('mbt_ai_image_model', iSel.value);
                 if (typeof mBTME !== 'undefined') mBTME.alert('Connected', p.charAt(0).toUpperCase() + p.slice(1) + ' verified. Models loaded.');
             })
-            .catch(function () {
+            .catch(function (err) {
                 if (btn) { btn.textContent = 'Synchronize Link'; btn.disabled = false; }
-                if (typeof mBTME !== 'undefined') mBTME.alert('Connection Failed', 'Could not reach ' + p + '. Check your key and try again.');
+                var detail = (err && err.message) ? String(err.message) : '';
+                if (!detail && typeof err === 'string') detail = err;
+                var failMsg = 'Could not reach ' + p + '. Check your key and try again.';
+                if (detail) failMsg = failMsg + ' ' + detail;
+                if (typeof mBTME !== 'undefined') mBTME.alert('Connection Failed', failMsg);
             });
     };
 

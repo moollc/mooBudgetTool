@@ -2202,18 +2202,37 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-row ed-2">' + fld('director', 'Director') + fld('producers', 'Producers') + '</div>' +
       '<div class="ed-row ed-3">' + fld('firstAd', '1st AD') + fld('secondAd', '2nd AD') + fld('upm', 'UPM') + '</div>' +
       '</div>';
-    /* Section 2: Weather & Logistics */
+    /* Section 2: Schedule */
+    html += '<div class="ed-section"><div class="ed-section-hdr">Schedule</div>' +
+      '<div class="ed-row ed-4">' + fld('crewCall', 'Crew Call', 'time') + fld('shootingCall', 'Shooting Call', 'time') + fld('estimatedLunch', 'Est. Lunch', 'time') + fld('estimatedWrap', 'Est. Wrap', 'time') + '</div>' +
+      '</div>';
+    /* Section 3: Locations */
+    html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Shooting Locations' +
+      '<button class="smart-btn" id="btn-fetch-weather-loc" type="button">' +
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
+      ' Fetch All Forecasts</button></div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th style="width:90px;">ETA</th><th>Notes</th><th></th></tr></thead><tbody>';
+    (d.shootingLocations || []).forEach(function (loc, i) {
+      html += '<tr><td><input data-arr="shootingLocations" data-i="' + i + '" data-f="address" value="' + esc(loc.address || '') + '" placeholder="Street, City, Country"></td>' +
+        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="eta" type="time" value="' + esc(loc.eta || '') + '" style="width:80px;"></td>' +
+        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="notes" value="' + esc(loc.notes || '') + '"></td>' +
+        '<td><button class="ed-del" data-arr="shootingLocations" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="shootingLocations">+ Add Location</button>' +
+      '<div style="font-size:10px;color:var(--muted);padding:4px 2px 0;">Fetch All Forecasts uses shooting location rows first, then Basecamp if rows are empty.</div>' +
+      '</div>';
+    /* Section 4: Weather & Logistics */
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Weather &amp; Logistics' +
       '<button class="smart-btn" id="btn-fetch-weather" type="button">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
       ' Fetch from Address</button></div>' +
       '<div class="smart-bar"><span id="weather-status"></span></div>' +
       '<div id="hospital-picker"></div>' +
+      '<div class="ed-row ed-2">' + fld('basecamp', 'Basecamp Address') + fld('basecampParking', 'Parking Notes') + '</div>' +
       '<div class="ed-row ed-3">' + fld('weatherHigh', 'High') + fld('weatherLow', 'Low') + fld('weatherConditions', 'Conditions') + '</div>' +
       '<div class="ed-row ed-2">' + fld('sunrise', 'Sunrise', 'time') + fld('sunset', 'Sunset', 'time') + '</div>' +
       '<div class="ed-row ed-2">' + fld('hospitalName', 'Hospital Name') + fld('hospitalPhone', 'Hospital Phone') + '</div>' +
       '<div class="ed-row">' + fld('hospitalAddress', 'Hospital Address', null, true) + '</div>' +
-      '<div class="ed-row ed-2">' + fld('basecamp', 'Basecamp Address') + fld('basecampParking', 'Parking Notes') + '</div>' +
       '</div>';
     /* 45.4 — Multi-location 3-day forecast (shown when locationForecasts populated by fetchWeatherAndHospitals) */
     if (d.locationForecasts && d.locationForecasts.length > 0) {
@@ -2234,23 +2253,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       });
       html += '</div>';
     }
-    /* Shooting Locations (dynamic) */
-    html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Shooting Locations' +
-      '<button class="smart-btn" id="btn-fetch-weather-loc" type="button">' +
-      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
-      ' Fetch All Forecasts</button></div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th style="width:90px;">ETA</th><th>Notes</th><th></th></tr></thead><tbody>';
-    (d.shootingLocations || []).forEach(function (loc, i) {
-      html += '<tr><td><input data-arr="shootingLocations" data-i="' + i + '" data-f="address" value="' + esc(loc.address || '') + '" placeholder="Street, City, Country"></td>' +
-        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="eta" type="time" value="' + esc(loc.eta || '') + '" style="width:80px;"></td>' +
-        '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="notes" value="' + esc(loc.notes || '') + '"></td>' +
-        '<td><button class="ed-del" data-arr="shootingLocations" data-del="' + i + '">&times;</button></td></tr>';
-    });
-    html += '</tbody></table></div><button class="ed-add-btn" data-add="shootingLocations">+ Add Location</button></div>';
-    /* Section 3: Schedule */
-    html += '<div class="ed-section"><div class="ed-section-hdr">Schedule</div>' +
-      '<div class="ed-row ed-4">' + fld('crewCall', 'Crew Call', 'time') + fld('shootingCall', 'Shooting Call', 'time') + fld('estimatedLunch', 'Est. Lunch', 'time') + fld('estimatedWrap', 'Est. Wrap', 'time') + '</div>' +
-      '</div>';
     /* Section 4: Shooting Schedule (dynamic table) */
     html += '<div class="ed-section"><div class="ed-section-hdr">Shooting Schedule</div>' +
       '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-scenes"><thead><tr><th>Scene</th><th>I/E</th><th>D/N</th><th>Description</th><th>Cast</th><th>Pages</th><th>Location</th><th></th></tr></thead><tbody>';
@@ -2867,6 +2869,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     function onError(msg) {
       if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate'; }
+      if (msg === 'AI_RATE_LIMITED') msg = 'Wait a few seconds before another AI request.';
       if (genStatus) genStatus.textContent = 'Error: ' + (msg || 'generation failed');
     }
 
@@ -3831,6 +3834,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         dbToast('AI Fill needs an API key \u2014 Settings \u2192 AI Provider in the main app.', true);
         return;
       }
+      if (r._error === 'AI_RATE_LIMITED' || (r._error && String(r._error).indexOf('Wait a few seconds') === 0)) {
+        dbToast('Wait a few seconds before another AI request.', true);
+        return;
+      }
       if (r._error) {
         dbToast('AI Fill failed: ' + r._error, true);
         return;
@@ -3990,53 +3997,184 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }, '*');
   }
 
+  /* Collect weather addresses: shooting locations → Basecamp → projectLocation (read-only fallback) */
+  function collectWeatherAddresses() {
+    var seen = {};
+    var locations = [];
+    var source = 'shooting';
+
+    function pushAddr(addr) {
+      var t = (addr || '').trim();
+      if (!t) return;
+      var key = t.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      locations.push(t);
+    }
+
+    /* 1. Shooting locations from editorData */
+    (editorData && editorData.shootingLocations || []).forEach(function (loc) {
+      pushAddr(loc.address);
+    });
+    /* Live DOM inputs if editorData stale */
+    var locInputs = dom.querySelectorAll('[data-arr="shootingLocations"][data-f="address"]');
+    var li;
+    for (li = 0; li < locInputs.length; li++) {
+      pushAddr(locInputs[li].value);
+    }
+
+    /* 2. Basecamp if no shooting addresses */
+    if (locations.length === 0) {
+      var basecamp = (editorData && editorData.basecamp) ? String(editorData.basecamp).trim() : '';
+      var baseInput = dom.querySelector('[data-key="basecamp"]');
+      if (baseInput && baseInput.value && baseInput.value.trim()) {
+        basecamp = baseInput.value.trim();
+      }
+      if (basecamp) {
+        pushAddr(basecamp);
+        source = 'basecamp';
+      }
+    }
+
+    /* 3. Budget project location if still empty */
+    if (locations.length === 0 && budget && budget.projectLocation) {
+      pushAddr(budget.projectLocation);
+      source = 'project';
+    }
+
+    return { locations: locations, source: source };
+  }
+
+  /* Nominatim query cascade for one address (serial fallbacks, limit=1 each) */
+  function geocodeAddressCascade(address, signal) {
+    var queries = [];
+    var full = (address || '').trim();
+    if (!full) return Promise.resolve(null);
+
+    queries.push(full);
+
+    /* Strip leading house number: "21 East Road Kingston 10, Jamaica" → "East Road…" */
+    var noHouse = full.replace(/^\d+\s+/, '');
+    if (noHouse && noHouse.toLowerCase() !== full.toLowerCase()) {
+      queries.push(noHouse);
+    }
+
+    /* Last two comma segments (city/region, country-ish) */
+    var parts = full.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+    if (parts.length >= 2) {
+      var tail = parts.slice(-2).join(', ');
+      if (tail && tail.toLowerCase() !== full.toLowerCase()) {
+        queries.push(tail);
+      }
+    }
+
+    /* Jamaica-style street strings that Nominatim often rejects */
+    var lower = full.toLowerCase();
+    var kingstonPostal = full.match(/\bKingston\s+\d+\b/i);
+    if (kingstonPostal) {
+      queries.push(kingstonPostal[0] + ', Jamaica');
+    }
+    if (lower.indexOf('kingston') >= 0 || lower.indexOf('jamaica') >= 0) {
+      queries.push('Kingston, Jamaica');
+    }
+
+    /* Dedupe queries case-insensitively while preserving order */
+    var seenQ = {};
+    var unique = [];
+    queries.forEach(function (q) {
+      var k = q.toLowerCase();
+      if (!seenQ[k]) { seenQ[k] = true; unique.push(q); }
+    });
+
+    function tryNext(idx) {
+      if (idx >= unique.length) return Promise.resolve(null);
+      var q = unique[idx];
+      return fetch(
+        'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q),
+        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal }
+      ).then(function (r) {
+        if (!r.ok) {
+          var httpErr = new Error('Nominatim HTTP ' + r.status);
+          httpErr.isHttp = true;
+          throw httpErr;
+        }
+        return r.json();
+      }).then(function (geo) {
+        if (geo && geo.length > 0) {
+          return {
+            address: address,
+            lat: parseFloat(geo[0].lat),
+            lon: parseFloat(geo[0].lon),
+            matchedQuery: q
+          };
+        }
+        return tryNext(idx + 1);
+      }).catch(function (err) {
+        if (err.name === 'AbortError') throw err;
+        if (err.isHttp) throw err; /* surface HTTP failure to outer status */
+        console.warn('[mBTDB geocode] query failed: ' + q, err);
+        return tryNext(idx + 1);
+      });
+    }
+
+    return tryNext(0);
+  }
+
   /* Fetch weather (3-day, all shooting locations) + nearest hospitals (first location) */
   function fetchWeatherAndHospitals() {
-    /* Gather all shooting location addresses */
-    var locations = (editorData && editorData.shootingLocations || [])
-      .map(function (loc) { return (loc.address || '').trim(); }).filter(Boolean);
+    var collected = collectWeatherAddresses();
+    var locations = collected.locations;
+    var addrSource = collected.source;
+
     if (locations.length === 0) {
-      var locInput = dom.querySelector('[data-arr="shootingLocations"][data-f="address"]');
-      var fallback = locInput ? locInput.value.trim() : '';
-      if (fallback) locations = [fallback];
+      dbAlert('Enter a shooting location or Basecamp address first.');
+      return;
     }
-    if (locations.length === 0) { dbAlert('Enter a shooting location address first.'); return; }
 
     var statusEl = dom.getElementById('weather-status');
     var hospPicker = dom.getElementById('hospital-picker');
-    statusEl.textContent = 'Geocoding ' + locations.length + ' location(s)\u2026';
-    hospPicker.style.display = 'none';
+    var sourceNote = '';
+    if (addrSource === 'basecamp') sourceNote = 'Using Basecamp address\u2026 ';
+    else if (addrSource === 'project') sourceNote = 'Using project location\u2026 ';
+    statusEl.textContent = sourceNote + 'Geocoding ' + locations.length + ' location(s)\u2026';
+    if (hospPicker) hospPicker.style.display = 'none';
 
     if (weatherFetchController) { weatherFetchController.abort(); }
     weatherFetchController = new AbortController();
     var signal = weatherFetchController.signal;
 
-    /* Geocode all locations in parallel — failures return null instead of crashing chain */
+    /* Geocode each location in parallel; cascade is serial per address */
     Promise.all(locations.map(function (address) {
-      return fetch(
-        'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address),
-        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal }
-      ).then(function (r) {
-        if (!r.ok) throw new Error('Nominatim HTTP ' + r.status);
-        return r.json();
-      }).then(function (geo) {
-        if (!geo || geo.length === 0) return null;
-        return { address: address, lat: parseFloat(geo[0].lat), lon: parseFloat(geo[0].lon) };
-      }).catch(function (err) {
-        if (err.name === 'AbortError') throw err; /* re-throw abort so outer chain can bail */
+      return geocodeAddressCascade(address, signal).catch(function (err) {
+        if (err.name === 'AbortError') throw err;
+        if (err.isHttp) {
+          console.warn('[mBTDB geocode] HTTP error for: ' + address, err);
+          return { __httpFail: true, address: address };
+        }
         console.warn('[mBTDB geocode] Could not locate: ' + address, err);
-        return null; /* continue with other locations */
+        return null;
       });
     })).then(function (geoResults) {
-      var validGeo = geoResults.filter(Boolean);
+      var httpFails = 0;
+      var validGeo = [];
+      geoResults.forEach(function (g) {
+        if (!g) return;
+        if (g.__httpFail) { httpFails++; return; }
+        validGeo.push(g);
+      });
+
       if (validGeo.length === 0) {
-        statusEl.textContent = 'Could not find any of the entered locations. Check addresses and try again.';
+        if (httpFails > 0 && httpFails === geoResults.length) {
+          statusEl.textContent = 'Geocode request failed \u2014 check connection and try again.';
+        } else {
+          statusEl.textContent = 'Could not geocode address(es). Try City, Country (e.g. Kingston, Jamaica).';
+        }
         return;
       }
       if (validGeo.length < locations.length) {
         statusEl.textContent = 'Fetching weather (' + validGeo.length + ' of ' + locations.length + ' found)\u2026';
       } else {
-        statusEl.textContent = 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
+        statusEl.textContent = (sourceNote || '') + 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
       }
 
       /* Fetch 3-day forecast for each geocoded location — isolate failures per-location */
@@ -4104,7 +4242,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var hosps = ((hospitalData.elements || []).filter(function (el) {
           return el.tags && el.tags.name;
         })).slice(0, 5);
-        if (hosps.length > 0) {
+        if (hosps.length > 0 && hospPicker) {
           var pickerHtml = '<p>Select nearest hospital:</p>';
           hosps.forEach(function (h, hi) {
             var name  = h.tags.name || 'Hospital';
@@ -4136,7 +4274,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
         saveEditorData();
         buildEditor('callSheet');
-        statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' +
+        var doneNote = '';
+        if (addrSource === 'basecamp') doneNote = ' (via Basecamp)';
+        else if (addrSource === 'project') doneNote = ' (via project location)';
+        statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' + doneNote +
           (hosps.length > 0 ? ' \u2014 select a hospital above.' : '.');
         setTimeout(function () { if (statusEl.textContent.indexOf('select') < 0) statusEl.textContent = ''; }, 3000);
       }).catch(function (err) {

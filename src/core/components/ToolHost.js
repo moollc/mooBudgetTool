@@ -178,6 +178,7 @@
     /* --- 2. TOOL-TO-SHELL BRIDGE (postMessage → CustomEvent) --- */
     window.addEventListener('message', function (e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
+        if (e.origin !== window.location.origin) return;
 
         var detail = { action: e.data.action || '', payload: e.data.payload || {}, origin: e.origin };
 

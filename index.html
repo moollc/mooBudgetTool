@@ -16,7 +16,8 @@
     <meta name="description" content="Offline-capable Film Production Budget Tool">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>mooBudgetTool v23.92</title>
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
+    <title>mooBudgetTool v23.97</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -145,6 +146,7 @@
     <script src="./src/lib/html2canvas.min.js"></script>
     <script src="./src/lib/xlsx.full.min.js"></script>
     <script src="./src/lib/marked.min.js"></script>
+    <script src="./src/lib/dompurify.min.js"></script>
     <script src="./src/lib/pdf.min.js"></script>
     <script src="./src/lib/localforage.min.js"></script>
     <script src="./src/lib/jszip.min.js"></script>
@@ -443,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.92";
+    var APP_VERSION = "23.97";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -4105,7 +4107,8 @@
                 var varCell = document.querySelector('[data-variance-id="' + item.id + '"]');
                 if (varCell) {
                     varCell.textContent = fmtDisplay(variance, isMobile);
-                    varCell.className = 'p-1 md:p-2 w-[50px] md:w-28 text-right font-mono font-black text-[10px] md:text-xs ' + (variance > 0 ? 'text-red-500' : 'text-green-600');
+                    varCell.classList.remove('text-red-500', 'text-green-600');
+                    varCell.classList.add(variance > 0 ? 'text-red-500' : 'text-green-600');
                 }
                 var updateInput = function (field, val) {
                     var input = document.querySelector('input[data-id="' + item.id + '"][data-field="' + field + '"]');
@@ -4507,6 +4510,17 @@
                 '</div>';
         },
 
+        /* Shared budget-row numeric column classes — render + surgical repaint must match. */
+        numericTdClass: function (rowPad, extra) {
+            return 'px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono tabular-nums text-xs' + (extra ? ' ' + extra : '');
+        },
+        varianceTdClass: function (rowPad, variance, hideVar) {
+            var color = variance > 0 ? 'text-red-500' : 'text-green-600';
+            var extra = 'font-black ' + color;
+            if (hideVar) extra += ' ' + hideVar;
+            return this.numericTdClass(rowPad, extra);
+        },
+
         // --- Data Row Blueprint: Itemized line generation ---
         // Logic Resolution: Mobile-optimized widths, font-scaling, and "touch-friendly" inputs.
         // Updated to use delegation: data-action attributes for buttons.
@@ -4575,7 +4589,7 @@
                 (item.rateSource && item.rateSource !== 'scaled' ? '<span title="Verified OpenGate Market Rate" class="text-[8px] text-emerald-500 font-black">✓</span>' : '') +
                 '</div>' +
                 '</td>' +
-                '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap font-mono font-bold text-xs text-slate-800 text-right" data-estimated-id="' + safeId + '">' +
+                '<td class="' + this.numericTdClass(rowPad, 'font-bold text-slate-800') + '" data-estimated-id="' + safeId + '">' +
                 fmtDisplay(estimated, isMobile) +
                 '</td>';
 
@@ -4588,12 +4602,12 @@
                     '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actualRate" value="' + toDisp(item.actualRate || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-amber-50/50 rounded-md border-none font-mono font-bold text-xs text-amber-700 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
                     '</td>' +
                     '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-bold text-xs text-blue-600">' + fmtDisplay(item.ETC != null ? item.ETC : Math.max(0, estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0))), false) + '</td>' +
-                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs" data-variance-id="' + safeId + '">' + fmtDisplay(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)), false) + '</td>';
+                    '<td class="' + this.numericTdClass(rowPad, 'font-black') + '" data-variance-id="' + safeId + '">' + fmtDisplay(estimated - (item.committedCost || 0) - ((item.actualQuantity || 0) * (item.actualRate || 0)), false) + '</td>';
             } else {
-                html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap">' +
-                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actual" value="' + toDisp(item.actual || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-20 bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right p-1" placeholder="0">' +
+                html += '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right">' +
+                    '<input type="number" step="0.01" data-id="' + safeId + '" data-section="' + safeSection + '" data-field="actual" value="' + toDisp(item.actual || 0).toFixed(2) + '" onchange="handleLineItemUpdate(this)" class="w-full min-w-[4.5rem] bg-blue-50/50 rounded-md border-none font-mono font-bold text-xs text-emerald-600 focus:ring-0 no-spinner text-right tabular-nums p-1" placeholder="0">' +
                     '</td>' +
-                    '<td class="px-1 ' + rowPad + ' w-px whitespace-nowrap text-right font-mono font-black text-xs ' + hideVar + '" data-variance-id="' + safeId + '">' + fmtDisplay(variance, isMobile) + '</td>';
+                    '<td class="' + this.varianceTdClass(rowPad, variance, hideVar) + '" data-variance-id="' + safeId + '">' + fmtDisplay(variance, isMobile) + '</td>';
             }
 
             if (hasIncentive) {
@@ -5987,8 +6001,13 @@
         }).then(function (md) {
             var el = document.getElementById('legalDocContent');
             if (el && typeof marked !== 'undefined' && typeof marked.parse === 'function') {
-                /* Logic Resolution: Use Marked.js for premium formatting if available */
-                el.innerHTML = marked.parse(md);
+                /* Logic Resolution: Use Marked.js for premium formatting if available;
+                   sanitize via shared helper when present (same path as AI markdown). */
+                el.innerHTML = (window.mBTAIModule && typeof window.mBTAIModule.renderSafeMarkdown === 'function')
+                    ? window.mBTAIModule.renderSafeMarkdown(md)
+                    : ((typeof window.DOMPurify !== 'undefined' && typeof window.DOMPurify.sanitize === 'function')
+                        ? window.DOMPurify.sanitize(marked.parse(md))
+                        : marked.parse(md));
                 el.classList.remove('animate-pulse');
                 /* Apply Tailwind prose-like styling manually for vanilla compatibility */
                 el.querySelectorAll('h1').forEach(function (h) { h.className = 'text-base font-black uppercase tracking-widest text-slate-900 mt-6 mb-4'; });
@@ -8053,13 +8072,14 @@
 
             function onError(msg) {
                 if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Generate'; }
+                if (msg === 'AI_RATE_LIMITED') msg = 'Wait a few seconds before another AI request.';
                 if (statusEl) statusEl.textContent = 'Error: ' + (msg || 'generation failed');
             }
 
             if (assistant && typeof assistant.callImageGen === 'function') {
                 assistant.callImageGen({ prompt: promptText, model: imgModel, aspectRatio: '16:9' })
                     .then(function (dataUrl) { onDataUrl(dataUrl); })
-                    .catch(function (err) { onError(err.message); });
+                    .catch(function (err) { onError(err && err.message); });
             } else {
                 /* Pollinations direct fallback — Phase 193: cache-busting seed per request */
                 var polModel = (imgModel && imgModel !== 'pollinations') ? '&model=' + encodeURIComponent(imgModel) : '';
@@ -13266,7 +13286,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.92', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.97', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13574,6 +13594,7 @@
 
                 /* Tool-ready handshake: listen for tool-ready postMessage instead of setTimeout */
                 var _toolReadyHandler = function (evt) {
+                    if (evt.origin !== window.location.origin) return;
                     if (evt.data && evt.data.type === 'mbt:tool-ready') {
                         window.removeEventListener('message', _toolReadyHandler);
                         /* Send payment context to the tool */
@@ -13595,6 +13616,7 @@
 
                 /* Listen f  payment completion toast from c tool */
                 var _paymentHandler = function (evt) {
+                    if (evt.origin !== window.location.origin) return;
                     if (evt.data && evt.data.type === 'mbt:toast' && evt.data.payload && evt.data.payload.source === 'quick-pay') {
                         window.removeEventListener('message', _paymentHandler);
                         /* Wire to Phase 65 Undo histor /
@@ -14627,6 +14649,7 @@
            { type:'mbt:tool-action', action:'reconcile' }. Reload in-memory budget + recompute. */
         window.addEventListener('message', function (evt) {
             if (!evt.data || evt.data.type !== 'mbt:tool-action') return;
+            if (evt.origin !== window.location.origin) return;
 
             /* Phase 182: Handle region changes from OpenGate */
             if (evt.data.action === 'og-location-changed') {
