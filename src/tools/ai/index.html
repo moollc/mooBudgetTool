@@ -1370,7 +1370,12 @@ window.openSourceModal   = openSourceModal;
                 dom.getElementById('genStatus').classList.add('hidden');
                 dom.getElementById('genBtn').disabled = false;
                 dom.getElementById('genBtn').textContent = 'Generate Budget';
-                errEl.textContent = err.message || 'Generation failed. Check your provider settings and try again.';
+                var em = (err && err.message) || '';
+                if (em === 'AI_RATE_LIMITED') {
+                    errEl.textContent = 'Wait a few seconds before another AI request.';
+                } else {
+                    errEl.textContent = em || 'Generation failed. Check your provider settings and try again.';
+                }
                 errEl.classList.remove('hidden');
             });
     }
@@ -1686,8 +1691,13 @@ window.openSourceModal   = openSourceModal;
             })
             .catch(function (err) {
                 removeLLMTyping(typingId);
+                var em = (err && err.message) || '';
+                if (em === 'AI_RATE_LIMITED') {
+                    addLLMMessage('ai', 'Wait a few seconds before another AI request.');
+                    return;
+                }
                 var prov = mBTAssistant.getProviderLabel(mBTAssistant.getProvider());
-                addLLMMessage('ai', 'Could not reach ' + prov + '. Check that your provider is running and the API key is configured in Settings > Connections. Error: ' + err.message);
+                addLLMMessage('ai', 'Could not reach ' + prov + '. Check that your provider is running and the API key is configured in Settings > Connections. Error: ' + em);
             });
     }
 

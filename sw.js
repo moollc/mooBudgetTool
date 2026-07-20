@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v23.92';
+var CACHE_NAME = 'mbt-monolith-cache-v23.97';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -27,6 +27,7 @@ var PRECACHE_ASSETS = [
     './src/lib/html2canvas.min.js',
     './src/lib/xlsx.full.min.js',
     './src/lib/marked.min.js',
+    './src/lib/dompurify.min.js',
     './src/lib/pdf.min.js',
     './src/lib/localforage.min.js',
     './src/lib/jszip.min.js',
@@ -135,10 +136,26 @@ self.addEventListener('fetch', function(event) {
     /* Only cache GET requests */
     if (event.request.method !== 'GET') return;
 
-    /* --- Cache-first strategy: ALL assets (including navigate) served from cache first ---
-       Ensures zero-latency loads and infinite offline resilience. Network fetches only happen
-       when: (1) asset not in cache, or (2) user explicitly calls reg.update().
-       This fixes offline app breakage caused by slow network timeouts. */
+    /* === BINDING: third-party GETs never enter this SW (2026-07-20 Call Sheet weather flake) ===
+       Nominatim / Open-Meteo / Overpass / OpenRouter / etc. must hit the network directly.
+       Do NOT: event.respondWith on cross-origin; cache.put third-party; strip search on APIs;
+       ignoreSearch for API URLs. Removing this early-return re-poisons geocode/weather.
+       Guard marker (hooks/agents): MBT_SW_SAME_ORIGIN_ONLY */
+    var reqUrl;
+    try {
+        reqUrl = new URL(event.request.url);
+    } catch (e) {
+        return;
+    }
+    if (reqUrl.origin !== self.location.origin) {
+        return; /* MBT_SW_SAME_ORIGIN_ONLY — third-party: network direct, never cache */
+    }
+
+    /* --- Cache-first strategy: SAME-ORIGIN assets only (including navigate) ---
+       Offline shell resilience. Network fetches only when: (1) not in cache, or (2) SW update.
+       ignoreSearch + strip query are OK here ONLY because cross-origin already returned —
+       they exist so ?v= bumps still match precached asset keys. Never apply that pattern
+       to third-party APIs. */
     event.respondWith(
         caches.match(event.request, { ignoreSearch: true }).then(function(cachedResponse) {
             /* 1. If cached, return immediately for zero-latency UX */
@@ -148,13 +165,14 @@ self.addEventListener('fetch', function(event) {
 
             /* 2. Not in cache — fetch from network */
             return fetch(event.request, { cache: 'no-cache' }).then(function(networkResponse) {
-                /* 3. Silently update the cache with successful response */
-                if (networkResponse && networkResponse.status === 200) {
+                /* 3. Cache successful same-origin basics only (never opaque / cors cross-origin) */
+                if (networkResponse && networkResponse.status === 200 &&
+                    networkResponse.type === 'basic') {
                     var clone = networkResponse.clone();
                     caches.open(CACHE_NAME).then(function(cache) {
                         var cleanUrl = new URL(event.request.url);
-                        cleanUrl.search = '';
-                        return cache.put(cleanUrl, clone);
+                        cleanUrl.search = ''; /* asset ?v= alias — same-origin only */
+                        return cache.put(cleanUrl.toString(), clone);
                     });
                 }
                 return networkResponse;

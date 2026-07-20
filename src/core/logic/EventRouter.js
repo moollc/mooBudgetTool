@@ -322,7 +322,7 @@ window.mBTRouter = (function () {
         if (window.saveBudget) {
             saveBudget().then(function () {
                 if (source) {
-                    try { source.postMessage({ type: 'mbt:tool-ack', action: actionName, status: 'success' }, '*'); } catch (er) {}
+                    try { _safePostMessage(source, { type: 'mbt:tool-ack', action: actionName, status: 'success' }); } catch (er) {}
                 }
             });
         }
@@ -396,16 +396,29 @@ window.mBTRouter = (function () {
         try { return JSON.parse(JSON.stringify(obj)); } catch (e) { return {}; }
     }
 
+    /* Same-origin target for all EventRouter outbound postMessage calls.
+       Uses window.location.origin so localhost and production both resolve correctly. */
+    function _pmTargetOrigin() {
+        return window.location.origin;
+    }
+    function _safePostMessage(win, data) {
+        if (!win) return;
+        try {
+            win.postMessage(data, _pmTargetOrigin());
+        } catch (err) { /* ignore */ }
+    }
+
     function _broadcastToTool(type, payload) {
         var iframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
         if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: type, payload: _safeSerialize(payload) }, '*');
+            _safePostMessage(iframe.contentWindow, { type: type, payload: _safeSerialize(payload) });
         }
     }
 
     /* --- Phase 133: centralized postMessage dispatcher extracted from inline listener --- */
     function _handleToolAction(e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
+        if (e.origin !== window.location.origin) return;
         var action  = e.data.action;
         var payload = e.data.payload || {};
         var budget             = _ctx.getBudget();
@@ -431,7 +444,7 @@ window.mBTRouter = (function () {
                 if (_ctx.getMBTActiveTool() === 'po') {
                     var _poIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
                     if (_poIframe && _poIframe.contentWindow) {
-                        _poIframe.contentWindow.postMessage(_safeSerialize({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }), '*');
+                        _safePostMessage(_poIframe.contentWindow, _safeSerialize({ type: 'mbt:tool-action', action: 'reload-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash } }));
                     }
                 }
                 _persistOpts = { skipRepaint: true }; /* render() already ran above */
@@ -576,9 +589,9 @@ window.mBTRouter = (function () {
         /* --- Phase 64: Share Hub Peer Roster Request --- */
         } else if (action === 'get-peers') {
             if (window.mBTRealtime && typeof mBTRealtime.getPresencePeers === 'function') {
-                e.source.postMessage(_safeSerialize({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }), '*');
+                _safePostMessage(e.source, _safeSerialize({ type: 'mbt-tools-response', action: 'peers-list', payload: mBTRealtime.getPresencePeers() }));
             } else {
-                e.source.postMessage({ type: 'mbt-tools-response', action: 'peers-list', payload: [] }, '*');
+                _safePostMessage(e.source, { type: 'mbt-tools-response', action: 'peers-list', payload: [] });
             }
 
         /* --- Phase 64: Share Hub Role Management --- */
@@ -818,7 +831,7 @@ window.mBTRouter = (function () {
         } else if (action === 'SYNC_FUNDING_SOURCE') {
             if (window.mBTAIContext) {
                 mBTAIContext.getCurrentProjectContext().then(function(ctx) {
-                    if (e.source) e.source.postMessage(_safeSerialize({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }), '*');
+                    if (e.source) _safePostMessage(e.source, _safeSerialize({ type: 'budget-sync', payload: { context: ctx, budgetDoc: budget } }));
                 });
             }
 
@@ -896,7 +909,7 @@ window.mBTRouter = (function () {
             var _templateId = (action === 'ai-funding-fill') ? 'fundingPackage' : (payload.templateId || 'generic');
             var _maxTokens = payload.maxTokens || 6000;
             var _reply = function (obj) {
-                if (_src) _src.postMessage(_safeSerialize({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }), '*');
+                if (_src) _safePostMessage(_src, _safeSerialize({ type: 'mbt:tool-reply', requestId: _rid, payload: obj || {} }));
             };
             if (!window.mBTAIModule || typeof mBTAIModule.callUnifiedAI !== 'function' || !_fields.length) {
                 _reply({}); return;
@@ -915,7 +928,7 @@ window.mBTRouter = (function () {
             var _apiKey   = mBTAIModule.getStoredApiKey(_provider);
             /* lmstudio does not require a key — allow empty key through */
             if (!_apiKey && _provider !== 'lmstudio') {
-                if (_src) _src.postMessage({ type: 'mbt:tool-reply', requestId: _rid, payload: { _error: 'no-api-key' } }, '*');
+                if (_src) _safePostMessage(_src, { type: 'mbt:tool-reply', requestId: _rid, payload: { _error: 'no-api-key' } });
                 return;
             }
 
@@ -1053,7 +1066,11 @@ window.mBTRouter = (function () {
                         }
                         /* Surface API-level failures so the caller can show the real error */
                         if (typeof resp === 'string' && resp.indexOf('Analysis Failed:') === 0) {
-                            _reply({ _error: resp.replace('Analysis Failed: ', '') });
+                            var _failMsg = resp.replace('Analysis Failed: ', '');
+                            if (_failMsg === 'AI_RATE_LIMITED') {
+                                _failMsg = 'Wait a few seconds before another AI request.';
+                            }
+                            _reply({ _error: _failMsg });
                             return;
                         }
                         var cleanOut = {};
@@ -1321,7 +1338,7 @@ window.mBTRouter = (function () {
         window.addEventListener('mbt:auth-changed', function () {
             if (!_ctx.getDiffActive()) return;
             var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-            if (modal && modal.contentWindow) modal.contentWindow.postMessage({ type: 'mbt:rbac-eviction' }, '*');
+            if (modal && modal.contentWindow) _safePostMessage(modal.contentWindow, { type: 'mbt:rbac-eviction' });
             _ctx.setDiffActive(false);
             _ctx.setDiffPendingRecord(null);
             _ctx.unsealRealtimeRenderer();
@@ -1358,7 +1375,7 @@ window.mBTRouter = (function () {
             var message = detail.message || '';
             var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
             if (toolIframe && toolIframe.contentWindow && _ctx.getMBTActiveTool() === 'share') {
-                toolIframe.contentWindow.postMessage({ type: 'mbt:activity-log', payload: detail }, '*');
+                _safePostMessage(toolIframe.contentWindow, { type: 'mbt:activity-log', payload: detail });
             } else {
                 if (typeof window.mBTAddActivityBadge === 'function') window.mBTAddActivityBadge();
             }

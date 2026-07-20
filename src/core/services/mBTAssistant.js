@@ -100,15 +100,35 @@ var mBTAssistant = (function () {
         try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
     }
 
-    /* Resolve the active chat model for a provider */
+    /* Resolve the active chat model for a provider.
+       OpenRouter: mbt_ai_chat_model_openrouter is source of truth; legacy
+       mbt_openrouter_model migrates once then stays in sync via setChatModel. */
     function _resolveChatModel(provider) {
         /* Check per-provider override first */
         var override = _get(K.MODEL_CHAT_PFX + provider);
-        if (override) return override;
-        /* Then check legacy per-provider keys */
-        if (provider === 'gemini')     return _get(K.GEMINI_MODEL) || 'gemini-2.5-flash';
-        if (provider === 'openrouter') return _get(K.OR_MODEL)     || 'openai/gpt-4o-mini';
-        if (provider === 'lmstudio')   return _get(K.LM_MODEL)     || 'local-model';
+        if (override) {
+            /* Keep legacy OpenRouter key aligned with the UI selection */
+            if (provider === 'openrouter') {
+                var legSynced = _get(K.OR_MODEL);
+                if (legSynced !== override) _set(K.OR_MODEL, override);
+            }
+            return override;
+        }
+        /* Then check legacy per-provider keys (one-time migrate into chat key) */
+        if (provider === 'gemini') {
+            return _get(K.GEMINI_MODEL) || 'gemini-2.5-flash';
+        }
+        if (provider === 'openrouter') {
+            var legacyOr = _get(K.OR_MODEL);
+            if (legacyOr) {
+                _set(K.MODEL_CHAT_PFX + 'openrouter', legacyOr);
+                return legacyOr;
+            }
+            return 'openai/gpt-4o-mini';
+        }
+        if (provider === 'lmstudio') {
+            return _get(K.LM_MODEL) || 'local-model';
+        }
         return (ENDPOINTS[provider] || {}).model || '';
     }
 
@@ -165,7 +185,14 @@ var mBTAssistant = (function () {
     ========================================================================= */
 
     function getChatModel(provider) { return _resolveChatModel(provider || getProvider()); }
-    function setChatModel(provider, model) { _set(K.MODEL_CHAT_PFX + provider, model); }
+    function setChatModel(provider, model) {
+        var m = model ? String(model).trim() : '';
+        _set(K.MODEL_CHAT_PFX + provider, m);
+        /* Dual-write legacy OpenRouter key so old readers never diverge */
+        if (provider === 'openrouter') {
+            _set(K.OR_MODEL, m);
+        }
+    }
 
     function getImageModel() { return _resolveImageModel(getProvider()); }
     function setImageModel(model) { _set(K.MODEL_IMAGE, model); }
@@ -260,8 +287,9 @@ var mBTAssistant = (function () {
     /* Legacy per-provider model accessors (used by Settings UI) */
     function getGeminiModel()         { return _get(K.GEMINI_MODEL)    || 'gemini-2.5-flash'; }
     function setGeminiModel(m)        { _set(K.GEMINI_MODEL, m); }
-    function getOpenRouterModel()     { return _get(K.OR_MODEL)        || 'openai/gpt-4o-mini'; }
-    function setOpenRouterModel(m)    { _set(K.OR_MODEL, m); }
+    /* OpenRouter legacy accessors delegate to chat model key (single source of truth) */
+    function getOpenRouterModel()     { return getChatModel('openrouter'); }
+    function setOpenRouterModel(m)    { setChatModel('openrouter', m); }
     function getLMStudioEndpoint()    { return _get(K.LM_ENDPOINT)     || 'http://localhost:1234/v1'; }
     function setLMStudioEndpoint(ep)  { _set(K.LM_ENDPOINT, ep); }
     function getLMStudioModel()       { return _get(K.LM_MODEL)        || 'local-model'; }
@@ -361,6 +389,20 @@ var mBTAssistant = (function () {
         _store(K.ASSETS, assets);
     }
 
+    /* Shared AI call cooldown: blocks rapid sequential attempts (click-spam / double-fire).
+       Gated on call START so failed attempts cannot bypass the window. */
+    var _lastCallStart = 0;
+    var AI_CALL_COOLDOWN_MS = 2500;
+
+    function _checkAiCooldown() {
+        var now = Date.now();
+        if (now - _lastCallStart < AI_CALL_COOLDOWN_MS) {
+            return Promise.reject(new Error('AI_RATE_LIMITED'));
+        }
+        _lastCallStart = now;
+        return null;
+    }
+
     /* =========================================================================
        PUBLIC API — callChat(options) → Promise<string>
        The single entry point for all LLM text generation.
@@ -374,6 +416,9 @@ var mBTAssistant = (function () {
     ========================================================================= */
 
     function callChat(options) {
+        var cooldownReject = _checkAiCooldown();
+        if (cooldownReject) return cooldownReject;
+
         var userMessage  = options.userMessage  || '';
         var basePrompt   = options.systemPrompt || 'You are a helpful film production assistant.';
         var history      = options.history      || [];
@@ -442,9 +487,8 @@ var mBTAssistant = (function () {
             url   = getLMStudioEndpoint() + '/chat/completions';
             model = getLMStudioModel();
         }
-        if (provider === 'openrouter') {
-            model = getOpenRouterModel();
-        }
+        /* OpenRouter: do NOT overwrite with legacy getOpenRouterModel() —
+           model already comes from getChatModel(provider) (UI selection). */
 
         var oaMsgs = [];
         if (sysInstr) oaMsgs.push({ role: 'system', content: sysInstr });
@@ -461,7 +505,19 @@ var mBTAssistant = (function () {
             body: JSON.stringify({ model: model, messages: oaMsgs, temperature: 0.7 })
         })
         .then(function (r) {
-            if (!r.ok) return r.json().then(function (e) { throw new Error(provider + ' ' + r.status + ': ' + ((e.error && e.error.message) || r.statusText)); });
+            if (!r.ok) {
+                return r.json().then(function (e) {
+                    var errMsg = ((e.error && e.error.message) || r.statusText) || '';
+                    /* Dead free model (e.g. Ling-2.6-flash retired): clear so UI re-picks */
+                    if (provider === 'openrouter' && (
+                        r.status === 404 ||
+                        errMsg.indexOf('no longer available') !== -1
+                    )) {
+                        setChatModel('openrouter', '');
+                    }
+                    throw new Error(provider + ' ' + r.status + ': ' + errMsg);
+                });
+            }
             return r.json();
         })
         .then(function (d) {
@@ -492,6 +548,9 @@ var mBTAssistant = (function () {
     };
 
     function callImageGen(options) {
+        var cooldownReject = _checkAiCooldown();
+        if (cooldownReject) return cooldownReject;
+
         var prompt      = options.prompt || '';
         /* Image provider is independent from chat provider — reads its own key */
         var provider    = _get('mbt_ai_image_provider') || getProvider();

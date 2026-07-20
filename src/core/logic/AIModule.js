@@ -9,6 +9,23 @@
 
 window.mBTAIModule = {
 
+    /* Safe markdown → HTML for AI-generated content (analysis + assistant chat).
+       marked.parse alone is XSS-unsafe; always sanitize. If DOMPurify is missing,
+       escape source markdown text rather than emit raw HTML. */
+    renderSafeMarkdown: function (text) {
+        var src = text || '';
+        var raw = (typeof window.marked !== 'undefined') ? window.marked.parse(src) : src;
+        if (typeof window.DOMPurify !== 'undefined' && typeof window.DOMPurify.sanitize === 'function') {
+            return window.DOMPurify.sanitize(raw);
+        }
+        /* DOMPurify failed to load (offline edge case, blocked script, etc.):
+           escape the SOURCE markdown, never the raw unsanitized marked HTML. */
+        if (window.mBT && window.mBT.ui && window.mBT.ui.render && typeof window.mBT.ui.render.esc === 'function') {
+            return window.mBT.ui.render.esc(src);
+        }
+        return String(src).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+
     /* ── Configuration ─────────────────────────────────────────────────── */
     config: {
         geminiModel:        'gemini-2.5-flash',
@@ -93,7 +110,11 @@ window.mBTAIModule = {
                 systemPrompt: systemInstruction
             }).catch(function (error) {
                 console.error('mBT AI Failure:', error);
-                return 'Analysis Failed: ' + (error && error.message ? error.message : 'Unknown');
+                var msg = error && error.message ? error.message : 'Unknown';
+                if (msg === 'AI_RATE_LIMITED') {
+                    msg = 'Wait a few seconds before another AI request.';
+                }
+                return 'Analysis Failed: ' + msg;
             });
         }
 
@@ -210,7 +231,7 @@ window.mBTAIModule = {
             budget.aiContext.analysis = result;
             if (typeof window.saveBudget === 'function') window.saveBudget();
 
-            var formattedResult = (typeof window.marked !== 'undefined') ? window.marked.parse(result) : result;
+            var formattedResult = self.renderSafeMarkdown(result);
             mBTME.open('aiAnalysis', 'Budget Analysis',
                 '<div class="p-6 text-sm leading-relaxed text-slate-700 max-h-[60vh] overflow-y-auto prose prose-sm prose-slate max-w-none">' + formattedResult + '</div>',
                 'max-w-2xl');
@@ -261,7 +282,7 @@ window.mBTAIModule = {
         var renderMessages = function () {
             return budget.aiContext.chat.map(function (msg) {
                 var contentHtml = msg.role === 'assistant'
-                    ? (typeof window.marked !== 'undefined' ? window.marked.parse(msg.content) : msg.content)
+                    ? self.renderSafeMarkdown(msg.content)
                     : window.mBT.ui.render.esc(msg.content);
 
                 /* Phase 60.B: detect action block and add [Preview & Apply] button */
@@ -345,6 +366,14 @@ window.mBTAIModule = {
                     /* Phase 60.B: inject action-trigger capability into chat system prompt */
                     var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
                     return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg).then(function (response) {
+                        /* callUnifiedAI swallows rejections into Analysis Failed: strings */
+                        if (typeof response === 'string' && response.indexOf('Analysis Failed:') === 0) {
+                            var failMsg = response.replace('Analysis Failed: ', '');
+                            if (history.lastElementChild) {
+                                history.lastElementChild.innerHTML = '<div class="text-rose-500 text-xs">Error: ' + failMsg + '</div>';
+                            }
+                            return;
+                        }
                         budget.aiContext.chat.push({ role: 'assistant', content: response });
                         if (typeof window.saveBudget === 'function') window.saveBudget();
                         history.innerHTML = renderMessages();
@@ -406,6 +435,11 @@ window.mBTAIModule = {
         mBTME.alert('Sourcing Analysis Running', 'AI is generating your Funding Strategy. The publisher will update when ready.');
 
         return self.callUnifiedAI(provider, apiKey, prompt, systemMsg).then(function (response) {
+            /* callUnifiedAI returns Analysis Failed: strings instead of rejecting */
+            if (typeof response === 'string' && response.indexOf('Analysis Failed:') === 0) {
+                mBTME.alert('Analysis Failed', response.replace('Analysis Failed: ', '') || 'AI request failed.');
+                return;
+            }
             var editorData = {};
             try {
                 editorData = JSON.parse(response.trim());
@@ -447,7 +481,9 @@ window.mBTAIModule = {
                 }
             }, 1500);
         }).catch(function (err) {
-            mBTME.alert('Analysis Failed', err.message || 'AI request failed. Check your API key and connection.');
+            var em = (err && err.message) || 'AI request failed. Check your API key and connection.';
+            if (em === 'AI_RATE_LIMITED') em = 'Wait a few seconds before another AI request.';
+            mBTME.alert('Analysis Failed', em);
         });
     },
 
