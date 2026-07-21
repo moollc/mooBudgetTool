@@ -163,7 +163,27 @@ $2,500 is well-supported as the counsel/clearance-fee floor-to-mid range for ind
 | Bonded Cellular | $750 | Alias LU600 tier |
 | 4G/5G Backup Data | $400 | Alias LU300 tier |
 
-**Still deferred (not this pass):** teleprompter systems, on-air CG hardware, CDN/bandwidth contracts, studio lease recurring facility lines.
+### Deferred pass (2026-07-21, Grok+X)
+
+| Description | baseRate | Unit | Notes |
+|-------------|----------|------|-------|
+| Presidential Teleprompter (17-19 in System) | $500 | Day | Gear-only; Magic/ShareGrid mid |
+| Compact Teleprompter (iPad Class) | $125 | Day | ShareGrid ~$100; AMC ~$295 |
+| On-Air CG Hardware (LiveText / XPression Class) | $560 | Day | ShareGrid Ross XPression $562 |
+| On-Air Graphics Software Package (BYO Hardware) | $275 | Day | ESTIMATE — software seat only |
+| CDN Live Streaming Bandwidth (Managed Egress, Event Day) | $850 | Day | Mid event egress planning rate |
+| Studio Lease Broadcast Control Room (Floor Day, Gear Excluded) | $1200 | Day | ESTIMATE — dry CR floor |
+
+### Per Diem (travel line item — Grok recommendation: **yes**)
+
+| Description | baseRate | Unit | Placement |
+|-------------|----------|------|-----------|
+| Per Diem | $75 | Day per person | `_MASTER_CREW_INDEX` (Travel & Logistics, not labor) |
+| Per Diems | $75 | Day | Template alias |
+
+**Why yes:** Union and producer practice treat per diem as a **travel/living allowance**, not a role day rate. SAG-AFTRA distant hire M&IE **$75/day** (Dec 2025); GSA CONUS M&IE **~$68–$92**. Budget quantity = **person-days** (7-day weeks, travel days, prep — not shoot days only). Lodging stays a separate line (`Accommodation`). Contacts/deal memos still carry per-diem fields in mBTDB; OpenGate now supplies the budget line anchor.
+
+**Reseed:** `CURRENT_VERSION` → `2026.07.21_live_broadcast_v4`.
 
 ---
 
