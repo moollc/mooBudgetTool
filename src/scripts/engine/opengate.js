@@ -167,6 +167,8 @@
         { "description": "Location Manager", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Location Scout", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Catering (Per Head)", "unit": "Flat", "baseRate": 45, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Per Diem", "unit": "Day", "baseRate": 75, "multipliers": { "USA": 1, "Jamaica": 1, "Trinidad": 1, "Barbados": 1, "Guyana": 1, "UK": 1, "Canada": 1, "Australia": 1, "India": 0.85, "Thailand": 0.85, "Philippines": 0.75, "Vietnam": 0.85, "Poland": 0.9, "Mexico": 0.85, "Brazil": 0.9, "Colombia": 0.8, "South Africa": 0.9 }, "intelligence": "Travel/living M&IE allowance per person per day (budget quantity = person-days). SAG-AFTRA distant hire $75/day (Dec 2025); GSA M&IE ~$68-$92. Not a crew labor rate — Travel & Logistics section. Lodging is a separate line." },
+        { "description": "Per Diems", "unit": "Day", "baseRate": 75, "multipliers": { "USA": 1, "Jamaica": 1, "Trinidad": 1, "Barbados": 1, "Guyana": 1, "UK": 1, "Canada": 1, "Australia": 1, "India": 0.85, "Thailand": 0.85, "Philippines": 0.75, "Vietnam": 0.85, "Poland": 0.9, "Mexico": 0.85, "Brazil": 0.9, "Colombia": 0.8, "South Africa": 0.9 }, "intelligence": "Alias: Per Diem (template Travel & Logistics string)." },
         { "description": "Craft Service", "unit": "Day", "baseRate": 300, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Script Supervisor", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Production Accountant", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
@@ -234,8 +236,9 @@
         return m;
     })();
 
-    /* Template / blueprint strings → canonical equipment index description */
-    var _EQUIPMENT_DESCRIPTION_ALIASES = {
+    /* Template / blueprint strings → canonical index description */
+    var _RATE_DESCRIPTION_ALIASES = {
+        'per diems': 'Per Diem',
         'switcher/encoder': 'Live Production Switcher Package',
         'lighting package': 'Light Kit (3-Light)',
         'sound equipment rental': 'Sound Kit (Mixer + Wireless)',
@@ -291,7 +294,14 @@
         { "description": "Comms System", "unit": "Day", "baseRate": 250, "category": "live", "intelligence": "Alias: Comms System (4-User Wireless).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "Bonded Cellular", "unit": "Day", "baseRate": 750, "category": "live", "intelligence": "Alias: Bonded Cellular (LiveU LU600) flagship tier.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "4G/5G Backup Data", "unit": "Day", "baseRate": 400, "category": "live", "intelligence": "Alias: Bonded Cellular (LiveU LU300) backup uplink tier.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
-        { "description": "Cameras (3-Cam Kit)", "unit": "Day", "baseRate": 1500, "category": "live", "intelligence": "Alias: Three-Camera Live Package gear-only.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
+        { "description": "Cameras (3-Cam Kit)", "unit": "Day", "baseRate": 1500, "category": "live", "intelligence": "Alias: Three-Camera Live Package gear-only.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        /* ========= LIVE / BROADCAST DEFERRED (Grok+X research 2026-07-21) ========= */
+        { "description": "Presidential Teleprompter (17-19 in System)", "unit": "Day", "baseRate": 500, "category": "live", "intelligence": "Gear-only dual-glass presidential/speech system. Magic Teleprompting stage gear $600+$200 paddles; ShareGrid peers $230-$750.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Compact Teleprompter (iPad Class)", "unit": "Day", "baseRate": 125, "category": "live", "intelligence": "Tablet/iPad-class beamsplitter rig gear-only. ShareGrid ~$100; AMC supported package ~$295.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "On-Air CG Hardware (LiveText / XPression Class)", "unit": "Day", "baseRate": 560, "category": "live", "intelligence": "Broadcast CG/character generator hardware day. ShareGrid NYC Ross XPression Studio $562/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "On-Air Graphics Software Package (BYO Hardware)", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "ESTIMATE — software seat when renter supplies qualified host PC/GPU. ~half of full XPression HW+SW day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "CDN Live Streaming Bandwidth (Managed Egress, Event Day)", "unit": "Day", "baseRate": 850, "category": "live", "intelligence": "Managed live CDN egress planning mid for 1k-5k peak concurrent multi-hour event. Scales with GB/viewers.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Studio Lease Broadcast Control Room (Floor Day, Gear Excluded)", "unit": "Day", "baseRate": 1200, "category": "location", "intelligence": "ESTIMATE — broadcast-capable control room floor/shell only; no switcher package or engineer.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
@@ -540,7 +550,7 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.07.21_live_broadcast_v3';
+            var CURRENT_VERSION = '2026.07.21_live_broadcast_v4';
 
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
@@ -1267,8 +1277,8 @@
         calculateRate: function (roleDescription, region, tier) {
             var self = this;
             var d = roleDescription.toLowerCase().trim();
-            if (_EQUIPMENT_DESCRIPTION_ALIASES[d]) {
-                d = _EQUIPMENT_DESCRIPTION_ALIASES[d].toLowerCase().trim();
+            if (_RATE_DESCRIPTION_ALIASES[d]) {
+                d = _RATE_DESCRIPTION_ALIASES[d].toLowerCase().trim();
             }
             var r = region || self.settings.location;
             var t = tier || self.settings.getMarketTier();
