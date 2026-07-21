@@ -222,7 +222,30 @@
        in those files; gap countries already Sound Mixer-anchored via Sound Kit).
        Wireless video TX/RX: no wireless-transmission tables in research/rates.
        Wireless rows reuse the Camera Kit (4K Cinema) multiplier profile (globally
-       traded video capital gear; gap countries already Camera Operator-anchored). */
+       traded video capital gear; gap countries already Camera Operator-anchored).
+       **Pricing policy (2026-07-21):** equipment uses a fixed USA anchor — regional
+       labor multipliers and Indie/Studio tier scalars do not apply. Jamaica still
+       converts USD anchor to JMD (×155). See _expandIndex + calculateRate. */
+    var _EQUIPMENT_FIXED_MULTIPLIERS = (function () {
+        var m = {};
+        for (var er = 0; er < RATE_REGIONS.length; er++) {
+            m[RATE_REGIONS[er]] = 1.0;
+        }
+        return m;
+    })();
+
+    /* Template / blueprint strings → canonical equipment index description */
+    var _EQUIPMENT_DESCRIPTION_ALIASES = {
+        'switcher/encoder': 'Live Production Switcher Package',
+        'lighting package': 'Light Kit (3-Light)',
+        'sound equipment rental': 'Sound Kit (Mixer + Wireless)',
+        'grip & support equipment': 'Grip Kit (Dolly + Stands)',
+        'grip and support equipment': 'Grip Kit (Dolly + Stands)',
+        'cameras (3-cam kit)': 'Three-Camera Live Package',
+        'comms system': 'Comms System (4-User Wireless)',
+        'bonded cellular': 'Bonded Cellular (LiveU LU600)',
+        '4g/5g backup data': 'Bonded Cellular (LiveU LU300)'
+    };
     var _MASTER_EQUIPMENT_INDEX = [
         { "description": "Camera Kit (4K Cinema Package)", "unit": "Day", "baseRate": 850, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
         { "description": "Camera Kit (Sony FX6/FX9)", "unit": "Day", "baseRate": 475, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.11, "Thailand": 0.90, "Philippines": 0.71, "Vietnam": 0.84, "Poland": 0.94, "Mexico": 0.95, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.29 } },
@@ -237,7 +260,38 @@
         { "description": "Wireless Video TX/RX System", "unit": "Day", "baseRate": 175, "category": "camera", "intelligence": "Generic wireless HD-SDI/HDMI TX+RX pair. USA mid between indie (~$35-$85) and pro Bolt-class (~$200-$275). Multipliers reuse Camera Kit 4K profile (no wireless regional tables; Camera Operator anchor for Caribbean/UK/Canada/Australia).", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
         { "description": "Teradek Bolt 4K (750ft)", "unit": "Day", "baseRate": 250, "category": "camera", "intelligence": "USA production-house day rate for Bolt 4K / Bolt 4K LT 750 TX/RX kits (~$200-$275; CSI Rentals $275 deluxe). Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
         { "description": "Teradek Bolt 4K (1500ft)", "unit": "Day", "baseRate": 350, "category": "camera", "intelligence": "USA day rate for longer-range Bolt 4K 1500 TX/RX kits; premium over 750ft tier. Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
-        { "description": "Accsoon CineView 2 (SDI)", "unit": "Day", "baseRate": 85, "category": "camera", "intelligence": "USA day rate for Accsoon CineView 2 SDI TX/RX (ShareGrid ~$35 peer; production-house kits ~$75-$100). Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } }
+        { "description": "Accsoon CineView 2 (SDI)", "unit": "Day", "baseRate": 85, "category": "camera", "intelligence": "USA day rate for Accsoon CineView 2 SDI TX/RX (ShareGrid ~$35 peer; production-house kits ~$75-$100). Multipliers reuse Camera Kit 4K profile.", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
+        /* ========= LIVE / BROADCAST EQUIPMENT (Phase 203, Grok+X research 2026-07-21) =========
+           Fixed USA USD anchor via _expandIndex equipment path. Sources: work/grok_live_broadcast_equipment_rates.txt */
+        { "description": "NewTek TriCaster Mini", "unit": "Day", "baseRate": 350, "category": "live", "intelligence": "Gear-only day. Absolute Rentals Burbank list $350/day (2024 table).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "NewTek TriCaster TC1", "unit": "Day", "baseRate": 750, "category": "live", "intelligence": "Gear-only day. Mid Absolute $800 (with CS) and ShareGrid LA peer $699.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "NewTek TriCaster 2 Elite", "unit": "Day", "baseRate": 995, "category": "live", "intelligence": "Gear-only day. Omega Broadcast rental list $995 with 2-stripe surface.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Blackmagic ATEM Mini Pro ISO", "unit": "Day", "baseRate": 50, "category": "live", "intelligence": "Prosumer HDMI switcher/recorder. Adorama $35/day; ShareGrid-class mid ~$50.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Blackmagic ATEM 2 M/E Constellation 4K", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Chassis only. ShareGrid Austin $289/day 4K 2 M/E; OpenGate mid 275.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Blackmagic ATEM 4 M/E Constellation 4K", "unit": "Day", "baseRate": 350, "category": "live", "intelligence": "40-input 4 M/E 4K class. Mid production-house day between mailer multi-day and 2 M/E peer.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Teradek VidiU Go Encoder", "unit": "Day", "baseRate": 45, "category": "live", "intelligence": "RTMP/Wi-Fi encoder. Lensrentals ~$45/7-day band; first-day mid ~$45.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Teradek Cube 655 HD Encoder", "unit": "Day", "baseRate": 75, "category": "live", "intelligence": "H.264 SDI/HDMI encoder. ShareGrid avg ~$97; mailer multi-day lower; mid 75.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Teradek Cube 755 HEVC Encoder", "unit": "Day", "baseRate": 85, "category": "live", "intelligence": "HEVC/H.264 premium encoder. Lensrentals weekly ~$96; single production day mid 85.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Wowza ClearCaster Encoder", "unit": "Day", "baseRate": 125, "category": "live", "intelligence": "ESTIMATE — product line sunset; mid pro rack encoder day when legacy units rent.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Decimator MD-HX Scan Converter", "unit": "Day", "baseRate": 25, "category": "live", "intelligence": "HDMI/SDI cross-converter. Motion Rental $19; ShareGrid/ProSound $25.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Blackmagic Micro Converter BiDirectional SDI/HDMI", "unit": "Day", "baseRate": 15, "category": "live", "intelligence": "Commodity 3G bidirectional converter. Canal Sound $15/day; ShareGrid ~$20.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Bonded Cellular (LiveU LU300)", "unit": "Day", "baseRate": 400, "category": "live", "intelligence": "Portable bonded encoder. Streaming Store / Feed Central ~$395-$400/day with short data.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Bonded Cellular (LiveU LU600)", "unit": "Day", "baseRate": 750, "category": "live", "intelligence": "Flagship backpack bonded encoder. Feed Central $540/day (2-day min); houses to $1500; mid 750.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Pepwave Bonded Router Backup", "unit": "Day", "baseRate": 375, "category": "live", "intelligence": "2-modem bonded cellular router gear day. Absolute Pepwave 2-cell $375/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Comms System (4-User Wireless)", "unit": "Day", "baseRate": 250, "category": "live", "intelligence": "Clear-Com FreeSpeak-class 4-drop wireless intercom package (base + beltpacks).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "IFB Talent Beltpack (Single)", "unit": "Day", "baseRate": 75, "category": "live", "intelligence": "Single talent IFB listen path. Beltpack add-ons ~$50-$75/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Dedicated Internet Line", "unit": "Day", "baseRate": 650, "category": "live", "intelligence": "Managed temporary bonded/sat event internet day. Absolute Starlink/4-cell class $650/day cards.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Live Production Switcher Package", "unit": "Day", "baseRate": 250, "category": "live", "intelligence": "Mid generic switcher+encoder flypack (ATEM Mini-class + RTMP encoder + cabling). Alias for Switcher/Encoder.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Three-Camera Live Package", "unit": "Day", "baseRate": 1500, "category": "live", "intelligence": "Three mid pro cameras + support/tripods/cables gear-only; switcher/encoder separate.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        /* Template-exact alias rows (blueprint strings resolve in OpenGate search) */
+        { "description": "Switcher/Encoder", "unit": "Day", "baseRate": 250, "category": "live", "intelligence": "Alias: Live Production Switcher Package (mid switcher + encoder bundle).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Lighting Package", "unit": "Day", "baseRate": 350, "category": "lighting", "intelligence": "Alias: Light Kit (3-Light) rental day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Sound Equipment Rental", "unit": "Day", "baseRate": 225, "category": "sound", "intelligence": "Alias: Sound Kit (Mixer + Wireless) rental day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Grip & Support Equipment", "unit": "Day", "baseRate": 325, "category": "arsenal", "intelligence": "Alias: Grip Kit (Dolly + Stands) rental day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Comms System", "unit": "Day", "baseRate": 250, "category": "live", "intelligence": "Alias: Comms System (4-User Wireless).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Bonded Cellular", "unit": "Day", "baseRate": 750, "category": "live", "intelligence": "Alias: Bonded Cellular (LiveU LU600) flagship tier.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "4G/5G Backup Data", "unit": "Day", "baseRate": 400, "category": "live", "intelligence": "Alias: Bonded Cellular (LiveU LU300) backup uplink tier.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Cameras (3-Cam Kit)", "unit": "Day", "baseRate": 1500, "category": "live", "intelligence": "Alias: Three-Camera Live Package gear-only.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
@@ -328,16 +382,18 @@
                     rate = comm.avg_rate;
                     source = 'community';
                 } else {
-                    /* Role-Specific Multiplier with a strict 1.0 fallback to prevent Drift. */
-                    var mult = (role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0;
+                    var isEquipment = (itemType === 'equipment');
+                    /* Equipment: fixed USA USD anchor (mult 1.0); crew: regional multipliers. */
+                    var mult = isEquipment ? 1.0 : ((role.multipliers && role.multipliers[region]) ? role.multipliers[region] : 1.0);
                     rate = role.baseRate * mult;
 
-                    /* Phase 190: Apply Market Tier Scalar (Indie/Standard/Studio)
-                       ONLY to 'default' source rates. Community overrides remain atomic. */
-                    var currentTier = self.settings.getMarketTier();
-                    if (currentTier && currentTier !== 'Standard') {
-                        var scalar = MARKET_TIER_SCALARS[currentTier] || 1.0;
-                        rate = rate * scalar;
+                    /* Market tier scalars apply to crew only — capital gear stays fixed. */
+                    if (!isEquipment) {
+                        var currentTier = self.settings.getMarketTier();
+                        if (currentTier && currentTier !== 'Standard') {
+                            var scalar = MARKET_TIER_SCALARS[currentTier] || 1.0;
+                            rate = rate * scalar;
+                        }
                     }
 
                     if (region === 'Jamaica') rate = Math.round(rate * 155);
@@ -484,7 +540,7 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.07.13_equipment_v2';
+            var CURRENT_VERSION = '2026.07.21_live_broadcast_v3';
 
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
@@ -1211,6 +1267,9 @@
         calculateRate: function (roleDescription, region, tier) {
             var self = this;
             var d = roleDescription.toLowerCase().trim();
+            if (_EQUIPMENT_DESCRIPTION_ALIASES[d]) {
+                d = _EQUIPMENT_DESCRIPTION_ALIASES[d].toLowerCase().trim();
+            }
             var r = region || self.settings.location;
             var t = tier || self.settings.getMarketTier();
 
@@ -1222,6 +1281,8 @@
                 if (comm.description && comm.description.toLowerCase().trim() === d && comm.region === r) {
                     var commCurrency = (OG_CURRENCIES[r] || 'USD');
                     var commScalar = MARKET_TIER_SCALARS[t] || 1.0;
+                    /* Equipment community rows stay fixed — no tier discount/premium. */
+                    if (comm.itemType === 'equipment') commScalar = 1.0;
                     return {
                         rate: Math.round(comm.rate * commScalar),
                         unit: comm.unit || 'Day',
@@ -1232,9 +1293,9 @@
                 }
             }
 
-            /* Find role in Master Index (crew, then equipment -- SYNONYM_REGISTRY
-               equipment keys resolve to _MASTER_EQUIPMENT_INDEX descriptions) */
+            /* Find role in Master Index (crew, then equipment) */
             var role = null;
+            var isEquipmentRole = false;
             for (var i = 0; i < _MASTER_CREW_INDEX.length; i++) {
                 if (_MASTER_CREW_INDEX[i].description.toLowerCase() === d) {
                     role = _MASTER_CREW_INDEX[i];
@@ -1245,6 +1306,7 @@
                 for (var eq = 0; eq < _MASTER_EQUIPMENT_INDEX.length; eq++) {
                     if (_MASTER_EQUIPMENT_INDEX[eq].description.toLowerCase() === d) {
                         role = _MASTER_EQUIPMENT_INDEX[eq];
+                        isEquipmentRole = true;
                         break;
                     }
                 }
@@ -1255,18 +1317,28 @@
             var currencies = OG_CURRENCIES;
             var currency = currencies[r] || 'USD';
 
-            /* Step 1: Apply regional multiplier */
-            var mult = (role.multipliers && role.multipliers[r]) ? role.multipliers[r] : 1.0;
-            var regionalRate = role.baseRate * mult;
+            var regionalRate;
+            var finalRate;
 
-            /* Step 2: Jamaica JMD conversion before tier scaling */
-            if (r === 'Jamaica') {
-                regionalRate = Math.round(regionalRate * 155);
+            if (isEquipmentRole) {
+                /* Fixed USA USD anchor; Jamaica JMD conversion only. No regional mult, no tier scalar. */
+                regionalRate = role.baseRate;
+                if (r === 'Jamaica') regionalRate = Math.round(regionalRate * 155);
+                finalRate = regionalRate;
+            } else {
+                /* Step 1: Apply regional multiplier */
+                var mult = (role.multipliers && role.multipliers[r]) ? role.multipliers[r] : 1.0;
+                regionalRate = role.baseRate * mult;
+
+                /* Step 2: Jamaica JMD conversion before tier scaling */
+                if (r === 'Jamaica') {
+                    regionalRate = Math.round(regionalRate * 155);
+                }
+
+                /* Step 3: Apply tier scalar (Indie: 0.7, Standard: 1.0, Studio: 1.3) */
+                var scalar = MARKET_TIER_SCALARS[t] || 1.0;
+                finalRate = Math.round(regionalRate * scalar);
             }
-
-            /* Step 3: Apply tier scalar (Indie: 0.7, Standard: 1.0, Studio: 1.3) */
-            var scalar = MARKET_TIER_SCALARS[t] || 1.0;
-            var finalRate = Math.round(regionalRate * scalar);
 
             return {
                 rate: finalRate,
