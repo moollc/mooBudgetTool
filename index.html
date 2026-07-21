@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v23.98</title>
+    <title>mooBudgetTool v23.99</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.98";
+    var APP_VERSION = "23.99";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -11908,6 +11908,61 @@
         }
     };
 
+    /* Save or update a contact in mBT Contacts (IndexedDB + mBTOG cache) for roster lookup. */
+    window.mBTSaveContactToRoster = function (contactData) {
+        var payload = contactData || {};
+        if (!payload.name) return Promise.resolve(null);
+        var saveFn = null;
+        if (typeof mBTOG !== 'undefined' && mBTOG && typeof mBTOG.saveContact === 'function') {
+            saveFn = function (c) { return mBTOG.saveContact(c); };
+        } else {
+            var idb = (window.mBT && window.mBT.storage) || window.mBTStorage || null;
+            if (idb && typeof idb.saveContact === 'function') {
+                saveFn = function (c) { return idb.saveContact(c); };
+            }
+        }
+        if (!saveFn) return Promise.resolve(null);
+        return window.mBTFetchMergedContactRoster().then(function (roster) {
+            var key = String(payload.name).toLowerCase();
+            var existing = null;
+            var ei;
+            for (ei = 0; ei < roster.length; ei++) {
+                if (roster[ei] && String(roster[ei].name || '').toLowerCase() === key) {
+                    existing = roster[ei];
+                    break;
+                }
+            }
+            var contact = existing ? {
+                id: existing.id,
+                name: payload.name || existing.name,
+                phone: payload.phone || existing.phone || '',
+                email: payload.email || existing.email || '',
+                role: payload.role || existing.role || existing.department || '',
+                department: payload.department || payload.role || existing.department || existing.role || '',
+                category: existing.category || 'Crew',
+                rate: existing.rate != null ? existing.rate : null,
+                walletType: existing.walletType || '',
+                walletAddress: existing.walletAddress || '',
+                portfolio: existing.portfolio || [],
+                source: existing.source || 'device'
+            } : {
+                id: 'device_' + Date.now(),
+                name: payload.name,
+                phone: payload.phone || '',
+                email: payload.email || '',
+                role: payload.role || '',
+                department: payload.department || payload.role || '',
+                category: 'Crew',
+                portfolio: [],
+                source: 'device'
+            };
+            return saveFn(contact).then(function (saved) {
+                window.__mbtCrewRosterCache = null;
+                return saved || contact;
+            });
+        });
+    };
+
     window.openCrewProfile = function (el, event, itemId, sectionName) {
         if (event) event.stopPropagation();
 
@@ -12110,12 +12165,32 @@
             if (importBtn) {
                 function importFromPhoneContacts() {
                     navigator.contacts.select(['name', 'tel', 'email'], { multiple: false }).then(function (contacts) {
-                        if (contacts.length) {
-                            var c = contacts[0];
-                            if (c.name && c.name[0]) document.getElementById('crewName').value = c.name[0];
-                            if (c.tel && c.tel[0]) document.getElementById('crewPhone').value = c.tel[0];
-                            if (c.email && c.email[0]) document.getElementById('crewEmail').value = c.email[0];
-                        }
+                        if (!contacts.length) return;
+                        var c = contacts[0];
+                        var name = (c.name && c.name[0]) ? c.name[0] : '';
+                        var phone = (c.tel && c.tel[0]) ? c.tel[0] : '';
+                        var email = (c.email && c.email[0]) ? c.email[0] : '';
+                        if (!name) return;
+                        var roleHint = (item && item.description) ? item.description : '';
+                        window.mBTSaveContactToRoster({
+                            name: name,
+                            phone: phone,
+                            email: email,
+                            role: roleHint,
+                            department: roleHint
+                        }).then(function (saved) {
+                            if (saved && typeof window.mBTApplyCrewContactPick === 'function') {
+                                window.mBTApplyCrewContactPick(saved);
+                            } else {
+                                if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
+                                if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
+                                if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
+                            }
+                        }).catch(function () {
+                            if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
+                            if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
+                            if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
+                        });
                     }).catch(function (ex) { console.log('Contact Import cancelled'); });
                 }
 
@@ -12212,6 +12287,16 @@
                 var cachedRoster = null;
                 var rosterLoading = false;
 
+                function getCrewRosterCache() {
+                    if (window.__mbtCrewRosterCache) cachedRoster = window.__mbtCrewRosterCache;
+                    return cachedRoster;
+                }
+
+                function setCrewRosterCache(roster) {
+                    cachedRoster = roster || [];
+                    window.__mbtCrewRosterCache = cachedRoster;
+                }
+
                 function hideCrewSuggestions() {
                     suggestBox.classList.add('hidden');
                     suggestBox.innerHTML = '';
@@ -12270,16 +12355,16 @@
                         }
                         renderCrewSuggestions(matches);
                     }
-                    if (cachedRoster) {
-                        applyFilter(cachedRoster);
+                    if (getCrewRosterCache()) {
+                        applyFilter(getCrewRosterCache());
                         return;
                     }
                     if (rosterLoading) return;
                     rosterLoading = true;
                     window.mBTFetchMergedContactRoster().then(function (roster) {
                         rosterLoading = false;
-                        cachedRoster = roster || [];
-                        applyFilter(cachedRoster);
+                        setCrewRosterCache(roster || []);
+                        applyFilter(getCrewRosterCache());
                     }).catch(function () {
                         rosterLoading = false;
                         cachedRoster = [];
@@ -13290,7 +13375,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.98', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.99', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
