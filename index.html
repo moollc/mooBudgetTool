@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v23.97</title>
+    <title>mooBudgetTool v23.98</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "23.97";
+    var APP_VERSION = "23.98";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -6086,8 +6086,12 @@
             var layoutH = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
             var visualH = vv && typeof vv.height === 'number' ? vv.height : layoutH;
             var offsetTop = vv && typeof vv.offsetTop === 'number' ? vv.offsetTop : 0;
-            /* Substantial shrink = keyboard (or browser chrome) covering lower layout area */
-            var keyboardOpen = layoutH > 0 && visualH < (layoutH - 120);
+            /* Substantial shrink = keyboard (or browser chrome) covering lower layout area.
+               Require a focused field so mobile URL bar alone does not squash modals. */
+            var aeFocus = document.activeElement;
+            var aeTag = aeFocus && aeFocus.tagName ? String(aeFocus.tagName).toLowerCase() : '';
+            var fieldFocused = aeTag === 'input' || aeTag === 'textarea' || aeTag === 'select';
+            var keyboardOpen = fieldFocused && layoutH > 0 && visualH < (layoutH - 150);
             var i, modalId, modal, contentEl, pad, maxH;
             for (i = 0; i < this.stack.length; i++) {
                 modalId = this.stack[i];
@@ -12006,8 +12010,8 @@
             '</div>' +
             '</div>';
 
-        /* max-h + h-full so keyboard reflow can shrink the sheet; min-h-0 for flex scroll */
-        var content = '<form id="crewProfileForm" class="flex flex-col h-full max-h-[500px] min-h-0">' +
+        /* max-h + explicit height so Profile tab fields render; keyboard hook shrinks outer shell */
+        var content = '<form id="crewProfileForm" class="flex flex-col h-[500px] max-h-[85vh] min-h-0">' +
             '<!-- Header -->' +
             '<div class="text-center relative shrink-0 mb-4">' +
             '<div class="w-20 h-20 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-white font-black text-3xl shadow-2xl border-4 border-white">' +
@@ -12022,7 +12026,7 @@
             '<button type="button" data-tab="history" onclick="toggleCrewProfileTab(\'history\')" class="crew-tab-btn flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Ledger</button>' +
             '</div>' +
             '<!-- Content Area -->' +
-            '<div class="flex-grow overflow-hidden relative bg-slate-50 rounded-2xl border border-slate-100">' +
+            '<div class="flex-1 min-h-0 overflow-hidden relative bg-slate-50 rounded-2xl border border-slate-100">' +
             '<div id="tab-profile" class="absolute inset-0 p-5 overflow-y-auto no-scrollbar">' +
             profileHtml +
             '</div>' +
@@ -13286,7 +13290,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=23.97', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=23.98', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
