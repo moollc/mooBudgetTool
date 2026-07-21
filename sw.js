@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v23.99';
+var CACHE_NAME = 'mbt-monolith-cache-v24.00';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
