@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mBT — Fringes</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../lib/localforage.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
@@ -86,7 +87,7 @@
                The monolith update-fringes handler writes to localforage and calls reconcile. */
             if (!state.projectKey || !state.budget) return;
             var fringes = state.budget.fringes || [];
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-fringes', payload: { fringes: fringes } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-fringes', payload: { fringes: fringes } }, window.location.origin);
         }
 
         function genId() {
@@ -242,7 +243,7 @@
             state.currency = params.get('currency') || 'JMD';
 
             document.getElementById('btn-back').addEventListener('click', function() {
-                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
             });
 
             document.getElementById('btn-add').addEventListener('click', addFringe);
@@ -286,11 +287,13 @@
 
     /* Phase 73B: receive undo/redo routing from parent monolith */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
     });
 
     /* v23.59: receive live display-currency switches from parent (mirrors po/stages) */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
         mBTFringes.io.setDisplayCurrency(e.data.currency, e.data.rates);
     });

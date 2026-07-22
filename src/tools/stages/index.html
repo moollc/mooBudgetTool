@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>mooBudgetTool — Stages</title>
     <script src="../../lib/tailwind.min.js"></script>
+    <script src="../../core/components/ToolBridge.js"></script>
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
@@ -1109,7 +1110,7 @@
                 /* Phase 50C.8: Dispatch tool focus to parent presence channel */
                 function dispatchFocus() {
                     if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'stages' } }, '*');
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'stages' } }, window.location.origin);
                     }
                 }
                 dispatchFocus();
@@ -1117,6 +1118,7 @@
 
                 /* Phase 73B: receive undo/redo routing from parent monolith */
                 window.addEventListener('message', function(e) {
+                    if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:tool-action') return;
                     if (e.data.action === 'undo') stagesUndo();
                     if (e.data.action === 'redo') stagesRedo();
@@ -1135,6 +1137,7 @@
 
                 /* Receive work-week changes from parent monolith settings */
                 window.addEventListener('message', function(e) {
+                    if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:workWeek') return;
                     if (!mBTStages.state || !mBTStages.state.project) return;
                     if (!mBTStages.state.project.settings) mBTStages.state.project.settings = {};
@@ -1145,6 +1148,7 @@
 
                 /* Receive live display-currency switches from parent (mirrors mbt:workWeek) */
                 window.addEventListener('message', function(e) {
+                    if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
                     if (!mBTStages.state) return;
                     mBTStages.state._currency = e.data.currency || 'JMD';
@@ -1155,6 +1159,7 @@
 
                 /* Receive reconcile from parent — reload budget from localforage and re-render */
                 window.addEventListener('message', function(e) {
+                    if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
                     if (!mBTStages.state || !mBTStages.state._projectKey) return;
                     localforage.getItem(mBTStages.state._projectKey).then(function(budget) {
@@ -1167,6 +1172,7 @@
 
                 /* Live cap sync from main budget -- refresh totalCap + vitals without reopen */
                 window.addEventListener('message', function(e) {
+                    if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:totalCap') return;
                     if (!mBTStages.state || !mBTStages.state.project) return;
                     var nextCap = parseFloat(e.data.totalCap) || 0;
@@ -1184,7 +1190,7 @@
                 /* Back button */
                 dom.getElementById('btn-back').addEventListener('click', function() {
                     if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
     } else {
       /* Fallback for standalone direct-launch */
       window.location.href = '/index.html';
@@ -2168,7 +2174,7 @@
                     var stages = cleanProject.targetLock ? cleanProject.targetLock.stages : {};
                     var msg = { type: 'mbt:tool-action', action: 'reconcile', payload: { stages: stages } };
                     if (window.mBTBridge) window.mBTBridge.send('reconcile', { stages: stages });
-                    else if (window.parent !== window) window.parent.postMessage(msg, '*');
+                    else if (window.parent !== window) window.parent.postMessage(msg, window.location.origin);
                 }).catch(function(err) {
                     console.error('[Stages] Save failed:', err);
                 });

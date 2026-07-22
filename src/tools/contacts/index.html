@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mBT — Contacts CRM</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../lib/localforage.min.js"></script>
   <script>window.mBT = window.mBT || { services: {} };</script>
   <script src="../../core/mBT.assets.js"></script>
@@ -852,7 +853,7 @@ var mBTContacts = (function () {
                             pettyCash: data.ledgers.pettyCash,
                             poCounter: data.ledgers.poCounter
                         }
-                    }, '*');
+                    }, window.location.origin);
                 }
             });
         }).then(function() {
@@ -955,7 +956,7 @@ var mBTContacts = (function () {
             type: 'mbt:tool-action',
             action: 'inject-contact',
             payload: { name: c.name, department: c.department, rate: c.rate, email: c.email || null, phone: c.phone || null }
-        }, '*');
+        }, window.location.origin);
     }
 
     /* --- Add/Edit modal --- */
@@ -1162,7 +1163,7 @@ var mBTContacts = (function () {
                     type: 'mbt:tool-action',
                     action: 'update-contact-rate',
                     payload: { name: contact.name, rate: contact.rate }
-                }, '*');
+                }, window.location.origin);
             }
             return STORAGE.getAllContacts();
         }).then(function (all) {
@@ -1228,7 +1229,7 @@ var mBTContacts = (function () {
     /* ========= Phase 50C.8: Peripheral Focus Presence ========= */
     function dispatchFocus() {
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'contacts' } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'contacts' } }, window.location.origin);
         }
     }
     dispatchFocus();
@@ -1236,11 +1237,13 @@ var mBTContacts = (function () {
 
     /* Phase 73B: receive undo/redo routing from parent monolith */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
     });
 
     /* Live display-currency switches from parent (mirrors mbt:workWeek) */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
         state.currency = e.data.currency || 'JMD';
         if (typeof render === 'function') render();
@@ -1501,7 +1504,7 @@ var mBTContacts = (function () {
     /* ========= Init ========= */
     dom.getElementById('btn-back').addEventListener('click', function () {
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
         } else {
       /* Fallback for standalone direct-launch */
       window.location.href = '/index.html';

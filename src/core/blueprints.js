@@ -19,7 +19,7 @@
         },
         equipment: {
             name: 'Equipment',
-            subcategories: ['camera', 'lighting', 'sound', 'arsenal', 'vfx'],
+            subcategories: ['camera', 'lighting', 'sound', 'arsenal', 'vfx', 'ptz'],
             defaultRate: 500,
             description: 'Gear and equipment rental'
         },
@@ -31,7 +31,7 @@
         },
         transport: {
             name: 'Transport',
-            subcategories: ['vehicles', 'fuel', 'parking', 'crew'],
+            subcategories: ['transport_coordinator', 'vehicles', 'fuel', 'parking'],
             defaultRate: 200,
             description: 'Vehicle and travel costs'
         },
@@ -73,7 +73,14 @@
         permits:         'Legal - Rights & Clearances',
         /* Post */
         editor:          'Editor',
-        colorist:        'Colorist'
+        colorist:        'Colorist',
+        /* Transport */
+        transport_coordinator: 'Transport Coordinator',
+        vehicles:        'Passenger Van (12-15 Seat)',
+        fuel:            'Fuel Allowance',
+        parking:         'Parking & Permits',
+        /* Live / PTZ */
+        ptz:             'PTZ Package (Camera + Controller)'
     };
 
     // Budget templates for different production types

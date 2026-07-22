@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mBT — Multiplayer Hub</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/localforage.min.js"></script>
     <script src="../../config/supabase-collab.js"></script>
@@ -795,6 +796,7 @@
 
             // Listen to PostMessage responses from monolith (peers list)
             window.addEventListener('message', function(e) {
+                if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                 var d = e.data;
                 if(!d) return;
                 if(d.type === 'mbt-tools-response' && d.action === 'peers-list') {
@@ -910,7 +912,7 @@
 
             /* Standard lifecycle: parent listens for mbt:tool-ready */
             if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'share' }, '*');
+                window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'share' }, window.location.origin);
             }
             updateScrollAffordance();
         }

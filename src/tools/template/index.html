@@ -182,7 +182,8 @@
                     { id: 'atl', name: 'Above The Line', items: ['Director', 'Producer', 'Copywriter (Pitch/Treatment)', 'Casting Director'] },
                     { id: 'prod', name: 'Production', items: ['Director of Photography (DP)', 'Camera Operator', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist (Key)', 'Production Designer', 'Wardrobe Stylist'] },
                     { id: 'post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Sound Designer', 'Music Supervisor'] },
-                    { id: 'other', name: 'Logistics & Talent', items: ['Cast - Lead', 'Location Manager', 'Catering (Per Head)', 'Equipment Rental', 'Insurance'] }
+                    { id: 'other', name: 'Logistics & Talent', items: ['Cast - Lead', 'Location Manager', 'Catering (Per Head)', 'Equipment Rental', 'Insurance'] },
+                    { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Passenger Van (12-15 Seat)', 'Fuel Allowance', 'Parking & Permits'] }
                 ]
             },
             'Documentary': {
@@ -192,6 +193,7 @@
                     { id: 'atl', name: 'Creative & Research', items: ['Director', 'Producer', 'Researcher', 'Subject Consultant'] },
                     { id: 'prod', name: 'Field Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Fixer/Local Producer', 'Drone Operator'] },
                     { id: 'travel', name: 'Travel & Logistics', items: ['Flights', 'Accommodation', 'Per Diems', 'Vehicle Rental', 'Carnets/Visas'] },
+                    { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Truck PA', 'Passenger Van (12-15 Seat)', 'Fuel Allowance', 'Parking & Permits'] },
                     { id: 'post', name: 'Post & Archive', items: ['Editor', 'Transcription', 'Archival Researcher', 'Archival Licensing', 'Colorist'] }
                 ]
             },
@@ -200,9 +202,10 @@
                 desc: 'Multi-cam setup. Focus on bandwidth redundancy, switching hardware, and technical operators.',
                 structure: [
                     { id: 'tech', name: 'Technical Crew', items: ['Technical Director', 'Stream Technician', 'Camera Operator', 'Camera Operator', 'Sound Mixer', 'Graphics Op'] },
-                    { id: 'gear', name: 'Hardware & Rigging', items: ['Switcher/Encoder', 'Cameras (3-Cam Kit)', 'Comms System', 'Bonded Cellular', 'Lighting Package'] },
+                    { id: 'gear', name: 'Hardware & Rigging', items: ['Switcher/Encoder', 'Cameras (3-Cam Kit)', 'PTZ Package (Camera + Controller)', 'PTZ Controller (RM-IP10 Class)', 'Comms System', 'Bonded Cellular', 'Lighting Package'] },
                     { id: 'conn', name: 'Connectivity', items: ['Dedicated Internet Line', '4G/5G Backup Data', 'IT Support'] },
-                    { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] }
+                    { id: 'other', name: 'Venue & Logistics', items: ['Venue Power Fee', 'Rigging', 'Crew Meals', 'Transport'] },
+                    { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Production Sprinter Van', 'Box Truck (16-24 ft)', 'Fuel Allowance', 'Parking & Permits'] }
                 ]
             }
         };
@@ -376,7 +379,7 @@
                     type: 'mbt:tool-action',
                     action: 'apply-template',
                     payload: { templateKey: key, withRates: !!withRates }
-                }, '*');
+                }, window.location.origin);
                 snack('Blueprint applied' + (withRates ? ' with industry rates.' : '.'));
                 return;
             }
@@ -442,7 +445,7 @@
                 }).then(function() {
                     snack('Template applied. Reload budget to see changes.');
                     if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, window.location.origin);
                     }
                 });
             }).catch(function(e) { snack('Error: ' + e.message); });
@@ -478,7 +481,7 @@
                 renderCustom();
                 /* Notify monolith so New Project modal reflects the new blueprint immediately */
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'blueprint-saved' }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'blueprint-saved' }, window.location.origin);
                 }
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
@@ -730,7 +733,7 @@
             var btnBack = document.getElementById('btn-back');
             if (btnBack) btnBack.addEventListener('click', function() {
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
                 } else {
                     history.back();
                 }
@@ -874,7 +877,7 @@
 
             /* Standard lifecycle: parent listens for mbt:tool-ready */
             if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'template' }, '*');
+                window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'template' }, window.location.origin);
             }
         }
 

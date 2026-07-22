@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.01</title>
+    <title>mooBudgetTool v24.05</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.01";
+    var APP_VERSION = "24.02";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -649,7 +649,7 @@
                 // Phase 199: Broadcast reconcile signal to active tool iframes (Stages, Calendar)
                 var iframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
                 if (iframe && iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, '*');
+                    iframe.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, window.location.origin);
                 }
             });
 
@@ -2785,7 +2785,7 @@
                 _attempts++;
                 var modal = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
                 if (modal && modal.contentWindow) {
-                    modal.contentWindow.postMessage({ type: 'mbt:diff-init', payload: diffPayload }, '*');
+                    modal.contentWindow.postMessage({ type: 'mbt:diff-init', payload: diffPayload }, window.location.origin);
                     clearInterval(_diffSendInterval);
                 }
                 if (_attempts > 20) clearInterval(_diffSendInterval); /* Give up after 2s */
@@ -3414,7 +3414,7 @@
         saveBudget();
         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
         /* Sync ledger state to sibling tool iframes */
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash, poCounter: budget.ledgers.poCounter } }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: budget.ledgers.pos, pettyCash: budget.ledgers.pettyCash, poCounter: budget.ledgers.poCounter } }, window.location.origin);
         return targetPo;
     };
 
@@ -8894,7 +8894,7 @@
                     var safeBudgetDoc;
                     try { safeBudgetDoc = JSON.parse(JSON.stringify(budget)); } catch (serErr) { safeBudgetDoc = null; }
                     try {
-                        aiIframe.contentWindow.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: safeBudgetDoc || {} } }, '*');
+                        aiIframe.contentWindow.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: safeBudgetDoc || {} } }, window.location.origin);
                     } catch (pmErr) {
                         console.warn('[mBT] Assistant Hub budget-sync postMessage failed:', pmErr);
                     }
@@ -11095,7 +11095,7 @@
             /* Cross-PWA Sync: push new totalCap to any open tool iframe */
             var toolIframe = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
             if (toolIframe && toolIframe.contentWindow) {
-                toolIframe.contentWindow.postMessage({ type: 'mbt:totalCap', totalCap: val }, '*');
+                toolIframe.contentWindow.postMessage({ type: 'mbt:totalCap', totalCap: val }, window.location.origin);
             }
         },
 
@@ -11112,7 +11112,7 @@
             var toolIframes = document.querySelectorAll('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
             for (var i = 0; i < toolIframes.length; i++) {
                 if (toolIframes[i].contentWindow) {
-                    toolIframes[i].contentWindow.postMessage({ type: 'mbt:workWeek', workWeek: days }, '*');
+                    toolIframes[i].contentWindow.postMessage({ type: 'mbt:workWeek', workWeek: days }, window.location.origin);
                 }
             }
         }
@@ -13375,7 +13375,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=24.01', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=24.02', { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
@@ -13697,7 +13697,7 @@
                                     itemId: itemId,
                                     sectionName: sectionName
                                 }
-                            }, '*');
+                            }, window.location.origin);
                         }
                     }
                 };
@@ -13806,7 +13806,7 @@
         mBT.core.action('undo', function () {
             if (mBTActiveTool) {
                 var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo-action' }, '*'); return; }
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo-action' }, window.location.origin); return; }
             }
             if (mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
             else if (typeof handleUndo === 'function') handleUndo();
@@ -13814,7 +13814,7 @@
         mBT.core.action('redo', function () {
             if (mBTActiveTool) {
                 var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo-action' }, '*'); return; }
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo-action' }, window.location.origin); return; }
             }
             if (mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
             else if (typeof handleRedo === 'function') handleRedo();
@@ -14955,7 +14955,7 @@
                 var toolIframes = document.querySelectorAll('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
                 for (var i = 0; i < toolIframes.length; i++) {
                     if (toolIframes[i].contentWindow) {
-                        toolIframes[i].contentWindow.postMessage({ type: 'mbt:displayCurrency', currency: v, rates: _rates }, '*');
+                        toolIframes[i].contentWindow.postMessage({ type: 'mbt:displayCurrency', currency: v, rates: _rates }, window.location.origin);
                     }
                 }
             },
