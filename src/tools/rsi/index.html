@@ -597,7 +597,7 @@
         refreshConsentUI();
         /* Standard lifecycle: parent listens for mbt:tool-ready */
         if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'rsi' }, '*');
+          window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'rsi' }, window.location.origin);
         }
       });
 

@@ -1,8 +1,8 @@
 # Rate Index Research Log
 
-**Purpose:** Sourced research backing new/changed entries in `_MASTER_CREW_INDEX` (`mBT/src/scripts/engine/opengate.js`), tied to the ATL/BTL template correction pass that started 2026-07-18. See `docs/STAGE_PRESETS.md` for the equivalent research log covering Stages timeline percentages, and `mBT/scaffold/mbt-completion-tracker.html` (workspace root, not shipped) for the tracker item this work closes out.
+**Purpose:** Sourced research backing new/changed entries in `_MASTER_CREW_INDEX` and `_MASTER_EQUIPMENT_INDEX` (`mBT/src/scripts/engine/opengate.js`). See `docs/OPENGATE_COVERAGE.md` for the domain checklist and provenance tiers (VERIFIED / PEER / ESTIMATE / GAP).
 
-Every entry below exists because the current template's role list or ATL/BTL placement was corrected during a live review with the tool's user (a working film/event producer), not invented. Only add to this file when a NEW rate entry is added or an EXISTING one is re-justified with real sourcing. Do not log routine template reshuffling that does not touch the rate index itself.
+Every entry must log **where the number came from**. Reactive template-only patches without domain sourcing are not acceptable. Append here when adding or re-justifying index rows. Do not log routine template reshuffling that does not touch the rate index.
 
 ---
 
@@ -184,6 +184,87 @@ $2,500 is well-supported as the counsel/clearance-fee floor-to-mid range for ind
 **Why yes:** Union and producer practice treat per diem as a **travel/living allowance**, not a role day rate. SAG-AFTRA distant hire M&IE **$75/day** (Dec 2025); GSA CONUS M&IE **~$68–$92**. Budget quantity = **person-days** (7-day weeks, travel days, prep — not shoot days only). Lodging stays a separate line (`Accommodation`). Contacts/deal memos still carry per-diem fields in mBTDB; OpenGate now supplies the budget line anchor.
 
 **Reseed:** `CURRENT_VERSION` → `2026.07.21_live_broadcast_v4`.
+
+---
+
+## Transport / vehicle pass (2026-07-22)
+
+Product gap: transport existed in Contacts (`Transport` dept), optional Transport Schedule doc, and blueprint `transport` category allocation — but no rated OpenGate rows or template line items for coordinators, drivers, or vehicle rentals.
+
+### Crew
+
+| Description | baseRate | Unit | Multiplier proxy | Notes |
+|-------------|----------|------|------------------|-------|
+| Transport Coordinator | $650 | Day | Location Manager | Fleet/routing lead; USA mid ~$550–$750/day from production-transport coordinator peers |
+| Production Driver | $250 | Day | Truck PA | Dedicated passenger-van/sprinter driver; USA mid ~$200–$300/day |
+
+### Equipment / allowances
+
+| Description | baseRate | Unit | Notes |
+|-------------|----------|------|-------|
+| Passenger Van (12-15 Seat) | $175 | Day | Ford Transit / Sprinter passenger class; ShareGrid peers ~$150–$225 |
+| Production Sprinter Van | $425 | Day | Crew/camera sprinter; peers ~$350–$500 |
+| Box Truck (16-24 ft) | $275 | Day | Grip/lighting box truck; peers ~$225–$350 (gear move, not driver) |
+| Fuel Allowance | $65 | Day | Per-vehicle planning allowance (~$50–$85/day US location loops) |
+| Parking & Permits | $450 | Flat | Municipal permit + truck-holding bundle; enter actual quotes when known |
+
+### Template aliases
+
+| Alias | Resolves |
+|-------|----------|
+| Transport | Production Sprinter Van |
+| Vehicle Rental | Passenger Van (12-15 Seat) |
+| Fuel / Fuel Allowance | Fuel Allowance |
+| Parking & Permits | Parking & Permits |
+
+**Templates:** `Travel & Transport` section added to all eight `BUDGET_TEMPLATES` keys plus template-tool `BUILT_IN` mirrors.
+
+**Blueprints:** `transport` subcategories now map via `SYNONYM_REGISTRY` (`transport_coordinator`, `vehicles`, `fuel`, `parking`) — fixes prior `crew` key collision with labor category.
+
+**Reseed:** `CURRENT_VERSION` → `2026.07.22_transport_v1`. SW cache → v24.04.
+
+---
+
+## Live / venue PTZ pass (2026-07-22)
+
+**Trigger:** Producer correction — OpenGate must accumulate by domain, not react to single missing strings. Live/venue productions standardize on PTZ heads + IP/VISCA controllers; index had handheld/live packages only.
+
+**Policy:** See `docs/OPENGATE_COVERAGE.md` — provenance tiers VERIFIED / PEER / ESTIMATE / GAP.
+
+**Pricing policy (equipment):** Fixed USA USD anchor via `_EQUIPMENT_FIXED_MULTIPLIERS` (same as live/broadcast gear pass).
+
+### Crew
+
+| Description | baseRate | Tier | Sources |
+|-------------|----------|------|---------|
+| PTZ Operator | $500 | VERIFIED peer | Absolute Rentals Burbank markets PTZ operators alongside PTZ rental fleet |
+| Stream Technician | $525 | PEER | Live stream engineer band between indie (~$400) and Broadcast Engineer (~$700) |
+
+### PTZ gear
+
+| Description | baseRate | Tier | Sources |
+|-------------|----------|------|---------|
+| Sony BRC-X400 4K PTZ Camera | $175 | VERIFIED peer | ShareGrid USA ~$150/day; Digital Azul €175/day |
+| JVC KY100 PTZ Camera | $280 | VERIFIED | Absolute Rentals Burbank published $280/day |
+| Panasonic AW-UE150 4K PTZ Camera | $350 | ESTIMATE | Absolute lists AW-UE150K (Call); mid above KY100 |
+| Sony SRG-X400 PTZ Camera | $155 | PEER | Livestream Rental SRG-300SEC €145/day |
+| Sony FR7 PTZ Cinema Camera | $450 | ESTIMATE | Absolute lists FR7 (Call); cinema PTZ premium |
+| PTZ Controller (RM-IP10 Class) | $85 | VERIFIED peer | Livestream Rental RM-IP10 €75/day |
+| Panasonic AW-RP150 PTZ Controller | $150 | ESTIMATE | Absolute lists AW-RP150G (Call) |
+| PTZ Package (Camera + Controller) | $275 | PEER | BRC-X400 ($175) + RM-IP10 ($85) + cabling |
+
+### Template aliases
+
+| Alias | Resolves |
+|-------|----------|
+| PTZ Camera / PTZ | Sony BRC-X400 4K PTZ Camera |
+| PTZ Controller | PTZ Controller (RM-IP10 Class) |
+| PTZ Kit / PTZ Control Setup / PTZ Package | PTZ Package (Camera + Controller) |
+| Graphics Op | Graphics Artist |
+
+**Templates:** `PTZ & Remote Cameras` section on Event Coverage, Corporate Video, Streaming/Broadcast; Live Broadcast tool gear section wired.
+
+**Reseed:** `CURRENT_VERSION` → `2026.07.22_live_venue_ptz_v1`. SW cache → v24.05.
 
 ---
 

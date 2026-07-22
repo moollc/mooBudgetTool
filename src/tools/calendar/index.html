@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>mBT — Production Calendar</title>
     <script src="../../lib/tailwind.min.js"></script>
+    <script src="../../core/components/ToolBridge.js"></script>
     <script src="../../lib/localforage.min.js"></script>
     <script>
         /* Theme Bridge: Instant Inheritance */
@@ -601,7 +602,7 @@ var mBTCalendar = (function () {
         localforage.setItem(state.projectKey, state.budget).then(function () {
             /* --- Notify parent to reload calendar data --- */
             if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, '*');
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, window.location.origin);
             }
         }).catch(function (e) { console.error('[CAL] save failed', e); });
     }
@@ -677,7 +678,7 @@ var mBTCalendar = (function () {
             /* --- Phase 50C.8: Dispatch tool focus to parent presence channel --- */
             function dispatchFocus() {
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'calendar' } }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'calendar' } }, window.location.origin);
                 }
             }
             dispatchFocus();
@@ -685,6 +686,7 @@ var mBTCalendar = (function () {
 
             /* Receive work-week changes from parent monolith settings */
             window.addEventListener('message', function(e) {
+                if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                 if (!e.data || e.data.type !== 'mbt:workWeek') return;
                 if (!state.budget) return;
                 if (!state.budget.settings) state.budget.settings = {};
@@ -696,6 +698,7 @@ var mBTCalendar = (function () {
 
             /* Receive reconcile from parent — reload budget from localforage and re-render */
             window.addEventListener('message', function(e) {
+                if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                 if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
                 if (!state.projectKey) return;
                 localforage.getItem(state.projectKey).then(function(budget) {
@@ -712,7 +715,7 @@ var mBTCalendar = (function () {
 
             dom.getElementById('btn-back').addEventListener('click', function () {
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
                 } else {
                     history.back();
                 }

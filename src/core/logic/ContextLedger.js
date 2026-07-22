@@ -376,7 +376,7 @@
             var sum = summary();
             var iframes = document.getElementsByTagName('iframe');
             for (var i = 0; i < iframes.length; i++) {
-                try { iframes[i].contentWindow.postMessage({ type: 'ledger-sync', payload: sum }, '*'); } catch (e) {}
+                try { iframes[i].contentWindow.postMessage({ type: 'ledger-sync', payload: sum }, window.location.origin); } catch (e) {}
             }
         } catch (e) { /* no DOM yet */ }
     });

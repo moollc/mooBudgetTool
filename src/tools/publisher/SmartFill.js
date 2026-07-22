@@ -12,6 +12,7 @@ window.mBTSmartFill = {
     /* --- Listener bootstrap --- */
     init: function () {
         window.addEventListener('message', function (evt) {
+            if (!evt || evt.origin !== window.location.origin) return;
             if (!evt.data || evt.data.type !== 'SMARTFILL_DATA') return;
 
             var payload = evt.data.payload || {};
@@ -33,7 +34,7 @@ window.mBTSmartFill = {
                 evt.source.postMessage({
                     type: 'SMARTFILL_ACK',
                     templateId: evt.data.templateId || payload.templateId || ''
-                }, '*');
+                }, evt.origin);
             }
         });
     }

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>mBT AI Assistant</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
   <script>
     /* Theme Bridge: Instant Inheritance (matches calendar_benchmark) */
@@ -962,25 +963,27 @@ window.openSourceModal   = openSourceModal;
     function refreshContextLedger() {
         /* Ask parent to rescan (budget + sidebar) then rebroadcast */
         if (window.parent === window) return;
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, window.location.origin);
     }
 
     function purgeOldReceipts() {
         if (window.parent === window) return;
         if (!confirm('Drop receipts older than 90 days from the Context Ledger?')) return;
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-purge', payload: { olderThanDays: 90 } }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-purge', payload: { olderThanDays: 90 } }, window.location.origin);
     }
 
     window.refreshContextLedger = refreshContextLedger;
     window.purgeOldReceipts     = purgeOldReceipts;
 
     window.addEventListener('message', function (e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'ledger-sync') return;
         renderLedgerPanel(e.data.payload || {});
     });
 
     /* Live display-currency switches from parent (mirrors stages/po) */
     window.addEventListener('message', function (e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
         _displayCurrency = e.data.currency || 'JMD';
         if (e.data.rates) _syncedRates = e.data.rates;
@@ -992,6 +995,7 @@ window.openSourceModal   = openSourceModal;
 
     /* --- Refresh Project Knowledge chips whenever parent fires budget-sync --- */
     window.addEventListener('message', function (e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'budget-sync') return;
         var payload = e.data.payload || e.data;
         /* Parent sends a thin {projectName, budget, currency}; budgetDoc has the real sections.
@@ -1767,8 +1771,8 @@ window.openSourceModal   = openSourceModal;
 
         /* Ask parent to push a ledger-sync so our Context panel populates immediately */
         if (window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, '*');
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'SYNC_FUNDING_SOURCE' }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, window.location.origin);
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'SYNC_FUNDING_SOURCE' }, window.location.origin);
         }
 
         var _initGen = _contextGeneration;
@@ -1791,7 +1795,7 @@ window.openSourceModal   = openSourceModal;
 
         /* Standard lifecycle: parent listens for mbt:tool-ready */
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'ai' }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'ai' }, window.location.origin);
         }
     }
 

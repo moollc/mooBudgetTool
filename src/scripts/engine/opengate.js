@@ -166,6 +166,8 @@
         { "description": "Cast - Supporting", "unit": "Day", "baseRate": 1000, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Location Manager", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Location Scout", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.75, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "Transport Coordinator", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Fleet/routing lead for crew, cast, and gear moves. USA mid ~$550-$750/day from production-transport coordinators and location-logistics peers. Multipliers proxy Location Manager." },
+        { "description": "Production Driver", "unit": "Day", "baseRate": 250, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "Canada": 0.65, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "Dedicated production driver (passenger van/sprinter, not grip truck). USA mid ~$200-$300/day from PA/driver day bands. Multipliers proxy Truck PA." },
         { "description": "Catering (Per Head)", "unit": "Flat", "baseRate": 45, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 1.1, "Canada": 0.9, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Per Diem", "unit": "Day", "baseRate": 75, "multipliers": { "USA": 1, "Jamaica": 1, "Trinidad": 1, "Barbados": 1, "Guyana": 1, "UK": 1, "Canada": 1, "Australia": 1, "India": 0.85, "Thailand": 0.85, "Philippines": 0.75, "Vietnam": 0.85, "Poland": 0.9, "Mexico": 0.85, "Brazil": 0.9, "Colombia": 0.8, "South Africa": 0.9 }, "intelligence": "Travel/living M&IE allowance per person per day (budget quantity = person-days). SAG-AFTRA distant hire $75/day (Dec 2025); GSA M&IE ~$68-$92. Not a crew labor rate — Travel & Logistics section. Lodging is a separate line." },
         { "description": "Per Diems", "unit": "Day", "baseRate": 75, "multipliers": { "USA": 1, "Jamaica": 1, "Trinidad": 1, "Barbados": 1, "Guyana": 1, "UK": 1, "Canada": 1, "Australia": 1, "India": 0.85, "Thailand": 0.85, "Philippines": 0.75, "Vietnam": 0.85, "Poland": 0.9, "Mexico": 0.85, "Brazil": 0.9, "Colombia": 0.8, "South Africa": 0.9 }, "intelligence": "Alias: Per Diem (template Travel & Logistics string)." },
@@ -200,6 +202,8 @@
         { "description": "Draftsperson", "unit": "Day", "baseRate": 600, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Assistant Art Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Graphics Artist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
+        { "description": "PTZ Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "VERIFIED peer — Absolute Rentals (Burbank) markets dedicated PTZ operators for multi-cam live/event alongside PTZ gear. USA mid ~$450-$550/day from live camera-operator bands. Multipliers proxy Camera Operator." },
+        { "description": "Stream Technician", "unit": "Day", "baseRate": 525, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.95, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — live streaming engineer (encoder/switcher/RTMP path, not broadcast TD). USA mid between indie stream tech (~$400) and Broadcast Engineer (~$700). Multipliers proxy Broadcast Engineer." },
         { "description": "Music Editor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Sound Editor", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Location Assistant", "unit": "Day", "baseRate": 350, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.8, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
@@ -247,7 +251,22 @@
         'cameras (3-cam kit)': 'Three-Camera Live Package',
         'comms system': 'Comms System (4-User Wireless)',
         'bonded cellular': 'Bonded Cellular (LiveU LU600)',
-        '4g/5g backup data': 'Bonded Cellular (LiveU LU300)'
+        '4g/5g backup data': 'Bonded Cellular (LiveU LU300)',
+        'transport': 'Production Sprinter Van',
+        'vehicle rental': 'Passenger Van (12-15 Seat)',
+        'vehicles': 'Passenger Van (12-15 Seat)',
+        'fuel': 'Fuel Allowance',
+        'fuel allowance': 'Fuel Allowance',
+        'parking & permits': 'Parking & Permits',
+        'parking and permits': 'Parking & Permits',
+        'ptz camera': 'Sony BRC-X400 4K PTZ Camera',
+        'ptz': 'Sony BRC-X400 4K PTZ Camera',
+        'ptz controller': 'PTZ Controller (RM-IP10 Class)',
+        'ptz control setup': 'PTZ Package (Camera + Controller)',
+        'ptz kit': 'PTZ Package (Camera + Controller)',
+        'ptz package': 'PTZ Package (Camera + Controller)',
+        'graphics op': 'Graphics Artist',
+        'graphics operator': 'Graphics Artist'
     };
     var _MASTER_EQUIPMENT_INDEX = [
         { "description": "Camera Kit (4K Cinema Package)", "unit": "Day", "baseRate": 850, "category": "camera", "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 1.06, "Thailand": 1.00, "Philippines": 0.71, "Vietnam": 1.18, "Poland": 0.94, "Mexico": 1.06, "Brazil": 1.35, "Colombia": 0.88, "South Africa": 1.26 } },
@@ -301,7 +320,27 @@
         { "description": "On-Air CG Hardware (LiveText / XPression Class)", "unit": "Day", "baseRate": 560, "category": "live", "intelligence": "Broadcast CG/character generator hardware day. ShareGrid NYC Ross XPression Studio $562/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "On-Air Graphics Software Package (BYO Hardware)", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "ESTIMATE — software seat when renter supplies qualified host PC/GPU. ~half of full XPression HW+SW day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "CDN Live Streaming Bandwidth (Managed Egress, Event Day)", "unit": "Day", "baseRate": 850, "category": "live", "intelligence": "Managed live CDN egress planning mid for 1k-5k peak concurrent multi-hour event. Scales with GB/viewers.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
-        { "description": "Studio Lease Broadcast Control Room (Floor Day, Gear Excluded)", "unit": "Day", "baseRate": 1200, "category": "location", "intelligence": "ESTIMATE — broadcast-capable control room floor/shell only; no switcher package or engineer.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
+        { "description": "Studio Lease Broadcast Control Room (Floor Day, Gear Excluded)", "unit": "Day", "baseRate": 1200, "category": "location", "intelligence": "ESTIMATE — broadcast-capable control room floor/shell only; no switcher package or engineer.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        /* ========= TRANSPORT / VEHICLE (Phase 204, 2026-07-22) ========= */
+        { "description": "Passenger Van (12-15 Seat)", "unit": "Day", "baseRate": 175, "category": "transport", "intelligence": "USA 12-15 passenger production van day. ShareGrid/production-house peers ~$150-$225/day for Ford Transit / Mercedes Sprinter passenger class.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Production Sprinter Van", "unit": "Day", "baseRate": 425, "category": "transport", "intelligence": "USA crew/camera sprinter with racks or seats removed. Production rental peers ~$350-$500/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Box Truck (16-24 ft)", "unit": "Day", "baseRate": 275, "category": "transport", "intelligence": "USA grip/lighting box truck day. Peer bands ~$225-$350/day before driver/labor.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Fuel Allowance", "unit": "Day", "baseRate": 65, "category": "transport", "intelligence": "Per-vehicle fuel planning allowance (not pump receipts). Mid ~$50-$85/day US fleet vans/trucks on location loops.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Parking & Permits", "unit": "Flat", "baseRate": 450, "category": "transport", "intelligence": "Location parking, truck holding, and municipal permit bundle for a short shoot block. Highly market-specific — enter actual quotes when known.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Vehicle Rental", "unit": "Day", "baseRate": 175, "category": "transport", "intelligence": "Alias: Passenger Van (12-15 Seat) generic template string.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        /* ========= PTZ / REMOTE CAMERAS (Phase 205, 2026-07-22) ========= */
+        { "description": "Sony BRC-X400 4K PTZ Camera", "unit": "Day", "baseRate": 175, "category": "live", "intelligence": "VERIFIED peer — ShareGrid USA peers ~$150/day; Digital Azul (PT) published €175/day (2026). OpenGate US mid $175.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "JVC KY100 PTZ Camera", "unit": "Day", "baseRate": 280, "category": "live", "intelligence": "VERIFIED — Absolute Rentals Burbank PTZ list: JVC KY100 PTZ $280/day (absoluterentals.com/camera/ptz-camera/ptz-camera-rentals/, fetched 2026-07-22).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Panasonic AW-UE150 4K PTZ Camera", "unit": "Day", "baseRate": 350, "category": "live", "intelligence": "ESTIMATE — Absolute Rentals lists AW-UE150K (Call). Mid above JVC KY100 ($280 verified) for flagship broadcast PTZ class.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Sony SRG-X400 PTZ Camera", "unit": "Day", "baseRate": 155, "category": "live", "intelligence": "PEER — Livestream Rental NL Sony SRG-300SEC PTZ €145/day; SRG-X400 current-gen sibling. US mid ~$155.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Sony FR7 PTZ Cinema Camera", "unit": "Day", "baseRate": 450, "category": "live", "intelligence": "ESTIMATE — Absolute Rentals lists Sony FR7 PTZ Cinema (Call). Full-frame cinema PTZ premium over BRC-X400; mid $450 gear-only.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Controller (RM-IP10 Class)", "unit": "Day", "baseRate": 85, "category": "live", "intelligence": "VERIFIED peer — Livestream Rental NL Sony RM-IP10 €75/day (livestreamrental.nl/product/329). US production mid ~$85.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "Panasonic AW-RP150 PTZ Controller", "unit": "Day", "baseRate": 150, "category": "live", "intelligence": "ESTIMATE — Absolute Rentals lists AW-RP150G (Call). Pro panel above RM-IP10 class; mid ~$150/day.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Package (Camera + Controller)", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "PEER — BRC-X400-class camera ($175) + RM-IP10-class controller ($85) + cabling; bundled gear-only mid $275.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Camera", "unit": "Day", "baseRate": 175, "category": "live", "intelligence": "Alias: Sony BRC-X400 4K PTZ Camera.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Controller", "unit": "Day", "baseRate": 85, "category": "live", "intelligence": "Alias: PTZ Controller (RM-IP10 Class).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Control Setup", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Alias: PTZ Package (Camera + Controller).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        { "description": "PTZ Kit", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Alias: PTZ Package (Camera + Controller).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
@@ -473,7 +512,7 @@
                                 location: newLoc,
                                 intelligence: mBTOG._getRegionIntelligence(newLoc)
                             }
-                        }, '*');
+                        }, window.location.origin);
                     }
                     /* Dispatch local event for same-window listeners */
                     window.dispatchEvent(new CustomEvent('og:location-changed', { 
@@ -509,7 +548,7 @@
                             type: 'mbt:tool-action',
                             action: 'og-tier-changed',
                             payload: { tier: newTier }
-                        }, '*');
+                        }, window.location.origin);
                     }
                     window.dispatchEvent(new CustomEvent('og:tier-changed', { detail: { tier: newTier } }));
                     return newTier;
@@ -550,7 +589,7 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.07.21_live_broadcast_v4';
+            var CURRENT_VERSION = '2026.07.22_live_venue_ptz_v1';
 
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
@@ -587,7 +626,7 @@
                     type: 'mbt:tool-action',
                     action: 'og-rate-changed',
                     payload: { description: description, rate: rate, region: region || this.settings.location }
-                }, '*');
+                }, window.location.origin);
             }
         },
 

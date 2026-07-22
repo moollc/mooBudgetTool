@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mooBudgetTool Publisher</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
   <script src="../../lib/localforage.min.js"></script>
   <script src="../../scripts/storage.js"></script>
@@ -257,7 +258,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     // ─── Phase 50C.8: Peripheral Focus Presence ──────────────────────────────────
     function dispatchFocus() {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'publisher' } }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'publisher' } }, window.location.origin);
       }
     }
     dispatchFocus();
@@ -265,11 +266,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Phase 73B: receive undo/redo routing from parent monolith */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
     });
 
     /* Live display-currency switches from parent (mirrors mbt:workWeek) */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
         currency = e.data.currency || 'JMD';
         if (e.data.rates) _syncedRates = e.data.rates;
@@ -279,7 +282,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     // ─── Back button ─────────────────────────────────────────────────────────────
     dom.getElementById('btn-back').addEventListener('click', function () {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
     } else {
       /* Fallback for standalone direct-launch */
       window.location.href = '/index.html';
@@ -348,7 +351,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
               type: 'mbt:tool-action',
               action: 'export-file',
               payload: { data: reader.result, filename: filename, mimeType: blob.type }
-            }, '*');
+            }, window.location.origin);
           };
           reader.readAsDataURL(blob);
         };
@@ -392,7 +395,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           pub.format.pdf(templateId, budget, { editorData: editorData, currency: baseCurrency });
           /* Phase 144 Task 4: two-way sync — push editorData back to parent Budget Editor */
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'sync-funding-source', payload: { editorData: editorData } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'sync-funding-source', payload: { editorData: editorData } }, window.location.origin);
           }
         };
       });
@@ -582,7 +585,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           exportAccountingCSV('wise');
           /* Phase 81: Accounting Bridge — notify shell */
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'wise' } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'wise' } }, window.location.origin);
           }
         } catch (e) {
           console.error(e);
@@ -597,7 +600,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           exportAccountingCSV('qb');
           /* Phase 81: Accounting Bridge — notify shell */
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'qb' } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'export-accounting', payload: { type: 'qb' } }, window.location.origin);
           }
         } catch (e) {
           console.error(e);

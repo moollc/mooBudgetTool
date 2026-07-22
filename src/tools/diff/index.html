@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mBT — Conflict Resolver</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script>
     /* Theme Bridge: Instant Inheritance (matches calendar_benchmark) */
     (function() {
@@ -307,7 +308,7 @@
                     mergedSections: mergedSections,
                     projectKey: _state.projectKey
                 }
-            }, '*');
+            }, window.location.origin);
         }
 
         /* --- Abort: discard unmerged deltas, tell monolith to cancel sync --- */
@@ -316,11 +317,12 @@
                 type: 'mbt:tool-action',
                 action: 'abort-diff',
                 payload: { projectKey: _state.projectKey }
-            }, '*');
+            }, window.location.origin);
         }
 
         /* --- Incoming postMessage router --- */
         window.addEventListener('message', function(e) {
+            if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
             if (!e.data) return;
 
             if (e.data.type === 'mbt:diff-init') {
@@ -372,7 +374,7 @@
 
     /* Standard lifecycle: parent listens for mbt:tool-ready (then can send mbt:diff-init) */
     if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'diff' }, '*');
+        window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'diff' }, window.location.origin);
     }
 
     /* Safety timeout — if monolith sends no payload within 5s, show error */

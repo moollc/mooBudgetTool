@@ -121,7 +121,8 @@ var BUDGET_TEMPLATES = {
             { id: 'btl_pre', name: 'BTL: Pre-Production', items: ['Line Producer', '1st Assistant Director (1st AD)', 'Location Scout', 'Casting Director', 'Storyboard Artist'] },
             { id: 'btl_prod', name: 'BTL: Production Crew', items: ['Director of Photography (DP)', 'Camera Operator', '1st Assistant Camera (Focus)', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Makeup Artist (Key)', 'Production Designer', 'Set PA', 'Cast - Supporting'] },
             { id: 'btl_post', name: 'BTL: Post-Production', items: ['Editor', 'Colorist', 'VFX Supervisor', 'Sound Designer', 'Music Supervisor'] },
-            { id: 'logistics', name: 'Logistics & Fees', items: ['Catering (Per Head)', 'Location Manager', 'Security Guard'] }
+            { id: 'logistics', name: 'Logistics & Fees', items: ['Catering (Per Head)', 'Location Manager', 'Security Guard'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Passenger Van (12-15 Seat)', 'Fuel Allowance', 'Parking & Permits'] }
         ]
     },
     'music_video': {
@@ -132,7 +133,8 @@ var BUDGET_TEMPLATES = {
             { id: 'atl', name: 'Creative & Direction', items: ['Director', 'Producer', 'Art Director', 'Cast - Lead'] },
             { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', 'Gaffer', 'Key Grip', 'Steadicam Operator', 'Makeup Artist (Key)', 'Wardrobe Stylist', 'Set PA'] },
             { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Music Editor'] },
-            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager', 'Cast - Supporting'] }
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager', 'Cast - Supporting'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Production Driver', 'Truck PA', 'Production Sprinter Van', 'Fuel Allowance'] }
         ]
     },
     'documentary': {
@@ -144,7 +146,8 @@ var BUDGET_TEMPLATES = {
             { id: 'rights', name: 'Rights & Acquisition', items: ['Legal - Rights & Clearances', 'Life Rights / IP Purchase'] },
             { id: 'btl_prod', name: 'Field Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Drone Operator', 'Researcher', 'Set PA'] },
             { id: 'btl_post', name: 'Post & Archive', items: ['Editor', 'Archival Researcher', 'Colorist', 'Sound Designer'] },
-            { id: 'travel', name: 'Travel & Logistics', items: ['Fixer/Local Producer', 'Security Guard', 'Catering (Per Head)'] }
+            { id: 'travel', name: 'Travel & Logistics', items: ['Fixer/Local Producer', 'Security Guard', 'Catering (Per Head)'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Truck PA', 'Passenger Van (12-15 Seat)', 'Per Diems', 'Fuel Allowance', 'Parking & Permits'] }
         ]
     },
     'feature_film': {
@@ -156,7 +159,8 @@ var BUDGET_TEMPLATES = {
             { id: 'btl_pre', name: 'BTL: Pre-Pro & Legal', items: ['Line Producer', 'Unit Production Manager (UPM)', '1st Assistant Director (1st AD)', 'Production Accountant', 'Legal - Rights & Clearances'] },
             { id: 'btl_prod', name: 'BTL: Principal Photography', items: ['Director of Photography (DP)', '1st Assistant Camera (Focus)', 'Gaffer', 'Key Grip', 'Sound Mixer', 'Production Designer', 'Script Supervisor', 'Still Photographer'] },
             { id: 'btl_post', name: 'BTL: Post-Production', items: ['Post-Production Supervisor', 'Editor', 'Colorist', 'Composer', 'VFX Supervisor'] },
-            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)', 'Medic / Set Nurse', 'Security Guard'] }
+            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)', 'Medic / Set Nurse', 'Security Guard'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Truck PA', 'Box Truck (16-24 ft)', 'Production Sprinter Van', 'Fuel Allowance', 'Parking & Permits'] }
         ]
     },
     'short_film': {
@@ -167,7 +171,8 @@ var BUDGET_TEMPLATES = {
             { id: 'atl', name: 'Direction & Talent', items: ['Director', 'Producer', 'Cast - Lead'] },
             { id: 'btl_prod', name: 'Production Crew', items: ['Director of Photography (DP)', 'Sound Mixer', 'Gaffer', 'Key Grip', 'Set PA', 'Cast - Supporting'] },
             { id: 'btl_post', name: 'Post & Finishing', items: ['Editor', 'Colorist', 'Sound Designer'] },
-            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)'] }
+            { id: 'other', name: 'Logistics', items: ['Location Manager', 'Catering (Per Head)'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Production Driver', 'Passenger Van (12-15 Seat)', 'Fuel Allowance'] }
         ]
     },
     'corporate_video': {
@@ -177,8 +182,10 @@ var BUDGET_TEMPLATES = {
         structure: [
             { id: 'atl', name: 'Project Management', items: ['Producer', 'Director', 'Copywriter (Pitch/Treatment)', 'Host'] },
             { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', 'Sound Mixer', 'Set PA'] },
+            { id: 'ptz', name: 'PTZ & Remote Cameras', items: ['PTZ Package (Camera + Controller)', 'Sony BRC-X400 4K PTZ Camera'] },
             { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'Music Editor'] },
-            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] }
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Production Driver', 'Passenger Van (12-15 Seat)', 'Parking & Permits'] }
         ]
     },
     'event_coverage': {
@@ -194,9 +201,11 @@ var BUDGET_TEMPLATES = {
             { id: 'leadership', name: 'Show / Client Leadership', items: ['Producer'] },
             { id: 'promo', name: 'Pre-Event Promo Content', items: ['Graphics Artist'] },
             { id: 'advance', name: 'Technical Advance & Connectivity', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
+            { id: 'ptz', name: 'PTZ & Remote Cameras', items: ['PTZ Package (Camera + Controller)', 'Sony BRC-X400 4K PTZ Camera', 'PTZ Operator'] },
             { id: 'event', name: 'Event Day Crew', items: ['Technical Director', 'Camera Operator', 'Sound Mixer', 'Digital Imaging Tech (DIT)'] },
             { id: 'post', name: 'Post-Event Recap & Delivery', items: ['Editor', 'Colorist'] },
-            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] }
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Transport Coordinator', 'Production Driver', 'Production Sprinter Van', 'Box Truck (16-24 ft)', 'Fuel Allowance', 'Parking & Permits'] }
         ]
     },
     'web_series': {
@@ -207,7 +216,8 @@ var BUDGET_TEMPLATES = {
             { id: 'atl', name: 'Showrunner / Executive Producer & Talent', items: ['Executive Producer', 'Director', 'Cast - Lead', 'Cast - Supporting', 'Screenwriter'] },
             { id: 'btl_prod', name: 'Production', items: ['Director of Photography (DP)', '1st Assistant Camera (Focus)', 'Sound Mixer', 'Gaffer', 'Set PA'] },
             { id: 'btl_post', name: 'Post-Production', items: ['Editor', 'Colorist', 'VFX Artist', 'Music Editor'] },
-            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager'] }
+            { id: 'other', name: 'Logistics', items: ['Catering (Per Head)', 'Location Manager'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Production Driver', 'Truck PA', 'Passenger Van (12-15 Seat)', 'Fuel Allowance'] }
         ]
     },
     'streaming_broadcast': {
@@ -217,9 +227,11 @@ var BUDGET_TEMPLATES = {
         structure: [
             { id: 'atl', name: 'Show Leadership & Talent', items: ['Executive Producer', 'Producer', 'Director', 'Cast - Lead'] },
             { id: 'tech', name: 'Control Room & Floor', items: ['Technical Director', 'Broadcast Engineer', 'Camera Operator', 'Sound Mixer', 'Graphics Artist'] },
+            { id: 'ptz', name: 'PTZ & Remote Cameras', items: ['PTZ Package (Camera + Controller)', 'Panasonic AW-UE150 4K PTZ Camera', 'PTZ Controller (RM-IP10 Class)', 'PTZ Operator'] },
             { id: 'infra', name: 'Studio Infrastructure', items: ['Switcher/Encoder', 'Dedicated Internet Line'] },
             { id: 'post', name: 'Highlights & Package', items: ['Editor', 'Colorist'] },
-            { id: 'other', name: 'Logistics & Ops', items: ['Catering (Per Head)', 'Publicist'] }
+            { id: 'other', name: 'Logistics & Ops', items: ['Catering (Per Head)', 'Publicist'] },
+            { id: 'transport', name: 'Travel & Transport', items: ['Production Driver', 'Passenger Van (12-15 Seat)', 'Parking & Permits'] }
         ]
     }
 };

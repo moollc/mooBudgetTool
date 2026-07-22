@@ -370,7 +370,8 @@ window.mBTAIModule = {
                         if (typeof response === 'string' && response.indexOf('Analysis Failed:') === 0) {
                             var failMsg = response.replace('Analysis Failed: ', '');
                             if (history.lastElementChild) {
-                                history.lastElementChild.innerHTML = '<div class="text-rose-500 text-xs">Error: ' + failMsg + '</div>';
+                                var _esc = (window.mBT && window.mBT.ui && window.mBT.ui.render && window.mBT.ui.render.esc) ? window.mBT.ui.render.esc(failMsg) : String(failMsg).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                history.lastElementChild.innerHTML = '<div class="text-rose-500 text-xs">Error: ' + _esc + '</div>';
                             }
                             return;
                         }
@@ -477,7 +478,7 @@ window.mBTAIModule = {
                             label: 'Sourcing Analysis',
                             editorData: editorData
                         }
-                    }, '*');
+                    }, window.location.origin);
                 }
             }, 1500);
         }).catch(function (err) {

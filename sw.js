@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v24.01';
+var CACHE_NAME = 'mbt-monolith-cache-v24.05';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -68,6 +68,8 @@ var PRECACHE_ASSETS = [
     './src/core/ui/Calendar.js',
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
+    './src/core/components/ToolBridge.js',
+    './src/core/components/EmbeddedMode.js',
 
     /* --- WebAssembly module (canonical tree — optional; install tolerates absence) --- */
     './src/core/wasm/mbt_wasm.js',

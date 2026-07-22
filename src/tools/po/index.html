@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>mBT — PO & Petty Cash</title>
   <script src="../../lib/tailwind.min.js"></script>
+  <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../lib/localforage.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
@@ -225,7 +226,7 @@
 
         function saveLedgers() {
             var l = getLedgers();
-            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: l.pos, pettyCash: l.pettyCash, poCounter: l.poCounter } }, '*');
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'update-ledgers', payload: { pos: l.pos, pettyCash: l.pettyCash, poCounter: l.poCounter } }, window.location.origin);
         }
 
         function getPoNumber() {
@@ -590,7 +591,7 @@
             state.currency = params.get('currency') || 'JMD';
 
             document.getElementById('btn-back').addEventListener('click', function() {
-                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
             });
 
             document.getElementById('btn-add').addEventListener('click', function() { openPoModal(null); });
@@ -654,6 +655,7 @@
 
     /* Phase 73B / Phase 80: message routing */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
         var action = e.data.action;
         var payload = e.data.payload || {};
@@ -665,6 +667,7 @@
 
     /* v23.58: receive live display-currency switches from parent (mirrors stages/publisher) */
     window.addEventListener('message', function(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
         mBTPO.io.setDisplayCurrency(e.data.currency, e.data.rates);
     });

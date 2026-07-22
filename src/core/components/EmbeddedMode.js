@@ -38,7 +38,7 @@
         send: function (action, payload) {
             window.parent.postMessage(
                 { type: 'mbt:tool-action', action: action, payload: payload || {} },
-                '*'
+                window.location.origin
             );
         },
 

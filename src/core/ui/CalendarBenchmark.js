@@ -527,7 +527,7 @@
             localforage.setItem(state.projectKey, state.budget).then(function () {
                 /* --- Notify parent to reload calendar data --- */
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, window.location.origin);
                 }
             }).catch(function (e) { console.error('[CAL] save failed', e); });
         }
@@ -696,13 +696,13 @@
 
                 /* Standard lifecycle: parent listens for mbt:tool-ready (e.g. quick-pay handshake) */
                 if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'calendar' }, '*');
+                    window.parent.postMessage({ type: 'mbt:tool-ready', tool: 'calendar' }, window.location.origin);
                 }
 
                 /* --- Phase 50C.8: Dispatch tool focus to parent presence channel --- */
                 function dispatchFocus() {
                     if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'calendar' } }, '*');
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'user-focus-changed', payload: { tool: 'calendar' } }, window.location.origin);
                     }
                 }
                 dispatchFocus();
@@ -710,12 +710,13 @@
 
                 /* Phase 73B: receive undo/redo routing from parent monolith */
                 window.addEventListener('message', function(e) {
+                    if (!e || e.origin !== window.location.origin) return;
                     if (!e.data || e.data.type !== 'mbt:tool-action') return;
                 });
 
                 dom.getElementById('btn-back').addEventListener('click', function () {
                     if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, '*');
+                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
                     } else {
                         history.back();
                     }
