@@ -368,6 +368,22 @@ var mBTAssistant = (function () {
         localStorage.removeItem(K.CHAT_PREFIX + (projectKey || 'default'));
     }
 
+    /* Stable chat-history key — matches AI tool budget-sync resolution */
+    function chatProjectKey(budgetDoc) {
+        var doc = budgetDoc || {};
+        if (doc.id != null && doc.id !== '') return String(doc.id);
+        if (doc.collab_project_id) return String(doc.collab_project_id);
+        if (doc.projectName) {
+            var prefix = (typeof window !== 'undefined' && window.storageKeyPrefix) ? window.storageKeyPrefix : 'prodBudget_v5_';
+            return prefix + doc.projectName;
+        }
+        return 'default';
+    }
+
+    function isPersistentContextFromDoc(budgetDoc) {
+        return !!(budgetDoc && budgetDoc.aiContext && budgetDoc.aiContext.saveHistory);
+    }
+
     /* =========================================================================
        PUBLIC API — GENERATED ASSETS
     ========================================================================= */
@@ -706,6 +722,8 @@ var mBTAssistant = (function () {
         getChatHistory:      getChatHistory,
         appendChat:          appendChat,
         clearChat:           clearChat,
+        chatProjectKey:      chatProjectKey,
+        isPersistentContextFromDoc: isPersistentContextFromDoc,
         /* Generated assets */
         getAsset:            getAsset,
         saveAsset:           saveAsset,

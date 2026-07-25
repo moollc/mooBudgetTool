@@ -93,12 +93,23 @@ window.mBTAIModule = {
     getSystemPrompt:    function () { return localStorage.getItem((window.storageKeyPrefix || '') + 'aiSystemPrompt') || ''; },
     saveSystemPrompt:   function (val) { localStorage.setItem((window.storageKeyPrefix || '') + 'aiSystemPrompt', val); },
 
+    isPersistentContext: function () {
+        var b = window.budget;
+        return !!(b && b.aiContext && b.aiContext.saveHistory);
+    },
+
+    clearStoredAssistantChat: function (budgetDoc) {
+        if (window.mBTAssistant && typeof window.mBTAssistant.clearChat === 'function') {
+            window.mBTAssistant.clearChat(window.mBTAssistant.chatProjectKey(budgetDoc || window.budget));
+        }
+    },
+
     /* ── Centralized Intelligence Dispatcher ──────────────────────────────
        Phase 173: collapsed to a thin wrapper over mBTAssistant.callChat().
        The legacy (provider, apiKey) args are accepted but ignored — mBTAssistant
        reads them from its own state (which is the SAME localStorage keys, so
        behavior is identical). User constraint injection is preserved. */
-    callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg) {
+    callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg, history) {
         var self = this;
         var userConstraints = self.getSystemPrompt();
         var baseInstruction = customSystemMsg || self.config.systemContext;
@@ -107,7 +118,8 @@ window.mBTAIModule = {
         if (window.mBTAssistant && typeof window.mBTAssistant.callChat === 'function') {
             return window.mBTAssistant.callChat({
                 userMessage:  prompt,
-                systemPrompt: systemInstruction
+                systemPrompt: systemInstruction,
+                history:      history || []
             }).catch(function (error) {
                 console.error('mBT AI Failure:', error);
                 var msg = error && error.message ? error.message : 'Unknown';
@@ -242,8 +254,11 @@ window.mBTAIModule = {
     clearContext: function () {
         var budget = window.budget;
         var mBTME  = window.mBTME;
+        var self   = this;
+        var keepPersist = self.isPersistentContext();
         mBTME.confirm('Clear Memory', 'Clear AI memory and chat history? This cannot be undone.', function () {
-            budget.aiContext = { chat: [], analysis: '' };
+            budget.aiContext = { chat: [], analysis: '', saveHistory: keepPersist };
+            self.clearStoredAssistantChat(budget);
             if (typeof window.saveBudget === 'function') window.saveBudget();
             var history = document.getElementById('aiChatHistory');
             if (history) history.innerHTML = '<div class="text-center text-slate-400 text-xs mt-10">Memory Cleared. Start fresh.</div>';
@@ -273,14 +288,19 @@ window.mBTAIModule = {
         var budget    = window.budget;
         var mBTME     = window.mBTME;
         var mBTAssets = window.mBTAssets || {};
+        var persist   = self.isPersistentContext();
 
         if (!budget.aiContext) budget.aiContext = { chat: [], analysis: '' };
+        if (persist && !Array.isArray(budget.aiContext.chat)) budget.aiContext.chat = [];
+
+        /* When persistent context is off, use a fresh in-modal thread (not budget.aiContext.chat) */
+        var activeChat = persist ? budget.aiContext.chat : [];
 
         /* Phase 60.B: action diff store — keyed refs prevent JSON injection in onclick attrs */
         window._mbtAIDiffStore = window._mbtAIDiffStore || {};
 
         var renderMessages = function () {
-            return budget.aiContext.chat.map(function (msg) {
+            return activeChat.map(function (msg) {
                 var contentHtml = msg.role === 'assistant'
                     ? self.renderSafeMarkdown(msg.content)
                     : window.mBT.ui.render.esc(msg.content);
@@ -310,14 +330,14 @@ window.mBTAIModule = {
         var content =
             '<div class="flex flex-col h-[500px] bg-slate-50">' +
                 '<div class="flex justify-between items-center px-4 py-2 bg-white border-b border-slate-100 shrink-0">' +
-                    '<span id="aiMsgCount" class="text-[9px] font-black uppercase tracking-widest text-slate-400">Context: ' + budget.aiContext.chat.length + ' msgs</span>' +
+                    '<span id="aiMsgCount" class="text-[9px] font-black uppercase tracking-widest text-slate-400">Context: ' + activeChat.length + ' msgs' + (persist ? '' : ' (session only)') + '</span>' +
                     '<div class="flex gap-2">' +
                         '<button onclick="mBT.features.ai.exportChat()" title="Export Discussion" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">' + (mBTAssets.file || '') + '</button>' +
                         '<button onclick="mBT.features.ai.clearContext()" title="Clear Memory" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all">' + (mBTAssets.trash || '') + '</button>' +
                     '</div>' +
                 '</div>' +
                 '<div id="aiChatHistory" class="flex-grow overflow-y-auto p-4 space-y-2">' +
-                    (budget.aiContext.chat.length ? renderMessages() : '<div class="text-center text-slate-400 text-xs mt-10">Start a conversation..</div>') +
+                    (activeChat.length ? renderMessages() : '<div class="text-center text-slate-400 text-xs mt-10">Start a conversation..</div>') +
                 '</div>' +
                 '<div class="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0">' +
                     '<input type="text" id="aiChatInput" class="flex-grow p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all" placeholder="Ask about rates, logistics, or risks.." onkeydown="if(event.key===\'Enter\') document.getElementById(\'aiChatSendBtn\').click()">' +
@@ -338,8 +358,8 @@ window.mBTAIModule = {
                     var text = input.value.trim();
                     if (!text) return;
 
-                    budget.aiContext.chat.push({ role: 'user', content: text });
-                    if (typeof window.saveBudget === 'function') window.saveBudget();
+                    activeChat.push({ role: 'user', content: text });
+                    if (persist && typeof window.saveBudget === 'function') window.saveBudget();
                     input.value = '';
 
                     var history = document.getElementById('aiChatHistory');
@@ -347,7 +367,7 @@ window.mBTAIModule = {
                     history.scrollTop = history.scrollHeight;
 
                     var count = document.getElementById('aiMsgCount');
-                    if (count) count.textContent = 'Context: ' + budget.aiContext.chat.length + ' msgs';
+                    if (count) count.textContent = 'Context: ' + activeChat.length + ' msgs' + (persist ? '' : ' (session only)');
 
                     var provider = self.getSelectedProvider();
                     var apiKey   = self.getStoredApiKey(provider);
@@ -361,11 +381,19 @@ window.mBTAIModule = {
                     var attachList   = (budget.attachments || []).map(function (a) { return a.name; }).join(', ');
                     var prevAnalysis = ((budget.aiContext && budget.aiContext.analysis) || 'None').substring(0, 500);
                     var contextSummary = '[SYSTEM CONTEXT: Project="' + budget.projectName + '", Total=' + (window.displayCurrency || '') + ' ' + budget.grandTotal + ', Docs=[' + docList + '], Attachments=[' + attachList + '], Last Analysis Summary="' + prevAnalysis + '"]';
-                    var finalPrompt    = budget.aiContext.chat.length < 2 ? (contextSummary + ' \n\n User Query: ' + text) : text;
+                    var apiHistory = [];
+                    var finalPrompt = text;
+                    if (persist && activeChat.length > 1) {
+                        apiHistory = activeChat.slice(0, -1).map(function (m) {
+                            return { role: m.role, content: m.content };
+                        });
+                    } else {
+                        finalPrompt = contextSummary + ' \n\n User Query: ' + text;
+                    }
 
                     /* Phase 60.B: inject action-trigger capability into chat system prompt */
                     var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
-                    return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg).then(function (response) {
+                    return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg, apiHistory).then(function (response) {
                         /* callUnifiedAI swallows rejections into Analysis Failed: strings */
                         if (typeof response === 'string' && response.indexOf('Analysis Failed:') === 0) {
                             var failMsg = response.replace('Analysis Failed: ', '');
@@ -375,11 +403,11 @@ window.mBTAIModule = {
                             }
                             return;
                         }
-                        budget.aiContext.chat.push({ role: 'assistant', content: response });
-                        if (typeof window.saveBudget === 'function') window.saveBudget();
+                        activeChat.push({ role: 'assistant', content: response });
+                        if (persist && typeof window.saveBudget === 'function') window.saveBudget();
                         history.innerHTML = renderMessages();
                         history.scrollTop = history.scrollHeight;
-                        if (count) count.textContent = 'Context: ' + budget.aiContext.chat.length + ' msgs';
+                        if (count) count.textContent = 'Context: ' + activeChat.length + ' msgs' + (persist ? '' : ' (session only)');
                     });
                 };
                 input.focus();

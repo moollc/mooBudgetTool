@@ -530,6 +530,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var llmHistory = [];   /* [{role, content}] for LLM session */
 
     var _llmProjectKey      = 'default'; /* updated from budget-sync postMessage */
+    var _persistentContext  = false;     /* budget.aiContext.saveHistory from parent */
     var _contextGeneration  = 0;        /* incremented on every project switch to invalidate stale async context */
 
     /* --- XSS-safe helper --- */
@@ -1015,16 +1016,37 @@ window.openSourceModal   = openSourceModal;
         context = newCtx;
         _contextGeneration++;
         var _oldProjectKey = _llmProjectKey;
-        _llmProjectKey = (payload.budgetDoc && payload.budgetDoc.id) ||
-                         (newCtx && newCtx.projectId != null ? newCtx.projectId : null) ||
-                         'default';
+        _llmProjectKey = (payload.budgetDoc && window.mBTAssistant && mBTAssistant.chatProjectKey)
+            ? mBTAssistant.chatProjectKey(payload.budgetDoc)
+            : ((payload.budgetDoc && payload.budgetDoc.id) ||
+               (newCtx && newCtx.projectId != null ? newCtx.projectId : null) ||
+               'default');
+        var _nextPersist = (payload.saveHistory !== undefined)
+            ? !!payload.saveHistory
+            : !!(window.mBTAssistant && mBTAssistant.isPersistentContextFromDoc && mBTAssistant.isPersistentContextFromDoc(payload.budgetDoc));
+        var _llmMsgElSync = document.getElementById('llmMessages');
+        if (_nextPersist !== _persistentContext) {
+            _persistentContext = _nextPersist;
+            if (_llmMsgElSync) {
+                _llmMsgElSync.innerHTML = '';
+                llmHistory = [];
+            }
+            if (!_persistentContext && window.mBTAssistant) {
+                mBTAssistant.clearChat(_llmProjectKey);
+                addLLMMessage('system', 'Persistent context off. Each message starts fresh.');
+            } else if (_persistentContext) {
+                restoreLLMHistory();
+            }
+        } else {
+            _persistentContext = _nextPersist;
+        }
         /* Phase 193.2: Purge stale chat bubbles on project switch */
         if (_oldProjectKey !== _llmProjectKey) {
             var llmMsgEl = document.getElementById('llmMessages');
             if (llmMsgEl) {
                 llmMsgEl.innerHTML = '';
                 llmHistory = [];
-                restoreLLMHistory();
+                if (_persistentContext) restoreLLMHistory();
             }
         }
         paintProjectKnowledge(newCtx, payload.budgetDoc || null);
@@ -1050,6 +1072,7 @@ window.openSourceModal   = openSourceModal;
        LLM HISTORY PERSISTENCE — delegated to mBTAssistant
     ========================================= */
     function persistLLMHistory() {
+        if (!_persistentContext || !window.mBTAssistant) return;
         mBTAssistant.clearChat(_llmProjectKey);
         llmHistory.forEach(function (m) {
             mBTAssistant.appendChat(_llmProjectKey, m.role, m.content);
@@ -1057,6 +1080,7 @@ window.openSourceModal   = openSourceModal;
     }
 
     function restoreLLMHistory() {
+        if (!_persistentContext || !window.mBTAssistant) return;
         var saved = mBTAssistant.getChatHistory(_llmProjectKey);
         if (!saved.length) return;
         llmHistory = saved.map(function (m) { return { role: m.role, content: m.content }; });
@@ -1280,12 +1304,18 @@ window.openSourceModal   = openSourceModal;
         });
     }
 
-    /* Chat tab call — passes llmHistory for multi-turn continuity */
+    /* Chat tab call — passes llmHistory for multi-turn continuity when persistent context is on */
     function callLLM(userMessage, systemPrompt) {
+        var apiHistory = [];
+        if (_persistentContext && llmHistory.length > 1) {
+            apiHistory = llmHistory.slice(0, -1).map(function (m) {
+                return { role: m.role, content: m.content };
+            });
+        }
         return mBTAssistant.callChat({
             userMessage:  userMessage,
             systemPrompt: systemPrompt,
-            history:      llmHistory
+            history:      apiHistory
         });
     }
 
@@ -1656,7 +1686,7 @@ window.openSourceModal   = openSourceModal;
         if (!llmHistory.length || confirm('Clear chat history? This cannot be undone.')) {
             llmMsgEl.innerHTML = '';
             llmHistory = [];
-            mBTAssistant.clearChat(_llmProjectKey);
+            if (_persistentContext && window.mBTAssistant) mBTAssistant.clearChat(_llmProjectKey);
             addLLMMessage('system', 'Chat cleared.');
         }
     }
@@ -1781,12 +1811,18 @@ window.openSourceModal   = openSourceModal;
             .then(function (ctx) {
                 if (_initGen !== _contextGeneration) return; /* stale — project switched before init resolved */
                 context = ctx;
-                _llmProjectKey = (ctx && ctx.projectId != null ? ctx.projectId : null) ||
-                                 (ctx && ctx._budgetDoc && ctx._budgetDoc.id) || 'default';
+                _llmProjectKey = (window.mBTAssistant && mBTAssistant.chatProjectKey)
+                    ? mBTAssistant.chatProjectKey(ctx._budgetDoc || ctx)
+                    : ((ctx && ctx.projectId != null ? ctx.projectId : null) ||
+                       (ctx && ctx._budgetDoc && ctx._budgetDoc.id) || 'default');
+                _persistentContext = !!(window.mBTAssistant && mBTAssistant.isPersistentContextFromDoc &&
+                    mBTAssistant.isPersistentContextFromDoc(ctx._budgetDoc || ctx));
                 paintProjectKnowledge(ctx, ctx._budgetDoc || null);
                 dom.getElementById('aiStatus').textContent = 'Ready';
-                restoreLLMHistory();
-                if (!llmHistory.length) addLLMMessage('system', 'LLM Chat ready. Provider: ' + provLabel + '. Change provider in Settings > Connections.');
+                if (_persistentContext) restoreLLMHistory();
+                if (!llmHistory.length) {
+                    addLLMMessage('system', 'LLM Chat ready. Provider: ' + provLabel + '. Persistent context ' + (_persistentContext ? 'on' : 'off') + '. Change in Settings > Connections.');
+                }
             })
             .catch(function (e) {
                 dom.getElementById('aiStatus').textContent = 'Error';

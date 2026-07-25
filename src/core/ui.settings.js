@@ -546,11 +546,12 @@
                                 '<div class="flex items-center justify-between py-1">' +
                                     '<div class="flex items-center gap-3">' +
                                         '<div class="relative flex items-center">' +
-                                            '<input type="checkbox" id="aiContextToggle" ' + (saveHistory ? 'checked' : '') + ' onchange="if(!budget.aiContext) budget.aiContext={chat:[], analysis:\'\'}; budget.aiContext.saveHistory = this.checked; saveBudget();" class="sr-only peer">' +
+                                            '<input type="checkbox" id="aiContextToggle" ' + (saveHistory ? 'checked' : '') + ' onchange="window.mBT_UI_Settings_setPersistentContext(this.checked)" class="sr-only peer">' +
                                             '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
                                         '</div>' +
                                         '<label for="aiContextToggle" class="text-[9px] font-black text-slate-400 uppercase tracking-widest cursor-pointer">Persistent Context</label>' +
                                     '</div>' +
+                                    '<p class="text-[8px] text-slate-600 ml-14 -mt-1">On: chat history saves per project and multi-turn memory reaches the model. Off: each message starts fresh.</p>' +
                                 '</div>' +
 
                                 '<button id="saveApiKeyBtn" onclick="mBT_syncAIProvider()" class="w-full bg-blue-600 text-white py-2.5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-blue-500 active:scale-95 transition-all border-b-4 border-blue-800">Synchronize AI Link</button>' +
@@ -1299,6 +1300,35 @@
                 if (cSel) cSel.innerHTML = '<option value="" disabled selected>Error fetching models</option>';
                 done();
             });
+    };
+
+    /* --- Persistent Context toggle (Connections tab) --- */
+    window.mBT_UI_Settings_setPersistentContext = function (checked) {
+        if (typeof budget === 'undefined' || !budget) return;
+        if (!budget.aiContext) budget.aiContext = { chat: [], analysis: '' };
+        budget.aiContext.saveHistory = !!checked;
+        if (!checked) {
+            budget.aiContext.chat = [];
+            if (window.mBTAssistant && typeof window.mBTAssistant.clearChat === 'function') {
+                window.mBTAssistant.clearChat(window.mBTAssistant.chatProjectKey(budget));
+            }
+        }
+        if (typeof saveBudget === 'function') saveBudget();
+
+        /* Live-sync open AI tool iframe */
+        var aiIframe = document.getElementById('mbtHubAiIframe');
+        if (aiIframe && aiIframe.contentWindow && window.mBTAIContext && typeof mBTAIContext.getCurrentProjectContext === 'function') {
+            mBTAIContext.getCurrentProjectContext().then(function (ctx) {
+                var safeBudgetDoc;
+                try { safeBudgetDoc = JSON.parse(JSON.stringify(budget)); } catch (serErr) { safeBudgetDoc = {}; }
+                try {
+                    aiIframe.contentWindow.postMessage({
+                        type: 'budget-sync',
+                        payload: { context: ctx, budgetDoc: safeBudgetDoc || {}, saveHistory: !!checked }
+                    }, window.location.origin);
+                } catch (pmErr) { /* ignore */ }
+            }).catch(function () { /* ignore */ });
+        }
     };
 
     /* --- Unified AI Sync: tests connection, fetches + caches chat and image models, saves all --- */
