@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.05</title>
+    <title>mooBudgetTool v24.07</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -13804,17 +13804,19 @@
         // Logic Resolution: Prioritize Tier 2 Namespace if available
         /* Phase 73B: route undo/redo into active tool iframe when one is open */
         mBT.core.action('undo', function () {
-            if (mBTActiveTool) {
+            var _toolUndo = mBTActiveTool === 'stages' || mBTActiveTool === 'db';
+            if (_toolUndo) {
                 var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo-action' }, window.location.origin); return; }
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'undo' }, window.location.origin); return; }
             }
             if (mBT.data.history && typeof mBT.data.history.undoSnapshot === 'function') mBT.data.history.undoSnapshot();
             else if (typeof handleUndo === 'function') handleUndo();
         });
         mBT.core.action('redo', function () {
-            if (mBTActiveTool) {
+            var _toolRedo = mBTActiveTool === 'stages' || mBTActiveTool === 'db';
+            if (_toolRedo) {
                 var _if = document.querySelector('[data-modal-id="tool-window"] iframe, #global-modal-container iframe');
-                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo-action' }, window.location.origin); return; }
+                if (_if && _if.contentWindow) { _if.contentWindow.postMessage({ type: 'mbt:tool-action', action: 'redo' }, window.location.origin); return; }
             }
             if (mBT.data.history && typeof mBT.data.history.redoSnapshot === 'function') mBT.data.history.redoSnapshot();
             else if (typeof handleRedo === 'function') handleRedo();
@@ -14589,17 +14591,15 @@
 
             // --- Keyboard Shortcuts (Tier 6 Wiring) ---
             document.body.addEventListener('keydown', function (e) {
-                // Undo: Ctrl+Z
-                if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                var _mod = e.ctrlKey || e.metaKey;
+                var _key = e.key ? e.key.toLowerCase() : '';
+                // Undo: Ctrl+Z / Cmd+Z (match stages/db/template tools)
+                if (_mod && _key === 'z' && !e.shiftKey) {
                     e.preventDefault();
                     if (mBT.core.actions['undo']) mBT.core.actions['undo']();
                 }
-                // Redo: Ctrl+Y or Ctrl+Shift+Z (standard Mac/Linux)
-                if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-                    e.preventDefault();
-                    if (mBT.core.actions['redo']) mBT.core.actions['redo']();
-                }
-                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
+                // Redo: Ctrl+Y / Cmd+Shift+Z
+                else if (_mod && (_key === 'y' || (_key === 'z' && e.shiftKey))) {
                     e.preventDefault();
                     if (mBT.core.actions['redo']) mBT.core.actions['redo']();
                 }
