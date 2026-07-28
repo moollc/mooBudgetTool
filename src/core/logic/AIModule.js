@@ -39,7 +39,10 @@ window.mBTAIModule = {
         openrouterEndpoint: 'https://openrouter.ai/api/v1/chat/completions',
         systemContext:    'ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates.',
         /* Phase 60.B: action-trigger addendum appended to systemContext in chat mode */
-        chatActionPrompt: 'ACTION CAPABILITY: When you identify a specific actionable budget change, output a JSON action block immediately before your explanation:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\nKeep explanations brief.'
+        chatActionPrompt: 'ACTION CAPABILITY: You can BUILD and MODIFY the budget. When the user asks for any change, output ONE JSON action block immediately before a brief explanation.\n\n' +
+            'Single change:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\n\n' +
+            'Several changes at once (also use this to build a new section or a whole budget):\n\x60\x60\x60json\n{"mbt_action":"batch","changes":[{"mbt_action":"add_section","section":"Camera Department"},{"mbt_action":"add_item","section":"Camera Department","description":"Camera Operator","quantity":5,"rate":40000,"unit":"Day"}]}\n\x60\x60\x60\n\n' +
+            'RULES: Use the OPENGATE RATE CARD rates verbatim for anything listed there — never round, adjust or invent a number that is on the card. Copy section and item names EXACTLY as they appear in the CURRENT BUDGET list. Use add_section before adding items to a section that does not exist yet. Never invent a section name that is not in the list unless you are creating it with add_section. Keep explanations brief.'
     },
 
     /* ── Storage Accessors (Phase 173: thin wrappers over mBTAssistant) ──
@@ -137,6 +140,131 @@ window.mBTAIModule = {
         });
     },
 
+    /* ── Budget snapshot for chat ────────────────────────────────────────
+       Chat used to send only the project name and grand total. The AI then had
+       to guess section names and item descriptions, but applySuggestion matches
+       them exactly — so a guess of "Production Crew" against a real key of
+       "BTL: Production Crew" failed every time. The AI looked like it lied.
+       This sends the real names so it can quote them back exactly.
+       Capped so a large budget cannot bloat the prompt. */
+    /* ── OpenGate rate lookup for chat ───────────────────────────────────
+       Without this the AI invents rates: it guessed J$30,000 for a Camera
+       Operator when OpenGate holds J$23,870, and J$6,000 for a sound package
+       actually rated J$34,875. A budget that looks right and is quietly wrong
+       is worse than one that fails loudly, so chat gets the real rate card.
+
+       All 182 rates would bloat every prompt, so this selects by relevance to
+       what the user actually asked, and always includes a spine of common
+       roles so simple asks still land on real numbers. */
+    _buildRateContext: function (query) {
+        var og = window.mBTOG;
+        if (!og || !og.rates || !og.rates.length) return '';
+
+        var MAX_ROWS = 60;
+        var picked = [];
+        var seen = {};
+        var i, r;
+
+        function add(rate) {
+            if (!rate || seen[rate.description]) return;
+            seen[rate.description] = true;
+            picked.push(rate);
+        }
+
+        /* 1. Match words from the user's request against the rate card. */
+        var words = String(query || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/);
+        var STOP = { the:1, a:1, an:1, and:1, or:1, for:1, to:1, of:1, in:1, on:1, at:1,
+                     with:1, add:1, set:1, make:1, budget:1, section:1, item:1, items:1,
+                     line:1, rate:1, rates:1, day:1, days:1, use:1, need:1, want:1,
+                     build:1, create:1, from:1, into:1, each:1, also:1, that:1, this:1 };
+        for (i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (!w || w.length < 3 || STOP[w]) continue;
+            var hits = og.search(w) || [];
+            for (var j = 0; j < hits.length && j < 8; j++) add(hits[j]);
+            if (picked.length >= MAX_ROWS) break;
+        }
+
+        /* 2. Always include a spine of the most commonly needed roles. */
+        var SPINE = ['Director', 'Producer', 'Camera Operator', 'Technical Director',
+                     'Stream Technician', 'Sound Mixer', 'Gaffer', 'Editor'];
+        for (i = 0; i < SPINE.length && picked.length < MAX_ROWS; i++) {
+            var sh = og.search(SPINE[i]) || [];
+            if (sh.length) add(sh[0]);
+        }
+
+        if (!picked.length) return '';
+
+        var cur = window.displayCurrency || '';
+        var lines = [];
+        lines.push('OPENGATE RATE CARD (' + (og.settings && og.settings.location ? og.settings.location : 'local') + ', ' + cur + '):');
+        lines.push('These are researched market rates. USE THESE NUMBERS. Do not estimate a rate for anything listed here.');
+        for (i = 0; i < picked.length && i < MAX_ROWS; i++) {
+            r = picked[i];
+            lines.push('  ' + r.description + ' = ' + r.rate + ' per ' + (r.unit || 'Day') +
+                       (r.itemType === 'equipment' ? ' [gear]' : ' [crew]'));
+        }
+        lines.push('If something the user needs is NOT on this list, say so plainly and give your best estimate clearly labelled as an estimate. Never silently invent a rate that contradicts this card.');
+        return lines.join('\n');
+    },
+
+    _buildBudgetContext: function () {
+        var budget = window.budget;
+        if (!budget || !budget.sections) return '';
+
+        var MAX_ITEMS_TOTAL = 40;
+        var MAX_PER_SECTION = 12;
+        var emitted = 0;
+        var lines = [];
+        var cur = window.displayCurrency || '';
+
+        lines.push('CURRENT BUDGET — use these names exactly as written:');
+        lines.push('Project: ' + (budget.projectName || 'Untitled'));
+        lines.push('Grand total: ' + cur + ' ' + (budget.grandTotal || 0));
+        if (budget.contingencyPercentage !== undefined) {
+            lines.push('Contingency: ' + budget.contingencyPercentage + '%');
+        }
+
+        var names = Object.keys(budget.sections);
+        for (var s = 0; s < names.length; s++) {
+            var sec = budget.sections[names[s]];
+            if (!sec) continue;
+            var items = sec.items || [];
+            lines.push('');
+            lines.push('Section: ' + names[s]);
+            var shown = 0;
+            for (var i = 0; i < items.length; i++) {
+                if (emitted >= MAX_ITEMS_TOTAL || shown >= MAX_PER_SECTION) break;
+                var it = items[i];
+                if (!it) continue;
+                var qty = parseFloat(it.quantity);
+                if (isNaN(qty)) qty = 0;
+                var rate = parseFloat(it.rate);
+                if (isNaN(rate)) rate = 0;
+                lines.push('  - ' + (it.description || 'Item') +
+                           ' (qty ' + qty + (it.unit ? ' ' + it.unit : '') +
+                           ', rate ' + cur + ' ' + rate + ')');
+                shown++;
+                emitted++;
+            }
+            var left = items.length - shown;
+            if (left > 0) lines.push('  ...and ' + left + ' more item' + (left === 1 ? '' : 's'));
+        }
+
+        if (emitted >= MAX_ITEMS_TOTAL) {
+            lines.push('');
+            lines.push('(Item list truncated. Ask the user if you need a section not shown.)');
+        }
+        return lines.join('\n');
+    },
+
+    /* Remove the ```json action block from text shown to the user. */
+    _stripActionBlock: function (text) {
+        var out = String(text || '').replace(/\x60\x60\x60json\s*\{[\s\S]*?"mbt_action"[\s\S]*?\}\s*\x60\x60\x60/g, '');
+        out = out.replace(/^\s+|\s+$/g, '');
+        return out || 'Proposed budget changes are ready — use Preview & Apply below.';
+    },
+
     /* ── Phase 60.B: Action Block Parser ───────────────────────────────── */
     _parseActionFromResponse: function (text) {
         var match = text.match(/\x60\x60\x60json\s*(\{[\s\S]*?"mbt_action"[\s\S]*?\})\s*\x60\x60\x60/);
@@ -147,65 +275,259 @@ window.mBTAIModule = {
         } catch (e) { return null; }
     },
 
-    /* ── Phase 60.B: Apply AI Suggestion ───────────────────────────────── */
+    /* ── Name matching helpers ───────────────────────────────────────────
+       The AI can return a near-miss: different case, extra spaces, or a
+       prefix dropped ("Production Crew" vs "BTL: Production Crew"). Exact
+       matching turned those into "Section not found" errors. Match loosely,
+       but only accept an unambiguous hit — never guess between two. */
+    _normalizeName: function (s) {
+        return String(s || '')
+            .toLowerCase()
+            .replace(/&/g, ' and ')          /* "Logistics & Fees" == "Logistics and Fees" */
+            .replace(/[^a-z0-9]+/g, ' ')
+            .replace(/^\s+|\s+$/g, '');
+    },
+
+    _findSectionKey: function (wanted) {
+        var budget = window.budget;
+        if (!budget || !budget.sections) return null;
+        var keys = Object.keys(budget.sections);
+        var i;
+
+        for (i = 0; i < keys.length; i++) {
+            if (keys[i] === wanted) return keys[i];
+        }
+        var want = this._normalizeName(wanted);
+        if (!want) return null;
+        for (i = 0; i < keys.length; i++) {
+            if (this._normalizeName(keys[i]) === want) return keys[i];
+        }
+        /* Partial match — only when exactly one section contains the text. */
+        var hits = [];
+        for (i = 0; i < keys.length; i++) {
+            var k = this._normalizeName(keys[i]);
+            if (k.indexOf(want) !== -1 || want.indexOf(k) !== -1) hits.push(keys[i]);
+        }
+        return hits.length === 1 ? hits[0] : null;
+    },
+
+    _findItem: function (sec, wanted) {
+        var items = (sec && sec.items) || [];
+        var i;
+        for (i = 0; i < items.length; i++) {
+            if ((items[i].description || '') === wanted) return items[i];
+        }
+        var want = this._normalizeName(wanted);
+        if (!want) return null;
+        for (i = 0; i < items.length; i++) {
+            if (this._normalizeName(items[i].description) === want) return items[i];
+        }
+        var hits = [];
+        for (i = 0; i < items.length; i++) {
+            var d = this._normalizeName(items[i].description);
+            if (d.indexOf(want) !== -1 || want.indexOf(d) !== -1) hits.push(items[i]);
+        }
+        return hits.length === 1 ? hits[0] : null;
+    },
+
+    /* Build a line item in the shape the budget engine expects.
+       baseRate and total matter: an item missing them shows a rate in the row
+       but totals as zero. The old add_item omitted both. */
+    _makeItem: function (spec) {
+        var qty  = parseFloat(spec.quantity);
+        if (isNaN(qty)) qty = 1;
+        var rate = parseFloat(spec.rate !== undefined ? spec.rate : spec.value);
+        if (isNaN(rate)) rate = 0;
+        return {
+            id: 'item_ai_' + Date.now() + '_' + Math.floor(Math.random() * 100000),
+            description: spec.description || 'AI Suggestion',
+            quantity: qty,
+            unit: spec.unit || 'Flat',
+            baseRate: rate,
+            rate: rate,
+            multiplier: 1,
+            actual: 0,
+            rateType: 'negotiable',
+            rateSource: 'ai',
+            tier: (window.budget && window.budget.tier) || 'Standard',
+            region: (window.budget && window.budget.region) || '',
+            crew: {},
+            qualifying: false,
+            actualQuantity: 0,
+            actualRate: 0,
+            actualDate: '',
+            committedCost: 0,
+            total: qty * rate
+        };
+    },
+
+    /* One change, described in plain English for the preview. */
+    _describeChange: function (c) {
+        var cur = window.displayCurrency || '';
+        var a = c.mbt_action;
+        if (a === 'update_rate')        return 'Set "' + (c.description || 'item') + '" rate to ' + cur + ' ' + c.value;
+        if (a === 'update_quantity')    return 'Set "' + (c.description || 'item') + '" quantity to ' + c.value;
+        if (a === 'add_item')           return 'Add "' + (c.description || 'item') + '" to ' + (c.section || '?');
+        if (a === 'add_section')        return 'Create section "' + (c.section || '?') + '"';
+        if (a === 'update_contingency') return 'Set contingency to ' + c.value + '%';
+        return 'Apply: ' + a;
+    },
+
+    /* Apply a single change. Returns an error string, or null on success. */
+    _applyOne: function (c) {
+        var budget = window.budget;
+        var a = c.mbt_action;
+
+        if (a === 'add_section') {
+            var wanted = String(c.section || '').replace(/^\s+|\s+$/g, '');
+            if (!wanted) return 'Section name missing.';
+            if (this._findSectionKey(wanted)) return null; /* already there, not an error */
+            budget.sections[wanted] = {
+                id: 'sec_ai_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+                isOpen: true,
+                items: [],
+                total: 0,
+                ratio: 0
+            };
+            return null;
+        }
+
+        if (a === 'update_contingency') {
+            var pct = parseFloat(c.value);
+            if (isNaN(pct)) return 'Contingency value was not a number.';
+            budget.contingencyPercentage = pct;
+            return null;
+        }
+
+        var key = this._findSectionKey(c.section);
+        if (!key) return 'Section not found: ' + (c.section || '(none)');
+        var sec = budget.sections[key];
+        if (!sec.items) sec.items = [];
+
+        if (a === 'add_item') {
+            sec.items.push(this._makeItem(c));
+            return null;
+        }
+
+        if (a === 'update_rate' || a === 'update_quantity') {
+            var item = this._findItem(sec, c.description);
+            if (!item) return 'Item not found: ' + (c.description || '(none)') + ' in ' + key;
+            var val = parseFloat(c.value);
+            if (isNaN(val)) return 'Value was not a number for ' + (c.description || 'item');
+            var field = c.field || (a === 'update_quantity' ? 'quantity' : 'rate');
+            item[field] = val;
+            if (field === 'rate') item.baseRate = val;
+            var q = parseFloat(item.quantity);   if (isNaN(q)) q = 0;
+            var r = parseFloat(item.rate);       if (isNaN(r)) r = 0;
+            var m = parseFloat(item.multiplier); if (isNaN(m) || !m) m = 1;
+            item.total = q * r * m;
+            return null;
+        }
+
+        return 'Unknown action: ' + a;
+    },
+
+    /* Apply an AI suggestion: one change, or a batch that builds a whole
+       section. Batches are all-or-nothing. The budget is snapshotted first,
+       and any failure restores it, so a half-applied batch is impossible. */
     applySuggestion: function (diff) {
         if (!diff || !diff.mbt_action) return;
+        var self   = this;
         var budget = window.budget;
         var mBTME  = window.mBTME;
         var mBTLE  = window.mBTLE;
         if (!budget) return mBTME.alert('Error', 'No budget loaded.');
 
-        /* Build human-readable preview description */
-        var desc = '';
-        if (diff.mbt_action === 'update_rate') {
-            desc = 'Set "' + (diff.description || 'item') + '" rate \u2192 ' + (mBTLE ? mBTLE.format.currency(diff.value) : diff.value);
-        } else if (diff.mbt_action === 'update_quantity') {
-            desc = 'Set "' + (diff.description || 'item') + '" quantity \u2192 ' + diff.value;
-        } else if (diff.mbt_action === 'add_item') {
-            desc = 'Add "' + (diff.description || 'item') + '" to section "' + (diff.section || '?') + '"';
-        } else if (diff.mbt_action === 'update_contingency') {
-            desc = 'Set contingency \u2192 ' + diff.value + '%';
-        } else {
-            desc = 'Apply: ' + diff.mbt_action;
+        var changes = (diff.mbt_action === 'batch' && diff.changes && diff.changes.length)
+            ? diff.changes
+            : [diff];
+
+        /* mBTME.confirm renders into a narrow <p>, so newlines collapse into one
+           dense paragraph. Build a scrollable list instead — a 31-change batch
+           has to be readable before anyone can honestly approve it. */
+        var esc = (window.mBT && window.mBT.ui && window.mBT.ui.render && window.mBT.ui.render.esc)
+            ? window.mBT.ui.render.esc
+            : function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+
+        var i, rows = [];
+        for (i = 0; i < changes.length; i++) {
+            rows.push('<li style="margin:0 0 4px 0;">' + esc(self._describeChange(changes[i])) + '</li>');
         }
+        var listHtml =
+            '<div style="text-align:left;max-height:260px;overflow-y:auto;margin:0 0 8px 0;">' +
+                '<ol style="margin:0;padding-left:18px;font-size:11px;line-height:1.5;color:#475569;">' +
+                    rows.join('') +
+                '</ol>' +
+            '</div>';
 
-        mBTME.confirm('Preview Change', desc + '. Apply this change to the budget?', function () {
-            var sec;
+        var title = changes.length > 1 ? ('Preview ' + changes.length + ' Changes') : 'Preview Change';
+        var body  = listHtml + '<span style="font-weight:800;">Apply to the budget?</span>';
 
-            if (diff.mbt_action === 'update_rate' || diff.mbt_action === 'update_quantity') {
-                sec = budget.sections[diff.section];
-                if (!sec) return mBTME.alert('Error', 'Section not found: ' + diff.section);
-                var item = null;
-                for (var i = 0; i < sec.items.length; i++) {
-                    if ((sec.items[i].description || '').toLowerCase() === (diff.description || '').toLowerCase()) { item = sec.items[i]; break; }
-                }
-                if (!item) return mBTME.alert('Error', 'Item not found: ' + diff.description);
-                item[diff.field || (diff.mbt_action === 'update_quantity' ? 'quantity' : 'rate')] = parseFloat(diff.value) || 0;
-
-            } else if (diff.mbt_action === 'add_item') {
-                sec = budget.sections[diff.section];
-                if (!sec) return mBTME.alert('Error', 'Section not found: ' + diff.section);
-                sec.items.push({
-                    id: 'item_ai_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-                    description: diff.description || 'AI Suggestion',
-                    quantity: parseFloat(diff.quantity) || 1,
-                    rate: parseFloat(diff.rate || diff.value) || 0,
-                    unit: diff.unit || 'Flat',
-                    multiplier: 1,
-                    actual: 0,
-                    notes: '',
-                    stageData: {}
+        mBTME.confirm(title, body, function () {
+            var backup;
+            try {
+                backup = JSON.stringify({
+                    sections: budget.sections,
+                    contingencyPercentage: budget.contingencyPercentage
                 });
+            } catch (e) { backup = null; }
 
-            } else if (diff.mbt_action === 'update_contingency') {
-                budget.contingencyPercentage = parseFloat(diff.value) || budget.contingencyPercentage;
+            var errors = [];
+            for (var j = 0; j < changes.length; j++) {
+                var err = self._applyOne(changes[j]);
+                if (err) errors.push('\u2022 ' + err);
             }
+
+            if (errors.length) {
+                if (backup) {
+                    var undoState = JSON.parse(backup);
+                    budget.sections = undoState.sections;
+                    budget.contingencyPercentage = undoState.contingencyPercentage;
+                }
+                return mBTME.alert('Nothing Applied',
+                    'The budget was left unchanged because ' +
+                    (errors.length === 1 ? 'this failed:' : 'these failed:') +
+                    '\n\n' + errors.join('\n'));
+            }
+
+            if (backup) window._mbtAILastBackup = backup;
 
             if (typeof window.saveBudget === 'function') window.saveBudget();
             if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+            if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
             if (typeof window.render === 'function') window.render();
-            mBTME.alert('Applied', 'Budget updated successfully.');
+
+            if (typeof self.refreshUndoButton === 'function') self.refreshUndoButton();
+
+            mBTME.alert('Applied', changes.length === 1
+                ? 'Budget updated.'
+                : (changes.length + ' changes applied. Use the undo arrow in chat to reverse.'));
         });
+    },
+
+    /* Show or hide the chat's undo button to match whether an undo exists. */
+    refreshUndoButton: function () {
+        var btn = document.getElementById('aiUndoBtn');
+        if (!btn) return;
+        if (window._mbtAILastBackup) btn.classList.remove('hidden');
+        else btn.classList.add('hidden');
+    },
+
+    /* Roll the budget back to the state before the last applied AI change. */
+    undoLastSuggestion: function () {
+        var mBTME = window.mBTME;
+        if (!window._mbtAILastBackup) return mBTME.alert('Undo', 'No AI change to undo.');
+        var budget = window.budget;
+        var prev = JSON.parse(window._mbtAILastBackup);
+        budget.sections = prev.sections;
+        budget.contingencyPercentage = prev.contingencyPercentage;
+        window._mbtAILastBackup = null;
+        if (typeof this.refreshUndoButton === 'function') this.refreshUndoButton();
+        if (typeof window.saveBudget === 'function') window.saveBudget();
+        if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+        if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+        if (typeof window.render === 'function') window.render();
+        mBTME.alert('Undone', 'The last AI change was reversed.');
     },
 
     /* ── Budget Analysis ────────────────────────────────────────────────── */
@@ -301,9 +623,15 @@ window.mBTAIModule = {
 
         var renderMessages = function () {
             return activeChat.map(function (msg) {
+                /* The action block is machine payload, not conversation. It is
+                   already parsed into the Preview & Apply button, so hide it —
+                   otherwise 30 lines of raw JSON bury the actual reply. */
+                var shown = (msg.role === 'assistant')
+                    ? self._stripActionBlock(msg.content)
+                    : msg.content;
                 var contentHtml = msg.role === 'assistant'
-                    ? self.renderSafeMarkdown(msg.content)
-                    : window.mBT.ui.render.esc(msg.content);
+                    ? self.renderSafeMarkdown(shown)
+                    : window.mBT.ui.render.esc(shown);
 
                 /* Phase 60.B: detect action block and add [Preview & Apply] button */
                 var actionBtn = '';
@@ -332,6 +660,7 @@ window.mBTAIModule = {
                 '<div class="flex justify-between items-center px-4 py-2 bg-white border-b border-slate-100 shrink-0">' +
                     '<span id="aiMsgCount" class="text-[9px] font-black uppercase tracking-widest text-slate-400">Context: ' + activeChat.length + ' msgs' + (persist ? '' : ' (session only)') + '</span>' +
                     '<div class="flex gap-2">' +
+                        '<button id="aiUndoBtn" onclick="window.mBTAIModule.undoLastSuggestion(); mBT.features.ai.refreshUndoButton();" title="Undo last AI budget change" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all' + (window._mbtAILastBackup ? '' : ' hidden') + '">' + (mBTAssets.undo || '\u21B6') + '</button>' +
                         '<button onclick="mBT.features.ai.exportChat()" title="Export Discussion" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">' + (mBTAssets.file || '') + '</button>' +
                         '<button onclick="mBT.features.ai.clearContext()" title="Clear Memory" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all">' + (mBTAssets.trash || '') + '</button>' +
                     '</div>' +
@@ -380,7 +709,9 @@ window.mBTAIModule = {
                     var docList      = (budget.documents || []).map(function (d) { return d.label; }).join(', ');
                     var attachList   = (budget.attachments || []).map(function (a) { return a.name; }).join(', ');
                     var prevAnalysis = ((budget.aiContext && budget.aiContext.analysis) || 'None').substring(0, 500);
-                    var contextSummary = '[SYSTEM CONTEXT: Project="' + budget.projectName + '", Total=' + (window.displayCurrency || '') + ' ' + budget.grandTotal + ', Docs=[' + docList + '], Attachments=[' + attachList + '], Last Analysis Summary="' + prevAnalysis + '"]';
+                    /* Docs/attachments/last-analysis ride along; the budget itself
+                       now goes in the system message via _buildBudgetContext. */
+                    var contextSummary = 'Docs=[' + docList + '], Attachments=[' + attachList + '], Last Analysis Summary="' + prevAnalysis + '"';
                     var apiHistory = [];
                     var finalPrompt = text;
                     if (persist && activeChat.length > 1) {
@@ -388,11 +719,18 @@ window.mBTAIModule = {
                             return { role: m.role, content: m.content };
                         });
                     } else {
-                        finalPrompt = contextSummary + ' \n\n User Query: ' + text;
+                        finalPrompt = '[' + contextSummary + ']\n\nUser Query: ' + text;
                     }
 
                     /* Phase 60.B: inject action-trigger capability into chat system prompt */
+                    /* Put the live budget in the system message so it survives on
+                       every turn — the old code dropped context once a saved
+                       conversation had history, leaving the AI blind mid-chat. */
+                    var budgetCtx = self._buildBudgetContext();
+                    var rateCtx   = self._buildRateContext(text);
                     var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
+                    if (budgetCtx) chatSystemMsg += '\n\n' + budgetCtx;
+                    if (rateCtx)   chatSystemMsg += '\n\n' + rateCtx;
                     return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg, apiHistory).then(function (response) {
                         /* callUnifiedAI swallows rejections into Analysis Failed: strings */
                         if (typeof response === 'string' && response.indexOf('Analysis Failed:') === 0) {

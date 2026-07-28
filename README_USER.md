@@ -122,7 +122,9 @@ Two modes:
 
 ## Data & Storage
 
-All your data is saved in your browser's **IndexedDB** — it stays on your device, never leaves unless you explicitly sync or export.
+All your data is saved in your browser's **IndexedDB** — it stays on your device unless you explicitly sync, export, or use an AI feature.
+
+**When AI features send data out:** AI is off until you add your own API key. Once you do, the questions you ask and the budget details needed to answer them are sent to that provider (OpenAI, Gemini, Anthropic, OpenRouter, etc.) along with your key. Rate guides, templates, and all other budget work stay local. If you want AI without anything leaving your machine, point Settings → AI at a local LM Studio endpoint.
 
 **To back up your data:**
 - Publisher → Save `.moo` file to your computer

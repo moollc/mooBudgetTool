@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.07</title>
+    <title>mooBudgetTool v24.08</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.02";
+    var APP_VERSION = "24.08";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -2828,14 +2828,27 @@
 
     /* ================= v19.54 TIER 3: Core Logic Engines ================= */
 
-    /* --- fetchExchangeRates: live rates from frankfurter.app (no API key required) --- */
+    /* --- fetchExchangeRates: live rates from frankfurter.dev (no API key required) --- */
     function fetchExchangeRates() {
         if (!navigator.onLine) return;
-        fetch('https://api.frankfurter.app/latest?from=USD')
+        /* frankfurter.app 301-redirects to api.frankfurter.dev/v1 (2026). A
+           cross-origin fetch does not follow that redirect, so live rates
+           silently failed and every user ran on the cached snapshot. */
+        fetch('https://api.frankfurter.dev/v1/latest?from=USD')
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.rates) return;
                 exchangeRates = Object.assign({ USD: 1.0 }, data.rates);
+                /* Frankfurter covers 29 majors only — no JMD/TTD/BBD, which are
+                   exactly the currencies this tool is built around. Keep the
+                   existing pegged values for those so a live refresh never
+                   deletes a currency the app depends on. */
+                var PEGGED = { JMD: 156.0, TTD: 6.8, BBD: 2.0 };
+                for (var pk in PEGGED) {
+                    if (PEGGED.hasOwnProperty(pk) && exchangeRates[pk] === undefined) {
+                        exchangeRates[pk] = PEGGED[pk];
+                    }
+                }
                 /* Phase 118: do not overwrite locked snapshot with live data */
                 if (localStorage.getItem(storageKeyPrefix + 'ratesLocked') !== 'true') {
                     localStorage.setItem(storageKeyPrefix + 'rates', JSON.stringify(exchangeRates));
@@ -2845,7 +2858,7 @@
                         mBTLE.config.currencies[code].rate = exchangeRates[code];
                     }
                 });
-                console.log('[mBT] Exchange rates refreshed from frankfurter.app');
+                console.log('[mBT] Exchange rates refreshed from frankfurter.dev');
             })
             .catch(function (e) {
                 console.warn('[mBT] Rate fetch failed, using cached/default rates:', e);
@@ -3761,7 +3774,7 @@
     }
 
     function hardResetApp() {
-        mBTME.confirm("Fix Bugs + Refresh", "This will:\n1. Repair any corrupted data fields in your current budget\n2. Wipe the app cache to pull the latest version\n\nYour budgets, contacts, and cloud auth are never touched. Continue?", function () {
+        mBTME.confirm("Fix Bugs + Refresh", "This will:\n1. Repair any corrupted data fields in your current budget\n2. Refresh the OpenGate rate card\n3. Wipe the app cache to pull the latest version\n\nYour budgets, contacts, and cloud auth are never touched. Continue?", function () {
 
             /* Step 1: data integrity repair on the live budget */
             var stats = _repairBudgetData();
@@ -3769,7 +3782,22 @@
                 stats.nanFixes + ' field(s) corrected, ' + stats.dupes + ' duplicate ID(s) resolved.';
             console.info('[mBT] ' + repairMsg);
 
-            /* Step 2: PWA cache wipe */
+            /* Step 2: force an OpenGate rate reseed.
+               Rate data lives in IndexedDB and only reseeds when the engine's
+               CURRENT_VERSION changes, so a user whose stored table predates a
+               rate update keeps the stale card with no way to refresh it —
+               cache wiping does not touch IndexedDB. This is reference data,
+               not user work, so re-pulling it is safe. Bespoke/community rates
+               are preserved by loadRates itself. */
+            try {
+                if (window.mBTOG && typeof window.mBTOG.loadRates === 'function') {
+                    window.mBTOG.loadRates(true);
+                }
+            } catch (ogErr) {
+                console.warn('[mBT] OpenGate reseed skipped:', ogErr);
+            }
+
+            /* Step 3: PWA cache wipe */
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.getRegistrations().then(function (registrations) {
                     for (var i = 0; i < registrations.length; i++) { registrations[i].unregister(); }
@@ -3781,7 +3809,7 @@
                 });
             }
 
-            /* Step 3: reload after queues flush */
+            /* Step 4: reload after queues flush */
             setTimeout(function () { window.location.reload(true); }, 800);
         });
     }
@@ -13375,7 +13403,7 @@
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            navigator.serviceWorker.register('./sw.js?v=24.02', { scope: './', updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION, { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
                     /* Store registration for native update checks (Task 15) */
                     if (!window.mBT) window.mBT = {};
