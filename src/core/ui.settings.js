@@ -753,7 +753,10 @@
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
-            var currentVersion = updateStatus.localVersion || 'v24.05';
+            /* Derive from the running build, never a hardcoded literal — a stale
+               literal here reports the wrong version to every user forever. */
+            var currentVersion = updateStatus.localVersion ||
+                (typeof window.APP_VERSION !== 'undefined' ? 'v' + window.APP_VERSION : 'unknown');
 
             var statusMsg = '';
             if (isChecking) {

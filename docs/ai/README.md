@@ -105,10 +105,11 @@ The AI automatically analyzes:
 
 ## Security
 
-- All analysis runs client-side
-- No data sent to external services
-- Works offline
-- Zero external dependencies
+- Rules-based analysis in this suite can run client-side and offline
+- **BYO LLM providers are different:** when you configure an API key (OpenAI, Gemini, Anthropic, OpenRouter, etc.) and use chat, fill, or similar features, prompt content and that key **are** sent to that third-party provider. This is not "no data sent to external services"
+- LM Studio keeps chat on your local endpoint if you use that option only
+- Zero external dependencies for the rules-based path only
+- Fuller producer-facing overview: [`docs/SECURITY_AND_DATA.md`](../SECURITY_AND_DATA.md)
 
 ## Advanced Configuration
 

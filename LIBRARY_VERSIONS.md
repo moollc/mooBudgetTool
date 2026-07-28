@@ -23,6 +23,7 @@
 | html2canvas | `html2canvas.min.js` | 194 KB | DOM → canvas snapshots | v1.4.x | ⚠️ Audit Required |
 | SheetJS (XLSX) | `xlsx.full.min.js` | 861 KB | Excel import/export | v0.18.x | ⚠️ Audit Required |
 | Marked | `marked.min.js` | 39 KB | Markdown → HTML parser | v12.x | ⚠️ Audit Required |
+| DOMPurify | `dompurify.min.js` | 29 KB | Sanitize AI/markdown HTML before innerHTML (XSS fix) | 3.4.12 | ✅ Pinned (jsDelivr UMD) |
 | PDF.js | `pdf.min.js` | 313 KB | PDF rendering in browser | v4.x | ⚠️ Audit Required |
 | localForage | `localforage.min.js` | 29 KB | Offline IndexedDB wrapper | v1.10.x | ⚠️ Audit Required |
 | JSZip | `jszip.min.js` | 95 KB | ZIP file creation | v3.10.x | ⚠️ Audit Required |
@@ -53,7 +54,7 @@
 
 | Metric | Value |
 |---|---|
-| Total files | 16 |
+| Total files | 17 |
 | Total size (uncompressed) | ~4.2 MB |
 | Largest single library | html2pdf (884 KB) |
 | Smallest single library | GridStack CSS (4 KB) |

@@ -203,6 +203,15 @@
         { "description": "Assistant Art Director", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Graphics Artist", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "PTZ Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "VERIFIED peer — Absolute Rentals (Burbank) markets dedicated PTZ operators for multi-cam live/event alongside PTZ gear. USA mid ~$450-$550/day from live camera-operator bands. Multipliers proxy Camera Operator." },
+        /* ========= HYBRID / CONFERENCE AV CREW (Phase 204, research 2026-07-27) =========
+           Hybrid conference work (in-room + videoconference bridge) had no role
+           vocabulary. Sourced from AV production cost guides and hybrid-event
+           staffing patterns; multipliers proxy Stream Technician / Camera Operator. */
+        { "description": "Videoconference Operator", "unit": "Day", "baseRate": 525, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — runs the Zoom/Teams bridge for a hybrid event: admits remote presenters, manages share-to-room, monitors remote audio. University AV guides staff this as a dedicated tech separate from the camera op (2 techs typical). USA mid aligns to Stream Technician band ~$525. Multipliers proxy Stream Technician." },
+        { "description": "Remote Presenter Wrangler", "unit": "Day", "baseRate": 425, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "ESTIMATE — cues and rehearses remote speakers, manages green room and hand-offs. Below Videoconference Operator (no signal-path responsibility); above PA band. USA mid ~$425. Multipliers proxy Stream Technician." },
+        { "description": "AV Technician", "unit": "Day", "baseRate": 450, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — generalist corporate/conference AV tech (projection, mics, cabling, room patch). USA mid between two-person crew guides ($900-$1500/day for 2) and specialist bands. Multipliers proxy Stream Technician." },
+        { "description": "Audio Operator (Live Event)", "unit": "Day", "baseRate": 550, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — live event A1 running FOH/mix for conference audio incl. videoconference send/return. Distinct from film Sound Mixer (production sound). USA mid ~$550. Multipliers proxy Stream Technician." },
+        { "description": "Graphics Operator", "unit": "Day", "baseRate": 500, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.9, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — lower-thirds/CG playback operator for live events. Sits below Technical Director, above Stream Technician. USA mid ~$500. Multipliers proxy Stream Technician." },
         { "description": "Stream Technician", "unit": "Day", "baseRate": 525, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.95, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 }, "intelligence": "PEER — live streaming engineer (encoder/switcher/RTMP path, not broadcast TD). USA mid between indie stream tech (~$400) and Broadcast Engineer (~$700). Multipliers proxy Broadcast Engineer." },
         { "description": "Music Editor", "unit": "Day", "baseRate": 650, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.8, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
         { "description": "Sound Editor", "unit": "Day", "baseRate": 750, "multipliers": { "USA": 1, "Jamaica": 0.28, "Trinidad": 0.37, "Barbados": 0.43, "Guyana": 0.37, "UK": 0.85, "Canada": 0.85, "Australia": 0.68, "India": 0.38, "Thailand": 0.42, "Philippines": 0.39, "Vietnam": 0.49, "Poland": 0.76, "Mexico": 0.47, "Brazil": 0.54, "Colombia": 0.36, "South Africa": 0.54 } },
@@ -340,7 +349,26 @@
         { "description": "PTZ Camera", "unit": "Day", "baseRate": 175, "category": "live", "intelligence": "Alias: Sony BRC-X400 4K PTZ Camera.", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "PTZ Controller", "unit": "Day", "baseRate": 85, "category": "live", "intelligence": "Alias: PTZ Controller (RM-IP10 Class).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
         { "description": "PTZ Control Setup", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Alias: PTZ Package (Camera + Controller).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
-        { "description": "PTZ Kit", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Alias: PTZ Package (Camera + Controller).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS }
+        { "description": "PTZ Kit", "unit": "Day", "baseRate": 275, "category": "live", "intelligence": "Alias: PTZ Package (Camera + Controller).", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS },
+        /* ========= OSEE SWITCHERS + HYBRID/CONFERENCE AV (Phase 204, research 2026-07-27) =========
+           OSEE had no entries; conference AV (projection, mics, laptops, VC bridge)
+           was absent entirely, which forced AI-assisted builds to invent rates.
+           Rental days derived from street purchase price on the standard
+           ~10%/day prosumer and ~5%/day pro-AV convention, cross-checked to
+           in-class peers already in this table. */
+        { "description": "OSEE GoStream Deck", "unit": "Day", "baseRate": 45, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — 4-input HDMI switcher/recorder, street $295 (B&H/Amazon 2026). Direct ATEM Mini Pro ISO competitor (2 HDMI outs vs 1); priced just under the $50 ATEM Mini Pro ISO peer already in this table." },
+        { "description": "OSEE GoStream Deck Pro", "unit": "Day", "baseRate": 60, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — NDI-updatable Pro variant of GoStream Deck. Premium over base Deck consistent with the NDI uplift on peer switchers." },
+        { "description": "OSEE GoStream Omni 12 ISO", "unit": "Day", "baseRate": 150, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — 12-input live switcher with ISO record, PTZ control, instant replay. Launch indicative $1,700-$1,900 (CineD, July 2026). Sits between ATEM Mini Pro ISO ($50) and ATEM 2 M/E Constellation ($275)." },
+        { "description": "Videoconference Bridge Kit (Zoom to Room)", "unit": "Day", "baseRate": 175, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — the two-way path for hybrid events: dedicated bridge laptop, USB capture in, program/audio return to the VC platform, and mix-minus so remote talent is not echoed back. Bundled gear-only day; excludes the Videoconference Operator who runs it." },
+        { "description": "USB Capture Device (Program to VC)", "unit": "Day", "baseRate": 35, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — UVC capture (Cam Link / ATEM USB webcam out) presenting program video to Zoom/Teams as a camera source. Street $130-$200; prosumer 10%/day convention." },
+        { "description": "Projector (5000 Lumen)", "unit": "Day", "baseRate": 300, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED — Houston AV Rental lists 5,000-lumen projector at $300/day; corporate AV guides quote $100-$500/day depending on lumens." },
+        { "description": "Projection Screen (Tripod)", "unit": "Day", "baseRate": 50, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED — tripod screen $50/day (Houston AV Rental). Fast-fold and larger formats price above this." },
+        { "description": "Wireless Microphone (Handheld)", "unit": "Day", "baseRate": 175, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED — Shure wireless handheld $175/day per channel (AV rental listings). Price is per channel, not per system." },
+        { "description": "Wireless Microphone (Lavalier)", "unit": "Day", "baseRate": 175, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED — Shure wireless lavalier $175/day per channel; matches handheld channel pricing in AV rental listings." },
+        { "description": "Presentation Laptop", "unit": "Day", "baseRate": 200, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED — laptop rental $200/day (AV rental rate cards). Covers slide playback or a dedicated VC bridge machine." },
+        { "description": "Confidence Monitor", "unit": "Day", "baseRate": 125, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — on-stage return display so presenters see slides/remote panel. Mid of corporate AV display bands; below projector, above tripod screen." },
+        { "description": "Camera Tripod (Video Head)", "unit": "Day", "baseRate": 45, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "ESTIMATE — fluid-head sticks for locked-off event cameras. ShareGrid-class prosumer day; below cine tripod bands." },
+        { "description": "Conference AV Package (Projection + Mics)", "unit": "Day", "baseRate": 500, "category": "live", "multipliers": _EQUIPMENT_FIXED_MULTIPLIERS, "intelligence": "VERIFIED floor — corporate projector-and-screen packages start at $500/day; full event AV packages run $500-$1,000+. Bundle alias for projection, screen, mic channels and patch." }
     ];
 
     /* ========= MARKET TRUTH INTELLIGENCE (Citations) ========= */
@@ -589,7 +617,7 @@
         loadRates: function (forceReseed) {
             var self = this;
             var DB_VERSION_KEY = 'mbt_og_db_version';
-            var CURRENT_VERSION = '2026.07.22_live_venue_ptz_v1';
+            var CURRENT_VERSION = '2026.07.27_hybrid_conference_av_v1';
 
             return _loadWithMigration('prodBudget_v5_globalItems').then(function (stored) {
                 return _lfGet(DB_VERSION_KEY).then(function (v) {
@@ -598,7 +626,28 @@
                     if (!stored || stored.length === 0 || v !== CURRENT_VERSION || forceReseed) {
                         var defaults = self._expandMasterIndex(self.settings.location)
                             .concat(self._expandEquipmentIndex(self.settings.location));
-                        for (var i = 0; i < defaults.length; i++) { self.rates.push(defaults[i]); }
+
+                        /* A reseed refreshes the DEFAULT card only. Rates the user
+                           edited (source !== 'default') are their own work and must
+                           survive — a straight overwrite here silently destroyed
+                           every bespoke and community rate. Keep those, and let a
+                           user override win over the default of the same name. */
+                        var keep = [];
+                        var kept = {};
+                        if (stored && stored.length) {
+                            for (var k = 0; k < stored.length; k++) {
+                                var sr = stored[k];
+                                if (sr && sr.source && sr.source !== 'default') {
+                                    keep.push(sr);
+                                    kept[sr.description] = true;
+                                }
+                            }
+                        }
+                        for (var i = 0; i < defaults.length; i++) {
+                            if (!kept[defaults[i].description]) self.rates.push(defaults[i]);
+                        }
+                        for (var kp = 0; kp < keep.length; kp++) { self.rates.push(keep[kp]); }
+
                         _lfSet(DB_VERSION_KEY, CURRENT_VERSION);
                         return self.saveRates();
                     }
