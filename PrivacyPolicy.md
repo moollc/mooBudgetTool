@@ -18,9 +18,11 @@ If you turn on "Cloud Sync" in Settings:
 ### 3. AI Features
 mBT has AI tools to help you analyze your budget or chat with a bot.
 * **Local Analytics**: The basic analysis tool runs entirely on your own computer. No data is sent over the internet.
-* **External AI (OpenAI, Claude, etc.)**: If you use your own API key to chat with a bot:
-    * The tool sends parts of your project (like budget totals or names) to that AI company so they can answer you.
-    * We don't control how those companies use your data. 
+* **External AI (OpenAI, Claude, Gemini, Grok, OpenRouter, etc.)**: If you use your own API key to chat with a bot:
+    * The tool sends parts of your project (like budget totals, section names and line item descriptions) to that AI company so they can answer you. Your API key is sent with each request.
+    * mBT does not create an account or a saved conversation on the provider's side. Each request is sent on its own and the reply comes straight back. Your chat history is stored only in this app, on your device.
+    * That said, providers keep a copy of requests on their own servers for a period of time, usually to check for abuse. **How long, and whether they use it to improve their own products, is set by that provider and not by us.** Terms differ a lot between them, and they change. Before you send a confidential budget, read the terms of the provider you picked.
+    * We don't control how those companies use your data.
     * **LM Studio**: If you use a local AI server (LM Studio), no data leaves your machine.
 
 ### 4. No Spying or Tracking

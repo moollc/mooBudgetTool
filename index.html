@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.08</title>
+    <title>mooBudgetTool v24.09</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.08";
+    var APP_VERSION = "24.09";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3698,7 +3698,15 @@
         if (!Array.isArray(b.activityLog)) b.activityLog = [];
         if (!Array.isArray(b.fundingSources)) b.fundingSources = [];
         if (!b.aiContext || typeof b.aiContext !== 'object') b.aiContext = { chat: [], analysis: '' };
-        if (!Array.isArray(b.aiContext.chat)) b.aiContext.chat = [];
+        /* Threads migration: wrap legacy chat once, keep chat key for rollback. */
+        if (window.mBTAIModule && typeof window.mBTAIModule._migrateAiContext === 'function') {
+            window.mBTAIModule._migrateAiContext(b);
+        } else if (window.mBTAssistant && typeof window.mBTAssistant.migrateBudgetAiContext === 'function') {
+            window.mBTAssistant.migrateBudgetAiContext(b);
+        } else {
+            if (!Array.isArray(b.aiContext.chat)) b.aiContext.chat = [];
+            if (!Array.isArray(b.aiContext.threads)) b.aiContext.threads = [];
+        }
         if (!b.settings || typeof b.settings !== 'object') b.settings = {};
         if (!b.jurisdiction || typeof b.jurisdiction !== 'object') b.jurisdiction = {};
         if (!b.ledgers || typeof b.ledgers !== 'object') b.ledgers = {};

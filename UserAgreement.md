@@ -9,7 +9,7 @@ Welcome to the Moo Budget Tool (mBT). By using this tool, you agree to these sim
 3. **Your Data & Privacy**: 
    * By default, your work stays on your own computer or phone.
    * **Cloud Sync**: If you turn on sync, your data is saved on our secure server so you can use it on other devices.
-   * **AI Providers**: If you use AI chat (like OpenAI or Claude), some of your project info is sent to them so they can answer your questions. We don't control what they do with it.
+   * **AI Providers**: If you use AI chat (like OpenAI, Claude, Gemini or Grok), some of your project info is sent to them so they can answer your questions. We don't control what they do with it, how long they keep it, or whether they use it to train their own systems. Those terms are set by the provider you chose, they are different for each one, and they change. If your budget is confidential, check that provider's terms first, or use a local AI server so nothing leaves your machine. You are responsible for what you send.
 
 4. **Not a Professional Service**: mBT is a tool, not a professional accountant or lawyer. Use it to help you work, but talk to a real pro before you sign off on a final production budget.
 

@@ -38,6 +38,52 @@ body {
     scrollbar-width: none;
 }
 
+/* Chat Expanded / PiP: hidden scrollbar + grey position dot */
+.mbt-chat-scrolltrack {
+    position: absolute;
+    right: 5px;
+    top: 10px;
+    bottom: 10px;
+    width: 6px;
+    pointer-events: none;
+}
+.mbt-chat-scrolldot {
+    position: absolute;
+    right: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: top 0.12s linear;
+}
+
+/* Drawer collapse: thin reopen strip */
+.mbt-chat-drawer-collapsed {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+}
+.mbt-chat-drawer-collapsed .mbt-chat-drawer-body,
+.mbt-chat-drawer-collapsed .mbt-chat-drawer-head {
+    display: none !important;
+}
+.mbt-chat-drawer-collapsed .mbt-chat-drawer-reopen {
+    display: flex !important;
+}
+.mbt-chat-drawer-reopen {
+    display: none;
+}
+
+/* PiP drag handle */
+.mbt-chat-pip-grip {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.mbt-chat-pip-grip:active {
+    cursor: grabbing;
+}
+
 /* --- 1. Interaction Protocols (Drag and drop behavior) --- */
 .draggable-row {
     cursor: grab;
