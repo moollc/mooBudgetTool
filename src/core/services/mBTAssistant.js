@@ -384,6 +384,61 @@ var mBTAssistant = (function () {
         return !!(budgetDoc && budgetDoc.aiContext && budgetDoc.aiContext.saveHistory);
     }
 
+    /* Migrate budget.aiContext.chat -> threads (idempotent).
+       Prefers mBTAIModule when loaded so title/id rules stay in one place.
+       Standalone fallback keeps legacy chat and wraps once if threads missing. */
+    function migrateBudgetAiContext(budgetDoc) {
+        var ctx, msgs, thr, now, i, title, t, m;
+        if (!budgetDoc) return null;
+        if (typeof window !== 'undefined' && window.mBTAIModule &&
+            typeof window.mBTAIModule._migrateAiContext === 'function') {
+            window.mBTAIModule._migrateAiContext(budgetDoc);
+            return budgetDoc.aiContext || null;
+        }
+        if (!budgetDoc.aiContext || typeof budgetDoc.aiContext !== 'object') {
+            budgetDoc.aiContext = {
+                chat: [],
+                threads: [],
+                analysis: '',
+                activeThreadId: null
+            };
+            return budgetDoc.aiContext;
+        }
+        ctx = budgetDoc.aiContext;
+        if (Array.isArray(ctx.threads)) {
+            if (!ctx.activeThreadId && ctx.threads.length && ctx.threads[0]) {
+                ctx.activeThreadId = ctx.threads[0].id;
+            }
+            if (!Array.isArray(ctx.chat)) ctx.chat = [];
+            return ctx;
+        }
+        now = Date.now();
+        msgs = Array.isArray(ctx.chat) ? ctx.chat.slice() : [];
+        title = '';
+        for (i = 0; i < msgs.length; i++) {
+            m = msgs[i];
+            if (m && m.role === 'user' && m.content) {
+                t = String(m.content).replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+                if (t) {
+                    title = t.length > 60 ? t.substring(0, 60) : t;
+                    break;
+                }
+            }
+        }
+        thr = {
+            id: 'thr_' + now + '_' + Math.floor(Math.random() * 100000),
+            title: title,
+            created: now,
+            updated: now,
+            changeCount: 0,
+            messages: msgs
+        };
+        ctx.threads = [thr];
+        ctx.activeThreadId = thr.id;
+        if (!Array.isArray(ctx.chat)) ctx.chat = [];
+        return ctx;
+    }
+
     /* =========================================================================
        PUBLIC API — GENERATED ASSETS
     ========================================================================= */
@@ -724,6 +779,7 @@ var mBTAssistant = (function () {
         clearChat:           clearChat,
         chatProjectKey:      chatProjectKey,
         isPersistentContextFromDoc: isPersistentContextFromDoc,
+        migrateBudgetAiContext: migrateBudgetAiContext,
         /* Generated assets */
         getAsset:            getAsset,
         saveAsset:           saveAsset,
