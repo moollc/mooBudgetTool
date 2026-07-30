@@ -1,9 +1,11 @@
 [
   {
     "id": "ai",
-    "name": "AI Suite",
+    "name": "Assistant",
     "path": "./src/tools/ai/index.html",
-    "icon": "🤖"
+    "icon": "🤖",
+    "deprecated": true,
+    "note": "Iframe retired. App opens mBT.features.ai.openChat() from the toolbar. File kept for cleanup pass only."
   },
   {
     "id": "calendar",

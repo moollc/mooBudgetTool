@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v24.09';
+var CACHE_NAME = 'mbt-monolith-cache-v24.10';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -75,12 +75,12 @@ var PRECACHE_ASSETS = [
     './src/core/wasm/mbt_wasm.js',
     './src/core/wasm/mbt_wasm_bg.wasm',
 
-    /* --- AI tool dependencies (loaded by src/tools/ai/index.html iframe) --- */
+    /* --- AI context helper (used by monolith + tools; not the retired AI Suite iframe) --- */
     './src/services/ai-context.js',
 
     /* --- Tool HTML files (dynamically loaded via openTool() iframes) --- */
+    /* src/tools/ai/index.html intentionally omitted: retired, openChat is the surface. */
     './src/tools/tools-manifest.json',
-    './src/tools/ai/index.html',
     './src/tools/calendar_benchmark/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',

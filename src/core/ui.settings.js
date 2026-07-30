@@ -401,7 +401,8 @@
                     '</div>';
         }
         if (tabName === 'connections') {
-            var webhookUrl = localStorage.getItem(storageKeyPrefix + 'cloudWebhook') || '';
+            /* Webhook lives only in assistant settings sheet (AIModule openChat).
+               Same key: storageKeyPrefix + cloudWebhook. Do not reintroduce a card here. */
             var ma = window.mBTAssistant;
             var aiProvidersCardBody = '';
 
@@ -486,32 +487,8 @@
             }
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="space-y-3">' +
-                            '<div class="connection-card">' +
-                                aiProvidersCardBody +
-                            '</div>' +
-                            '<div class="connection-card">' +
-                                '<div class="p-4 bg-slate-900 rounded-2xl border border-black shadow-lg text-white">' +
-                                    '<div class="flex justify-between items-start mb-3">' +
-                                        '<div>' +
-                                            '<h3 class="text-[10px] font-black uppercase tracking-widest text-emerald-400">Production Webhook</h3>' +
-                                            '<p class="text-[9px] text-slate-500 font-bold mt-0.5">Upstream Data Bridge</p>' +
-                                        '</div>' +
-                                        '<div class="text-slate-700">' + mBTAssets.cloud + '</div>' +
-                                    '</div>' +
-                                    '<div class="space-y-3">' +
-                                        '<div>' +
-                                            '<label class="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Webhook Endpoint</label>' +
-                                            '<div class="flex gap-2">' +
-                                                '<input type="text" id="cloudWebhookInput" value="' + esc(webhookUrl) + '" onchange="localStorage.setItem(\'' + storageKeyPrefix + 'cloudWebhook\', this.value)" class="flex-1 bg-slate-800 text-white border-none rounded-lg p-2.5 text-[10px] font-mono outline-none focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-600" placeholder="https://api.mbt-assistant.com/ingest..">' +
-                                                '<button onclick="var url=document.getElementById(\'cloudWebhookInput\').value; if(!url) return mBTME.alert(\'Error\', \'No URL\'); mBTME.showLoader(\'Pinging..\'); fetch(url, {method:\'POST\', headers:{\'Content-Type\':\'application/json\'}, body:JSON.stringify({test:true, source:\'MooBudget\', project:budget.projectName, ts:new Date().toISOString()})).then(function(r){ mBTME.hideLoader(); if(r.ok) mBTME.alert(\'Success\',\'Endpoint Reachable\'); else mBTME.alert(\'Error\', \'Status: \'+r.status); }).catch(function(e){ mBTME.hideLoader(); mBTME.alert(\'Connection Failed\', e.message); })" class="px-3 bg-emerald-900/50 text-emerald-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-900 border border-emerald-800 transition-colors">Test</button>' +
-                                            '</div>' +
-                                            '<p class="text-[8px] text-slate-600 mt-2">Destination for "Cloud Dispatch". Accepts JSON payloads containing Ledger and Budget totals.</p>' +
-                                            '<p class="text-[8px] text-amber-500 font-bold mt-1">Note: automatic dispatch is not yet implemented. The Test button only checks connectivity. It does not send live budget data.</p>' +
-                                        '</div>' +
-                                    '</div>' +
-                                '</div>' +
-                            '</div>' +
+                        '<div class="connection-card">' +
+                            aiProvidersCardBody +
                         '</div>' +
                     '</div>';
         }

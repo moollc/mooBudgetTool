@@ -1,9 +1,16 @@
 <!DOCTYPE html>
+<!--
+  DEPRECATED (scheduled for deletion).
+  Superseded by the native assistant renderer in src/core/logic/AIModule.js (openChat).
+  The toolbar / AI Suite entry now calls mBT.features.ai.openChat() and no longer
+  loads this iframe. File kept in place until Jayson confirms the replacement and
+  a separate cleanup pass removes it.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mBT AI Assistant</title>
+  <title>mBT AI Assistant (deprecated)</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../core/components/EmbeddedMode.js"></script>
