@@ -726,6 +726,151 @@ window.mBTAIModule = {
         mBTME.alert('Undone', 'The last AI change was reversed.');
     },
 
+    /* Inject budget context into chat prompts (default on). Stored in localStorage. */
+    isInjectBudgetContext: function () {
+        try {
+            var v = localStorage.getItem('mbt_ai_inject_budget_context');
+            if (v === '0' || v === 'false') return false;
+        } catch (e) {}
+        return true;
+    },
+    setInjectBudgetContext: function (on) {
+        try { localStorage.setItem('mbt_ai_inject_budget_context', on ? '1' : '0'); } catch (e) {}
+    },
+
+    /* Apply an AI-generated full budget (replaces the active project). Ported from
+       EventRouter load-budget so Generate works without the old iframe. */
+    applyGeneratedBudget: function (budgetData) {
+        var mBTME = window.mBTME;
+        var mBT = window.mBT;
+        if (!budgetData || !mBT || !mBT.data) {
+            if (mBTME) mBTME.alert('Error', 'Budget data or data layer unavailable.');
+            return false;
+        }
+        function sanitizeBudgetNode(node) {
+            if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
+            if (Array.isArray(node)) {
+                var arr = [];
+                var ai;
+                for (ai = 0; ai < node.length; ai++) arr.push(sanitizeBudgetNode(node[ai]));
+                return arr;
+            }
+            if (node && typeof node === 'object') {
+                var c = {};
+                var keys = Object.keys(node);
+                var ki;
+                for (ki = 0; ki < keys.length; ki++) c[keys[ki]] = sanitizeBudgetNode(node[keys[ki]]);
+                return c;
+            }
+            return node;
+        }
+        var lbSanitized = sanitizeBudgetNode(budgetData);
+        if (!lbSanitized.projectName || typeof lbSanitized.sections !== 'object') {
+            if (mBTME) mBTME.alert('Invalid Budget', 'The AI returned an incomplete structure. Try again with more detail.');
+            return false;
+        }
+        var sNames = Object.keys(lbSanitized.sections);
+        var si;
+        for (si = 0; si < sNames.length; si++) {
+            var sName = sNames[si];
+            var sec = lbSanitized.sections[sName];
+            if (!sec.id) sec.id = sName.toLowerCase().replace(/\s+/g, '_').substring(0, 20);
+            if (sec.isOpen === undefined) sec.isOpen = true;
+            if (!Array.isArray(sec.items)) { sec.items = []; continue; }
+            var nextItems = [];
+            var ii;
+            for (ii = 0; ii < sec.items.length; ii++) {
+                var it = sec.items[ii];
+                if (!it || typeof it.description !== 'string') continue;
+                it.id = it.id || ('item_' + ii + '_' + Math.random().toString(36).substr(2, 4));
+                it.quantity = Number(it.quantity) || 1;
+                it.rate = Number(it.rate) || 0;
+                it.multiplier = Number(it.multiplier) || 1;
+                it.actual = Number(it.actual) || 0;
+                it.unit = it.unit || 'Flat';
+                it.rateType = it.rateType || 'negotiable';
+                it.crew = it.crew || {};
+                nextItems.push(it);
+            }
+            sec.items = nextItems;
+        }
+        lbSanitized.company = lbSanitized.company || 'Independent';
+        lbSanitized.startDate = lbSanitized.startDate || new Date().toISOString().split('T')[0];
+        lbSanitized.contingencyPercentage = Number(lbSanitized.contingencyPercentage) || 10;
+        lbSanitized.salesTaxPercentage = Number(lbSanitized.salesTaxPercentage) || 0;
+        lbSanitized.discountPercentage = Number(lbSanitized.discountPercentage) || 0;
+        lbSanitized.documents = Array.isArray(lbSanitized.documents) ? lbSanitized.documents : [];
+        lbSanitized.attachments = Array.isArray(lbSanitized.attachments) ? lbSanitized.attachments : [];
+        lbSanitized.globalItems = Array.isArray(lbSanitized.globalItems) ? lbSanitized.globalItems : [];
+        lbSanitized.aiContext = lbSanitized.aiContext || { chat: [], threads: [], analysis: '', activeThreadId: null };
+        lbSanitized.activityLog = lbSanitized.activityLog || [];
+        var lbBase = lbSanitized.projectName.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'AI Budget';
+        lbSanitized.projectName = lbBase + ' ' + new Date().toISOString().split('T')[0];
+        if (mBT.data.state && typeof mBT.data.state.wrap === 'function') {
+            window.budget = mBT.data.state.wrap(lbSanitized);
+        } else {
+            window.budget = lbSanitized;
+        }
+        if (typeof window.currentProjectName !== 'undefined') window.currentProjectName = lbSanitized.projectName;
+        if (mBT.data.save) {
+            mBT.data.save().then(function () {
+                if (mBT.data.load) mBT.data.load(lbSanitized.projectName);
+            });
+        }
+        if (typeof window.saveBudget === 'function') {
+            try { window.saveBudget(); } catch (eSave) { /* ignore */ }
+        }
+        if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+        if (typeof window.render === 'function') window.render();
+        if (mBTME) mBTME.alert('Budget Loaded', '"' + lbSanitized.projectName + '" is now active in the editor.');
+        return true;
+    },
+
+    /* AI Generate: builds a full budget from a brief + optional type hint. Replaces current budget. */
+    generateBudgetFromPrompt: function (userPrompt, templateHint) {
+        var self = this;
+        var mBTME = window.mBTME;
+        var provider = self.getSelectedProvider();
+        var apiKey = self.getStoredApiKey(provider);
+        userPrompt = String(userPrompt || '').replace(/^\s+|\s+$/g, '');
+        if (!userPrompt) {
+            if (mBTME) mBTME.alert('Generate', 'Enter a production description first.');
+            return Promise.resolve(false);
+        }
+        if (!apiKey && provider !== 'lmstudio') {
+            if (mBTME) mBTME.alert('Assistant Offline', 'Configure an API key in Settings > Connections.');
+            return Promise.resolve(false);
+        }
+        var schemaGuide = [
+            'Return ONLY a valid JSON object - no markdown fences, no explanation, no comments.',
+            'Schema: { "projectName": string, "company": string, "startDate": "YYYY-MM-DD",',
+            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number,',
+            '"sections": { "Section Name": { "id": "snake_id", "isOpen": true, "items": [',
+            '{ "id": "item_001", "description": string, "quantity": number,',
+            '"unit": "Day|Week|Flat|Hour", "rate": number, "multiplier": 1, "actual": 0, "rateType": "negotiable" }',
+            '] } } }',
+            'Rules: plain text strings only (no HTML tags). Realistic rates. 3-5 sections, 4-8 items each.',
+            templateHint ? ('Use a ' + templateHint + ' budget structure.') : ''
+        ].join(' ');
+        if (mBTME && mBTME.showLoader) mBTME.showLoader('Generating budget..');
+        return self.callUnifiedAI(provider, apiKey, 'Generate a production budget for: ' + userPrompt, schemaGuide).then(function (result) {
+            if (mBTME && mBTME.hideLoader) mBTME.hideLoader();
+            if (typeof result === 'string' && result.indexOf('Analysis Failed:') === 0) {
+                if (mBTME) mBTME.alert('Generate Failed', result.replace('Analysis Failed: ', '') || 'AI request failed.');
+                return false;
+            }
+            var text = String(result || '').replace(/^[\x60]{3}json\s*/i, '').replace(/^[\x60]{3}\s*/i, '').replace(/\s*[\x60]{3}$/i, '').replace(/^\s+|\s+$/g, '');
+            var raw;
+            try {
+                raw = JSON.parse(text);
+            } catch (e) {
+                if (mBTME) mBTME.alert('Generate Failed', 'The AI returned invalid JSON. Simplify your prompt and try again.');
+                return false;
+            }
+            return self.applyGeneratedBudget(raw);
+        });
+    },
+
     /* ── Budget Analysis ────────────────────────────────────────────────── */
     analyzeCurrentBudget: function () {
         var self     = this;
@@ -816,17 +961,22 @@ window.mBTAIModule = {
         sess.inflight = false;
         sess.genId = (sess.genId || 0) + 1;
         if (sess.root && sess.root.parentNode) sess.root.parentNode.removeChild(sess.root);
+        if (this._pipResizeHandler) {
+            window.removeEventListener('resize', this._pipResizeHandler);
+            this._pipResizeHandler = null;
+        }
         this._chatSession = null;
         document.body.style.overflow = '';
     },
 
     /* ── AI Chat: Expanded + PiP (Build 2) ───────────────────────────────── */
-    openChat: function () {
+    openChat: function (opts) {
         var self = this;
         var budget = window.budget;
         var mBTME = window.mBTME;
         var mBTAssets = window.mBTAssets || {};
         var persist = self.isPersistentContext();
+        opts = opts || {};
 
         if (!budget) {
             if (mBTME && mBTME.alert) mBTME.alert('No Project', 'Load a project before opening Assistant.');
@@ -1069,6 +1219,27 @@ window.mBTAIModule = {
             return mBTAssets[name] || fallback || '';
         }
 
+        /* Resize asset SVGs for the chat header so file/trash/gear/etc share one size.
+           Use \\s (not \\s*) before width/height so stroke-width is not torn apart. */
+        function iconAtSize(name, sizePx, fallback) {
+            var raw = mBTAssets[name] || fallback || '';
+            if (!raw) return '';
+            var s = String(sizePx);
+            var out = String(raw);
+            out = out.replace(/\swidth="[^"]*"/gi, '');
+            out = out.replace(/\sheight="[^"]*"/gi, '');
+            out = out.replace(/\sstroke-width="[^"]*"/gi, '');
+            out = out.replace(/<svg\b/i, '<svg width="' + s + '" height="' + s + '" stroke-width="2.5" style="display:block;width:' + s + 'px;height:' + s + 'px;"');
+            return out;
+        }
+
+        function headerIcon(name, fallback, isPip) {
+            var sz = isPip ? 16 : 18;
+            return '<span class="inline-flex items-center justify-center shrink-0" style="width:' + sz + 'px;height:' + sz + 'px;">' +
+                iconAtSize(name, sz, fallback) +
+            '</span>';
+        }
+
         /* ── Render pieces ─────────────────────────────────────────────── */
 
         function renderMessagesHtml(chat, isPip) {
@@ -1172,6 +1343,11 @@ window.mBTAIModule = {
                     'Ask anything about this budget. I can see your sections, line items and the OpenGate rate card.' +
                 '</p>' +
                 '<div class="flex flex-wrap justify-center gap-2 max-w-lg">' + chipHtml + '</div>' +
+                (isPip ? '' : (
+                    '<button type="button" data-chat-act="open-generate" class="mt-4 px-4 py-2 rounded-xl bg-violet-50 border border-violet-200 text-[9px] font-black uppercase tracking-widest text-violet-700 hover:bg-violet-100">' +
+                        'Generate from template (replaces budget)' +
+                    '</button>'
+                )) +
             '</div>';
         }
 
@@ -1250,30 +1426,28 @@ window.mBTAIModule = {
         function renderHeaderHtml(isPip) {
             var m = modelName();
             var undoHidden = window._mbtAILastBackup ? '' : ' hidden';
+            /* Uniform hit area and icon size. Gear differs by colour only (slate-600). */
+            var hdrBtn = 'p-1.5 rounded';
             var modeBtn = isPip
-                ? ('<button type="button" data-chat-act="mode-expand" title="Expand to full window" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded">' + icon('expandTall', icon('maximize', '')) + '</button>')
-                : ('<button type="button" data-chat-act="mode-pip" title="Shrink to PiP" class="p-1.5 text-blue-600 bg-blue-50 rounded">' + icon('pip', '') + '</button>');
+                ? ('<button type="button" data-chat-act="mode-expand" title="Expand to full window" class="' + hdrBtn + ' text-blue-600 hover:bg-blue-50">' + headerIcon('expandTall', icon('maximize', ''), isPip) + '</button>')
+                : ('<button type="button" data-chat-act="mode-pip" title="Shrink to PiP" class="' + hdrBtn + ' text-blue-600 bg-blue-50">' + headerIcon('pip', '', isPip) + '</button>');
             var grip = isPip
-                ? ('<span class="text-slate-300 shrink-0" aria-hidden="true">' + icon('drag', '') + '</span>')
+                ? ('<span class="text-slate-300 shrink-0" aria-hidden="true">' + headerIcon('drag', '', isPip) + '</span>')
                 : '';
-            var gearSize = isPip ? 'p-0.5 text-slate-500 hover:text-slate-900' : 'p-1.5 text-slate-500 hover:text-slate-900';
-            var gearIcon = isPip
-                ? '<span style="display:inline-flex;transform:scale(1.15)">' + icon('gear', '') + '</span>'
-                : icon('gear', '');
             return '<div id="aiChatHeader" class="' + (isPip ? 'mbt-chat-pip-grip px-2.5 py-2' : 'px-4 py-3') + ' bg-white border-b border-slate-100 flex items-center gap-1.5 shrink-0">' +
                 grip +
                 '<h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">Assistant</h3>' +
                 '<span class="w-2 h-2 rounded-full ' + liveDotClass() + ' shrink-0" title="Connection status"></span>' +
-                (isPip ? '' : ('<span class="text-slate-400 shrink-0">' + icon('chat', '') + '</span><span class="text-[10px] font-black text-slate-600 truncate max-w-[140px]">' + esc(m) + '</span>')) +
+                (isPip ? '' : ('<span class="text-slate-400 shrink-0">' + headerIcon('chat', '', isPip) + '</span><span class="text-[10px] font-black text-slate-600 truncate max-w-[140px]">' + esc(m) + '</span>')) +
                 '<div class="flex-1"></div>' +
                 (isPip ? '' : '<span class="text-[8px] font-black uppercase tracking-widest text-slate-400 mr-1 hidden lg:inline">Sees your budget &amp; OpenGate rates</span>') +
-                '<button type="button" id="aiUndoBtn" data-chat-act="undo" title="Undo last AI budget change" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded' + undoHidden + '">' + icon('undo', '\u21B6') + '</button>' +
-                '<button type="button" data-chat-act="export" title="Export" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">' + icon('file', '') + '</button>' +
-                '<button type="button" data-chat-act="clear" title="Clear" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded">' + icon('trash', '') + '</button>' +
-                '<button type="button" data-chat-act="settings" title="Settings" class="' + gearSize + ' rounded hover:bg-slate-100">' + gearIcon + '</button>' +
+                '<button type="button" id="aiUndoBtn" data-chat-act="undo" title="Undo last AI budget change" class="' + hdrBtn + ' text-slate-400 hover:text-amber-600 hover:bg-amber-50' + undoHidden + '">' + headerIcon('undo', '\u21B6', isPip) + '</button>' +
+                '<button type="button" data-chat-act="export" title="Export" class="' + hdrBtn + ' text-slate-400 hover:text-blue-600 hover:bg-blue-50">' + headerIcon('file', '', isPip) + '</button>' +
+                '<button type="button" data-chat-act="clear" title="Clear" class="' + hdrBtn + ' text-slate-400 hover:text-rose-500 hover:bg-rose-50">' + headerIcon('trash', '', isPip) + '</button>' +
+                '<button type="button" data-chat-act="settings" title="Settings" class="' + hdrBtn + ' text-slate-600 hover:text-slate-900 hover:bg-slate-100">' + headerIcon('gear', '', isPip) + '</button>' +
                 '<div class="w-px h-4 bg-slate-200 mx-0.5"></div>' +
                 modeBtn +
-                '<button type="button" data-chat-act="close" title="Close" class="p-1.5 text-slate-300 hover:text-slate-600 rounded">' + icon('close', 'x') + '</button>' +
+                '<button type="button" data-chat-act="close" title="Close" class="' + hdrBtn + ' text-slate-300 hover:text-slate-600">' + headerIcon('close', 'x', isPip) + '</button>' +
             '</div>';
         }
 
@@ -1348,6 +1522,31 @@ window.mBTAIModule = {
             '</div>';
         }
 
+        function formatTokens(n) {
+            n = parseInt(n, 10) || 0;
+            if (n < 1000) return String(n);
+            if (n < 10000) return (n / 1000).toFixed(1) + 'k';
+            return Math.round(n / 1000) + 'k';
+        }
+
+        function ledgerSummary() {
+            try {
+                if (window.mBTContextLedger && typeof window.mBTContextLedger.summary === 'function') {
+                    return window.mBTContextLedger.summary() || {};
+                }
+            } catch (e) {}
+            return { totalTokens: 0, entryCount: 0, byType: {} };
+        }
+
+        function userSources() {
+            try {
+                if (window.mBTAssistant && typeof window.mBTAssistant.getSources === 'function') {
+                    return window.mBTAssistant.getSources() || [];
+                }
+            } catch (e) {}
+            return [];
+        }
+
         function renderRightDrawerHtml(rightOpen) {
             var colCls = rightOpen ? 'w-[340px]' : 'mbt-chat-drawer-collapsed w-[36px]';
             var s = budgetStats();
@@ -1363,6 +1562,60 @@ window.mBTAIModule = {
                 );
             }
             var attachLabel = s.attachN ? (s.attachN + ' file' + (s.attachN === 1 ? '' : 's')) : 'none';
+            var srcs = userSources();
+            var srcHtml = [];
+            var sj, src, prev;
+            for (sj = 0; sj < srcs.length; sj++) {
+                src = srcs[sj];
+                if (!src) continue;
+                prev = String(src.text || '').substring(0, 80);
+                srcHtml.push(
+                    '<div class="rounded-lg border border-slate-100 bg-slate-50/60 px-2.5 py-2">' +
+                        '<div class="flex items-start gap-2">' +
+                            '<button type="button" data-chat-act="edit-source" data-source-id="' + esc(src.id) + '" class="flex-1 min-w-0 text-left">' +
+                                '<div class="text-[9px] font-black uppercase tracking-widest text-slate-700 truncate">' + esc(src.title || 'Source') + '</div>' +
+                                '<div class="text-[9px] font-bold text-slate-500 mt-0.5 line-clamp-2">' + esc(prev) + (String(src.text || '').length > 80 ? '\u2026' : '') + '</div>' +
+                            '</button>' +
+                            '<button type="button" data-chat-act="delete-source" data-source-id="' + esc(src.id) + '" title="Remove source" class="shrink-0 p-1 text-slate-300 hover:text-rose-500">' + icon('close', 'x') + '</button>' +
+                        '</div>' +
+                    '</div>'
+                );
+            }
+            if (!srcHtml.length) {
+                srcHtml.push('<p class="text-[9px] font-bold text-slate-400">No custom sources yet. Add a treatment, script or notes.</p>');
+            }
+
+            var led = ledgerSummary();
+            var tokTotal = led.totalTokens || 0;
+            var tokBudget = 100000;
+            var tokPct = Math.min(100, (tokTotal / tokBudget) * 100);
+            var tokColor = tokPct < 20 ? 'bg-emerald-500' : (tokPct < 50 ? 'bg-amber-400' : 'bg-rose-500');
+            var typeKeys = Object.keys(led.byType || {});
+            var chipHtml = [];
+            var ti, tk, tb;
+            var typeLabels = {
+                'treatment': 'Treatment',
+                'script': 'Script',
+                'budget-snapshot': 'Snapshot',
+                'template-fill': 'Doc Fills',
+                'attachment': 'Attachments',
+                'receipt': 'Receipts',
+                'source': 'Sources'
+            };
+            for (ti = 0; ti < typeKeys.length; ti++) {
+                tk = typeKeys[ti];
+                tb = led.byType[tk] || {};
+                chipHtml.push(
+                    '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[8px] font-bold text-indigo-700">' +
+                        '<strong>' + (tb.count || 0) + '</strong> ' + esc(typeLabels[tk] || tk) +
+                        ' <span class="text-indigo-400">(' + formatTokens(tb.tokens) + ')</span>' +
+                    '</span>'
+                );
+            }
+            if (!chipHtml.length) {
+                chipHtml.push('<span class="text-[8px] font-bold text-slate-400">No indexed artifacts yet.</span>');
+            }
+
             return '<div id="aiChatRight" class="' + colCls + ' shrink-0 border-l border-slate-100 bg-white flex flex-col transition-all">' +
                 '<div class="mbt-chat-drawer-head px-3 pt-3 pb-2 border-b border-slate-100 shrink-0 flex items-center gap-2">' +
                     '<div class="flex-1 text-[8px] font-black uppercase tracking-widest text-slate-400">Context</div>' +
@@ -1375,7 +1628,7 @@ window.mBTAIModule = {
                         icon('chevronLeft', '&lt;') +
                     '</button>' +
                 '</div>' +
-                '<div class="mbt-chat-drawer-body flex-1 min-h-0 flex flex-col">' +
+                '<div class="mbt-chat-drawer-body flex-1 min-h-0 flex flex-col overflow-hidden">' +
                     '<div class="px-4 pt-3 pb-2 border-b border-slate-100 shrink-0">' +
                         '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Context sources</div>' +
                         '<div class="flex items-start gap-2 py-2 border-b border-slate-50">' +
@@ -1407,11 +1660,35 @@ window.mBTAIModule = {
                             '</div>' +
                         '</div>' +
                     '</div>' +
+                    '<div class="px-4 py-3 border-b border-slate-100 shrink-0 space-y-2">' +
+                        '<div class="flex items-center justify-between">' +
+                            '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Custom sources</div>' +
+                            '<span class="text-[8px] font-bold text-slate-400">' + srcs.length + '</span>' +
+                        '</div>' +
+                        '<div class="space-y-1.5 max-h-28 no-scrollbar overflow-y-auto">' + srcHtml.join('') + '</div>' +
+                        '<button type="button" data-chat-act="add-source" class="w-full py-2 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-50">+ Add source</button>' +
+                    '</div>' +
+                    '<div class="px-4 py-3 border-b border-slate-100 shrink-0 space-y-2">' +
+                        '<div class="flex items-center justify-between">' +
+                            '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Token usage</div>' +
+                            '<span class="text-[9px] font-black text-slate-700">' + formatTokens(tokTotal) + ' / 100k</span>' +
+                        '</div>' +
+                        '<div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="' + tokColor + ' h-full" style="width:' + tokPct.toFixed(1) + '%"></div></div>' +
+                        '<div class="flex flex-wrap gap-1">' + chipHtml.join('') + '</div>' +
+                        '<div class="flex gap-2">' +
+                            '<button type="button" data-chat-act="ledger-rescan" class="flex-1 py-1.5 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50">Rescan</button>' +
+                            '<button type="button" data-chat-act="ledger-purge" class="flex-1 py-1.5 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50" title="Drop receipts older than 90 days">Purge 90d+</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="px-4 py-2 border-b border-slate-100 shrink-0 flex gap-2">' +
+                        '<button type="button" data-chat-act="run-analytics" class="flex-1 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-[8px] font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-100">Analytics</button>' +
+                        '<button type="button" data-chat-act="open-generate" class="flex-1 py-2 rounded-lg bg-violet-50 border border-violet-100 text-[8px] font-black uppercase tracking-widest text-violet-700 hover:bg-violet-100">Generate</button>' +
+                    '</div>' +
                     '<div class="px-4 py-3 border-b border-slate-100 shrink-0">' +
                         '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Estimated grand total</div>' +
                         '<div class="text-[18px] font-black tracking-tighter text-slate-900 leading-tight">' + esc(fmtMoney(s.grand)) + '</div>' +
                     '</div>' +
-                    '<div class="no-scrollbar overflow-y-auto divide-y divide-slate-50 shrink-0 max-h-40">' + secRows.join('') + '</div>' +
+                    '<div class="no-scrollbar overflow-y-auto divide-y divide-slate-50 shrink-0 max-h-28">' + secRows.join('') + '</div>' +
                     '<div class="px-4 py-2 border-t border-b border-slate-100 text-[8px] font-bold text-slate-400 shrink-0">Updates as changes apply</div>' +
                     '<div class="px-4 py-3 flex-1 min-h-0 no-scrollbar overflow-y-auto">' +
                         '<div class="flex items-center gap-1.5 mb-2">' +
@@ -1483,6 +1760,7 @@ window.mBTAIModule = {
             try { vidSel = localStorage.getItem('mbt_ai_video_model') || ''; } catch (e4) {}
             var house = self.getSystemPrompt() || '';
             var remember = !!(budget.aiContext && budget.aiContext.saveHistory);
+            var injectOn = self.isInjectBudgetContext();
             var webhook = '';
             try { webhook = localStorage.getItem((window.storageKeyPrefix || '') + 'cloudWebhook') || ''; } catch (e5) {}
             var prefix = window.storageKeyPrefix || '';
@@ -1521,6 +1799,16 @@ window.mBTAIModule = {
                         '<span class="text-[10px] font-bold text-slate-700">Remember conversations</span>' +
                         '<input type="checkbox" id="aiChatRemember" ' + (remember ? 'checked' : '') + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">' +
                     '</label>' +
+                    '<label class="flex items-center justify-between gap-3 py-2">' +
+                        '<span class="text-[10px] font-bold text-slate-700">Inject budget context</span>' +
+                        '<input type="checkbox" id="aiChatInjectBudget" ' + (injectOn ? 'checked' : '') + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" title="When off, chat is a bare conversation without the budget snapshot">' +
+                    '</label>' +
+                    '<p class="text-[8px] font-bold text-slate-400 -mt-2">Default is on. Turn off for a bare conversation with no budget snapshot in the prompt.</p>' +
+                    '<div class="p-3 rounded-xl border border-violet-100 bg-violet-50/40 space-y-2">' +
+                        '<div class="text-[9px] font-black uppercase tracking-widest text-violet-700">Actions</div>' +
+                        '<button type="button" data-chat-act="run-analytics" class="w-full py-2.5 rounded-lg bg-white border border-indigo-100 text-[9px] font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-50">Run budget analytics</button>' +
+                        '<button type="button" data-chat-act="open-generate" class="w-full py-2.5 rounded-lg bg-white border border-violet-200 text-[9px] font-black uppercase tracking-widest text-violet-700 hover:bg-violet-50">Generate from template (replaces budget)</button>' +
+                    '</div>' +
                     '<div class="p-3 bg-slate-900 rounded-xl text-white space-y-2">' +
                         '<div class="text-[9px] font-black uppercase tracking-widest text-emerald-400">Webhook endpoint</div>' +
                         '<div class="flex gap-2">' +
@@ -1530,6 +1818,84 @@ window.mBTAIModule = {
                         '<p class="text-[8px] text-amber-500 font-bold">Note: automatic dispatch is not yet implemented. The Test button only checks connectivity. It does not send live budget data.</p>' +
                     '</div>' +
                     '<button type="button" data-chat-act="settings-save" class="w-full py-3 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-500">Save settings</button>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function renderGenerateSheetHtml() {
+            return '<div id="aiChatGenerate" class="absolute inset-0 z-20 bg-white flex flex-col">' +
+                '<div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2 shrink-0">' +
+                    '<h4 class="text-[11px] font-black uppercase tracking-widest text-slate-800">Generate budget</h4>' +
+                    '<div class="flex-1"></div>' +
+                    '<button type="button" data-chat-act="generate-close" class="p-1.5 text-slate-300 hover:text-slate-600 rounded">' + icon('close', 'x') + '</button>' +
+                '</div>' +
+                '<div class="flex-1 min-h-0 no-scrollbar overflow-y-auto p-4 space-y-4">' +
+                    '<p class="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">This replaces the current budget structure. Confirm before running.</p>' +
+                    '<div>' +
+                        '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Quick blueprint (structure only)</div>' +
+                        '<div class="flex flex-wrap gap-2 mb-2">' +
+                            '<button type="button" data-chat-act="apply-blueprint" data-tmpl="commercial" class="px-3 py-1.5 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-700 hover:border-violet-300 hover:text-violet-700">TVC</button>' +
+                            '<button type="button" data-chat-act="apply-blueprint" data-tmpl="documentary" class="px-3 py-1.5 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-700 hover:border-violet-300 hover:text-violet-700">DOCU</button>' +
+                            '<button type="button" data-chat-act="apply-blueprint" data-tmpl="live_stream" class="px-3 py-1.5 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-700 hover:border-violet-300 hover:text-violet-700">BCAST</button>' +
+                            '<button type="button" data-chat-act="apply-blueprint" data-tmpl="music_video" class="px-3 py-1.5 rounded-full border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-700 hover:border-violet-300 hover:text-violet-700">MV</button>' +
+                        '</div>' +
+                        '<label class="flex items-center gap-2 text-[10px] font-bold text-slate-600">' +
+                            '<input type="checkbox" id="aiChatRatesToggle" checked class="w-4 h-4 rounded border-slate-300 text-blue-600">' +
+                            'Inject OpenGate rates when applying a blueprint' +
+                        '</label>' +
+                    '</div>' +
+                    '<div class="border-t border-slate-100 pt-4 space-y-3">' +
+                        '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">AI generate full budget</div>' +
+                        '<textarea id="aiGenPrompt" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-violet-100 resize-none" placeholder="e.g. 3-day TVC shoot in Kingston, $80k budget, 10-person crew.."></textarea>' +
+                        '<div>' +
+                            '<label class="block text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Production type</label>' +
+                            '<select id="aiGenType" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none">' +
+                                '<option value="">Auto-detect from description</option>' +
+                                '<option value="Commercial">TVC / Commercial</option>' +
+                                '<option value="Documentary">Documentary</option>' +
+                                '<option value="Live Stream">Live Broadcast / Stream</option>' +
+                                '<option value="Music Video">Music Video</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<button type="button" data-chat-act="run-generate" class="w-full py-3 bg-violet-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-violet-500">Generate and replace budget</button>' +
+                    '</div>' +
+                    '<div class="border-t border-slate-100 pt-4 space-y-3">' +
+                        '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Push funding source</div>' +
+                        '<p class="text-[9px] font-bold text-slate-500">Add one funding source to the active budget. Duplicates by name are skipped.</p>' +
+                        '<input type="text" id="aiFundName" placeholder="Source name" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none">' +
+                        '<div class="flex gap-2">' +
+                            '<input type="number" id="aiFundAmount" placeholder="Amount" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none">' +
+                            '<select id="aiFundStatus" class="w-28 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none">' +
+                                '<option value="Pending">Pending</option>' +
+                                '<option value="Confirmed">Confirmed</option>' +
+                                '<option value="LOI">LOI</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<button type="button" data-chat-act="push-funding" class="w-full py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[9px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-100">Push to budget</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function renderSourceModalHtml() {
+            var sess = self._chatSession || {};
+            var edit = sess.sourceEdit || null;
+            var isEdit = !!(edit && edit.id);
+            var title = isEdit ? (edit.title || '') : '';
+            var text = isEdit ? (edit.text || '') : '';
+            return '<div id="aiChatSourceModal" class="absolute inset-0 z-30 flex items-center justify-center p-4" style="background:rgba(15,23,42,0.45);">' +
+                '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 space-y-3" data-chat-act="source-modal-stop">' +
+                    '<div class="flex items-center gap-2">' +
+                        '<h4 class="text-[11px] font-black uppercase tracking-widest text-slate-800">' + (isEdit ? 'Edit source' : 'Add source') + '</h4>' +
+                        '<div class="flex-1"></div>' +
+                        '<button type="button" data-chat-act="source-close" class="p-1.5 text-slate-300 hover:text-slate-600 rounded">' + icon('close', 'x') + '</button>' +
+                    '</div>' +
+                    '<input type="text" id="aiSourceTitle" value="' + esc(title) + '" placeholder="Title (optional)" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">' +
+                    '<textarea id="aiSourceText" rows="7" placeholder="Paste treatment, script, notes or brief.." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 resize-none">' + esc(text) + '</textarea>' +
+                    '<div class="flex gap-2">' +
+                        '<button type="button" data-chat-act="source-close" class="flex-1 py-2.5 rounded-xl bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-600">Cancel</button>' +
+                        '<button type="button" data-chat-act="source-save" class="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-500">' + (isEdit ? 'Save changes' : 'Add source') + '</button>' +
+                    '</div>' +
                 '</div>' +
             '</div>';
         }
@@ -1569,20 +1935,15 @@ window.mBTAIModule = {
                         '<div class="relative flex-1 min-w-0 flex flex-col">' + centre + '</div>' +
                         renderRightDrawerHtml(sess.rightOpen) +
                       '</div>')) +
-                (sess.settingsOpen ? renderSettingsSheetHtml() : '');
+                (sess.settingsOpen ? renderSettingsSheetHtml() : '') +
+                (sess.generateOpen ? renderGenerateSheetHtml() : '') +
+                (sess.sourceModalOpen ? renderSourceModalHtml() : '');
 
             if (isPip) {
-                var rawPos = sess.pipPos || readPipPos();
-                var maxX = Math.max(0, (window.innerWidth || 800) - 330);
-                var maxY = Math.max(0, (window.innerHeight || 600) - 120);
-                var pos = {
-                    x: Math.min(maxX, Math.max(0, rawPos.x)),
-                    y: Math.min(maxY, Math.max(0, rawPos.y))
-                };
-                sess.pipPos = pos;
-                var pipH = Math.max(200, (window.innerHeight || 600) - pos.y - 14);
+                var geo = pipGeometry(sess.pipPos || readPipPos());
+                sess.pipPos = { x: geo.x, y: geo.y };
                 return '<div id="mbtAiChatRoot" class="mbt-ai-chat-root" style="position:fixed;inset:0;z-index:980;pointer-events:none;">' +
-                    '<div id="mbtAiChatPanel" class="bg-white rounded-xl shadow-2xl ring-1 ring-slate-900/15 flex flex-col overflow-hidden" style="position:fixed;left:' + pos.x + 'px;top:' + pos.y + 'px;width:330px;height:' + pipH + 'px;max-height:' + pipH + 'px;pointer-events:auto;z-index:981;">' +
+                    '<div id="mbtAiChatPanel" class="bg-white rounded-xl shadow-2xl ring-1 ring-slate-900/15 flex flex-col overflow-hidden" style="position:fixed;left:' + geo.x + 'px;top:' + geo.y + 'px;width:330px;height:' + geo.h + 'px;max-height:calc(100vh - 28px);pointer-events:auto;z-index:981;">' +
                         panelInner +
                     '</div>' +
                 '</div>';
@@ -1613,15 +1974,32 @@ window.mBTAIModule = {
             setTimeout(update, 20);
         }
 
-        function clampPip(x, y) {
+        /* PiP is a floating column: 330px wide, near full height but inset 14px top and bottom. */
+        function pipGeometry(rawPos) {
+            var inset = 14;
             var w = 330;
-            var h = Math.max(120, (window.innerHeight || 600) - 28);
-            var maxX = Math.max(0, (window.innerWidth || 800) - w);
-            var maxY = Math.max(0, (window.innerHeight || 600) - h);
-            return {
-                x: Math.min(maxX, Math.max(0, x)),
-                y: Math.min(maxY, Math.max(0, y))
-            };
+            var vw = window.innerWidth || 800;
+            var vh = window.innerHeight || 600;
+            var minH = 120;
+            var maxH = Math.max(minH, vh - inset * 2);
+            var raw = rawPos || {};
+            var x = typeof raw.x === 'number' ? raw.x : Math.max(inset, vw - w - inset);
+            var y = typeof raw.y === 'number' ? raw.y : inset;
+            /* Keep top inset. Cap y so a minimum panel still fits above the bottom inset. */
+            y = Math.max(inset, Math.min(y, Math.max(inset, vh - minH - inset)));
+            /* Height fills down to the bottom inset, never past max working height. */
+            var h = Math.max(minH, vh - y - inset);
+            if (h > maxH) h = maxH;
+            if (y + h > vh - inset) {
+                y = Math.max(inset, vh - inset - h);
+            }
+            x = Math.max(0, Math.min(x, Math.max(0, vw - w)));
+            return { x: x, y: y, h: h, w: w };
+        }
+
+        function clampPip(x, y) {
+            var g = pipGeometry({ x: x, y: y });
+            return { x: g.x, y: g.y, h: g.h };
         }
 
         function bindPipDrag() {
@@ -1643,7 +2021,11 @@ window.mBTAIModule = {
                 var c = clampPip(nx, ny);
                 panel.style.left = c.x + 'px';
                 panel.style.top = c.y + 'px';
-                sess.pipPos = c;
+                if (typeof c.h === 'number') {
+                    panel.style.height = c.h + 'px';
+                    panel.style.maxHeight = 'calc(100vh - 28px)';
+                }
+                sess.pipPos = { x: c.x, y: c.y };
             }
 
             function endDrag() {
@@ -1706,6 +2088,23 @@ window.mBTAIModule = {
                     holdTimer = null;
                 }
             };
+
+            /* Keep inset margins when the viewport is resized. */
+            if (self._pipResizeHandler) {
+                window.removeEventListener('resize', self._pipResizeHandler);
+            }
+            self._pipResizeHandler = function () {
+                if (!self._chatSession || self._chatSession.mode !== 'pip') return;
+                var p = document.getElementById('mbtAiChatPanel');
+                if (!p) return;
+                var g = pipGeometry(self._chatSession.pipPos || { x: p.offsetLeft, y: p.offsetTop });
+                p.style.left = g.x + 'px';
+                p.style.top = g.y + 'px';
+                p.style.height = g.h + 'px';
+                p.style.maxHeight = 'calc(100vh - 28px)';
+                self._chatSession.pipPos = { x: g.x, y: g.y };
+            };
+            window.addEventListener('resize', self._pipResizeHandler);
         }
 
         function doSend(text, isRetry) {
@@ -1764,11 +2163,25 @@ window.mBTAIModule = {
                 finalPrompt = '[' + contextSummary + ']\n\nUser Query: ' + text;
             }
 
-            var budgetCtx = self._buildBudgetContext();
-            var rateCtx = self._buildRateContext(text);
             var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
-            if (budgetCtx) chatSystemMsg += '\n\n' + budgetCtx;
-            if (rateCtx) chatSystemMsg += '\n\n' + rateCtx;
+            if (self.isInjectBudgetContext()) {
+                var budgetCtx = self._buildBudgetContext();
+                var rateCtx = self._buildRateContext(text);
+                if (budgetCtx) chatSystemMsg += '\n\n' + budgetCtx;
+                if (rateCtx) chatSystemMsg += '\n\n' + rateCtx;
+            }
+            try {
+                if (window.mBTAssistant && typeof window.mBTAssistant.buildSourceContext === 'function') {
+                    var srcCtx = window.mBTAssistant.buildSourceContext();
+                    if (srcCtx) chatSystemMsg += '\n\n' + srcCtx;
+                }
+            } catch (eSrc) { /* ignore */ }
+            try {
+                if (window.mBTContextLedger && typeof window.mBTContextLedger.asPromptFragment === 'function') {
+                    var ledFrag = window.mBTContextLedger.asPromptFragment({ maxTokens: 4000 });
+                    if (ledFrag && ledFrag.text) chatSystemMsg += '\n\n' + ledFrag.text;
+                }
+            } catch (eLed) { /* ignore */ }
 
             return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg, apiHistory).then(function (response) {
                 if (!self._chatSession || self._chatSession.genId !== myGen) {
@@ -1882,6 +2295,7 @@ window.mBTAIModule = {
                 var vSel = document.getElementById('aiVidModelSelect');
                 var rules = document.getElementById('aiChatHouseRules');
                 var rem = document.getElementById('aiChatRemember');
+                var inj = document.getElementById('aiChatInjectBudget');
                 var whEl = document.getElementById('aiChatWebhook');
                 if (cSel && cSel.value) {
                     if (ma && typeof ma.setChatModel === 'function') ma.setChatModel(p, cSel.value);
@@ -1901,6 +2315,7 @@ window.mBTAIModule = {
                     persist = self.isPersistentContext();
                     if (typeof window.saveBudget === 'function') window.saveBudget();
                 }
+                if (inj) self.setInjectBudgetContext(!!inj.checked);
                 if (whEl) {
                     prefix = window.storageKeyPrefix || '';
                     try { localStorage.setItem(prefix + 'cloudWebhook', whEl.value || ''); } catch (e4) {}
@@ -1962,8 +2377,12 @@ window.mBTAIModule = {
                 return;
             }
             if (act === 'attach') {
-                var fi = document.getElementById('aiChatFileInput');
-                if (fi) fi.click();
+                /* Paperclip opens source management (context ledger), not a dead file-only path. */
+                sess.sourceEdit = null;
+                sess.sourceModalOpen = true;
+                sess.rightOpen = true;
+                writeDrawer('mbt_chat_drawer_right', true);
+                self._chatRender();
                 return;
             }
             if (act === 'mic') {
@@ -1989,6 +2408,183 @@ window.mBTAIModule = {
                     sess.pendingDiff = null;
                     self._commitSuggestion(changes);
                 }
+                return;
+            }
+            if (act === 'run-analytics') {
+                sess.settingsOpen = false;
+                sess.generateOpen = false;
+                self.analyzeCurrentBudget();
+                return;
+            }
+            if (act === 'open-generate') {
+                sess.generateOpen = true;
+                sess.settingsOpen = false;
+                self._chatRender();
+                return;
+            }
+            if (act === 'generate-close') {
+                sess.generateOpen = false;
+                self._chatRender();
+                return;
+            }
+            if (act === 'apply-blueprint') {
+                var tmpl = el.getAttribute('data-tmpl') || '';
+                if (!tmpl) return;
+                if (window.mBT && window.mBT.features && window.mBT.features.blueprints &&
+                    typeof window.mBT.features.blueprints.applyFromHub === 'function') {
+                    window.mBT.features.blueprints.applyFromHub(tmpl);
+                }
+                return;
+            }
+            if (act === 'run-generate') {
+                var genPromptEl = document.getElementById('aiGenPrompt');
+                var genTypeEl = document.getElementById('aiGenType');
+                var gPrompt = genPromptEl ? genPromptEl.value : '';
+                var gType = genTypeEl ? genTypeEl.value : '';
+                mBTME.confirm(
+                    'Replace current budget?',
+                    'AI Generate will build a new budget structure and load it as the active project. This replaces the current sections.',
+                    function () {
+                        self.generateBudgetFromPrompt(gPrompt, gType).then(function (ok) {
+                            if (ok && self._chatSession) {
+                                self._chatSession.generateOpen = false;
+                                if (typeof self._chatRender === 'function') self._chatRender();
+                            }
+                        });
+                    }
+                );
+                return;
+            }
+            if (act === 'add-source') {
+                sess.sourceEdit = null;
+                sess.sourceModalOpen = true;
+                self._chatRender();
+                return;
+            }
+            if (act === 'edit-source') {
+                id = el.getAttribute('data-source-id');
+                var srcs = userSources();
+                var found = null;
+                var fi;
+                for (fi = 0; fi < srcs.length; fi++) {
+                    if (srcs[fi] && srcs[fi].id === id) { found = srcs[fi]; break; }
+                }
+                if (!found) return;
+                sess.sourceEdit = { id: found.id, title: found.title || '', text: found.text || '' };
+                sess.sourceModalOpen = true;
+                self._chatRender();
+                return;
+            }
+            if (act === 'delete-source') {
+                id = el.getAttribute('data-source-id');
+                if (!id) return;
+                mBTME.confirm('Remove source?', 'This source will no longer be sent with chat context.', function () {
+                    if (window.mBTAssistant && typeof window.mBTAssistant.removeSource === 'function') {
+                        window.mBTAssistant.removeSource(id);
+                    }
+                    if (self._chatSession && typeof self._chatRender === 'function') self._chatRender();
+                });
+                return;
+            }
+            if (act === 'source-close') {
+                sess.sourceModalOpen = false;
+                sess.sourceEdit = null;
+                self._chatRender();
+                return;
+            }
+            if (act === 'source-modal-stop') {
+                /* Stop clicks inside the modal card from closing via backdrop. */
+                if (e && e.stopPropagation) e.stopPropagation();
+                return;
+            }
+            if (act === 'source-save') {
+                var stEl = document.getElementById('aiSourceTitle');
+                var sxEl = document.getElementById('aiSourceText');
+                var st = stEl ? String(stEl.value || '').replace(/^\s+|\s+$/g, '') : '';
+                var sx = sxEl ? String(sxEl.value || '').replace(/^\s+|\s+$/g, '') : '';
+                if (!sx) {
+                    mBTME.alert('Source', 'Paste or type some content first.');
+                    return;
+                }
+                if (!st) {
+                    st = sx.split('\n')[0].replace(/^#+\s*/, '').substring(0, 50) || 'Source';
+                }
+                if (sess.sourceEdit && sess.sourceEdit.id && window.mBTAssistant && typeof window.mBTAssistant.updateSource === 'function') {
+                    window.mBTAssistant.updateSource(sess.sourceEdit.id, st, sx);
+                } else if (window.mBTAssistant && typeof window.mBTAssistant.addSource === 'function') {
+                    window.mBTAssistant.addSource(st, sx);
+                }
+                sess.sourceModalOpen = false;
+                sess.sourceEdit = null;
+                sess.rightOpen = true;
+                writeDrawer('mbt_chat_drawer_right', true);
+                self._chatRender();
+                return;
+            }
+            if (act === 'ledger-rescan') {
+                try {
+                    if (window.mBTContextLedger && budget && budget.projectName) {
+                        window.mBTContextLedger.setActiveProject(budget.projectName).then(function () {
+                            return Promise.all([
+                                window.mBTContextLedger.ingestBudget(budget),
+                                window.mBTContextLedger.ingestSidebar()
+                            ]);
+                        }).then(function () {
+                            if (self._chatSession && typeof self._chatRender === 'function') self._chatRender();
+                        }).catch(function () {
+                            if (self._chatSession && typeof self._chatRender === 'function') self._chatRender();
+                        });
+                    }
+                } catch (eRs) { /* ignore */ }
+                return;
+            }
+            if (act === 'ledger-purge') {
+                mBTME.confirm('Purge old receipts?', 'Drop context ledger receipts older than 90 days?', function () {
+                    try {
+                        if (window.mBTContextLedger && typeof window.mBTContextLedger.purge === 'function') {
+                            window.mBTContextLedger.purge(90);
+                        }
+                    } catch (ePg) { /* ignore */ }
+                    if (self._chatSession && typeof self._chatRender === 'function') self._chatRender();
+                });
+                return;
+            }
+            if (act === 'push-funding') {
+                var fnEl = document.getElementById('aiFundName');
+                var faEl = document.getElementById('aiFundAmount');
+                var fsEl = document.getElementById('aiFundStatus');
+                var fName = fnEl ? String(fnEl.value || '').replace(/^\s+|\s+$/g, '') : '';
+                var fAmt = faEl ? (parseFloat(faEl.value) || 0) : 0;
+                var fStatus = fsEl ? (fsEl.value || 'Pending') : 'Pending';
+                if (!fName) {
+                    mBTME.alert('Funding', 'Enter a source name first.');
+                    return;
+                }
+                if (!budget.fundingSources) budget.fundingSources = [];
+                var lower = fName.toLowerCase();
+                var exists = false;
+                var fxi;
+                for (fxi = 0; fxi < budget.fundingSources.length; fxi++) {
+                    if ((budget.fundingSources[fxi].name || '').toLowerCase() === lower) { exists = true; break; }
+                }
+                if (exists) {
+                    mBTME.alert('Funding', 'A source with that name already exists.');
+                    return;
+                }
+                budget.fundingSources.push({
+                    name: fName,
+                    amount: fAmt,
+                    currency: window.displayCurrency || 'JMD',
+                    status: fStatus
+                });
+                if (typeof window.saveBudget === 'function') window.saveBudget();
+                if (window.mBT && window.mBT.features && window.mBT.features.funding && window.mBT.features.funding.updateCard) {
+                    window.mBT.features.funding.updateCard();
+                }
+                if (fnEl) fnEl.value = '';
+                if (faEl) faEl.value = '';
+                mBTME.alert('Funding', '"' + fName + '" added to the budget.');
+                self._chatRender();
                 return;
             }
         }
@@ -2017,7 +2613,14 @@ window.mBTAIModule = {
                     handleAction('send', e.target, e);
                 }
                 if (e.key === 'Escape') {
-                    if (self._chatSession && self._chatSession.settingsOpen) {
+                    if (self._chatSession && self._chatSession.sourceModalOpen) {
+                        self._chatSession.sourceModalOpen = false;
+                        self._chatSession.sourceEdit = null;
+                        self._chatRender();
+                    } else if (self._chatSession && self._chatSession.generateOpen) {
+                        self._chatSession.generateOpen = false;
+                        self._chatRender();
+                    } else if (self._chatSession && self._chatSession.settingsOpen) {
                         self._chatSession.settingsOpen = false;
                         self._chatRender();
                     } else if (self._chatSession && self._chatSession.pendingDiff) {
@@ -2029,22 +2632,40 @@ window.mBTAIModule = {
                 }
             };
 
+            /* Optional: file pick still available for dumping text into a new source. */
             var fileIn = document.getElementById('aiChatFileInput');
             if (fileIn) {
                 fileIn.onchange = function () {
                     var files = fileIn.files;
                     if (!files || !files.length) return;
-                    var names = [];
-                    var i;
-                    for (i = 0; i < files.length; i++) names.push(files[i].name);
-                    var inp = document.getElementById('aiChatInput');
-                    if (inp) {
-                        var add = '[Attached: ' + names.join(', ') + '] ';
-                        inp.value = add + (inp.value || '');
-                        inp.focus();
-                    }
+                    var file = files[0];
+                    var reader = new FileReader();
+                    reader.onload = function (ev) {
+                        var body = String((ev && ev.target && ev.target.result) || '').substring(0, 12000);
+                        if (window.mBTAssistant && typeof window.mBTAssistant.addSource === 'function' && body) {
+                            window.mBTAssistant.addSource(file.name || 'Attachment', body);
+                        }
+                        if (self._chatSession) {
+                            self._chatSession.rightOpen = true;
+                            writeDrawer('mbt_chat_drawer_right', true);
+                            if (typeof self._chatRender === 'function') self._chatRender();
+                        }
+                    };
+                    reader.readAsText(file);
                     fileIn.value = '';
                 };
+            }
+
+            /* Backdrop click on source modal closes it. */
+            var srcModal = document.getElementById('aiChatSourceModal');
+            if (srcModal) {
+                srcModal.addEventListener('click', function (ev) {
+                    if (ev.target === srcModal) {
+                        sess.sourceModalOpen = false;
+                        sess.sourceEdit = null;
+                        self._chatRender();
+                    }
+                });
             }
 
             bindScrollDot();
@@ -2086,6 +2707,8 @@ window.mBTAIModule = {
             self._chatSession.activeChat = ac0.chat;
             self._chatSession.activeThread = ac0.thread;
             self._chatSession.persist = persist;
+            if (opts.openGenerate) self._chatSession.generateOpen = true;
+            if (opts.openSettings) self._chatSession.settingsOpen = true;
             self._chatRender();
             return;
         }
@@ -2110,7 +2733,10 @@ window.mBTAIModule = {
             lastFailedText: '',
             lastFailedMsg: '',
             lastUserText: '',
-            settingsOpen: false,
+            settingsOpen: !!opts.openSettings,
+            generateOpen: !!opts.openGenerate,
+            sourceModalOpen: false,
+            sourceEdit: null,
             micOn: false,
             pipPos: readPipPos()
         };
@@ -2319,9 +2945,9 @@ window.mBTAIModule = {
                     '<div class="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-all">' + (mBTAssets.chat || '') + '</div>' +
                     '<div class="text-center"><h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Discussions</h4><p class="text-[8px] text-slate-400 font-bold">Chat &amp; Consult</p></div>' +
                 '</button>' +
-                '<button onclick="mBTME.close(\'aiToolsModal\'); openTool(\'./src/tools/ai/index.html?projectKey=\' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : \'\')) + \'&mode=generate\');" class="col-span-2 p-4 bg-violet-50 border border-violet-200 rounded-2xl flex items-center gap-3 hover:bg-violet-100 transition-all group">' +
+                '<button onclick="mBTME.close(\'aiToolsModal\'); mBT.features.ai.openChat({ openGenerate: true });" class="col-span-2 p-4 bg-violet-50 border border-violet-200 rounded-2xl flex items-center gap-3 hover:bg-violet-100 transition-all group">' +
                     '<div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-violet-500 group-hover:scale-110 transition-all">' + (mBTAssets.wand || '') + '</div>' +
-                    '<div class="text-left"><h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Generate Budget</h4><p class="text-[8px] text-slate-400 font-bold">Describe a production \u2014 AI builds the full structure</p></div>' +
+                    '<div class="text-left"><h4 class="font-black text-[10px] uppercase tracking-widest text-slate-700">Generate Budget</h4><p class="text-[8px] text-slate-400 font-bold">Describe a production - AI builds the full structure</p></div>' +
                 '</button>' +
                 '<button onclick="mBT.features.ai.openSourcingAnalysis();" class="col-span-2 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 hover:bg-emerald-100 transition-all group">' +
                     '<div class="w-10 h-10 bg-white rounded-full shadow-sm flex-shrink-0 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-all"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>' +

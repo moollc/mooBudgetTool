@@ -17,7 +17,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.09</title>
+    <title>mooBudgetTool v24.10</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +445,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.09";
+    var APP_VERSION = "24.10";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -8866,9 +8866,10 @@
             });
         },
 
-        /* Phase 149.1B -- Assistant Hub: single-bar blueprint strip + expanded modal */
+        /* Assistant entry: opens the native renderer in AIModule.openChat.
+           Old hub modal + ai/index.html iframe retired; TVC/DOCU chips and
+           Generate live inside the chat UI (settings / generate sheet). */
         showAssistantHub: function () {
-            var self = this;
             var _provider = mBT.features.ai.getSelectedProvider();
             var _apiKey = mBT.features.ai.getStoredApiKey(_provider);
             var _needsSetup = !_apiKey && _provider !== 'lmstudio';
@@ -8878,69 +8879,15 @@
                 });
                 return;
             }
-            var content = '<div class="flex flex-col h-[88vh] bg-slate-900 text-white font-sans">' +
-                '<!-- Secondary strip: optional blueprint shortcuts + Inject Rates (single quiet row) -->' +
-                '<div class="sh-hub-strip">' +
-                '<span class="sh-hub-strip-label">Template</span>' +
-                '<div class="sh-hub-chip-scroll">' +
-                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'commercial\')" class="sh-chip" title="Commercial (TVC)">TVC</button>' +
-                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'documentary\')" class="sh-chip" title="Documentary">DOCU</button>' +
-                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'live_stream\')" class="sh-chip" title="Broadcast">BCAST</button>' +
-                '<button type="button" onclick="mBT.features.blueprints.applyFromHub(\'music_video\')" class="sh-chip" title="Music Video">MV</button>' +
-                '</div>' +
-                '<label class="sh-hub-rates" title="Inject industry rates when applying a template">' +
-                '<input type="checkbox" id="mbtHubRatesToggle" checked class="hidden peer">' +
-                '<div class="sh-hub-rates-track">' +
-                '<div class="sh-hub-rates-knob"></div>' +
-                '</div>' +
-                '<span class="sh-hub-rates-text">Rates</span>' +
-                '</label>' +
-                '</div>' +
-                '<!-- Main: Assistant Iframe (primary focus of this modal) -->' +
-                '<div class="flex-1 relative bg-black/20 min-h-0">' +
-                '<iframe id="mbtHubAiIframe" src="./src/tools/ai/index.html?embedded=true&v=' + Date.now() + '" class="w-full h-full border-none block"></iframe>' +
-                '</div>' +
-                '</div>' +
-                '<style id="sh-chips-css">' +
-                /* Quiet utility strip: secondary to chat UI below */
-                '.sh-hub-strip{display:flex;align-items:center;gap:6px;padding:3px 10px;border-bottom:1px solid rgba(255,255,255,0.04);background:transparent;flex-shrink:0;min-height:0}' +
-                '.sh-hub-strip-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.26);flex-shrink:0}' +
-                '.sh-hub-chip-scroll{display:flex;align-items:center;gap:3px;flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}' +
-                '.sh-hub-chip-scroll::-webkit-scrollbar{height:3px}' +
-                '.sh-hub-chip-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:999px}' +
-                '.sh-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:transparent;border:1px solid rgba(255,255,255,0.07);color:rgba(255,255,255,0.45);font-size:10px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background .15s,border-color .15s,color .15s;flex-shrink:0;line-height:1.3;min-height:0;white-space:nowrap}' +
-                '.sh-chip:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14);color:rgba(255,255,255,0.72)}' +
-                '.sh-chip:active{background:rgba(255,255,255,0.09)}' +
-                '.sh-hub-rates{display:inline-flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;padding:2px 0 2px 6px;border-left:1px solid rgba(255,255,255,0.06)}' +
-                '.sh-hub-rates-track{width:22px;height:12px;background:rgba(255,255,255,0.12);border-radius:999px;position:relative;transition:background .15s}' +
-                '.sh-hub-rates .peer:checked ~ .sh-hub-rates-track{background:rgba(59,130,246,0.5)}' +
-                '.sh-hub-rates-knob{position:absolute;left:2px;top:2px;width:8px;height:8px;background:rgba(255,255,255,0.85);border-radius:999px;transition:transform .15s}' +
-                '.sh-hub-rates .peer:checked ~ .sh-hub-rates-track .sh-hub-rates-knob{transform:translateX(10px)}' +
-                '.sh-hub-rates-text{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,0.3)}' +
-                '.sh-hub-rates:hover .sh-hub-rates-text{color:rgba(255,255,255,0.55)}' +
-                '</style>';
-
-            mBTME.open('assistant-hub', 'Assistant Center', content, 'max-w-6xl', { hideHeader: true, noPadding: true });
-            /* Push live budget context to AI iframe once it's ready */
-            setTimeout(function () {
-                var aiIframe = document.getElementById('mbtHubAiIframe');
-                if (aiIframe && aiIframe.contentWindow && typeof budget !== 'undefined' && budget) {
-                    var ctx = { projectName: budget.projectName, budget: budget.grandTotal || 0, currency: displayCurrency || 'JMD' };
-                    /* JSON round-trip strips Proxy-wrapped nested objects that break structuredClone/postMessage */
-                    var safeBudgetDoc;
-                    try { safeBudgetDoc = JSON.parse(JSON.stringify(budget)); } catch (serErr) { safeBudgetDoc = null; }
-                    try {
-                        aiIframe.contentWindow.postMessage({ type: 'budget-sync', payload: { context: ctx, budgetDoc: safeBudgetDoc || {} } }, window.location.origin);
-                    } catch (pmErr) {
-                        console.warn('[mBT] Assistant Hub budget-sync postMessage failed:', pmErr);
-                    }
-                }
-            }, 600);
+            if (mBT.features.ai && typeof mBT.features.ai.openChat === 'function') {
+                mBT.features.ai.openChat();
+            }
         },
 
         /* Phase 194.2: Hub tile keys now match BUDGET_TEMPLATES keys directly (all lowercase) */
         applyFromHub: function (templateName) {
-            var withRates = !!(document.getElementById('mbtHubRatesToggle') || { checked: true }).checked;
+            var ratesEl = document.getElementById('aiChatRatesToggle') || document.getElementById('mbtHubRatesToggle');
+            var withRates = ratesEl ? !!ratesEl.checked : true;
             mBT.features.blueprints.applyTemplate(templateName, withRates, true);
         },
 
@@ -14618,7 +14565,12 @@
                 if (target.closest('#openAiToolsBtn')) {
                     if (typeof mBTME !== 'undefined' && mBTME.stack && mBTME.stack.length > 0) return;
                     if (document.getElementById('mbtCollabAuthOverlay')) return;
-                    mBT.blueprints.openTool();
+                    /* Single assistant surface: native openChat (not the old AI Suite iframe). */
+                    if (mBT.features && mBT.features.ai && typeof mBT.features.ai.openChat === 'function') {
+                        mBT.features.ai.openChat();
+                    } else if (mBT.blueprints && typeof mBT.blueprints.openTool === 'function') {
+                        mBT.blueprints.openTool();
+                    }
                 }
             };
 
