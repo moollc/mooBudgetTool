@@ -1,4 +1,4 @@
-/* mBT Phase 60.A/60.B: AI Module — Assistant Bridge + Action Triggering
+/* mBT Phase 60.A/60.B: AI Module, Assistant Bridge + Action Triggering
    Extracted from index.html monolith (L2652-3037) to restore structural hygiene.
    Phase 60.B adds: applySuggestion(jsonDiff), action-block parsing, [Preview & Apply] UI.
 
@@ -40,15 +40,17 @@ window.mBTAIModule = {
         systemContext:    'ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates.',
         /* Phase 60.B: action-trigger addendum appended to systemContext in chat mode */
         chatActionPrompt: 'ACTION CAPABILITY: You can BUILD and MODIFY the budget. When the user asks for any change, output ONE JSON action block immediately before a brief explanation.\n\n' +
-            'Single change:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\n\n' +
+            'Single change:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency|set_workweek|set_stage_days","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\n\n' +
+            'Workweek: \x60\x60\x60json\n{"mbt_action":"set_workweek","value":5}\n\x60\x60\x60 (value must be 5, 6 or 7)\n\n' +
+            'Stage days: \x60\x60\x60json\n{"mbt_action":"set_stage_days","stage":"prod","days":6}\n\x60\x60\x60 (stage is one of dev, pre, prod, post, dist)\n\n' +
             'Several changes at once (also use this to build a new section or a whole budget):\n\x60\x60\x60json\n{"mbt_action":"batch","changes":[{"mbt_action":"add_section","section":"Camera Department"},{"mbt_action":"add_item","section":"Camera Department","description":"Camera Operator","quantity":5,"rate":40000,"unit":"Day"}]}\n\x60\x60\x60\n\n' +
-            'RULES: Use the OPENGATE RATE CARD rates verbatim for anything listed there — never round, adjust or invent a number that is on the card. Copy section and item names EXACTLY as they appear in the CURRENT BUDGET list. Use add_section before adding items to a section that does not exist yet. Never invent a section name that is not in the list unless you are creating it with add_section. Keep explanations brief.'
+            'RULES: Use the OPENGATE RATE CARD rates verbatim for anything listed there, never round, adjust or invent a number that is on the card. Copy section and item names EXACTLY as they appear in the CURRENT BUDGET list. Use add_section before adding items to a section that does not exist yet. Never invent a section name that is not in the list unless you are creating it with add_section. Stage days are a span, not a sum, take the longest single assignment within a stage, never add crew days together. Keep explanations brief.'
     },
 
     /* ── Storage Accessors (Phase 173: thin wrappers over mBTAssistant) ──
        Legacy API kept intact so call sites in index.html, EventRouter, and
        ui.settings.js don't need to change. All actual storage I/O now goes
-       through the mBTAssistant singleton — single source of truth. */
+       through the mBTAssistant singleton, single source of truth. */
     getStoredApiKey: function (provider) {
         if (window.mBTAssistant) return window.mBTAssistant.getApiKey(provider) || '';
         return localStorage.getItem('mbt_' + provider + '_api_key') || '';
@@ -282,7 +284,7 @@ window.mBTAIModule = {
 
     /* ── Centralized Intelligence Dispatcher ──────────────────────────────
        Phase 173: collapsed to a thin wrapper over mBTAssistant.callChat().
-       The legacy (provider, apiKey) args are accepted but ignored — mBTAssistant
+       The legacy (provider, apiKey) args are accepted but ignored, mBTAssistant
        reads them from its own state (which is the SAME localStorage keys, so
        behavior is identical). User constraint injection is preserved. */
     callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg, history) {
@@ -306,8 +308,8 @@ window.mBTAIModule = {
             });
         }
 
-        /* Hard fallback if mBTAssistant ever fails to load — keeps tool from crashing */
-        return Promise.reject(new Error('mBTAssistant unavailable — AI service offline.')).catch(function (error) {
+        /* Hard fallback if mBTAssistant ever fails to load, keeps tool from crashing */
+        return Promise.reject(new Error('mBTAssistant unavailable, AI service offline.')).catch(function (error) {
             console.error('mBT AI Failure:', error);
             return 'Analysis Failed: ' + error.message;
         });
@@ -316,7 +318,7 @@ window.mBTAIModule = {
     /* ── Budget snapshot for chat ────────────────────────────────────────
        Chat used to send only the project name and grand total. The AI then had
        to guess section names and item descriptions, but applySuggestion matches
-       them exactly — so a guess of "Production Crew" against a real key of
+       them exactly, so a guess of "Production Crew" against a real key of
        "BTL: Production Crew" failed every time. The AI looked like it lied.
        This sends the real names so it can quote them back exactly.
        Capped so a large budget cannot bloat the prompt. */
@@ -381,6 +383,37 @@ window.mBTAIModule = {
         return lines.join('\n');
     },
 
+    /* Stage day rollup: the SPAN of a stage, never the SUM. If crew A works 3
+       days and crew B works 1 day in the same stage, the stage is 3 days, not
+       4. Take the max stageData[k].days seen across all items, per stage.
+       This is the single place that rule lives; _applyOne and the context
+       builder both read from it so the AI and the confirm preview agree. */
+    _rollupStageDays: function () {
+        var budget = window.budget;
+        var STAGE_KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+        var rolled = { dev: 0, pre: 0, prod: 0, post: 0, dist: 0 };
+        if (!budget || !budget.sections) return rolled;
+
+        var names = Object.keys(budget.sections);
+        for (var s = 0; s < names.length; s++) {
+            var sec = budget.sections[names[s]];
+            if (!sec || !sec.items) continue;
+            for (var i = 0; i < sec.items.length; i++) {
+                var it = sec.items[i];
+                if (!it || !it.stageData) continue;
+                for (var k = 0; k < STAGE_KEYS.length; k++) {
+                    var key = STAGE_KEYS[k];
+                    var sd = it.stageData[key];
+                    if (!sd) continue;
+                    var d = parseFloat(sd.days);
+                    if (isNaN(d)) continue;
+                    if (d > rolled[key]) rolled[key] = d; /* max, not sum */
+                }
+            }
+        }
+        return rolled;
+    },
+
     _buildBudgetContext: function () {
         var budget = window.budget;
         if (!budget || !budget.sections) return '';
@@ -391,7 +424,7 @@ window.mBTAIModule = {
         var lines = [];
         var cur = window.displayCurrency || '';
 
-        lines.push('CURRENT BUDGET — use these names exactly as written:');
+        lines.push('CURRENT BUDGET, use these names exactly as written:');
         lines.push('Project: ' + (budget.projectName || 'Untitled'));
         lines.push('Grand total: ' + cur + ' ' + (budget.grandTotal || 0));
         if (budget.contingencyPercentage !== undefined) {
@@ -414,9 +447,22 @@ window.mBTAIModule = {
                 if (isNaN(qty)) qty = 0;
                 var rate = parseFloat(it.rate);
                 if (isNaN(rate)) rate = 0;
+                var stageSuffix = '';
+                if (it.stageData) {
+                    var sdParts = [];
+                    var STAGE_KEYS = ['dev', 'pre', 'prod', 'post', 'dist'];
+                    for (var sk = 0; sk < STAGE_KEYS.length; sk++) {
+                        var sdv = it.stageData[STAGE_KEYS[sk]];
+                        if (!sdv) continue;
+                        var sdDays = parseFloat(sdv.days);
+                        if (isNaN(sdDays)) continue;
+                        sdParts.push(STAGE_KEYS[sk] + ': ' + sdDays + 'd');
+                    }
+                    if (sdParts.length) stageSuffix = ', stages ' + sdParts.join(', ');
+                }
                 lines.push('  - ' + (it.description || 'Item') +
                            ' (qty ' + qty + (it.unit ? ' ' + it.unit : '') +
-                           ', rate ' + cur + ' ' + rate + ')');
+                           ', rate ' + cur + ' ' + rate + stageSuffix + ')');
                 shown++;
                 emitted++;
             }
@@ -428,6 +474,34 @@ window.mBTAIModule = {
             lines.push('');
             lines.push('(Item list truncated. Ask the user if you need a section not shown.)');
         }
+
+        /* SCHEDULE: workweek, per-stage day counts (including zero, so the
+           model can see what is unfilled), and the rolled up span per stage
+           computed by the max rule, so the model can compare assigned days
+           against what the header shows. */
+        var workWeek = (budget.settings && budget.settings.workWeek) || 5;
+        lines.push('');
+        lines.push('SCHEDULE:');
+        lines.push('Work week: ' + workWeek + ' days' +
+                   (workWeek === 5 ? ' (Mon to Fri)' : (workWeek === 6 ? ' (Mon to Sat)' : ' (Mon to Sun)')));
+
+        var stageLabels = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
+        var STAGE_KEYS2 = ['dev', 'pre', 'prod', 'post', 'dist'];
+        var tlStages = (budget.targetLock && budget.targetLock.stages) ? budget.targetLock.stages : {};
+        var rolled = this._rollupStageDays();
+        for (var ks = 0; ks < STAGE_KEYS2.length; ks++) {
+            var stageKey = STAGE_KEYS2[ks];
+            var stageEntry = tlStages[stageKey];
+            var label = (stageEntry && stageEntry.label) ? stageEntry.label : stageLabels[stageKey];
+            var setDays = stageEntry ? (parseFloat(stageEntry.days) || 0) : 0;
+            var rolledDays = rolled[stageKey] || 0;
+            var note = '';
+            if (rolledDays > setDays) note = ' [assigned items need ' + rolledDays + 'd, exceeds the ' + setDays + 'd set on the stage]';
+            lines.push('  - ' + stageKey + ' (' + label + '): ' + setDays + ' days set' +
+                       (rolledDays > 0 ? ', ' + rolledDays + ' days assigned across items (span, not sum)' : ', no items assigned') +
+                       note);
+        }
+
         return lines.join('\n');
     },
 
@@ -435,7 +509,7 @@ window.mBTAIModule = {
     _stripActionBlock: function (text) {
         var out = String(text || '').replace(/\x60\x60\x60json\s*\{[\s\S]*?"mbt_action"[\s\S]*?\}\s*\x60\x60\x60/g, '');
         out = out.replace(/^\s+|\s+$/g, '');
-        return out || 'Proposed budget changes are ready — use Preview & Apply below.';
+        return out || 'Proposed budget changes are ready, use Preview & Apply below.';
     },
 
     /* ── Phase 60.B: Action Block Parser ───────────────────────────────── */
@@ -452,7 +526,7 @@ window.mBTAIModule = {
        The AI can return a near-miss: different case, extra spaces, or a
        prefix dropped ("Production Crew" vs "BTL: Production Crew"). Exact
        matching turned those into "Section not found" errors. Match loosely,
-       but only accept an unambiguous hit — never guess between two. */
+       but only accept an unambiguous hit, never guess between two. */
     _normalizeName: function (s) {
         return String(s || '')
             .toLowerCase()
@@ -475,7 +549,7 @@ window.mBTAIModule = {
         for (i = 0; i < keys.length; i++) {
             if (this._normalizeName(keys[i]) === want) return keys[i];
         }
-        /* Partial match — only when exactly one section contains the text. */
+        /* Partial match, only when exactly one section contains the text. */
         var hits = [];
         for (i = 0; i < keys.length; i++) {
             var k = this._normalizeName(keys[i]);
@@ -543,6 +617,8 @@ window.mBTAIModule = {
         if (a === 'add_item')           return 'Add "' + (c.description || 'item') + '" to ' + (c.section || '?');
         if (a === 'add_section')        return 'Create section "' + (c.section || '?') + '"';
         if (a === 'update_contingency') return 'Set contingency to ' + c.value + '%';
+        if (a === 'set_workweek')       return 'Set work week to ' + c.value + ' days';
+        if (a === 'set_stage_days')     return 'Set ' + (c.stage || '?') + ' stage to ' + c.days + ' days';
         return 'Apply: ' + a;
     },
 
@@ -569,6 +645,45 @@ window.mBTAIModule = {
             var pct = parseFloat(c.value);
             if (isNaN(pct)) return 'Contingency value was not a number.';
             budget.contingencyPercentage = pct;
+            return null;
+        }
+
+        if (a === 'set_workweek') {
+            var wk = parseInt(c.value, 10);
+            if (wk !== 5 && wk !== 6 && wk !== 7) return 'Work week must be 5, 6 or 7 days, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+            /* Route through the same entry point the header control uses
+               (index.html mBT.features.funding.setWorkWeek), so reconcile,
+               header refresh and the mbt:workWeek postMessage to open tool
+               iframes all fire exactly as they do for a manual change. */
+            if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.setWorkWeek === 'function') {
+                window.mBT.features.funding.setWorkWeek(wk);
+            } else {
+                if (!budget.settings) budget.settings = {};
+                budget.settings.workWeek = wk;
+            }
+            return null;
+        }
+
+        if (a === 'set_stage_days') {
+            var STAGE_KEYS = { dev: 1, pre: 1, prod: 1, post: 1, dist: 1 };
+            var stageKey = String(c.stage || '').replace(/^\s+|\s+$/g, '').toLowerCase();
+            if (!STAGE_KEYS[stageKey]) return 'Unknown stage: ' + (c.stage || '(none)') + '. Use one of dev, pre, prod, post, dist.';
+            var days = parseFloat(c.days);
+            if (isNaN(days) || days < 0) return 'Stage days must be a non negative number, got ' + (c.days === undefined ? '(none)' : c.days) + '.';
+            /* Route through the same entry point the Stages tool uses
+               (index.html window.updateStageDuration), so it scaffolds
+               targetLock on a fresh budget, saves, and fires updateAllHeaders
+               plus mBTLE.reconcile exactly as a manual edit does. */
+            if (typeof window.updateStageDuration === 'function') {
+                window.updateStageDuration(stageKey, days);
+            } else {
+                if (!budget.targetLock) budget.targetLock = { totalCap: 0, stages: {} };
+                if (!budget.targetLock.stages) budget.targetLock.stages = {};
+                if (!budget.targetLock.stages[stageKey]) {
+                    budget.targetLock.stages[stageKey] = { label: stageKey.toUpperCase(), ratio: 20, days: 0, locked: false };
+                }
+                budget.targetLock.stages[stageKey].days = days;
+            }
             return null;
         }
 
@@ -650,15 +765,40 @@ window.mBTAIModule = {
         try {
             backup = JSON.stringify({
                 sections: budget.sections,
-                contingencyPercentage: budget.contingencyPercentage
+                contingencyPercentage: budget.contingencyPercentage,
+                settings: budget.settings,
+                targetLock: budget.targetLock
             });
         } catch (e) { backup = null; }
 
+        /* Batch guard. Some verbs delegate to the same entry points the manual
+           controls use (setWorkWeek, updateStageDuration), and each of those
+           runs a full saveBudget + reconcile + updateAllHeaders on its own. In
+           a batch that repeated the whole cost per change: six changes measured
+           7 saves, 7 reconciles and 6 header rebuilds where one of each is
+           enough. Reconcile is O(items) and a save serialises the entire
+           budget, so an AI generated budget felt sluggish for the rest of the
+           session. Suppress the per change passes here, then do exactly one of
+           each below. Restored in a finally so a throw cannot strand the app
+           with saving disabled. */
+        var _realSave = window.saveBudget;
+        var _realReconcile = (mBTLE && mBTLE.reconcile) ? mBTLE.reconcile : null;
+        var _realHeaders = window.updateAllHeaders;
+        var _noop = function () { };
         var errors = [];
         var j;
-        for (j = 0; j < changes.length; j++) {
-            var err = self._applyOne(changes[j]);
-            if (err) errors.push('\u2022 ' + err);
+        try {
+            if (typeof _realSave === 'function') window.saveBudget = _noop;
+            if (_realReconcile) mBTLE.reconcile = _noop;
+            if (typeof _realHeaders === 'function') window.updateAllHeaders = _noop;
+            for (j = 0; j < changes.length; j++) {
+                var err = self._applyOne(changes[j]);
+                if (err) errors.push('\u2022 ' + err);
+            }
+        } finally {
+            if (typeof _realSave === 'function') window.saveBudget = _realSave;
+            if (_realReconcile) mBTLE.reconcile = _realReconcile;
+            if (typeof _realHeaders === 'function') window.updateAllHeaders = _realHeaders;
         }
 
         if (errors.length) {
@@ -666,6 +806,8 @@ window.mBTAIModule = {
                 var undoState = JSON.parse(backup);
                 budget.sections = undoState.sections;
                 budget.contingencyPercentage = undoState.contingencyPercentage;
+                budget.settings = undoState.settings;
+                budget.targetLock = undoState.targetLock;
             }
             return mBTME.alert('Nothing Applied',
                 'The budget was left unchanged because ' +
@@ -685,6 +827,10 @@ window.mBTAIModule = {
 
         if (typeof window.saveBudget === 'function') window.saveBudget();
         if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+        /* Suppressed during the apply loop above, so run it once here. Without
+           this a workweek or stage days change would leave the header showing
+           the old value until the next unrelated repaint. */
+        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
         if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
         if (typeof window.render === 'function') window.render();
 
@@ -716,11 +862,14 @@ window.mBTAIModule = {
         var prev = JSON.parse(window._mbtAILastBackup);
         budget.sections = prev.sections;
         budget.contingencyPercentage = prev.contingencyPercentage;
+        budget.settings = prev.settings;
+        budget.targetLock = prev.targetLock;
         window._mbtAILastBackup = null;
         if (typeof this.refreshUndoButton === 'function') this.refreshUndoButton();
         if (typeof window.saveBudget === 'function') window.saveBudget();
         if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
         if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
         if (typeof window.render === 'function') window.render();
         if (this._chatSession && typeof this._chatRender === 'function') this._chatRender();
         mBTME.alert('Undone', 'The last AI change was reversed.');
@@ -841,6 +990,7 @@ window.mBTAIModule = {
             if (mBTME) mBTME.alert('Assistant Offline', 'Configure an API key in Settings > Connections.');
             return Promise.resolve(false);
         }
+        var genCurrency = window.displayCurrency || 'USD';
         var schemaGuide = [
             'Return ONLY a valid JSON object - no markdown fences, no explanation, no comments.',
             'Schema: { "projectName": string, "company": string, "startDate": "YYYY-MM-DD",',
@@ -849,9 +999,17 @@ window.mBTAIModule = {
             '{ "id": "item_001", "description": string, "quantity": number,',
             '"unit": "Day|Week|Flat|Hour", "rate": number, "multiplier": 1, "actual": 0, "rateType": "negotiable" }',
             '] } } }',
-            'Rules: plain text strings only (no HTML tags). Realistic rates. 3-5 sections, 4-8 items each.',
+            'Rules: plain text strings only (no HTML tags). All "rate" values MUST be in ' + genCurrency +
+            '. 3-5 sections, 4-8 items each.',
+            'For any role or item that appears on the OPENGATE RATE CARD below, copy its rate exactly, do not estimate it.',
             templateHint ? ('Use a ' + templateHint + ' budget structure.') : ''
         ].join(' ');
+        var genRateCtx = self._buildRateContext(userPrompt + ' ' + (templateHint || ''));
+        if (genRateCtx) {
+            schemaGuide += '\n\n' + genRateCtx;
+        } else {
+            schemaGuide += '\n\nNo local rate card is available. State clearly that rates are estimates in ' + genCurrency + '.';
+        }
         if (mBTME && mBTME.showLoader) mBTME.showLoader('Generating budget..');
         return self.callUnifiedAI(provider, apiKey, 'Generate a production budget for: ' + userPrompt, schemaGuide).then(function (result) {
             if (mBTME && mBTME.hideLoader) mBTME.hideLoader();
@@ -958,6 +1116,17 @@ window.mBTAIModule = {
     closeChat: function () {
         var sess = this._chatSession;
         if (!sess) return;
+        /* Release the microphone. Closing the panel with dictation running would
+           otherwise leave the browser recording with no visible indicator. */
+        if (this._recognition) {
+            var rec = this._recognition;
+            rec.onend = null;
+            rec.onresult = null;
+            rec.onerror = null;
+            try { rec.stop(); } catch (eMic) { /* already stopped */ }
+            this._recognition = null;
+        }
+        sess.micOn = false;
         sess.inflight = false;
         sess.genId = (sess.genId || 0) + 1;
         if (sess.root && sess.root.parentNode) sess.root.parentNode.removeChild(sess.root);
@@ -967,6 +1136,213 @@ window.mBTAIModule = {
         }
         this._chatSession = null;
         document.body.style.overflow = '';
+        /* Leave the shared modal/history stack if registered. */
+        if (window.mBTME && typeof window.mBTME.unregisterLayer === 'function') {
+            window.mBTME.unregisterLayer('mbtAiChat');
+        }
+    },
+
+    /* True under the Expanded mobile breakpoint (CSS @media max-width 767px). */
+    _isMobileChatLayout: function () {
+        try {
+            if (window.matchMedia) return window.matchMedia('(max-width: 767px)').matches;
+        } catch (eMq) { /* ignore */ }
+        return (window.innerWidth || 0) < 768;
+    },
+
+    /*
+     * Voice input via the Web Speech API. Was a visual stub: the button turned
+     * red and the composer went readonly, so it looked frozen and nothing was
+     * ever transcribed.
+     *
+     * Interim results are written straight into the live input element rather
+     * than through _chatRender, because a re-render on every syllable would
+     * fight the user's own typing and lose the caret. The committed text is
+     * kept separately from the interim tail so a correction is never doubled.
+     */
+    _startDictation: function () {
+        var self = this;
+        var sess = self._chatSession;
+        if (!sess || sess.micOn) return;
+
+        var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!Ctor) {
+            if (window.mBTME) window.mBTME.alert('Voice Input', 'This browser cannot do speech recognition. Try Chrome, or type your request.');
+            return;
+        }
+
+        var rec;
+        try { rec = new Ctor(); } catch (eNew) {
+            if (window.mBTME) window.mBTME.alert('Voice Input', 'Speech recognition could not start on this device.');
+            return;
+        }
+
+        rec.continuous = true;
+        rec.interimResults = true;
+        try { rec.lang = navigator.language || 'en-US'; } catch (eLang) { /* default */ }
+
+        /* Whatever is already typed stays put, dictation appends to it. */
+        var inputEl = document.getElementById('aiChatInput');
+        var committed = inputEl ? String(inputEl.value || '') : '';
+
+        rec.onresult = function (ev) {
+            var el = document.getElementById('aiChatInput');
+            if (!el) return;
+            var interim = '';
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+                var chunk = ev.results[i][0].transcript;
+                if (ev.results[i].isFinal) {
+                    committed = (committed ? committed + ' ' : '') + String(chunk).replace(/^\s+|\s+$/g, '');
+                } else {
+                    interim += chunk;
+                }
+            }
+            el.value = committed + (interim ? (committed ? ' ' : '') + interim : '');
+        };
+
+        rec.onerror = function (ev) {
+            var code = ev && ev.error ? String(ev.error) : 'unknown';
+            self._stopDictation();
+            if (code === 'not-allowed' || code === 'service-not-allowed') {
+                if (window.mBTME) window.mBTME.alert('Microphone Blocked', 'Allow microphone access for this site, then tap the mic again.');
+            } else if (code !== 'aborted' && code !== 'no-speech') {
+                if (window.mBTME) window.mBTME.alert('Voice Input', 'Speech recognition stopped: ' + code);
+            }
+        };
+
+        /* Fires when the engine stops on its own, e.g. a long silence. Keep the
+           UI honest rather than leaving a red mic that is no longer listening. */
+        rec.onend = function () {
+            if (self._chatSession && self._chatSession.micOn) self._stopDictation();
+        };
+
+        try { rec.start(); } catch (eStart) {
+            if (window.mBTME) window.mBTME.alert('Voice Input', 'Could not start the microphone.');
+            return;
+        }
+
+        self._recognition = rec;
+        sess.micOn = true;
+        self._chatRender();
+        var focusEl = document.getElementById('aiChatInput');
+        if (focusEl) {
+            focusEl.value = committed;
+            focusEl.focus();
+        }
+    },
+
+    _stopDictation: function () {
+        var sess = this._chatSession;
+        var rec = this._recognition;
+        if (rec) {
+            rec.onend = null;   /* prevent the stop handler recursing */
+            rec.onresult = null;
+            rec.onerror = null;
+            try { rec.stop(); } catch (eStop) { /* already stopped */ }
+            this._recognition = null;
+        }
+        if (!sess) return;
+        /* Keep the dictated text across the re-render. */
+        var el = document.getElementById('aiChatInput');
+        var kept = el ? el.value : '';
+        sess.micOn = false;
+        if (typeof this._chatRender === 'function') this._chatRender();
+        var after = document.getElementById('aiChatInput');
+        if (after && kept) {
+            after.value = kept;
+            after.focus();
+        }
+    },
+
+    /*
+     * Context drawer section collapse state, persisted per section.
+     * Defaults: the two bulky sections (context sources, section totals) start
+     * closed. Everything else opens. Keeping them all open pushed "At a glance"
+     * about 740px down the panel, so the summary was never visible without
+     * scrolling, which was the whole complaint.
+     */
+    _CTX_DEFAULT_CLOSED: { sources: true, sections: true },
+
+    _ctxSectionClosed: function (key) {
+        try {
+            var v = localStorage.getItem('mbt_ctx_sec_' + key);
+            if (v === '0') return false;
+            if (v === '1') return true;
+        } catch (e) { /* ignore */ }
+        return !!this._CTX_DEFAULT_CLOSED[key];
+    },
+
+    _ctxToggleSection: function (key) {
+        var next = !this._ctxSectionClosed(key);
+        try { localStorage.setItem('mbt_ctx_sec_' + key, next ? '1' : '0'); } catch (e) { /* ignore */ }
+        /* Toggle the class in place. Calling _chatRender here rebuilt the whole
+           panel, which replaced the composer input with a fresh empty node and
+           silently threw away anything half typed. Collapsing a drawer section
+           must never touch the message the user is writing. */
+        var btn = document.querySelector('[data-ctx-key="' + key + '"]');
+        var sec = btn ? btn.parentNode : null;
+        if (sec && sec.classList) {
+            if (next) sec.classList.add('mbt-ctx-closed');
+            else sec.classList.remove('mbt-ctx-closed');
+            return;
+        }
+        /* Section not on screen (drawer closed, PiP mode): fall back to a
+           re-render so the stored state is still reflected when it reappears. */
+        if (typeof this._chatRender === 'function') this._chatRender();
+    },
+
+    /* Single writer for drawer prefs. Mobile must never rewrite desktop values. */
+    _persistDrawerPref: function (key, open) {
+        if (this._isMobileChatLayout()) return;
+        try { localStorage.setItem(key, open ? '1' : '0'); } catch (eDr) { /* ignore */ }
+    },
+
+    /*
+     * Dismiss one assistant surface, top first (matches Escape and Android back):
+     * source modal, settings/generate, drawer, pending confirm, then the shell.
+     * Returns true if the assistant is still open after the dismiss.
+     */
+    _dismissChatTopLayer: function () {
+        var sess = this._chatSession;
+        if (!sess) return false;
+        if (sess.sourceModalOpen) {
+            sess.sourceModalOpen = false;
+            sess.sourceEdit = null;
+            if (typeof this._chatRender === 'function') this._chatRender();
+            return true;
+        }
+        if (sess.generateOpen) {
+            sess.generateOpen = false;
+            if (typeof this._chatRender === 'function') this._chatRender();
+            return true;
+        }
+        if (sess.settingsOpen) {
+            sess.settingsOpen = false;
+            if (typeof this._chatRender === 'function') this._chatRender();
+            return true;
+        }
+        if (sess.leftOpen || sess.rightOpen) {
+            /* Dismiss ONE drawer per press. Mobile only ever has one open. On desktop
+               both can be open, and back must not collapse both at once. Right is the
+               context drawer and sits above history, so it goes first. */
+            if (sess.rightOpen) {
+                sess.rightOpen = false;
+                this._persistDrawerPref('mbt_chat_drawer_right', false);
+            } else {
+                sess.leftOpen = false;
+                this._persistDrawerPref('mbt_chat_drawer_left', false);
+            }
+            if (typeof this._chatRender === 'function') this._chatRender();
+            return true;
+        }
+        if (sess.pendingDiff) {
+            /* Cancel like the Cancel button: leave budget untouched, stay in chat. */
+            sess.pendingDiff = null;
+            if (typeof this._chatRender === 'function') this._chatRender();
+            return true;
+        }
+        this.closeChat();
+        return false;
     },
 
     /* ── AI Chat: Expanded + PiP (Build 2) ───────────────────────────────── */
@@ -1024,6 +1400,16 @@ window.mBTAIModule = {
 
         function writeDrawer(key, open) {
             try { localStorage.setItem(key, open ? '1' : '0'); } catch (e) {}
+        }
+
+        /* Mobile must not rewrite desktop drawer prefs stored in localStorage. */
+        function persistDrawer(key, open) {
+            if (self._isMobileChatLayout()) return;
+            writeDrawer(key, open);
+        }
+
+        function isMobileChatLayout() {
+            return self._isMobileChatLayout();
         }
 
         function readPipPos() {
@@ -1226,10 +1612,21 @@ window.mBTAIModule = {
             if (!raw) return '';
             var s = String(sizePx);
             var out = String(raw);
-            out = out.replace(/\swidth="[^"]*"/gi, '');
-            out = out.replace(/\sheight="[^"]*"/gi, '');
-            out = out.replace(/\sstroke-width="[^"]*"/gi, '');
-            out = out.replace(/<svg\b/i, '<svg width="' + s + '" height="' + s + '" stroke-width="2.5" style="display:block;width:' + s + 'px;height:' + s + 'px;"');
+            /* Rewrite ONLY the opening <svg> tag. A global strip of width and
+               height also tore the attributes off inner <rect> elements, which
+               made any rect based icon render as nothing at all: the PiP icon is
+               two rects, so its button appeared empty. Match the svg tag, edit
+               inside that match, and leave every child element untouched. */
+            out = out.replace(/<svg\b[^>]*>/i, function (tag) {
+                var t = tag;
+                t = t.replace(/\swidth="[^"]*"/gi, '');
+                t = t.replace(/\sheight="[^"]*"/gi, '');
+                t = t.replace(/\sstroke-width="[^"]*"/gi, '');
+                t = t.replace(/\sstyle="[^"]*"/gi, '');
+                return t.replace(/^<svg\b/i,
+                    '<svg width="' + s + '" height="' + s + '" stroke-width="2.5"' +
+                    ' style="display:block;width:' + s + 'px;height:' + s + 'px;"');
+            });
             return out;
         }
 
@@ -1405,18 +1802,27 @@ window.mBTAIModule = {
                 ? (sideBtn + ' shrink-0 relative flex items-center justify-center text-rose-600 bg-rose-50')
                 : (sideBtn + ' shrink-0 flex items-center justify-center text-slate-400 hover:text-slate-600');
             var micExtra = micOn ? '<span class="absolute inset-0 rounded-lg ring-2 ring-rose-400/50 animate-pulse"></span>' : '';
-            var placeholder = micOn ? 'Listening' : 'Ask about rates, logistics, or risks..';
+            var placeholder = micOn ? 'Listening, speak now' : 'Ask about rates, logistics, or risks..';
             var phCls = micOn ? 'placeholder:text-rose-400' : 'placeholder:text-slate-300';
+            /* Hide the mic entirely where the browser cannot do speech input,
+               rather than offering a control that can never work. */
+            var micSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+            var micTitle = micOn ? 'Stop listening' : 'Voice input';
+            var micHtml = micSupported
+                ? ('<button type="button" data-chat-act="mic" title="' + micTitle + '" class="' + micCls + '">' +
+                       micExtra + icon('mic', '') +
+                   '</button>')
+                : '';
             return '<div class="' + (isPip ? 'p-2' : 'p-4') + ' border-t border-slate-100 flex gap-2 bg-white shrink-0">' +
                 '<div class="flex-1 min-w-0 flex items-center gap-0.5 ' + (isPip ? 'p-1 pl-1.5 rounded-lg' : 'p-1.5 pl-2 rounded-xl') + ' bg-slate-50">' +
                     '<button type="button" data-chat-act="attach" title="Attach file" class="' + sideBtn + ' shrink-0 flex items-center justify-center text-slate-400 hover:text-slate-600">' +
                         icon('clip', '') +
                     '</button>' +
-                    /* Mic is a visual stub only. Recording is not implemented yet. */
-                    '<button type="button" data-chat-act="mic" title="' + (micOn ? 'Recording (stub)' : 'Voice input (not implemented)') + '" class="' + micCls + '">' +
-                        micExtra + icon('mic', '') +
-                    '</button>' +
-                    '<input type="text" id="aiChatInput" ' + (micOn ? 'readonly ' : '') + 'placeholder="' + esc(placeholder) + '" class="flex-1 min-w-0 p-2 bg-transparent border-none text-[10px] font-bold outline-none ' + phCls + '">' +
+                    micHtml +
+                    /* Never readonly while listening. Speech recognition is not
+                       reliable enough to trust blind, so the user must be able
+                       to fix a mistranscription without stopping the mic. */
+                    '<input type="text" id="aiChatInput" placeholder="' + esc(placeholder) + '" class="flex-1 min-w-0 p-2 bg-transparent border-none text-[10px] font-bold outline-none ' + phCls + '">' +
                     '<input type="file" id="aiChatFileInput" class="hidden" multiple>' +
                 '</div>' +
                 sendHtml +
@@ -1434,6 +1840,10 @@ window.mBTAIModule = {
             var grip = isPip
                 ? ('<span class="text-slate-300 shrink-0" aria-hidden="true">' + headerIcon('drag', '', isPip) + '</span>')
                 : '';
+            var drawerBtns = isPip ? '' : (
+                '<button type="button" data-chat-act="toggle-left" title="History" class="' + hdrBtn + ' mbt-chat-hdr-drawer text-slate-400 hover:text-blue-600 hover:bg-blue-50">' + headerIcon('list', 'H', isPip) + '</button>' +
+                '<button type="button" data-chat-act="toggle-right" title="Context" class="' + hdrBtn + ' mbt-chat-hdr-drawer text-slate-400 hover:text-blue-600 hover:bg-blue-50">' + headerIcon('barChart', 'C', isPip) + '</button>'
+            );
             return '<div id="aiChatHeader" class="' + (isPip ? 'mbt-chat-pip-grip px-2.5 py-2' : 'px-4 py-3') + ' bg-white border-b border-slate-100 flex items-center gap-1.5 shrink-0">' +
                 grip +
                 '<h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">Assistant</h3>' +
@@ -1441,6 +1851,7 @@ window.mBTAIModule = {
                 (isPip ? '' : ('<span class="text-slate-400 shrink-0">' + headerIcon('chat', '', isPip) + '</span><span class="text-[10px] font-black text-slate-600 truncate max-w-[140px]">' + esc(m) + '</span>')) +
                 '<div class="flex-1"></div>' +
                 (isPip ? '' : '<span class="text-[8px] font-black uppercase tracking-widest text-slate-400 mr-1 hidden lg:inline">Sees your budget &amp; OpenGate rates</span>') +
+                drawerBtns +
                 '<button type="button" id="aiUndoBtn" data-chat-act="undo" title="Undo last AI budget change" class="' + hdrBtn + ' text-slate-400 hover:text-amber-600 hover:bg-amber-50' + undoHidden + '">' + headerIcon('undo', '\u21B6', isPip) + '</button>' +
                 '<button type="button" data-chat-act="export" title="Export" class="' + hdrBtn + ' text-slate-400 hover:text-blue-600 hover:bg-blue-50">' + headerIcon('file', '', isPip) + '</button>' +
                 '<button type="button" data-chat-act="clear" title="Clear" class="' + hdrBtn + ' text-slate-400 hover:text-rose-500 hover:bg-rose-50">' + headerIcon('trash', '', isPip) + '</button>' +
@@ -1616,6 +2027,37 @@ window.mBTAIModule = {
                 chipHtml.push('<span class="text-[8px] font-bold text-slate-400">No indexed artifacts yet.</span>');
             }
 
+            /* One icon row instead of two stacked rows of text buttons. Same four
+               actions, a quarter of the vertical space. Labels kept under each
+               icon: four unlabelled glyphs is a guessing game. */
+            function ctxAction(act, iconName, label, title, tone) {
+                return '<button type="button" data-chat-act="' + act + '" title="' + esc(title) + '" ' +
+                    'class="flex-1 py-1.5 rounded-lg border border-slate-200 bg-white flex flex-col items-center gap-0.5 ' + tone + ' transition-colors">' +
+                        icon(iconName, '') +
+                        '<span class="text-[7px] font-black uppercase tracking-widest">' + esc(label) + '</span>' +
+                    '</button>';
+            }
+            var actionRow =
+                '<div class="px-3 py-2 border-b border-slate-100 shrink-0 flex gap-1.5">' +
+                    ctxAction('ledger-rescan', 'refresh', 'Rescan', 'Rescan artifacts into the context ledger', 'text-slate-600 hover:bg-slate-100') +
+                    ctxAction('ledger-purge', 'trash', 'Purge', 'Drop receipts older than 90 days', 'text-slate-600 hover:bg-slate-100') +
+                    ctxAction('run-analytics', 'barChart', 'Analytics', 'Analyse the current budget', 'text-indigo-600 hover:bg-indigo-50') +
+                    ctxAction('open-generate', 'wand', 'Generate', 'Generate a budget from a template', 'text-violet-600 hover:bg-violet-50') +
+                '</div>';
+
+            /* Collapsible section wrapper. Header is the toggle. */
+            function ctxSection(key, label, meta, bodyHtml) {
+                var closed = self._ctxSectionClosed(key);
+                return '<div class="mbt-ctx-sec' + (closed ? ' mbt-ctx-closed' : '') + ' border-b border-slate-100 shrink-0">' +
+                        '<button type="button" data-chat-act="ctx-toggle" data-ctx-key="' + esc(key) + '" class="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-50">' +
+                            '<span class="text-slate-300 mbt-ctx-chev shrink-0">' + icon('chevronDown', 'v') + '</span>' +
+                            '<span class="flex-1 text-left text-[8px] font-black uppercase tracking-widest text-slate-400">' + esc(label) + '</span>' +
+                            '<span class="text-[8px] font-bold text-slate-400 shrink-0">' + esc(meta) + '</span>' +
+                        '</button>' +
+                        '<div class="mbt-ctx-sec-body">' + bodyHtml + '</div>' +
+                    '</div>';
+            }
+
             return '<div id="aiChatRight" class="' + colCls + ' shrink-0 border-l border-slate-100 bg-white flex flex-col transition-all">' +
                 '<div class="mbt-chat-drawer-head px-3 pt-3 pb-2 border-b border-slate-100 shrink-0 flex items-center gap-2">' +
                     '<div class="flex-1 text-[8px] font-black uppercase tracking-widest text-slate-400">Context</div>' +
@@ -1629,8 +2071,10 @@ window.mBTAIModule = {
                     '</button>' +
                 '</div>' +
                 '<div class="mbt-chat-drawer-body flex-1 min-h-0 flex flex-col overflow-hidden">' +
-                    '<div class="px-4 pt-3 pb-2 border-b border-slate-100 shrink-0">' +
-                        '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Context sources</div>' +
+                    actionRow +
+                    '<div class="flex-1 min-h-0 overflow-y-auto no-scrollbar">' +
+                    ctxSection('sources', 'Context sources', 'Budget, rates, memory',
+                    '<div class="px-4 pb-2">' +
                         '<div class="flex items-start gap-2 py-2 border-b border-slate-50">' +
                             '<span class="text-slate-400 mt-0.5 shrink-0">' + icon('list', '') + '</span>' +
                             '<div class="flex-1 min-w-0">' +
@@ -1659,38 +2103,28 @@ window.mBTAIModule = {
                                 '<div class="text-[9px] font-bold text-slate-500 mt-0.5">' + s.msgN + ' messages \u00b7 saved per project</div>' +
                             '</div>' +
                         '</div>' +
-                    '</div>' +
-                    '<div class="px-4 py-3 border-b border-slate-100 shrink-0 space-y-2">' +
-                        '<div class="flex items-center justify-between">' +
-                            '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Custom sources</div>' +
-                            '<span class="text-[8px] font-bold text-slate-400">' + srcs.length + '</span>' +
-                        '</div>' +
+                    '</div>') +
+                    ctxSection('custom', 'Custom sources', String(srcs.length),
+                    '<div class="px-4 pb-3 space-y-2">' +
                         '<div class="space-y-1.5 max-h-28 no-scrollbar overflow-y-auto">' + srcHtml.join('') + '</div>' +
                         '<button type="button" data-chat-act="add-source" class="w-full py-2 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-50">+ Add source</button>' +
-                    '</div>' +
-                    '<div class="px-4 py-3 border-b border-slate-100 shrink-0 space-y-2">' +
-                        '<div class="flex items-center justify-between">' +
-                            '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Token usage</div>' +
-                            '<span class="text-[9px] font-black text-slate-700">' + formatTokens(tokTotal) + ' / 100k</span>' +
-                        '</div>' +
+                    '</div>') +
+                    ctxSection('tokens', 'Token usage', formatTokens(tokTotal),
+                    '<div class="px-4 pb-3 space-y-2">' +
                         '<div class="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="' + tokColor + ' h-full" style="width:' + tokPct.toFixed(1) + '%"></div></div>' +
                         '<div class="flex flex-wrap gap-1">' + chipHtml.join('') + '</div>' +
-                        '<div class="flex gap-2">' +
-                            '<button type="button" data-chat-act="ledger-rescan" class="flex-1 py-1.5 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50">Rescan</button>' +
-                            '<button type="button" data-chat-act="ledger-purge" class="flex-1 py-1.5 rounded-lg border border-slate-200 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50" title="Drop receipts older than 90 days">Purge 90d+</button>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="px-4 py-2 border-b border-slate-100 shrink-0 flex gap-2">' +
-                        '<button type="button" data-chat-act="run-analytics" class="flex-1 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-[8px] font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-100">Analytics</button>' +
-                        '<button type="button" data-chat-act="open-generate" class="flex-1 py-2 rounded-lg bg-violet-50 border border-violet-100 text-[8px] font-black uppercase tracking-widest text-violet-700 hover:bg-violet-100">Generate</button>' +
-                    '</div>' +
+                    '</div>') +
+                    /* Grand total is never collapsible, it is the one number that
+                       must always be on screen. */
                     '<div class="px-4 py-3 border-b border-slate-100 shrink-0">' +
                         '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">Estimated grand total</div>' +
                         '<div class="text-[18px] font-black tracking-tighter text-slate-900 leading-tight">' + esc(fmtMoney(s.grand)) + '</div>' +
                     '</div>' +
-                    '<div class="no-scrollbar overflow-y-auto divide-y divide-slate-50 shrink-0 max-h-28">' + secRows.join('') + '</div>' +
-                    '<div class="px-4 py-2 border-t border-b border-slate-100 text-[8px] font-bold text-slate-400 shrink-0">Updates as changes apply</div>' +
-                    '<div class="px-4 py-3 flex-1 min-h-0 no-scrollbar overflow-y-auto">' +
+                    ctxSection('sections', 'Sections', String(s.rows.length),
+                    '<div class="divide-y divide-slate-50">' + secRows.join('') +
+                        '<div class="px-4 py-2 text-[8px] font-bold text-slate-400">Updates as changes apply</div>' +
+                    '</div>') +
+                    '<div class="px-4 py-3">' +
                         '<div class="flex items-center gap-1.5 mb-2">' +
                             '<span class="text-slate-400">' + icon('barChart', '') + '</span>' +
                             '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400">At a glance</div>' +
@@ -1725,6 +2159,7 @@ window.mBTAIModule = {
                                 '</div>' +
                             '</div>' +
                         '</div>' +
+                    '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -1925,15 +2360,23 @@ window.mBTAIModule = {
                     '</div>';
             }
 
+            var drawerScrim = '';
+            if (!isPip && (sess.leftOpen || sess.rightOpen)) {
+                /* One scrim; tap closes whichever drawer is open (mobile overlay only). */
+                drawerScrim = '<div class="mbt-chat-drawer-scrim" data-chat-act="' +
+                    (sess.leftOpen ? 'toggle-left' : 'toggle-right') + '" aria-hidden="true"></div>';
+            }
+
             var panelInner =
                 renderHeaderHtml(isPip) +
                 renderEngineLineHtml(isPip) +
                 (isPip
                     ? ('<div class="relative flex-1 min-h-0 flex flex-col">' + centre + '</div>')
-                    : ('<div class="flex-1 min-h-0 flex">' +
+                    : ('<div class="mbt-ai-chat-body flex-1 min-h-0 flex">' +
                         renderLeftDrawerHtml(sess.leftOpen) +
-                        '<div class="relative flex-1 min-w-0 flex flex-col">' + centre + '</div>' +
+                        '<div class="mbt-ai-chat-main relative flex-1 min-w-0 flex flex-col">' + centre + '</div>' +
                         renderRightDrawerHtml(sess.rightOpen) +
+                        drawerScrim +
                       '</div>')) +
                 (sess.settingsOpen ? renderSettingsSheetHtml() : '') +
                 (sess.generateOpen ? renderGenerateSheetHtml() : '') +
@@ -1942,15 +2385,16 @@ window.mBTAIModule = {
             if (isPip) {
                 var geo = pipGeometry(sess.pipPos || readPipPos());
                 sess.pipPos = { x: geo.x, y: geo.y };
-                return '<div id="mbtAiChatRoot" class="mbt-ai-chat-root" style="position:fixed;inset:0;z-index:980;pointer-events:none;">' +
+                return '<div id="mbtAiChatRoot" class="mbt-ai-chat-root mbt-ai-mode-pip" style="position:fixed;inset:0;z-index:980;pointer-events:none;">' +
                     '<div id="mbtAiChatPanel" class="bg-white rounded-xl shadow-2xl ring-1 ring-slate-900/15 flex flex-col overflow-hidden" style="position:fixed;left:' + geo.x + 'px;top:' + geo.y + 'px;width:330px;height:' + geo.h + 'px;max-height:calc(100vh - 28px);pointer-events:auto;z-index:981;">' +
                         panelInner +
                     '</div>' +
                 '</div>';
             }
 
-            return '<div id="mbtAiChatRoot" class="mbt-ai-chat-root" style="position:fixed;inset:0;z-index:980;">' +
-                '<div data-chat-act="backdrop" style="position:absolute;inset:0;background:rgba(15,23,42,0.35);"></div>' +
+            /* Desktop geometry stays inline; under 768px CSS forces full-bleed overlay drawers. */
+            return '<div id="mbtAiChatRoot" class="mbt-ai-chat-root mbt-ai-mode-expanded" style="position:fixed;inset:0;z-index:980;">' +
+                '<div class="mbt-ai-chat-backdrop" data-chat-act="backdrop" style="position:absolute;inset:0;background:rgba(15,23,42,0.35);"></div>' +
                 '<div id="mbtAiChatPanel" class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="position:absolute;top:24px;bottom:24px;left:15%;width:70%;max-width:1400px;pointer-events:auto;">' +
                     panelInner +
                 '</div>' +
@@ -2234,13 +2678,15 @@ window.mBTAIModule = {
             }
             if (act === 'toggle-left') {
                 sess.leftOpen = !sess.leftOpen;
-                writeDrawer('mbt_chat_drawer_left', sess.leftOpen);
+                if (sess.leftOpen && isMobileChatLayout()) sess.rightOpen = false;
+                persistDrawer('mbt_chat_drawer_left', sess.leftOpen);
                 self._chatRender();
                 return;
             }
             if (act === 'toggle-right') {
                 sess.rightOpen = !sess.rightOpen;
-                writeDrawer('mbt_chat_drawer_right', sess.rightOpen);
+                if (sess.rightOpen && isMobileChatLayout()) sess.leftOpen = false;
+                persistDrawer('mbt_chat_drawer_right', sess.rightOpen);
                 self._chatRender();
                 return;
             }
@@ -2332,7 +2778,7 @@ window.mBTAIModule = {
                 fetch(val, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ test: true, source: 'MooBudget', project: budget.projectName, ts: new Date().toISOString() })
+                    body: JSON.stringify({ test: true, source: 'mooBudgetTool', project: budget.projectName, ts: new Date().toISOString() })
                 }).then(function (r) {
                     if (mBTME.hideLoader) mBTME.hideLoader();
                     if (r.ok) mBTME.alert('Success', 'Endpoint Reachable');
@@ -2345,7 +2791,11 @@ window.mBTAIModule = {
             }
             if (act === 'send') {
                 var inp = document.getElementById('aiChatInput');
-                doSend(inp ? inp.value : '');
+                var toSend = inp ? inp.value : '';
+                /* Read the text first, then release the mic. Sending ends the
+                   utterance, so leaving it live would dictate into an empty box. */
+                if (sess.micOn) self._stopDictation();
+                doSend(toSend);
                 return;
             }
             if (act === 'stop') {
@@ -2381,14 +2831,14 @@ window.mBTAIModule = {
                 sess.sourceEdit = null;
                 sess.sourceModalOpen = true;
                 sess.rightOpen = true;
-                writeDrawer('mbt_chat_drawer_right', true);
+                if (isMobileChatLayout()) sess.leftOpen = false;
+                persistDrawer('mbt_chat_drawer_right', true);
                 self._chatRender();
                 return;
             }
             if (act === 'mic') {
-                /* Mic recording is not implemented. Toggle UI only. */
-                sess.micOn = !sess.micOn;
-                self._chatRender();
+                if (sess.micOn) self._stopDictation();
+                else self._startDictation();
                 return;
             }
             if (act === 'preview') {
@@ -2517,7 +2967,8 @@ window.mBTAIModule = {
                 sess.sourceModalOpen = false;
                 sess.sourceEdit = null;
                 sess.rightOpen = true;
-                writeDrawer('mbt_chat_drawer_right', true);
+                if (isMobileChatLayout()) sess.leftOpen = false;
+                persistDrawer('mbt_chat_drawer_right', true);
                 self._chatRender();
                 return;
             }
@@ -2536,6 +2987,10 @@ window.mBTAIModule = {
                         });
                     }
                 } catch (eRs) { /* ignore */ }
+                return;
+            }
+            if (act === 'ctx-toggle') {
+                self._ctxToggleSection(el.getAttribute('data-ctx-key') || '');
                 return;
             }
             if (act === 'ledger-purge') {
@@ -2613,22 +3068,9 @@ window.mBTAIModule = {
                     handleAction('send', e.target, e);
                 }
                 if (e.key === 'Escape') {
-                    if (self._chatSession && self._chatSession.sourceModalOpen) {
-                        self._chatSession.sourceModalOpen = false;
-                        self._chatSession.sourceEdit = null;
-                        self._chatRender();
-                    } else if (self._chatSession && self._chatSession.generateOpen) {
-                        self._chatSession.generateOpen = false;
-                        self._chatRender();
-                    } else if (self._chatSession && self._chatSession.settingsOpen) {
-                        self._chatSession.settingsOpen = false;
-                        self._chatRender();
-                    } else if (self._chatSession && self._chatSession.pendingDiff) {
-                        self._chatSession.pendingDiff = null;
-                        self._chatRender();
-                    } else {
-                        self.closeChat();
-                    }
+                    /* Same dismiss order as Android back (top internal layer first). */
+                    e.preventDefault();
+                    self._dismissChatTopLayer();
                 }
             };
 
@@ -2647,7 +3089,8 @@ window.mBTAIModule = {
                         }
                         if (self._chatSession) {
                             self._chatSession.rightOpen = true;
-                            writeDrawer('mbt_chat_drawer_right', true);
+                            if (isMobileChatLayout()) self._chatSession.leftOpen = false;
+                            persistDrawer('mbt_chat_drawer_right', true);
                             if (typeof self._chatRender === 'function') self._chatRender();
                         }
                     };
@@ -2701,6 +3144,13 @@ window.mBTAIModule = {
             bindRootEvents();
         };
 
+        function registerChatLayer() {
+            if (!window.mBTME || typeof window.mBTME.registerLayer !== 'function') return;
+            window.mBTME.registerLayer('mbtAiChat', function () {
+                return self._dismissChatTopLayer();
+            });
+        }
+
         /* Mount or refresh session */
         if (self._chatSession && self._chatSession.root && document.body.contains(self._chatSession.root)) {
             var ac0 = activeThreadAndChat();
@@ -2710,12 +3160,18 @@ window.mBTAIModule = {
             if (opts.openGenerate) self._chatSession.generateOpen = true;
             if (opts.openSettings) self._chatSession.settingsOpen = true;
             self._chatRender();
+            registerChatLayer();
             return;
         }
 
         var mode = readMode();
         var leftOpen = readDrawer('mbt_chat_drawer_left', true);
         var rightOpen = readDrawer('mbt_chat_drawer_right', true);
+        /* Mobile always opens to chat only; do not overwrite stored desktop drawer prefs. */
+        if (isMobileChatLayout()) {
+            leftOpen = false;
+            rightOpen = false;
+        }
         var acInit = activeThreadAndChat();
 
         self._chatSession = {
@@ -2746,10 +3202,11 @@ window.mBTAIModule = {
         }
 
         self._chatRender();
+        registerChatLayer();
     },
 
     /* ── Persona & Rules Modal (Phase 58.2) ─────────────────────────────── */
-    /* ── Phase 144: Sourcing Analysis — AI Interview Wizard ─────────────── */
+    /* ── Phase 144: Sourcing Analysis, AI Interview Wizard ─────────────── */
     /* Generates a Funding Strategy document via AI analysis of live budget funding
        sources, then sends the result to the publisher iframe via SmartFill bridge. */
     openSourcingAnalysis: function () {
@@ -2780,7 +3237,7 @@ window.mBTAIModule = {
             'FORMAT: ' + (budget.format || 'Feature Film') + '\n' +
             'TOTAL BUDGET: ' + totalBudget + ' ' + displayCurrency + '\n' +
             'SECURED FUNDING: ' + totalFunding + ' ' + displayCurrency + '\n' +
-            'FUNDING GAP: ' + (gap > 0 ? gap + ' ' + displayCurrency : 'None — fully covered') + '\n' +
+            'FUNDING GAP: ' + (gap > 0 ? gap + ' ' + displayCurrency : 'None, fully covered') + '\n' +
             'SOURCES:\n' + sourcesText + '\n\n' +
             'Generate a concise Funding Strategy document. Output a raw JSON object with these exact keys:\n' +
             '- execSummary: 1-2 paragraph project pitch and financing goals\n' +

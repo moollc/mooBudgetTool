@@ -4,7 +4,7 @@
   <circle cx="12" cy="12" r="10"></circle>
   <path d="M15 11a3 3 0 1 0 0 2"></path>
 </svg> 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
-  Part of the mBT (Moo Budget Tool) Ecosystem.
+  Part of the mBT (mooBudgetTool) Ecosystem.
   License: MIT
 -->
 <html lang="en">
@@ -13,11 +13,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#2563eb">
-    <meta name="description" content="Offline-capable Film Production Budget Tool">
+    <meta name="description" content="Offline-first film production budgeting with real regional rates. Build, schedule and cost a shoot with no connection.">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
-    <title>mooBudgetTool v24.10</title>
+
+    <!-- Link previews (WhatsApp, iMessage, Slack, X, Facebook). WhatsApp reads
+         og:image and og:title only, and it will not follow a relative path, so
+         every URL below is absolute against the GitHub Pages origin. Without
+         these tags a shared link renders as a bare URL with no logo or text. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="mooBudgetTool">
+    <meta property="og:title" content="mooBudgetTool">
+    <meta property="og:description" content="Offline-first film production budgeting with real regional rates. Build, schedule and cost a shoot with no connection.">
+    <meta property="og:url" content="https://moollc.github.io/mooBudgetTool/">
+    <meta property="og:image" content="https://moollc.github.io/mooBudgetTool/assets/og-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="mooBudgetTool, offline-first film production budgeting">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="mooBudgetTool">
+    <meta name="twitter:description" content="Offline-first film production budgeting with real regional rates.">
+    <meta name="twitter:image" content="https://moollc.github.io/mooBudgetTool/assets/og-card.png">
+
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
+    <title>mooBudgetTool v24.11</title>
     <script>
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
@@ -445,7 +466,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.10";
+    var APP_VERSION = "24.11";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -1046,7 +1067,13 @@
                 /* Stream B: Persistence (Slow Debounce) */
                 clearTimeout(this._saveTimer);
                 this._saveTimer = setTimeout(function () {
-                    if (mBT.data && mBT.data.recorder) mBT.data.recorder.snapshot('Field Edit');
+                    /* No snapshot here. The blur handler already pushes one
+                       ('Field Edit: <field>') the moment an edit finishes, and this
+                       debounced pass captured the same post-edit state a second time.
+                       Two identical entries meant the first Undo press moved between
+                       them and appeared to do nothing, so renaming a line item took
+                       two presses to reverse. Deliberate actions (add, delete,
+                       reorder, apply preset) push their own snapshots directly. */
                     mBT.data.save().then(function () {
                         if (window.mBT && window.mBT.state) window.mBT.state.isDirty = false;
                         var statusMsg = document.getElementById('statusBarMessage');
@@ -6075,10 +6102,107 @@
     // Previously: mBTME
     mBT.ui.modal = {
         containerId: 'global-modal-container', stack: [],
+        /* Custom layers (assistant) share the same stack + history as modals.
+           One browser history entry is armed while any dismissible layer is open.
+           Back closes only the top stack id; UI close keeps the entry balanced. */
+        _layerMeta: {},
+        _histHooked: false,
+        _fromPopstate: false,
+        _ignoreNextPop: false,
+        _histArmed: false,
         /* --- Registry Resolution: Pointing to Tier 1 Asset Registry --- */
         icons: {
             close: mBTAssets.close,
             alert: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+        },
+
+        /* Android / PWA back: one popstate listener closes top stack layer only. */
+        _ensureHistoryHook: function () {
+            if (this._histHooked) return;
+            this._histHooked = true;
+            var self = this;
+            window.addEventListener('popstate', function () {
+                self._onPopState();
+            });
+        },
+
+        /* Keep exactly one armed history entry while stack is non-empty. */
+        _syncLayerHistory: function () {
+            this._ensureHistoryHook();
+            var n = (this.stack && this.stack.length) || 0;
+            try {
+                if (n > 0 && !this._histArmed) {
+                    window.history.pushState({ mbtLayers: n }, '');
+                    this._histArmed = true;
+                } else if (n > 0 && this._histArmed) {
+                    window.history.replaceState({ mbtLayers: n }, '');
+                } else if (n === 0 && this._histArmed) {
+                    if (this._fromPopstate) {
+                        /* Browser already consumed the entry via back. */
+                        this._histArmed = false;
+                    } else {
+                        this._ignoreNextPop = true;
+                        this._histArmed = false;
+                        window.history.back();
+                    }
+                }
+            } catch (eHist) { /* ignore */ }
+        },
+
+        _onPopState: function () {
+            if (this._ignoreNextPop) {
+                this._ignoreNextPop = false;
+                return;
+            }
+            if (!this.stack || !this.stack.length) {
+                this._histArmed = false;
+                return;
+            }
+            /* Browser already consumed the armed entry. */
+            this._histArmed = false;
+            var top = this.stack[this.stack.length - 1];
+            this._fromPopstate = true;
+            try {
+                var meta = this._layerMeta && this._layerMeta[top];
+                if (meta && typeof meta.dismiss === 'function') {
+                    var stay = false;
+                    try { stay = !!meta.dismiss(); } catch (eDis) { stay = false; }
+                    /* stay true: assistant still open after internal dismiss.
+                       stay false: unregisterLayer already removed it from stack.
+                       Either way, re-sync so an entry is armed only if stack remains. */
+                    this._fromPopstate = false;
+                    this._syncLayerHistory();
+                } else {
+                    this.close(top, true);
+                    this._fromPopstate = false;
+                    this._syncLayerHistory();
+                }
+            } finally {
+                this._fromPopstate = false;
+            }
+        },
+
+        /* Register a non-DOM layer (assistant root) on the same stack as modals. */
+        registerLayer: function (layerId, dismissFn) {
+            if (!layerId) return;
+            if (!this._layerMeta) this._layerMeta = {};
+            this._layerMeta[layerId] = { dismiss: dismissFn };
+            if (!this.stack) this.stack = [];
+            if (this.stack.indexOf(layerId) >= 0) {
+                this._syncLayerHistory();
+                return;
+            }
+            this.stack.push(layerId);
+            this._syncLayerHistory();
+        },
+
+        unregisterLayer: function (layerId) {
+            if (!layerId || !this.stack) return;
+            var wasIn = this.stack.indexOf(layerId) >= 0;
+            this.stack = this.stack.filter(function (id) { return id !== layerId; });
+            if (this._layerMeta) delete this._layerMeta[layerId];
+            if (wasIn) this._syncLayerHistory();
+            if (this.stack.length === 0) document.body.style.overflow = '';
         },
 
         /* Mobile keyboard: layout viewport often stays full height while visualViewport
@@ -6199,7 +6323,14 @@
             document.body.style.overflow = 'hidden';
 
             var modalId = id + 'Modal';
-            this.close(modalId, true); /* Cleanup duplicates */
+            /* Cleanup duplicates without history.back so re-open does not race popstate. */
+            var priorIdx = (this.stack || []).indexOf(modalId);
+            if (priorIdx >= 0) {
+                this.stack = this.stack.filter(function (sid) { return sid !== modalId; });
+                /* One history entry already exists for this id; keep depth, skip re-push below. */
+            }
+            var existingEl = document.getElementById(modalId);
+            if (existingEl) existingEl.remove();
 
             var headerHtml = options.hideHeader ? '' :
                 '<div class="px-4 py-2.5 border-b border-slate-100 bg-white rounded-t-2xl relative grid grid-cols-[1fr_auto_1fr] items-center shrink-0">' +
@@ -6212,6 +6343,7 @@
             var baseZ = 999;
             var newZ = baseZ + (this.stack.length * 10);
             this.stack.push(modalId);
+            this._syncLayerHistory();
             var fullHtml =
                 '<div id="' + modalId + '" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 hidden" style="z-index:' + newZ + '; transition: opacity 300ms;" tabindex="-1">' +
                 '<div id="' + modalId + 'Content" class="bg-white rounded-2xl shadow-2xl w-full ' + maxWidth + ' mx-auto max-h-[95vh] flex flex-col transition-all duration-300 transform scale-95 border border-white/20 overflow-hidden">' +
@@ -6245,7 +6377,7 @@
             }, 50);
 
             modal.addEventListener('click', function (e) { if (e.target === modal) self.close(modalId); });
-            /* Escape Key Listener */
+            /* Escape Key Listener: same top-of-stack rule as Android back */
             var escHandler = function (e) {
                 if (e.key === 'Escape') {
                     if (self.stack[self.stack.length - 1] === modalId) {
@@ -6264,8 +6396,10 @@
         close: function (modalId, instant) {
             instant = instant || false;
             var self = this;
+            var wasIn = (this.stack || []).indexOf(modalId) >= 0;
             /* Phase 87B: Pop from stack */
             this.stack = (this.stack || []).filter(function (id) { return id !== modalId; });
+            if (wasIn) this._syncLayerHistory();
             if (this.stack.length === 0) document.body.style.overflow = '';
             var modal = document.getElementById(modalId);
             if (!modal) return;
@@ -10359,50 +10493,153 @@
         },
 
         // --- 6. Database Tools (Tier 5 Additions) ---
-        openAddRateModal: function () {
+        /* Same normaliser as AIModule._normalizeName (AIModule.js line 530) and
+           ui.settings.js _mBTNormalizeName. Kept in sync on purpose: if this
+           diverges, rate averaging silently splits into two groups. */
+        _normalizeRateKey: function (s) {
+            return String(s || '')
+                .toLowerCase()
+                .replace(/&/g, ' and ')
+                .replace(/[^a-z0-9]+/g, ' ')
+                .replace(/^\s+|\s+$/g, '');
+        },
+
+        /* originalDescription is set only when editing an existing row, so
+           addRate() knows which row to write back to vs. push a new one. */
+        openAddRateModal: function (originalDescription) {
+            var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
+            var editing = !!originalDescription;
+            var existing = null;
+            if (editing) {
+                for (var i = 0; i < (og.rates || []).length; i++) {
+                    if (og.rates[i].description === originalDescription) { existing = og.rates[i]; break; }
+                }
+                if (!existing) return mBTME.alert("Error", "Rate not found.");
+            }
+            var isDefaultCard = editing && existing.source === 'default';
+            var region = (og.settings && og.settings.location) || 'Jamaica';
+            var currency = (existing && existing.currency) || (og.currencies && og.currencies[region]) || 'USD';
+            var unit = (existing && existing.unit) || 'Day';
+            var descVal = existing ? existing.description : '';
+            var rateVal = existing ? existing.rate : '';
+
+            var esc = mBT.ui.render.esc;
             var content = '<div class="space-y-4 p-2">' +
+                (isDefaultCard ? '<p class="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-2 leading-relaxed">This is a default card rate. Saving creates your own override; the shared card is never changed.</p>' : '') +
                 '<div>' +
                 '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Description</label>' +
-                '<input type="text" id="newRateDesc" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-tighter outline-none focus:ring-2 focus:ring-blue-100" placeholder="ITEM NAME">' +
+                '<input type="text" id="newRateDesc" value="' + esc(descVal) + '" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-tighter outline-none focus:ring-2 focus:ring-blue-100" placeholder="ITEM NAME">' +
                 '</div>' +
                 '<div class="grid grid-cols-2 gap-3">' +
                 '<div>' +
                 '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Rate</label>' +
-                '<input type="number" id="newRateVal" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="0.00">' +
+                '<input type="number" id="newRateVal" value="' + esc(rateVal) + '" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-blue-100" placeholder="0.00">' +
                 '</div>' +
                 '<div>' +
                 '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Unit</label>' +
                 '<select id="newRateUnit" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none cursor-pointer">' +
-                '<option value="Day">Day</option>' +
-                '<option value="Flat">Flat</option>' +
-                '<option value="Week">Week</option>' +
-                '<option value="Hour">Hour</option>' +
+                '<option value="Day"' + (unit === 'Day' ? ' selected' : '') + '>Day</option>' +
+                '<option value="Flat"' + (unit === 'Flat' ? ' selected' : '') + '>Flat</option>' +
+                '<option value="Week"' + (unit === 'Week' ? ' selected' : '') + '>Week</option>' +
+                '<option value="Hour"' + (unit === 'Hour' ? ' selected' : '') + '>Hour</option>' +
                 '</select>' +
                 '</div>' +
                 '</div>' +
-                '<button onclick="mBT.features.settings.addRate()" class="w-full py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95 mt-4">Add to Database</button>' +
+                '<div class="grid grid-cols-2 gap-3">' +
+                '<div>' +
+                '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Region</label>' +
+                '<input type="text" id="newRateRegion" value="' + esc(region) + '" disabled class="w-full p-3 bg-slate-100 border-none rounded-xl text-xs font-bold text-slate-400 outline-none cursor-not-allowed">' +
+                '</div>' +
+                '<div>' +
+                '<label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Currency</label>' +
+                '<input type="text" id="newRateCurrency" value="' + esc(currency) + '" class="w-full p-3 bg-slate-50 border-none rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-blue-100" placeholder="USD">' +
+                '</div>' +
+                '</div>' +
+                '<input type="hidden" id="newRateOriginalDesc" value="' + esc(originalDescription || '') + '">' +
+                '<button onclick="mBT.features.settings.addRate()" class="w-full py-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95 mt-4">' + (editing ? 'Save Changes' : 'Add to Database') + '</button>' +
                 '</div>';
-            mBTME.open('addRate', 'New Global Rate', content, 'max-w-sm');
+            mBTME.open('addRate', editing ? 'Edit Rate' : 'New Global Rate', content, 'max-w-sm');
         },
 
         addRate: function () {
+            var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
             var desc = document.getElementById('newRateDesc').value.trim();
             var rate = parseFloat(document.getElementById('newRateVal').value) || 0;
             var unit = document.getElementById('newRateUnit').value;
+            var region = (og.settings && og.settings.location) || 'Jamaica';
+            var currency = (document.getElementById('newRateCurrency').value || '').trim().toUpperCase() ||
+                (og.currencies && og.currencies[region]) || 'USD';
+            var originalDescEl = document.getElementById('newRateOriginalDesc');
+            var originalDescription = originalDescEl ? originalDescEl.value : '';
 
             if (!desc) return mBTME.alert("Error", "Description required");
 
-            mBTOG.rates.push({
-                description: desc,
-                rate: rate,
-                unit: unit,
-                source: 'user',
-                intelligence: 'Bespoke local rate. Manually verified.'
-            });
-            mBTOG.saveRates();
+            var descriptionKey = this._normalizeRateKey(desc);
+            var nowIso = new Date().toISOString();
+
+            var target = null;
+            if (originalDescription) {
+                for (var i = 0; i < og.rates.length; i++) {
+                    if (og.rates[i].description === originalDescription) { target = og.rates[i]; break; }
+                }
+            }
+
+            if (target && target.source !== 'default') {
+                /* User owns this row already: write back in place. */
+                target.description = desc;
+                target.description_key = descriptionKey;
+                target.rate = rate;
+                target.unit = unit;
+                target.region = region;
+                target.currency = currency;
+                target.source = 'user';
+                target.updatedAt = nowIso;
+                if (!target.intelligence) target.intelligence = 'Bespoke local rate. Manually verified.';
+            } else {
+                /* New row, or editing a default card: never mutate the default,
+                   always create a fresh user-owned override instead. */
+                og.rates.push({
+                    description: desc,
+                    description_key: descriptionKey,
+                    rate: rate,
+                    unit: unit,
+                    region: region,
+                    currency: currency,
+                    source: 'user',
+                    updatedAt: nowIso,
+                    intelligence: 'Bespoke local rate. Manually verified.'
+                });
+            }
+            og.saveRates();
 
             mBTME.close('addRateModal');
             this.open('database', 'lineItems'); // Refresh list
+        },
+
+        /* Delete confirms first via mBTME.confirm, then removes. Only rows the
+           user owns (source !== 'default') may be deleted; default card rates
+           are read only and never reach this path from the UI. */
+        deleteRate: function (description) {
+            var og = window.mBTOG || { rates: [] };
+            var self = this;
+            var esc = mBT.ui.render.esc;
+            mBTME.confirm('Delete Rate', 'Remove "' + esc(description) + '" from your rate database? This cannot be undone.', function () {
+                var idx = -1;
+                for (var i = 0; i < og.rates.length; i++) {
+                    if (og.rates[i].description === description) { idx = i; break; }
+                }
+                if (idx === -1) return;
+                if (og.rates[idx].source === 'default') {
+                    return mBTME.alert("Error", "Default card rates cannot be deleted.");
+                }
+                og.rates.splice(idx, 1);
+                og.saveRates();
+                self.open('database', 'lineItems');
+            });
+        },
+
+        editRate: function (description) {
+            this.openAddRateModal(description);
         },
 
         setRateRegion: function (region) {

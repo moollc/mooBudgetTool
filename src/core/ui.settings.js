@@ -1,11 +1,38 @@
 /**
  * © 2026 Jayson Moo-Young <jayson.m.y@gmail.com>
- * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * Part of the mBT (mooBudgetTool) Ecosystem.
  * License: MIT
  */
 
 (function (window) {
     'use strict';
+
+    /* Row actions for a rate list entry. Add is always available; Edit and
+       Delete are only offered on rows the user owns (source !== 'default').
+       Default card rates stay read only here, editing one opens the same
+       modal but writes a new user override rather than mutating the card. */
+    function _mBTRateRowActions(r, esc, dispRate, dispCurr) {
+        var actions = [{
+            icon: mBTAssets.plus, title: 'Add', color: 'blue',
+            onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')"
+        }];
+        if (r.source !== 'default') {
+            actions.push({
+                icon: mBTAssets.edit, title: 'Edit', color: 'slate',
+                onClick: "mBT.features.settings.editRate('" + esc(r.description) + "')"
+            });
+            actions.push({
+                icon: mBTAssets.trash, title: 'Delete', color: 'rose',
+                onClick: "mBT.features.settings.deleteRate('" + esc(r.description) + "')"
+            });
+        } else {
+            actions.push({
+                icon: mBTAssets.edit, title: 'Edit (creates your override)', color: 'slate',
+                onClick: "mBT.features.settings.editRate('" + esc(r.description) + "')"
+            });
+        }
+        return actions;
+    }
 
     function renderDbView(subTab) {
         function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -82,7 +109,7 @@
                     subtitle: sub,
                     info: r.intelligence || '',
                     classes: 'border-b border-slate-50',
-                    actions: [{ icon: mBTAssets.plus, title: 'Add', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }]
+                    actions: _mBTRateRowActions(r, esc, dispRate, dispCurr)
                 });
             }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
 
@@ -97,11 +124,12 @@
                         '<button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 shadow-sm flex items-center justify-center gap-2">' + mBTAssets.plus + ' Add Rate</button>' +
                         '<button onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400') + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
                         '<button onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400') + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
+                        '<button onclick="window._mBTOpenApplyRatesConfirm()" class="flex-1 py-2 rounded-lg bg-blue-600 border border-blue-600 text-[9px] font-black uppercase tracking-widest text-white hover:bg-blue-500 shadow-sm flex items-center justify-center gap-2 transition-all">Apply Rates</button>' +
                     '</div>' +
                     '<div class="flex items-center gap-2">' +
                         '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
                         '<div class="flex gap-1 shrink-0">' +
-                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' +
+                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' +
                                 (function() {
                                     var currentTier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
                                     return ['Standard', 'Indie', 'Studio'].map(function(t) {
@@ -109,10 +137,11 @@
                                     }).join('');
                                 })() +
                             '</select>' +
-                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
+                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
+                _mBTApplyRatesBarHtml() +
                 '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">' + rateRows + '</div>' +
                 (citation ? '<div class="p-2 bg-blue-50/50 border-t border-blue-100 shrink-0 space-y-0.5"><p class="text-[7px] font-medium text-blue-500 leading-snug">' + esc(citation.replace(/^INTELLIGENCE:\s*/i, '')) + '</p><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>' : '<div class="p-2 border-t border-slate-100 shrink-0"><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>') +
             '</div>';
@@ -191,12 +220,396 @@
                 subtitle: sub,
                 info: r.intelligence || '',
                 classes: 'border-b border-slate-50',
-                actions: [{ icon: mBTAssets.plus, title: 'Add', color: 'blue', onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')" }]
+                actions: _mBTRateRowActions(r, esc, dispRate, dispCurr)
             });
         }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
         body.innerHTML = rateRows;
     }
     window._mBTRefreshDbRates = _mBTRefreshDbRates;
+
+    /* ── Apply Rates ──────────────────────────────────────────────────────
+       Settings > Database > Rates. Bar under search/scale/region shows the
+       current scope; Apply Rates opens an inline confirm pane with a per
+       item diff, never writes straight away. Manually edited budget items
+       are protected by default. Undo restores every rate in one step.
+       Mirrors AIModule.js: _findItem matching (exact, then normalized, then
+       a single unambiguous partial), and the snapshot/restore undo shape
+       used by _commitSuggestion / undoLastSuggestion. Totals are always
+       recomputed through mBTLE.reconcile(), never written by hand. */
+
+    function _mBTEsc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+    /* Mirrors AIModule._normalizeName so matching behaves the same way. */
+    function _mBTNormalizeName(s) {
+        return String(s || '')
+            .toLowerCase()
+            .replace(/&/g, ' and ')
+            .replace(/[^a-z0-9]+/g, ' ')
+            .replace(/^\s+|\s+$/g, '');
+    }
+
+    /* Mirrors AIModule._findItem: exact match, then normalized, then a
+       single unambiguous partial. Never guesses between two candidates. */
+    function _mBTFindBudgetItem(items, wanted) {
+        var i;
+        for (i = 0; i < items.length; i++) {
+            if ((items[i].description || '') === wanted) return items[i];
+        }
+        var want = _mBTNormalizeName(wanted);
+        if (!want) return null;
+        for (i = 0; i < items.length; i++) {
+            if (_mBTNormalizeName(items[i].description) === want) return items[i];
+        }
+        var hits = [];
+        for (i = 0; i < items.length; i++) {
+            var d = _mBTNormalizeName(items[i].description);
+            if (d.indexOf(want) !== -1 || want.indexOf(d) !== -1) hits.push(items[i]);
+        }
+        return hits.length === 1 ? hits[0] : null;
+    }
+
+    /* Every line item across every section, flattened for matching. */
+    function _mBTAllBudgetItems() {
+        var budget = window.budget;
+        var out = [];
+        if (!budget || !budget.sections) return out;
+        var keys = Object.keys(budget.sections);
+        var i, items, j;
+        for (i = 0; i < keys.length; i++) {
+            items = (budget.sections[keys[i]] && budget.sections[keys[i]].items) || [];
+            for (j = 0; j < items.length; j++) out.push(items[j]);
+        }
+        return out;
+    }
+
+    /* A line item counts as manually edited when the user hand set its rate
+       (item.rateSource === 'custom', the same flag index.html sets on a
+       direct rate edit) or the row is explicitly locked (rateType ===
+       'fixed'). Both are existing signals already in the codebase, used
+       instead of inventing a new one. */
+    function _mBTItemIsEdited(item) {
+        if (!item) return false;
+        return item.rateSource === 'custom' || item.rateType === 'fixed';
+    }
+
+    /* Convert a card rate (in its own currency) into the budget's currency,
+       the same helper addRateToBudget uses. */
+    function _mBTConvertToBudgetCurrency(rate, fromCurrency) {
+        var budget = window.budget;
+        var budgetCurr = (budget && budget.currency) || window.displayCurrency || 'JMD';
+        if (fromCurrency && fromCurrency !== budgetCurr && window.mBT && mBT.le && typeof mBT.le.convertCurrency === 'function') {
+            var converted = mBT.le.convertCurrency(rate, fromCurrency, budgetCurr);
+            return (typeof converted === 'number' && !isNaN(converted)) ? converted : rate;
+        }
+        return rate;
+    }
+
+    /* Build the diff between every scoped card rate and any budget item
+       whose description matches it. Only description-matched rows appear;
+       quantity, unit and actual are never inspected or touched. */
+    function _mBTBuildRateDiff() {
+        var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
+        var rates = og.rates || [];
+        var allItems = _mBTAllBudgetItems();
+        var rows = [];
+        var i;
+        /* Iterate LINE ITEMS, not card rates. Walking the card the other way
+           let several cards claim the same item ("Director" and "Director of
+           Photography (DP)" both matched one DP line, proposing two different
+           rates), and let a loose partial hand an item a rate belonging to a
+           different role. One item resolves to at most one card, or none. */
+        for (i = 0; i < allItems.length; i++) {
+            var item = allItems[i];
+            var desc = item && item.description;
+            if (!desc) continue;
+            var card = _mBTFindCardForItem(rates, desc);
+            if (!card) continue;
+            var newRate = _mBTConvertToBudgetCurrency(card.rate, card.currency);
+            var curRate = parseFloat(item.rate) || 0;
+            rows.push({
+                itemId: item.id,
+                description: item.description,
+                current: curRate,
+                proposed: newRate,
+                edited: _mBTItemIsEdited(item)
+            });
+        }
+        return rows;
+    }
+
+    /* Resolve one line item description to a single card rate: exact, then
+       normalized, then a single unambiguous partial. Returns null when two or
+       more cards could match, so an ambiguous name is never silently guessed.
+       Mirrors AIModule._findItem's resolution order. */
+    function _mBTFindCardForItem(rates, description) {
+        var target = String(description || '');
+        var norm = _mBTNormalizeName(target);
+        var i, card, hit;
+        if (!norm) return null;
+
+        for (i = 0; i < rates.length; i++) {
+            if (String(rates[i].description || '') === target) return rates[i];
+        }
+        for (i = 0; i < rates.length; i++) {
+            if (_mBTNormalizeName(rates[i].description) === norm) return rates[i];
+        }
+        /* Partial: accept only when exactly one card is a candidate. */
+        hit = null;
+        for (i = 0; i < rates.length; i++) {
+            card = rates[i];
+            var cn = _mBTNormalizeName(card.description);
+            if (!cn) continue;
+            if (cn.indexOf(norm) > -1 || norm.indexOf(cn) > -1) {
+                if (hit && _mBTNormalizeName(hit.description) !== cn) return null;
+                if (!hit) hit = card;
+            }
+        }
+        return hit;
+    }
+
+    function _mBTFormatMoney(n, cur) {
+        var v = (typeof n === 'number' && !isNaN(n)) ? n : 0;
+        return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' ' + (cur || '');
+    }
+
+    /* The bar under search/scale/region: scope (rate count, scale/region,
+       currency) and how many budget line items match it right now. */
+    function _mBTApplyRatesBarHtml() {
+        var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
+        var region = (og.settings && og.settings.location) || 'Jamaica';
+        var tier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
+        var rates = og.rates || [];
+        var cur = (rates[0] && rates[0].currency) || window.displayCurrency || 'JMD';
+        var diff = _mBTBuildRateDiff();
+
+        return '<div id="applyRatesBar" class="px-3 py-2 border-b border-slate-100 text-[10px] font-bold text-slate-500 truncate shrink-0">' +
+                '<span id="applyRatesScopeCount">' + rates.length + '</span> rates &middot; ' +
+                '<span id="applyRatesScopeLabel">' + _mBTEsc(tier + ' / ' + region) + '</span> &middot; ' +
+                '<span id="applyRatesCurLabel">' + _mBTEsc(cur) + '</span> &middot; ' +
+                '<span id="applyRatesMatchLabel">' + diff.length + ' of ' + rates.length + ' line items match</span>' +
+            '</div>' +
+            '<div id="applyRatesConfirmPane" class="hidden px-3 py-3 bg-white border-b border-slate-100 shrink-0"></div>' +
+            '<div id="applyRatesDonePane" class="hidden px-3 py-2.5 bg-emerald-50 border-b border-emerald-100 items-center gap-3 shrink-0"></div>';
+    }
+
+    /* Re-render just the bar (region/tier changes call this alongside the
+       list refresh, without a full modal repaint). Any open confirm pane
+       is closed first, since its diff was built against the old scope. */
+    function _mBTRefreshApplyRatesBar() {
+        var barWrap = document.getElementById('applyRatesBar');
+        if (!barWrap || !barWrap.parentNode) return;
+        window._mBTApplyRatesState = null;
+        var container = barWrap.parentNode;
+        var confirmPane = document.getElementById('applyRatesConfirmPane');
+        var donePane = document.getElementById('applyRatesDonePane');
+        if (confirmPane) { confirmPane.parentNode.removeChild(confirmPane); }
+        if (donePane) { donePane.parentNode.removeChild(donePane); }
+        container.removeChild(barWrap);
+        var tmp = document.createElement('div');
+        tmp.innerHTML = _mBTApplyRatesBarHtml();
+        var nodes = [];
+        while (tmp.firstChild) nodes.push(tmp.removeChild(tmp.firstChild));
+        var listBody = document.getElementById('dbListBody');
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+            if (nodes[i].nodeType === 1) container.insertBefore(nodes[i], listBody || null);
+        }
+    }
+    window._mBTRefreshApplyRatesBar = _mBTRefreshApplyRatesBar;
+
+    /* Render the confirm pane's diff rows. keepEdited = true excludes rows
+       tagged EDITED (the default, protecting hand set rates). */
+    function _mBTRenderDiffRows(diff, keepEdited) {
+        var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
+        var region = (og.settings && og.settings.location) || 'Jamaica';
+        var rates = og.rates || [];
+        var cur = (rates[0] && rates[0].currency) || window.displayCurrency || 'JMD';
+        var visible = diff.filter(function (d) { return !(keepEdited && d.edited); });
+
+        var rowsHtml = visible.map(function (d, idx) {
+            var delta = d.proposed - d.current;
+            var up = delta > 0;
+            var col = up ? 'text-rose-600' : (delta < 0 ? 'text-emerald-600' : 'text-slate-400');
+            var sign = up ? '+' : '';
+            return '<tr class="border-t border-slate-50">' +
+                '<td class="p-1.5"><input type="checkbox" checked data-diff-idx="' + idx + '" class="applyRatesRowCheck w-3.5 h-3.5 accent-blue-600"></td>' +
+                '<td class="p-1.5 text-[10px] font-bold text-slate-700 truncate">' + _mBTEsc(d.description) + (d.edited ? ' <span class="text-[8px] text-amber-600 font-black">EDITED</span>' : '') + '</td>' +
+                '<td class="p-1.5 text-right text-[10px] text-slate-500">' + _mBTEsc(_mBTFormatMoney(d.current, cur)) + '</td>' +
+                '<td class="p-1.5 text-right text-[10px] font-black text-slate-700">' + _mBTEsc(_mBTFormatMoney(d.proposed, cur)) + '</td>' +
+                '<td class="p-1.5 pr-2 text-right text-[10px] ' + col + '">' + sign + _mBTEsc(_mBTFormatMoney(delta, cur)) + '</td>' +
+            '</tr>';
+        }).join('');
+
+        var editedCount = diff.filter(function (d) { return d.edited; }).length;
+
+        return {
+            html:
+                '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 mb-1">Replace rates on ' + visible.length + ' line items?</div>' +
+                '<p class="text-[10px] font-bold text-slate-500 mb-3 leading-relaxed">' +
+                    'Only items whose description matches a rate in this list change. Quantities, units and ' +
+                    'actuals are untouched. Items you have edited by hand are listed below, uncheck any you want to keep.' +
+                '</p>' +
+                '<div class="rounded-xl border border-slate-100 overflow-hidden mb-3 max-h-56 overflow-y-auto no-scrollbar">' +
+                    '<table class="w-full">' +
+                        '<thead class="bg-slate-50 text-slate-400">' +
+                            '<tr>' +
+                                '<th class="text-left p-1.5 w-6"></th>' +
+                                '<th class="text-left p-1.5 text-[9px] font-black uppercase tracking-widest">Line item</th>' +
+                                '<th class="text-right p-1.5 text-[9px] font-black uppercase tracking-widest">Current</th>' +
+                                '<th class="text-right p-1.5 text-[9px] font-black uppercase tracking-widest">New</th>' +
+                                '<th class="text-right p-1.5 pr-2 text-[9px] font-black uppercase tracking-widest">Change</th>' +
+                            '</tr>' +
+                        '</thead>' +
+                        '<tbody id="applyRatesDiffBody">' + (rowsHtml || '<tr><td colspan="5" class="p-3 text-center text-[9px] font-black uppercase tracking-widest text-slate-300">Nothing to change</td></tr>') + '</tbody>' +
+                    '</table>' +
+                '</div>' +
+                '<div class="flex items-center gap-2 mb-3 px-1">' +
+                    '<input type="checkbox" id="applyRatesKeepEdited" ' + (keepEdited ? 'checked' : '') + ' onchange="window._mBTToggleKeepEdited(this.checked)" class="w-3.5 h-3.5 accent-blue-600">' +
+                    '<label for="applyRatesKeepEdited" class="text-[9px] font-bold text-slate-600">Keep manually edited rates (' + editedCount + ' items)</label>' +
+                '</div>' +
+                '<div class="flex gap-2">' +
+                    '<button onclick="window._mBTCancelApplyRates()" class="flex-1 py-2 rounded-xl bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-600">Cancel</button>' +
+                    '<button onclick="window._mBTCommitApplyRates()" class="flex-1 py-2 rounded-xl bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all">Replace ' + visible.length + ' rates</button>' +
+                '</div>',
+            count: visible.length
+        };
+    }
+
+    /* Session state for the open confirm pane. Not persisted; Cancel or a
+       fresh Apply click both discard it. */
+    window._mBTApplyRatesState = null;
+
+    window._mBTOpenApplyRatesConfirm = function () {
+        var pane = document.getElementById('applyRatesConfirmPane');
+        var donePane = document.getElementById('applyRatesDonePane');
+        if (!pane) return;
+        var diff = _mBTBuildRateDiff();
+        window._mBTApplyRatesState = { diff: diff, keepEdited: true };
+        var built = _mBTRenderDiffRows(diff, true);
+        pane.innerHTML = built.html;
+        pane.classList.remove('hidden');
+        if (donePane) { donePane.classList.add('hidden'); donePane.innerHTML = ''; }
+    };
+
+    window._mBTToggleKeepEdited = function (checked) {
+        if (!window._mBTApplyRatesState) return;
+        window._mBTApplyRatesState.keepEdited = !!checked;
+        var pane = document.getElementById('applyRatesConfirmPane');
+        if (!pane) return;
+        var built = _mBTRenderDiffRows(window._mBTApplyRatesState.diff, window._mBTApplyRatesState.keepEdited);
+        pane.innerHTML = built.html;
+    };
+
+    window._mBTCancelApplyRates = function () {
+        window._mBTApplyRatesState = null;
+        var pane = document.getElementById('applyRatesConfirmPane');
+        if (pane) { pane.classList.add('hidden'); pane.innerHTML = ''; }
+    };
+
+    /* Commit: only the checked, non excluded rows are written. Rate and
+       baseRate are updated on the matched item; quantity, unit and actual
+       are never touched. Totals are recomputed through mBTLE.reconcile(),
+       never written by hand. A full pre-apply backup is kept for Undo. */
+    window._mBTCommitApplyRates = function () {
+        var mBTME = window.mBTME;
+        var state = window._mBTApplyRatesState;
+        if (!state || !window.budget) return;
+
+        var pane = document.getElementById('applyRatesConfirmPane');
+        var checks = pane ? pane.querySelectorAll('.applyRatesRowCheck') : [];
+        var visible = state.diff.filter(function (d) { return !(state.keepEdited && d.edited); });
+        var checkedIds = {};
+        var i;
+        for (i = 0; i < checks.length; i++) {
+            if (checks[i].checked) {
+                var idx = parseInt(checks[i].getAttribute('data-diff-idx'), 10);
+                if (visible[idx]) checkedIds[visible[idx].itemId] = true;
+            }
+        }
+
+        var toApply = visible.filter(function (d) { return checkedIds[d.itemId]; });
+        if (!toApply.length) {
+            window._mBTCancelApplyRates();
+            return;
+        }
+
+        var backup;
+        try {
+            backup = JSON.stringify({ sections: window.budget.sections, contingencyPercentage: window.budget.contingencyPercentage });
+        } catch (e) { backup = null; }
+
+        var allItems = _mBTAllBudgetItems();
+        var beforeTotal = (typeof window.budget.grandTotal === 'number') ? window.budget.grandTotal : null;
+        var applied = 0;
+        var j, k;
+        for (j = 0; j < toApply.length; j++) {
+            var target = null;
+            for (k = 0; k < allItems.length; k++) {
+                if (allItems[k].id === toApply[j].itemId) { target = allItems[k]; break; }
+            }
+            if (!target) continue;
+            target.rate = toApply[j].proposed;
+            target.baseRate = toApply[j].proposed;
+            applied++;
+        }
+
+        if (!applied) {
+            window._mBTCancelApplyRates();
+            return;
+        }
+
+        if (backup) window._mBTApplyRatesLastBackup = backup;
+
+        if (typeof window.saveBudget === 'function') window.saveBudget();
+        if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+        if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+        if (typeof window.render === 'function') window.render();
+
+        var afterTotal = (typeof window.budget.grandTotal === 'number') ? window.budget.grandTotal : null;
+        var cur = window.budget.currency || window.displayCurrency || 'JMD';
+
+        window._mBTApplyRatesState = null;
+        if (pane) { pane.classList.add('hidden'); pane.innerHTML = ''; }
+
+        var donePane = document.getElementById('applyRatesDonePane');
+        if (donePane) {
+            var msg = applied + (applied === 1 ? ' rate' : ' rates') + ' replaced.';
+            if (beforeTotal != null && afterTotal != null) {
+                msg += ' Grand total moved from ' + _mBTEsc(_mBTFormatMoney(beforeTotal, cur)) + ' to ' + _mBTEsc(_mBTFormatMoney(afterTotal, cur)) + '.';
+            }
+            donePane.innerHTML =
+                '<div class="flex-1 text-[10px] font-bold text-emerald-800">' + msg + '</div>' +
+                '<button onclick="window._mBTUndoApplyRates()" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border border-emerald-200 text-[9px] font-black uppercase tracking-widest text-emerald-700">Undo</button>';
+            donePane.classList.remove('hidden');
+            donePane.classList.add('flex');
+        }
+
+        if (typeof window._mBTRefreshDbRates === 'function') window._mBTRefreshDbRates();
+        if (mBTME && typeof mBTME.toast === 'function') mBTME.toast(applied + ' rate(s) applied.');
+    };
+
+    /* Restore every rate touched by the last Apply Rates commit in one
+       step. Independent of AIModule's undo (window._mbtAILastBackup) so
+       the two features never step on each other's history. */
+    window._mBTUndoApplyRates = function () {
+        var mBTME = window.mBTME;
+        if (!window._mBTApplyRatesLastBackup || !window.budget) return;
+        var prev = JSON.parse(window._mBTApplyRatesLastBackup);
+        window.budget.sections = prev.sections;
+        window.budget.contingencyPercentage = prev.contingencyPercentage;
+        window._mBTApplyRatesLastBackup = null;
+
+        if (typeof window.saveBudget === 'function') window.saveBudget();
+        if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+        if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+        if (typeof window.render === 'function') window.render();
+
+        var donePane = document.getElementById('applyRatesDonePane');
+        if (donePane) { donePane.classList.add('hidden'); donePane.classList.remove('flex'); donePane.innerHTML = ''; }
+
+        if (typeof window._mBTRefreshDbRates === 'function') window._mBTRefreshDbRates();
+        if (mBTME && typeof mBTME.toast === 'function') mBTME.toast('Rates restored.');
+    };
 
     window.mBT_UI_Settings_getTabContent = function (tabName, subTab) {
         subTab = subTab || 'lineItems';
@@ -221,7 +634,7 @@
                         '<div class="settings-card flex items-center gap-3">' +
                             '<div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">' + mBTAssets.appLogo + '</div>' +
                             '<div>' +
-                                '<h3 class="text-xs font-black uppercase tracking-widest settings-text-primary">moo Budget Tool</h3>' +
+                                '<h3 class="text-xs font-black uppercase tracking-widest settings-text-primary">mooBudgetTool</h3>' +
                                 '<p class="text-[9px] text-slate-400 font-bold">Build v' + APP_VERSION + ' &bull; ' + (navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>') + '</p>' +
                             '</div>' +
                         '</div>' +

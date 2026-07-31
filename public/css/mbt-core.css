@@ -57,7 +57,7 @@ body {
     transition: top 0.12s linear;
 }
 
-/* Drawer collapse: thin reopen strip */
+/* Drawer collapse: thin reopen strip (desktop Expanded) */
 .mbt-chat-drawer-collapsed {
     width: 36px !important;
     min-width: 36px !important;
@@ -72,6 +72,114 @@ body {
 }
 .mbt-chat-drawer-reopen {
     display: none;
+}
+
+/* Collapsible context drawer sections. Bulky ones start closed so the at a
+   glance summary sits above the fold instead of ~740px down. */
+.mbt-ctx-sec-body {
+    overflow: hidden;
+}
+/* Descendant, not direct child: Tailwind utility wrappers sit between the
+   section and its body, so a child combinator silently never matched and the
+   collapsed sections still rendered at full height. */
+.mbt-ctx-sec.mbt-ctx-closed .mbt-ctx-sec-body {
+    display: none !important;
+}
+.mbt-ctx-sec .mbt-ctx-chev {
+    transition: transform 0.15s ease;
+}
+.mbt-ctx-sec.mbt-ctx-closed .mbt-ctx-chev {
+    transform: rotate(-90deg);
+}
+
+/* Mobile-only header toggles for history / context drawers */
+.mbt-chat-hdr-drawer {
+    display: none;
+}
+
+/* Drawer scrim: hidden on desktop, shown under open mobile sheets */
+.mbt-chat-drawer-scrim {
+    display: none;
+}
+
+/* Expanded assistant under 768px: full bleed panel, overlay drawers */
+@media (max-width: 767px) {
+    #mbtAiChatRoot.mbt-ai-mode-expanded > .mbt-ai-chat-backdrop {
+        display: none !important;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded #mbtAiChatPanel {
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded .mbt-ai-chat-body {
+        position: relative;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded .mbt-ai-chat-main {
+        width: 100%;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatLeft,
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatRight {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 40;
+        width: min(85vw, 320px) !important;
+        max-width: 320px !important;
+        min-width: 0 !important;
+        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+        background: #fff;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatLeft {
+        left: 0;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatRight {
+        right: 0;
+    }
+
+    /* No 36px reopen strip on mobile; closed means fully gone */
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatLeft.mbt-chat-drawer-collapsed,
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatRight.mbt-chat-drawer-collapsed {
+        display: none !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        border: none !important;
+        pointer-events: none;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded .mbt-chat-drawer-scrim {
+        display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 35;
+        background: rgba(15, 23, 42, 0.4);
+        pointer-events: auto;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded .mbt-chat-hdr-drawer {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Tighter chat padding so composer stays usable at 360px */
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatHistory {
+        padding: 12px !important;
+    }
 }
 
 /* PiP drag handle */
