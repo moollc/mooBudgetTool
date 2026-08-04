@@ -1,6 +1,6 @@
 /**
  * © 2026 Jayson Moo-Young <moo@moo.llc>
- * Part of the mBT (Moo Budget Tool) Ecosystem.
+ * Part of the mBT (mooBudgetTool) Ecosystem.
  * License: MIT
  */
 

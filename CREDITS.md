@@ -1,12 +1,13 @@
 # Credits & Acknowledgments
 
-The **mBT (Moo Budget Tool)** ecosystem is built upon the incredible work of the open-source community. I would like t gratefully acknowledge the following libraries and their authors:
+The **mBT (mooBudgetTool)** ecosystem is built upon the incredible work of the open-source community. I would like t gratefully acknowledge the following libraries and their authors:
 
 ## Core Infrastructure
 - **localForage** — Offline storage made easy. [GitHub](https://github.com/localForage/localForage)
 - **Supabase** — Open source Firebase alternative. [Website](https://supabase.com)
 - **Tailwind CSS** — Utility-first CSS framework. [Website](https://tailwindcss.com)
 - **Lucide** — Beautiful & consistent icons. [Website](https://lucide.dev)
+- **DOMPurify** — XSS sanitizer for HTML. [GitHub](https://github.com/cure53/DOMPurify)
 - **Rust / WASM-Pack** — The high-performance diffing engine (mbt_wasm). [Website](https://rustwasm.github.io/wasm-pack/)
 
 ## UI & Interactions

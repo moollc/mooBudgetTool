@@ -1,6 +1,6 @@
 # LIBRARY_VERSIONS.md — mBT Vendored Dependency Audit
 
-**Project:** mBT (Moo Budget Tool)  
+**Project:** mBT (mooBudgetTool)  
 **Location:** `mBT/src/lib/`  
 **Last Audited:** 2026-04-03  
 **Constraint:** All libraries must be ES5-compatible and loadable from `file://` protocol.

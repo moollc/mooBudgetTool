@@ -34,5 +34,5 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   
   // Log build info
-  console.log('[mBT] Monolith PWA - Moo Budget Tool');
+  console.log('[mBT] Monolith PWA - mooBudgetTool');
 });

@@ -1,6 +1,6 @@
 # mBT User Guide
 
-**Moo Budget Tool — Film Production Budget Manager**
+**mooBudgetTool — Film Production Budget Manager**
 
 > [!WARNING]
 > **BETA VERSION**: This software is still being tested. While we try to be 100% accurate, bugs can happen. **Always check your final totals yourself** before showing your budget to investors or signing off on final paperwork. 
