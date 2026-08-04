@@ -2,7 +2,7 @@
 
 Last Updated: April 21, 2026
 
-The Moo Budget Tool (mBT) is built to be private by default. 
+The mooBudgetTool (mBT) is built to be private by default. 
 
 ### 1. Your Data Stays with You
 Normally, everything you do in mBT stays right on your device (in your browser's memory). 

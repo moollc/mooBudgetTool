@@ -1,6 +1,6 @@
 # mBT User Agreement
 
-Welcome to the Moo Budget Tool (mBT). By using this tool, you agree to these simple rules:
+Welcome to the mooBudgetTool (mBT). By using this tool, you agree to these simple rules:
 
 1. **Check Your Numbers**: This tool is for estimating film costs. You are 100% responsible for the accuracy of your final budget. We are not responsible for any money lost or mistakes in the math.
 

@@ -507,7 +507,23 @@ var mBTContacts = (function () {
 
         var name = c.name || 'Unnamed';
         var dept = c.department || 'General';
-        var rate = c.rate || deptStandard(dept) || 0;
+        var rate = c.rate;
+        var hasStoredRate = (rate !== null && rate !== undefined && rate !== '');
+        var finalRate = hasStoredRate ? rate : (deptStandard(dept) || 0);
+        var displayRate = finalRate;
+        var conversionSubline = '';
+        if (hasStoredRate) {
+            var contactCurrency = c.currency || (state.budget && state.budget.currency) || 'JMD';
+            if (contactCurrency !== state.currency) {
+                try {
+                    var le = window.parent && window.parent.mBT && window.parent.mBT.le;
+                    if (le && typeof le.convertCurrency === 'function') {
+                        displayRate = le.convertCurrency(finalRate, contactCurrency, state.currency);
+                        conversionSubline = '<div class="text-[9px] text-slate-400 font-medium">≈ ' + esc(contactCurrency) + ' ' + finalRate.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + '</div>';
+                    }
+                } catch (e) { /* cross-origin or engine unavailable */ }
+            }
+        }
         var isBudget = c.isBudgetExtraction;
         var accent = DEPT_COLORS[dept] || '#64748b';
 
@@ -525,7 +541,8 @@ var mBTContacts = (function () {
                 '</div>' +
                 '<div class="text-right shrink-0">' +
                     '<div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Daily Rate</div>' +
-                    '<div class="text-[17px] font-black text-slate-900 leading-none">' + fmt(rate) + '</div>' +
+                    '<div class="text-[17px] font-black text-slate-900 leading-none">' + fmt(displayRate) + '</div>' +
+                    conversionSubline +
                 '</div>' +
             '</div>';
 
@@ -917,6 +934,7 @@ var mBTContacts = (function () {
             name: c.name, department: c.department, email: c.email || null,
             phone: c.phone || null, rate: c.rate || null, role: c.department,
             category: c.department, projectId: c.projectId || null, projectName: c.projectName || null,
+            currency: (state.budget && state.budget.currency) || 'JMD',
             walletType: c.walletType || null,
             walletAddress: c.walletAddress || null
         }).then(function () { return STORAGE.getAllContacts(); }).then(function (all) {
@@ -938,7 +956,8 @@ var mBTContacts = (function () {
                 return STORAGE.saveContact({
                     name: c.name, department: c.department, email: c.email || null,
                     phone: c.phone || null, rate: c.rate || null, role: c.department,
-                    category: c.department, projectId: c.projectId || null, projectName: c.projectName || null
+                    category: c.department, projectId: c.projectId || null, projectName: c.projectName || null,
+                    currency: (state.budget && state.budget.currency) || 'JMD'
                 });
             });
         });
@@ -952,10 +971,23 @@ var mBTContacts = (function () {
     /* --- Push contact to budget --- */
     function pushContactToBudget(c) {
         if (window.parent === window) { alert('Open this tool from the Budget Editor to push contacts.'); return; }
+        var rate = c.rate;
+        var hasRate = (rate !== null && rate !== undefined && rate !== '');
+        var contactCurrency = c.currency || (state.budget && state.budget.currency) || 'JMD';
+        var baseCurrency = (state.budget && state.budget.currency) || 'JMD';
+        var finalRate = rate;
+        if (hasRate && contactCurrency !== baseCurrency) {
+            try {
+                var le = window.parent && window.parent.mBT && window.parent.mBT.le;
+                if (le && typeof le.convertCurrency === 'function') {
+                    finalRate = Math.round(le.convertCurrency(rate, contactCurrency, baseCurrency));
+                }
+            } catch (e) { /* cross-origin or engine unavailable */ }
+        }
         window.parent.postMessage({
             type: 'mbt:tool-action',
             action: 'inject-contact',
-            payload: { name: c.name, department: c.department, rate: c.rate, email: c.email || null, phone: c.phone || null }
+            payload: { name: c.name, department: c.department, rate: finalRate, email: c.email || null, phone: c.phone || null }
         }, window.location.origin);
     }
 
@@ -967,6 +999,12 @@ var mBTContacts = (function () {
         var DEPT_LIST = ['Production', 'Art', 'Camera', 'Sound', 'Electrical', 'Editing', 'Post', 'Transport', 'Craft Services', 'Miscellaneous'];
         var deptOpts = DEPT_LIST.map(function (d) {
             return '<option value="' + esc(d) + '"' + (d === ((prefill && prefill.department) || 'Production') ? ' selected' : '') + '>' + esc(d) + '</option>';
+        }).join('');
+
+        var contactCurrency = (prefill && prefill.currency) || (state.budget && state.budget.currency) || 'JMD';
+        var currencyList = ['JMD', 'USD', 'EUR', 'GBP', 'CAD', 'MXN'];
+        var currencyOpts = currencyList.map(function (curr) {
+            return '<option value="' + curr + '"' + (curr === contactCurrency ? ' selected' : '') + '>' + curr + '</option>';
         }).join('');
 
         var modal = document.createElement('div');
@@ -984,7 +1022,13 @@ var mBTContacts = (function () {
                     field('Name *', 'text', 'm-name', 'Full name', (prefill && prefill.name) || '') +
                     '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Department *</label>' +
                     '<select id="m-dept" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' + deptOpts + '</select></div>' +
-                    field('Daily Rate (' + state.currency + ')', 'number', 'm-rate', 'Dept standard if blank', (prefill && prefill.rate) || '') +
+                    '<div>' +
+                        '<label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Daily Rate &amp; Currency</label>' +
+                        '<div class="flex gap-2">' +
+                            '<input type="number" id="m-rate" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors" placeholder="Dept standard if blank" value="' + esc((prefill && prefill.rate) || '') + '">' +
+                            '<select id="m-currency" class="w-32 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' + currencyOpts + '</select>' +
+                        '</div>' +
+                    '</div>' +
                     field('Email', 'email', 'm-email', 'email@example.com', (prefill && prefill.email) || '') +
                     field('Phone', 'tel', 'm-phone', '+1 (555) 123-4567', (prefill && prefill.phone) || '') +
                     field('Dietary Restrictions', 'text', 'm-dietary', 'e.g. Vegetarian, Halal', (prefill && prefill.dietaryRestrictions) || '') +
@@ -1122,6 +1166,7 @@ var mBTContacts = (function () {
         var dept = document.getElementById('m-dept').value;
         var rateStr = document.getElementById('m-rate').value;
         var rate = rateStr ? parseFloat(rateStr) : deptStandard(dept);
+        var currency = document.getElementById('m-currency').value;
         var email = document.getElementById('m-email').value.trim();
         var phone = document.getElementById('m-phone').value.trim();
         var dietary = document.getElementById('m-dietary').value.trim();
@@ -1144,7 +1189,7 @@ var mBTContacts = (function () {
 
         var contact = {
             name: name, department: dept, email: email || null, phone: phone || null,
-            rate: rate || null, role: dept, category: dept,
+            rate: rate || null, currency: currency, role: dept, category: dept,
             dietaryRestrictions: dietary || null, allergies: allergies || null,
             walletType:    walletType    || null,
             walletAddress: walletAddress || null,
@@ -1159,10 +1204,21 @@ var mBTContacts = (function () {
             savedId = (saved && saved.id) || contact.id || null;
             /* Rate sync: dispatch to Budget Editor if editing an existing contact */
             if (state.editingId && contact.rate && window.parent !== window) {
+                var syncRate = contact.rate;
+                var contactCurrency = contact.currency || (state.budget && state.budget.currency) || 'JMD';
+                var baseCurrency = (state.budget && state.budget.currency) || 'JMD';
+                if (contactCurrency !== baseCurrency) {
+                    try {
+                        var le = window.parent && window.parent.mBT && window.parent.mBT.le;
+                        if (le && typeof le.convertCurrency === 'function') {
+                            syncRate = Math.round(le.convertCurrency(contact.rate, contactCurrency, baseCurrency));
+                        }
+                    } catch (e) { /* cross-origin or engine unavailable */ }
+                }
                 window.parent.postMessage({
                     type: 'mbt:tool-action',
                     action: 'update-contact-rate',
-                    payload: { name: contact.name, rate: contact.rate }
+                    payload: { name: contact.name, rate: syncRate }
                 }, window.location.origin);
             }
             return STORAGE.getAllContacts();
@@ -1486,7 +1542,8 @@ var mBTContacts = (function () {
                     return STORAGE.saveContact({
                         name: c.name, email: c.email || null, phone: c.phone || null,
                         role: c.role || '', category: c.category || '', department: c.department || '',
-                        rate: c.rate || null, walletType: c.walletType || null, walletAddress: c.walletAddress || null
+                        rate: c.rate || null, currency: c.currency || null,
+                        walletType: c.walletType || null, walletAddress: c.walletAddress || null
                     });
                 });
             });

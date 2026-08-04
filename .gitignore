@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+lib/
+
+# Build outputs
+build/
+target/
+
+# Legacy monolith source file — not for public release
+mBT-Old.html
+
+# Dev-only scripts
+_phase16_patch.ps1
+
+# Dev/reference screenshots — all subfolders and image types
+screenshots/
+
+# Agent harness artifacts (wrong cwd — never product)
+terminals/
+mcps/
+_verify-*.png
+
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+tmp/
+temp/
+*.temp
+*.tmp
+
+# Testing coverage
+coverage/
+.nyc_output/
+
+# Dev test harness (keep out of product tree)
+tests/
+
+# Dev research / analysis docs (product docs stay: SECURITY_AND_DATA, api/, etc.)
+docs/*_RESEARCH.md
+docs/dead_code_report.md
+
+# Social-card HTML source is not a shipped asset (PNG only)
+assets/*.html
+
+# PWA generated
+public/sw.js.generated
+
+# Cache
+.cache/
+.cache-v1/
+
+# Self-Ignore (Ghost Local Footprint)
+.gitignore

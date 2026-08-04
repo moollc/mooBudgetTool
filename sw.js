@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v24.11';
+var CACHE_NAME = 'mbt-monolith-cache-v24.12';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -98,7 +98,7 @@ var PRECACHE_ASSETS = [
     /* --- PWA icons (offline-critical for installation) --- */
     './assets/cow-192.png',
     './assets/cow-512.png',
-    './assets/og-card.png',
+    './assets/og-card-v2.png',
     './assets/mBT.svg'
 ];
 
