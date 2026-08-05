@@ -573,6 +573,100 @@ body {
     border-color: var(--border-settings-light, #f1f5f9);
 }
 
+/* Settings General redesign — row height variants (pass 1) */
+.settings-row {
+    min-height: 56px;
+    box-sizing: border-box;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+}
+/* Label stack only — not horizontal flex wrappers (e.g. Cloud account avatar row) */
+.settings-row > .min-w-0:not(.items-center) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    max-height: 40px;
+}
+/* 8px grid: fixed line-heights (ratio LH on 9px font = 13.5px off-grid) */
+.settings-row .text-\[11px\],
+.settings-row .text-\[10px\],
+.settings-row .text-\[9px\],
+.settings-row .text-\[8px\] {
+    line-height: 16px;
+}
+.settings-row .seg {
+    line-height: 16px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.settings-row > .flex.gap-1 {
+    max-height: 32px;
+    align-items: center;
+}
+.settings-row--single {
+    min-height: 40px;
+}
+.settings-row--button {
+    min-height: 48px;
+}
+.settings-card-group {
+    padding: 0;
+}
+.settings-card-group > .settings-row + .settings-row {
+    box-shadow: inset 0 1px 0 var(--border-settings-light, #f8fafc);
+}
+.settings-general-panel > section:first-child > .settings-section-heading {
+    margin-top: 0;
+}
+.settings-section-heading {
+    font-size: 9px;
+    line-height: 16px;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+.settings-format-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+}
+.settings-format-grid > label + label {
+    box-shadow: inset 1px 0 0 var(--border-settings-light, #f1f5f9);
+}
+/* Format cell: 8 pad + 16 label + 8 gap + 32 control + 8 pad = 72 */
+.settings-format-cell {
+    min-height: 72px;
+    padding: 8px;
+    box-sizing: border-box;
+}
+.settings-format-cell > span {
+    display: block;
+    line-height: 16px;
+    margin-bottom: 8px;
+}
+.settings-format-cell select,
+.settings-format-cell input {
+    height: 32px;
+    box-sizing: border-box;
+    line-height: 16px;
+    width: 100%;
+}
+/* Native selects: pin line-height on settings body (theme-neutral sizing) */
+#settingsTabBody .settings-general-panel select {
+    -webkit-appearance: none;
+    appearance: none;
+    line-height: 16px !important;
+    padding-right: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 12px;
+}
+#settingsTabBody .settings-general-panel input,
+#settingsTabBody .settings-general-panel option,
+#settingsTabBody .settings-general-panel textarea {
+    line-height: 16px !important;
+}
+
 /* Dark Theme Overrides */
 .mbt-theme-dark {
     --bg-settings-card: #1e293b;
@@ -585,6 +679,16 @@ body {
     --text-settings-link: #60a5fa;
     --border-settings: #334155;
     --border-settings-light: #1e293b;
+}
+
+/* Body surface when theme class is on <html> and/or <body>.
+   Utility classes like bg-slate-950 may not exist in the vendored Tailwind
+   scan set if only added at runtime — paint via the theme class instead. */
+html.mbt-theme-dark,
+html.mbt-theme-dark body,
+body.mbt-theme-dark {
+    background-color: #020617;
+    color: #f1f5f9;
 }
 
 /* --- 11.6 Settings Tab System (Phase 128 T2 Refactor: semantic class restoration) --- */
@@ -1476,13 +1580,42 @@ body {
 
 /* --- 18. Phase 128: Premium Dark Contrast (Curb-Hardened) --- */
 
-/* Task 1: Token Spectrum Overrides — captures modal surface tokens used in index.html */
+/* Task 1: Token Spectrum Overrides — captures modal surface tokens used in index.html.
+   Values track .mbt-theme-dark tokens (~671): card, alt, primary/secondary text, borders. */
+.mbt-theme-dark .bg-white {
+    background-color: var(--bg-settings-card-alt, #0f172a) !important;
+}
+
 .mbt-theme-dark .bg-slate-50 {
-    background-color: #1e293b !important;
+    background-color: var(--bg-settings-card, #1e293b) !important;
+}
+
+/*
+ * Opacity utilities are DIFFERENT class names from the solid tokens.
+ * Tailwind emits class="bg-slate-50/60" → CSS must select .bg-slate-50\/60.
+ * The solid rule above never matches, so the settings header band
+ * (bg-slate-50/60 + border-slate-100) stayed near-white in dark mode.
+ * Match the modal plate (card-alt #0f172a) so the band is not a light island.
+ */
+.mbt-theme-dark .bg-slate-50\/60,
+.mbt-theme-dark .bg-slate-50\/50,
+.mbt-theme-dark .bg-slate-50\/40,
+.mbt-theme-dark .bg-slate-50\/30,
+.mbt-theme-dark .bg-slate-100\/50 {
+    background-color: var(--bg-settings-card-alt, #0f172a) !important;
+}
+
+/* Dark-path shell / db nav also use opacity utilities (often missing from the
+   Tailwind scan set when only built via JS strings) — force solid plate paint. */
+.mbt-theme-dark .bg-slate-900\/60,
+.mbt-theme-dark .bg-slate-900\/50,
+.mbt-theme-dark .bg-slate-900\/40,
+.mbt-theme-dark .bg-slate-900\/30 {
+    background-color: var(--bg-settings-card-alt, #0f172a) !important;
 }
 
 .mbt-theme-dark .bg-slate-100 {
-    background-color: #334155 !important;
+    background-color: var(--border-settings-card, #334155) !important;
 }
 
 .mbt-theme-dark .bg-slate-200 {
@@ -1490,11 +1623,15 @@ body {
 }
 
 .mbt-theme-dark .border-slate-100 {
-    border-color: #334155 !important;
+    border-color: var(--border-settings-light, #1e293b) !important;
 }
 
 .mbt-theme-dark .border-slate-200 {
-    border-color: #475569 !important;
+    border-color: var(--border-settings, #334155) !important;
+}
+
+.mbt-theme-dark .text-slate-300 {
+    color: var(--text-settings-secondary, #94a3b8) !important;
 }
 
 .mbt-theme-dark .text-slate-400 {
@@ -1514,7 +1651,30 @@ body {
 }
 
 .mbt-theme-dark .text-slate-800 {
-    color: #ffffff !important;
+    color: var(--text-settings-primary, #f1f5f9) !important;
+}
+
+.mbt-theme-dark .text-slate-900 {
+    color: var(--text-settings-primary, #f1f5f9) !important;
+}
+
+/* Active settings tab label (always text-blue-700 in shell) on dark band */
+.mbt-theme-dark .text-blue-700 {
+    color: var(--text-settings-link, #60a5fa) !important;
+}
+
+/* Apply Rates done/confirm accents (emerald island) — stay readable on dark panes */
+.mbt-theme-dark .text-emerald-700,
+.mbt-theme-dark .text-emerald-800 {
+    color: #6ee7b7 !important;
+}
+
+.mbt-theme-dark .border-emerald-200 {
+    border-color: #065f46 !important;
+}
+
+.mbt-theme-dark .border-emerald-100 {
+    border-color: #064e3b !important;
 }
 
 /* Task 3: Negative Constraints — No Light Mode edits. No New Classes. */

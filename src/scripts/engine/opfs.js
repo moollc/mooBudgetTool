@@ -27,6 +27,13 @@
         return typeof key === 'string' && key.indexOf(BUDGET_PREFIX) === 0;
     }
 
+    /* Content check: a real budget document has a sections object.
+       Prefix-only keys can be config leftovers (aiSystemPrompt, SELECTAIPROVIDER, …).
+       Used by migration — never treat those as budget documents. */
+    function _isBudgetValue(data) {
+        return !!(data && typeof data === 'object' && data.sections);
+    }
+
     /* ========= FILENAME HELPERS ========= */
     /* Percent-encode chars unsafe in OPFS filenames, including % itself to allow round-trip decode. */
     function _safeFileName(key) {
@@ -196,7 +203,9 @@
                 return loadJSON(k).then(function (existing) {
                     if (existing) return;
                     return localforageRef.getItem(k).then(function (data) {
-                        if (data) return saveJSON(k, data);
+                        /* Skip config ghosts and other non-budget prefix keys */
+                        if (!_isBudgetValue(data)) return;
+                        return saveJSON(k, data);
                     });
                 });
             });
