@@ -957,7 +957,9 @@ var mBTContacts = (function () {
                     name: c.name, department: c.department, email: c.email || null,
                     phone: c.phone || null, rate: c.rate || null, role: c.department,
                     category: c.department, projectId: c.projectId || null, projectName: c.projectName || null,
-                    currency: (state.budget && state.budget.currency) || 'JMD'
+                    currency: (state.budget && state.budget.currency) || 'JMD',
+                    walletType: c.walletType || null,
+                    walletAddress: c.walletAddress || null
                 });
             });
         });

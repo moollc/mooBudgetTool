@@ -38,11 +38,15 @@
 
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
-    <title>mooBudgetTool v24.12</title>
+    <title>mooBudgetTool v24.13</title>
     <script>
+        /* Pre-paint theme on <html> so tokens resolve before body paint */
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
-            document.documentElement.className = 'mbt-theme-' + theme;
+            if (theme !== 'dark' && theme !== 'light') theme = 'light';
+            var cn = String(document.documentElement.className || '');
+            cn = cn.replace(/\bmbt-theme-\S+/g, ' ').replace(/\s+/g, ' ').trim();
+            document.documentElement.className = (cn ? cn + ' ' : '') + 'mbt-theme-' + theme;
         })();
     </script>
     <!-- Phase 137.RESTORE_INTEGRATE: Absolute Utility Hoisting -->
@@ -141,12 +145,6 @@
                     id: 'setting_fundingbar', label: 'Show Funding Bar', desc: 'Display the Secured / Gap funding meter',
                     getState: function () { return !(window.budget && window.budget.settings && window.budget.settings.showFundingBar === false); },
                     action: function (v) { if (!window.budget.settings) window.budget.settings = {}; window.budget.settings.showFundingBar = v; saveBudget(); mBT.ui.toolbar.update(); }
-                },
-                {
-                    type: 'setting',
-                    id: 'setting_devmode', label: 'Developer Mode', desc: 'Show advanced tools and logs',
-                    getState: function () { return localStorage.getItem('mBT_devMode') === 'true'; },
-                    action: function (v) { localStorage.setItem('mBT_devMode', v); location.reload(); }
                 }
             ]
         };
@@ -367,15 +365,277 @@
             height: 28px;
             flex-shrink: 0;
         }
+
+        /* --- Settings General redesign: 8px grid spacing/sizing only (no colours) ---
+           Colour for cards/text is inline via isDark ternaries in ui.settings.js. --- */
+        .settings-row {
+            min-height: 56px;
+            box-sizing: border-box;
+            padding-top: 8px !important;
+            padding-bottom: 8px !important;
+        }
+        .settings-row--single {
+            min-height: 40px;
+        }
+        .settings-row--button {
+            min-height: 48px;
+        }
+        /* Label + sublabel stack: 16 + 8 gap + 16 = 40px content band */
+        .settings-row > .min-w-0:not(.items-center) {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+            max-height: 40px;
+        }
+        .settings-row .text-\[11px\],
+        .settings-row .text-\[10px\],
+        .settings-row .text-\[9px\],
+        .settings-row .text-\[8px\] {
+            line-height: 16px;
+        }
+        .settings-row .seg {
+            line-height: 16px;
+        }
+        /* Theme segment wrap is h-8 (32px) — keep control band inside the row */
+        .settings-row > .flex.gap-1,
+        .settings-row > #themeSegWrap {
+            max-height: 32px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .settings-section-heading {
+            font-size: 9px;
+            line-height: 16px;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+        .settings-general-panel > section:first-child > .settings-section-heading {
+            margin-top: 0;
+        }
+        .settings-cloud-panel > section:first-child > .settings-section-heading {
+            margin-top: 0;
+        }
+        .settings-updates-panel > section:first-child > .settings-section-heading {
+            margin-top: 0;
+        }
+        .settings-connections-panel > section:first-child > .settings-section-heading {
+            margin-top: 0;
+        }
+        /* Cloud account row: avatar + two text lines */
+        .settings-row--account {
+            min-height: 64px;
+        }
+        .settings-intro-row {
+            height: 32px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            display: flex;
+            align-items: center;
+            line-height: 16px;
+        }
+        .settings-field-row {
+            height: 56px;
+            box-sizing: border-box;
+            padding: 8px 8px 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            line-height: 16px;
+        }
+        .settings-field-row > span {
+            height: 16px;
+            line-height: 16px;
+            flex-shrink: 0;
+        }
+        .settings-field-row input,
+        .settings-field-row select {
+            height: 32px;
+            min-height: 32px;
+            max-height: 32px;
+            box-sizing: border-box;
+            line-height: 16px;
+        }
+        .settings-field-grid {
+            height: 56px;
+            box-sizing: border-box;
+        }
+        #settingsTabBody .settings-cloud-panel select {
+            -webkit-appearance: none;
+            appearance: none;
+            line-height: 16px !important;
+            padding-right: 24px;
+        }
+        #settingsTabBody .settings-cloud-panel input,
+        #settingsTabBody .settings-cloud-panel option,
+        #settingsTabBody .settings-cloud-panel textarea {
+            line-height: 16px !important;
+        }
+
+        /* Grouped card: zero outer pad (hairline dividers need inline/isDark colour — not here) */
+        .settings-card-group {
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .settings-format-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+        /* Format cell: 8 pad + 16 label + 8 gap + 32 control + 8 pad = 72 */
+        .settings-format-cell {
+            min-height: 72px;
+            padding: 8px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        .settings-format-cell > span {
+            display: block;
+            line-height: 16px;
+            margin-bottom: 8px;
+        }
+        .settings-format-cell select,
+        .settings-format-cell input {
+            height: 32px;
+            box-sizing: border-box;
+            line-height: 16px;
+            width: 100%;
+        }
+
+        /* Native select LH: UA keeps "normal" unless appearance reset (sizing only, no colours) */
+        #settingsTabBody .settings-general-panel select {
+            -webkit-appearance: none;
+            appearance: none;
+            line-height: 16px !important;
+            padding-right: 24px;
+        }
+        #settingsTabBody .settings-general-panel input,
+        #settingsTabBody .settings-general-panel option,
+        #settingsTabBody .settings-general-panel textarea {
+            line-height: 16px !important;
+        }
+
+        /* --- Settings Database: toolbars / action row / sub-tabs (spacing only, no colour) --- */
+        .db-toolbar {
+            height: 56px;
+            box-sizing: border-box;
+            padding: 7px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 16px;
+        }
+        .db-toolbar.db-toolbar--solo .db-toolbar-search {
+            flex: 1 1 100%;
+            width: 100%;
+            min-width: 0;
+        }
+        .db-toolbar .db-toolbar-search {
+            flex: 1 1 0%;
+            min-width: 0;
+            height: 32px;
+            box-sizing: border-box;
+            line-height: 16px;
+        }
+        .db-toolbar .db-toolbar-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-shrink: 0;
+            line-height: 16px;
+        }
+        .db-toolbar .db-toolbar-actions button {
+            height: 32px;
+            box-sizing: border-box;
+            line-height: 16px;
+            flex-shrink: 0;
+        }
+        .db-actions-row {
+            min-height: 56px;
+            box-sizing: border-box;
+            padding: 7px 8px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            line-height: 16px;
+        }
+        .db-actions-left,
+        .db-actions-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            line-height: 16px;
+        }
+        .db-actions-right {
+            margin-left: auto;
+        }
+        .db-actions-row button,
+        .db-actions-row select {
+            height: 32px;
+            box-sizing: border-box;
+            line-height: 16px;
+            flex-shrink: 0;
+        }
+        /* Real native <select> chevron — do not set appearance:none */
+        .db-actions-row select.db-select {
+            padding-left: 8px;
+            padding-right: 8px;
+            max-width: 140px;
+        }
+        .db-sub-tab {
+            line-height: 16px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            height: 32px;
+            box-sizing: border-box;
+        }
+        .db-sub-tab.border-b-2 {
+            padding-bottom: 6px;
+        }
     </style>
 </head>
 
 <body class="pb-16 text-slate-900 transition-colors duration-300">
     <script>
+        /* Sync body + html theme classes; strip opposite theme / stale utilities */
         (function () {
             var theme = localStorage.getItem('mbt_active_theme') || 'light';
-            document.body.classList.add('mbt-theme-' + theme);
-            document.body.classList.add(theme === 'dark' ? 'bg-slate-950' : 'bg-gray-100');
+            if (theme !== 'dark' && theme !== 'light') theme = 'light';
+            if (window.mBT && mBT.ui && typeof mBT.ui.applyThemeClasses === 'function') {
+                mBT.ui.applyThemeClasses(theme);
+                return;
+            }
+            /* Inline fallback before ui.settings.js loads — same rules as applyThemeClasses */
+            var themeClass = 'mbt-theme-' + theme;
+            var roots = [document.documentElement, document.body];
+            var i, el, cn;
+            for (i = 0; i < roots.length; i++) {
+                el = roots[i];
+                if (!el) continue;
+                cn = String(el.className || '');
+                cn = cn.replace(/\bmbt-theme-\S+/g, ' ');
+                cn = cn.replace(/\bbg-gray-100\b/g, ' ');
+                cn = cn.replace(/\bbg-slate-50\b/g, ' ');
+                cn = cn.replace(/\bbg-slate-950\b/g, ' ');
+                cn = cn.replace(/\btext-slate-900\b/g, ' ');
+                cn = cn.replace(/\btext-slate-100\b/g, ' ');
+                cn = cn.replace(/\s+/g, ' ').trim();
+                el.className = cn;
+                el.classList.add(themeClass);
+            }
+            if (theme === 'dark') {
+                document.body.classList.add('bg-slate-950');
+                document.body.classList.add('text-slate-100');
+            } else {
+                document.body.classList.add('bg-gray-100');
+                document.body.classList.add('text-slate-900');
+            }
         })();
     </script>
     <div id="app" class="max-w-7xl mx-auto px-4 py-4"></div>
@@ -466,7 +726,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.12";
+    var APP_VERSION = "24.13";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -837,8 +1097,62 @@
                     }).catch(function () { });
                 };
 
-                /* Phase 194: Config consolidation + store init before project list load */
+                /* Always-on ghost purge: remove prodBudget_v5_* keys that are NOT real budgets
+                   (no .sections) from both localforage and OPFS. Safe every boot — not one-shot.
+                   Protects infrastructure suffixes (trash/globalItems/templates) and $METADATA. */
+                var purgeGhostBudgetKeys = function () {
+                    var _pfx = typeof storageKeyPrefix !== 'undefined' ? storageKeyPrefix : 'prodBudget_v5_';
+                    var PROTECTED = {
+                        'trash': true,
+                        'globalItems': true,
+                        'templates': true,
+                        'projectDateFormat': true,
+                        'projectNameSeparator': true,
+                        'projectStorageProtocol': true
+                    };
+                    if (!mBT.data || !mBT.data.storage || typeof mBT.data.storage.keys !== 'function') {
+                        return Promise.resolve();
+                    }
+                    return mBT.data.storage.keys().then(function (keys) {
+                        var candidates = (keys || []).filter(function (k) {
+                            if (typeof k !== 'string' || k.indexOf(_pfx) !== 0) return false;
+                            var suffix = k.slice(_pfx.length);
+                            if (!suffix || suffix.charAt(0) === '$') return false;
+                            if (PROTECTED[suffix]) return false;
+                            return true;
+                        });
+                        return Promise.all(candidates.map(function (k) {
+                            return mBT.data.storage.load(k).then(function (data) {
+                                /* Keep real budgets */
+                                if (data && typeof data === 'object' && data.sections) return null;
+                                /* Successful read: null/undefined or non-budget object/string → purge */
+                                return k;
+                            }).catch(function () {
+                                /* Read error — never delete on failure */
+                                return null;
+                            });
+                        }));
+                    }).then(function (toDelete) {
+                        var list = [];
+                        var i;
+                        for (i = 0; i < (toDelete || []).length; i++) {
+                            if (toDelete[i]) list.push(toDelete[i]);
+                        }
+                        if (!list.length) return;
+                        console.log('[mBT] Ghost budget purge: removing ' + list.length + ' non-budget key(s):', list);
+                        return Promise.all(list.map(function (k) {
+                            return mBT.data.storage.remove(k).catch(function (e) {
+                                console.warn('[mBT] Ghost purge remove failed for', k, e);
+                            });
+                        }));
+                    }).catch(function (e) {
+                        console.warn('[mBT] Ghost budget purge error:', e);
+                    });
+                };
+
+                /* Phase 194: Config consolidation + always-on ghost purge + store init before project list */
                 var listP = consolidateConfigKeys()
+                    .then(function () { return purgeGhostBudgetKeys(); })
                     .then(function () { return scrubPhantomKey(); })
                     .then(function () { return mBTConfigStore._ensureLoaded(); })
                     .then(function () {
@@ -1437,8 +1751,10 @@
                     }
                     if (opfsData) return opfsData;
                     if (forageData) {
-                        /* Lazy migration: localforage has data, OPFS does not -- write through */
-                        if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady()) {
+                        /* Lazy migration: localforage has data, OPFS does not -- write through
+                           only real budgets (must have .sections). Config ghosts must not re-enter OPFS. */
+                        if (typeof mBTOPFS !== 'undefined' && mBTOPFS.isReady() &&
+                            forageData && typeof forageData === 'object' && forageData.sections) {
                             mBTOPFS.save(key, forageData).catch(function () { });
                         }
                         return forageData;
@@ -1615,14 +1931,16 @@
             });
         },
 
-        /* getList: merge storage + localStorage keys, filter to project names only */
+        /* getList: merge storage + localStorage keys, filter to REAL project names only.
+           Key-shape denylist first (cheap), then content check: value must be an object
+           with .sections. Prefix alone is not enough — config ghosts share the prefix. */
         getList: function () {
             var self = this;
             return self.storage.keys().then(function (fKeys) {
                 var lKeys = Object.keys(localStorage);
                 var combined = {};
                 fKeys.concat(lKeys).forEach(function (k) { combined[k] = true; });
-                return Object.keys(combined).filter(function (k) {
+                var candidates = Object.keys(combined).filter(function (k) {
                     return k.indexOf(storageKeyPrefix) === 0 &&
                         k.charAt(storageKeyPrefix.length) !== '$' &&
                         k.indexOf('_trash') === -1 &&
@@ -1635,7 +1953,25 @@
                         k.slice(-19) !== 'selectedAiProvider' &&
                         k.slice(-17) !== 'projectDateFormat' &&
                         k.slice(-20) !== 'projectNameSeparator';
-                }).map(function (k) { return k.replace(storageKeyPrefix, ''); });
+                });
+                return Promise.all(candidates.map(function (k) {
+                    return self.storage.load(k).then(function (data) {
+                        if (data && typeof data === 'object' && data.sections) {
+                            return k.replace(storageKeyPrefix, '');
+                        }
+                        return null;
+                    }).catch(function () { return null; });
+                })).then(function (names) {
+                    var out = [];
+                    var seen = {};
+                    for (var i = 0; i < names.length; i++) {
+                        if (names[i] && !seen[names[i]]) {
+                            seen[names[i]] = true;
+                            out.push(names[i]);
+                        }
+                    }
+                    return out;
+                });
             });
         },
 
@@ -9639,7 +9975,7 @@
                     '<button onclick="mBT.features.cortex.ui.openGlobalDashboard()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white border border-slate-900 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-sm">Global View</button>' +
                     '<button onclick="mBT.features.ai.analyzeCurrentBudget()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm">' + mBTAssets.doctor + ' Deep Scan</button>' +
                     '<button onclick="mBT.features.ai.openChat()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-sm">' + mBTAssets.chat + ' Chat</button>' +
-                    '<button onclick="showSettingsModal(\'ai\')" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">' + mBTAssets.gear + '</button>' +
+                    '<button onclick="showSettingsModal(\'connections\')" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">' + mBTAssets.gear + '</button>' +
                     '</div>' +
                     '</div>' +
                     '<div class="grid grid-cols-1 md:grid-cols-12 gap-4 flex-grow overflow-hidden min-h-0">' +
@@ -10182,12 +10518,36 @@
     mBT.features.settings = {
 
         // --- 0. Modal Orchestration ---
+        _settingsShellTabCls: function (isActive) {
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var base = 'min-w-0 h-8 px-3 flex items-center justify-center text-[10px] leading-4 font-black uppercase tracking-widest border-b-2 transition-colors ';
+            if (isActive) {
+                return base + 'text-blue-700 border-blue-600';
+            }
+            return base + (isDark ? 'text-slate-500 border-transparent hover:text-slate-300' : 'text-slate-400 border-transparent hover:text-slate-700');
+        },
+
         open: function (tab, subTab) {
             tab = (tab || 'general').toLowerCase();
             /* Normalize legacy/display subTab names to internal ids */
             var _subTabMap = { 'rates': 'lineItems', 'contacts': 'contacts', 'templates': 'templates', 'trash': 'trash', 'bin': 'trash' };
             if (subTab) subTab = _subTabMap[subTab.toLowerCase()] || subTab.toLowerCase();
             var self = this;
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _shellBg = isDark ? 'bg-slate-900/60' : 'bg-slate-50/60';
+            var _shellBorder = isDark ? 'border-slate-700' : 'border-slate-100';
+            var _title = isDark ? 'text-slate-100' : 'text-slate-900';
+            var _meta = isDark ? 'text-slate-400' : 'text-slate-500';
+            var _online = isDark ? 'text-emerald-400' : 'text-emerald-600';
+            var _offline = isDark ? 'text-rose-400' : 'text-rose-600';
+            var _checkBtn = isDark ? 'bg-slate-800 border-slate-600 text-slate-300 hover:border-blue-500 hover:text-blue-400' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-700';
+            var _closeBtn = isDark ? 'hover:bg-slate-700 text-slate-500 hover:text-slate-200' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700';
+            var _logoWrap = isDark ? 'bg-slate-800' : 'bg-white';
+            var buildVer = (typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'unknown');
+            var onlineLabel = (typeof navigator !== 'undefined' && navigator.onLine) ? 'Online' : 'Offline';
+            var onlineCls = (typeof navigator !== 'undefined' && navigator.onLine) ? _online : _offline;
+            var onlineDot = (typeof navigator !== 'undefined' && navigator.onLine) ? 'bg-emerald-500' : 'bg-rose-500';
+            var logoHtml = (typeof mBTAssets !== 'undefined' && mBTAssets.appLogo) ? mBTAssets.appLogo : '';
             var TABS = [
                 { id: 'general', label: 'General' },
                 { id: 'database', label: 'Database' },
@@ -10196,18 +10556,30 @@
                 { id: 'updates', label: 'Updates' }
             ];
 
-            /* Build top-level tab nav — compact height, app-nav feel (not spreadsheet header) */
-            var tabsHtml = '<div class="flex items-stretch justify-between border-b border-slate-100 mb-0.5 px-1.5">';
+            /* Identity header + tab bar (demo shell) */
+            var shellHtml = '<div class="px-5 pt-4 pb-0 border-b ' + _shellBorder + ' ' + _shellBg + '">' +
+                '<div class="flex items-center gap-3 mb-4">' +
+                    '<div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm ' + _logoWrap + '">' +
+                        '<div class="w-9 h-9 flex items-center justify-center">' + logoHtml + '</div>' +
+                    '</div>' +
+                    '<div class="min-w-0 flex-1">' +
+                        '<div class="text-[12px] leading-4 font-black ' + _title + '">mooBudgetTool</div>' +
+                        '<div class="flex items-center gap-1.5 text-[9px] leading-4 font-bold ' + _meta + '">' +
+                            '<span>Build v' + buildVer + '</span>' +
+                            '<span class="w-1 h-1 rounded-full ' + onlineDot + '"></span>' +
+                            '<span class="' + onlineCls + '">' + onlineLabel + '</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button type="button" onclick="mBT.features.settings.checkForUpdates()" class="px-3 h-8 rounded-lg border ' + _checkBtn + ' text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm transition-all shrink-0">Check updates</button>' +
+                    '<button type="button" onclick="mBTME.close(\'settingsModal\')" class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0 ' + _closeBtn + '" title="Close">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+                    '</button>' +
+                '</div>' +
+                '<div class="flex gap-1 -mb-px overflow-x-auto no-scrollbar">';
             TABS.forEach(function (t) {
-                var active = (t.id === tab);
-                /* Title case + medium weight: legible at mobile without tall py-3 bars */
-                tabsHtml += '<button data-settings-tab="' + t.id + '" class="min-w-0 py-0.5 px-1 text-center text-[11px] leading-snug tracking-wide transition-colors ' +
-                    (active
-                        ? 'font-bold text-blue-600 border-b-2 border-blue-600'
-                        : 'font-medium text-slate-400 hover:text-slate-600 border-b-2 border-transparent') +
-                    '">' + t.label + '</button>';
+                shellHtml += '<button type="button" data-settings-tab="' + t.id + '" class="' + self._settingsShellTabCls(t.id === tab) + '">' + t.label + '</button>';
             });
-            tabsHtml += '</div>';
+            shellHtml += '</div></div>';
 
             /* Database tab default sub-tab — getTabContent renders its own sub-tab nav */
             if (tab === 'database') subTab = subTab || 'lineItems';
@@ -10217,7 +10589,7 @@
                 ? window.mBT_UI_Settings_getTabContent(tab, subTab)
                 : '<div class="p-8 text-center text-slate-400 text-[9px] font-black uppercase tracking-widest">Loading...</div>';
 
-            var content = tabsHtml +
+            var content = shellHtml +
                 '<div id="settingsTabBody" class="flex flex-col min-h-0" style="height:76vh;">' + bodyHtml + '</div>';
 
             /* Open modal (or refresh if already open) */
@@ -10245,14 +10617,7 @@
                     /* Update active state on main tab buttons */
                     tabBtns.forEach(function (b) {
                         var isActive = b.getAttribute('data-settings-tab') === t;
-                        b.className = b.className
-                            .replace(/text-blue-600|border-blue-600|text-slate-300|hover:text-slate-500|border-transparent/g, '')
-                            .trim();
-                        if (isActive) {
-                            b.className += ' text-blue-600 border-b-2 border-blue-600';
-                        } else {
-                            b.className += ' text-slate-300 hover:text-slate-500 border-b-2 border-transparent';
-                        }
+                        b.className = self._settingsShellTabCls(isActive);
                     });
                     /* Swap only the tab body content */
                     var bodyEl = document.getElementById('settingsTabBody');
@@ -13594,6 +13959,35 @@
 
     /* --- 1. OFFLINE ENDURANCE SERVICE (Service Worker Registration) --- */
     if ('serviceWorker' in navigator) {
+        var mbtRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (mbtRefreshing) return;
+            mbtRefreshing = true;
+            window.location.reload();
+        });
+
+        function mbtShowSwUpdateToast() {
+            var msg = 'Updating to v' + APP_VERSION;
+            var container = document.getElementById('toastContainer');
+            if (!container) return;
+            var el = document.getElementById('mbt-sw-update-toast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'mbt-sw-update-toast';
+                el.setAttribute('style', 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#0f172a;color:#fff;padding:10px 20px;border-radius:9999px;font-size:12px;font-weight:700;z-index:10001;pointer-events:none;box-shadow:0 8px 24px rgba(15,23,42,.4);');
+                container.appendChild(el);
+            }
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function mbtActivateWaitingWorker(reg) {
+            var waiting = reg.waiting;
+            if (!waiting) return;
+            mbtShowSwUpdateToast();
+            waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+
         window.addEventListener('load', function () {
             navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION, { scope: './', updateViaCache: 'none' })
                 .then(function (reg) {
@@ -13605,11 +13999,11 @@
                     console.log('SW Synchronization active:', reg.scope);
                     reg.onupdatefound = function () {
                         var installingWorker = reg.installing;
+                        if (!installingWorker) return;
                         installingWorker.onstatechange = function () {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                /* Store pending worker ref for SKIP_WAITING bridge (Task 13) */
                                 if (!window.mBT.registry.updateStatus) window.mBT.registry.updateStatus = {};
-                                window.mBT.registry.pendingWorker = reg.waiting;
+                                window.mBT.registry.pendingWorker = reg.waiting || installingWorker;
                                 window.mBT.registry.updateStatus.available = true;
                                 /* Refresh Settings panel if open (Task 17) */
                                 if (window.mBT.features && window.mBT.features.settings) {
@@ -13618,28 +14012,12 @@
                                         window.mBT.features.settings.open('updates');
                                     }
                                 }
-                                /* Task 13: Dirty-state guard Ã¢â‚¬â€ auto-activate when clean, confirm when unsaved work exists */
-                                var pending = window.mBT.registry.pendingWorker;
+                                /* Task 13: Dirty-state guard — auto-activate when clean, confirm when unsaved work exists */
                                 if (!window.mBT.state || !window.mBT.state.isDirty) {
-                                    /* Clean state: activate silently without interrupting user */
-                                    if (pending) {
-                                        navigator.serviceWorker.addEventListener('controllerchange', function () {
-                                            window.location.reload();
-                                        });
-                                        pending.postMessage({ type: 'SKIP_WAITING' });
-                                    } else {
-                                        window.location.reload();
-                                    }
+                                    mbtActivateWaitingWorker(reg);
                                 } else {
-                                    mBTME.confirm("Update Available", "New production logic available. You have unsaved changes Ã¢â‚¬â€ synchronize now?", function () {
-                                        if (pending) {
-                                            navigator.serviceWorker.addEventListener('controllerchange', function () {
-                                                window.location.reload();
-                                            });
-                                            pending.postMessage({ type: 'SKIP_WAITING' });
-                                        } else {
-                                            window.location.reload();
-                                        }
+                                    mBTME.confirm("Update Available", "New production logic available. You have unsaved changes — synchronize now?", function () {
+                                        mbtActivateWaitingWorker(reg);
                                     });
                                 }
                             }

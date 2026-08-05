@@ -34,39 +34,82 @@
         return actions;
     }
 
+    /* Dense 56px list row for Database panels (replaces tall RenderEngine.listRow p-4) */
+    function _mBTDbDenseRow(opts) {
+        var esc = opts.esc || function (s) { return String(s || ''); };
+        var title = opts.title || '';
+        var subtitle = opts.subtitle || '';
+        var icon = opts.icon || '';
+        var iconCls = opts.iconCls || 'w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 text-[10px] leading-4';
+        var titleCls = opts.titleCls || 'text-[10px] leading-4 font-black uppercase text-slate-700 truncate';
+        var subCls = opts.subCls || 'text-[9px] leading-4 text-slate-400 font-bold truncate';
+        var rowExtra = opts.rowExtra || '';
+        var actions = opts.actions || [];
+        var actionHtml = actions.map(function (a) {
+            return '<button type="button" aria-label="' + esc(a.title || 'Action') + '" onclick="' + a.onClick + '" class="shrink-0 h-8 px-2 text-[8px] leading-4 font-black uppercase text-' + (a.color || 'blue') + '-600 hover:opacity-80 transition-opacity" title="' + esc(a.title || '') + '">' +
+                (a.label ? esc(a.label) : (a.icon || '')) +
+                '</button>';
+        }).join('');
+        return '<div class="settings-row flex items-center gap-3 px-3 ' + rowExtra + '">' +
+            (icon ? ('<div class="' + iconCls + '">' + icon + '</div>') : '') +
+            '<div class="min-w-0 flex-1">' +
+                '<div class="' + titleCls + '">' + esc(title) + '</div>' +
+                (subtitle ? ('<div class="' + subCls + '">' + esc(subtitle) + '</div>') : '') +
+            '</div>' +
+            (actionHtml ? ('<div class="flex items-center gap-1 shrink-0">' + actionHtml + '</div>') : '') +
+            '</div>';
+    }
+
     function renderDbView(subTab) {
         function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
         var og = window.mBTOG || { rates: [], contacts: [], templates: [], settings: { location: 'Jamaica', optInSharing: false } };
+        var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+        var _shell = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
+        var _toolbarBg = isDark ? 'bg-slate-900/40' : 'bg-slate-50';
+        var _contactsTb = isDark ? 'bg-indigo-950/40' : 'bg-indigo-50';
+        var _search = isDark ? 'bg-slate-900 text-white border-slate-600' : 'bg-white border-slate-200';
+        var _searchIndigo = isDark ? 'bg-slate-900 text-white border-indigo-800' : 'bg-white border-indigo-200';
+        var _btnMuted = isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'bg-white border-slate-200 text-slate-600';
+        var _btnIndigo = isDark ? 'bg-indigo-900/50 text-indigo-200' : 'bg-indigo-200 text-indigo-800';
+        var _select = isDark ? 'bg-slate-900 text-slate-200 border-slate-600' : 'bg-white text-slate-600 border-slate-200';
+        var _txt = isDark ? 'text-slate-100' : 'text-slate-700';
+        var _muted = isDark ? 'text-slate-400' : 'text-slate-400';
+        var _empty = isDark ? 'text-slate-500' : 'text-slate-300';
+        var _footBorder = isDark ? 'border-slate-700' : 'border-slate-100';
+        var _amberBar = isDark ? 'bg-amber-950/40 text-amber-300 border-amber-900/50' : 'bg-amber-50 text-amber-700 border-amber-100';
 
         if (subTab === 'contacts') {
             var contacts = og.contacts || [];
             var listContent = contacts.length ? contacts.map(function (c) {
-                return RenderEngine.ui.listRow({
-                    id: c.id || c.name,
-                    icon: mBTAssets.user,
+                return _mBTDbDenseRow({
+                    esc: esc,
+                    icon: mBTAssets.user || '',
                     title: c.name || 'Unknown',
                     subtitle: c.role || 'No Role',
-                    classes: 'border-b border-slate-50',
+                    titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
+                    subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
+                    iconCls: isDark
+                        ? 'w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300 shrink-0'
+                        : 'w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0',
                     actions: [{
-                        icon: mBTAssets.plus,
+                        label: 'Add',
                         title: 'Add to Budget',
                         color: 'blue',
                         onClick: "mBT.data.addCrewToBudget('" + esc(c.name) + "', '" + esc(c.role) + "')"
                     }]
                 });
-            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.user, message: 'No Contacts Found' });
+            }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Contacts Found</div>';
 
-            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
-                '<div class="p-3 bg-indigo-50 border-b border-indigo-100 flex flex-col gap-3 shrink-0 z-10">' +
-                    '<div class="flex justify-center gap-3 flex-wrap">' +
-                        '<button onclick="mBT.features.settings.openAddContactModal()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">' + (mBTAssets.plus || "") + ' Add</button>' +
-                        '<button onclick="document.getElementById(\'csvImportInput\').click()" class="bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center gap-1.5">' + (mBTAssets.plus || "") + ' Import CSV</button>' +
-                    '</div>' +
-                    '<div class="relative">' +
-                        '<input type="text" id="contactsSearchInput" placeholder="SEARCH PERSONNEL.." class="w-full p-2.5 pr-10 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">' +
+            return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
+                '<input type="file" id="csvImportInput" accept=".csv" class="hidden" onchange="importContactsCSV(this)">' +
+                '<div class="db-toolbar ' + _contactsTb + ' shrink-0 z-10">' +
+                    '<input type="text" id="contactsSearchInput" placeholder="SEARCH PERSONNEL.." class="db-toolbar-search ' + _searchIndigo + ' rounded-lg px-2 text-[10px] leading-4 font-black uppercase tracking-widest outline-none">' +
+                    '<div class="db-toolbar-actions">' +
+                        '<button type="button" onclick="mBT.features.settings.openAddContactModal()" class="h-8 px-2 rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest ' + _btnIndigo + ' flex items-center gap-1">' + (mBTAssets.plus || '') + ' Add</button>' +
+                        '<button type="button" onclick="document.getElementById(\'csvImportInput\').click()" class="h-8 px-2 rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest ' + _btnIndigo + ' flex items-center gap-1">' + (mBTAssets.plus || '') + ' Import CSV</button>' +
                     '</div>' +
                 '</div>' +
-                '<div id="contactsListBody" class="flex-grow overflow-y-auto no-scrollbar relative bg-white">' + listContent + '</div>' +
+                '<div id="contactsListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0">' + listContent + '</div>' +
             '</div>';
         }
 
@@ -102,67 +145,94 @@
                 var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
                 if (avg && avg.contributor_count > 0) sub += ' [Research: ' + avg.contributor_count + ']';
 
-                return RenderEngine.ui.listRow({
-                    id: r.id || r.description,
-                    icon: mBTAssets.money,
+                var actions = _mBTRateRowActions(r, esc, dispRate, dispCurr).map(function (a) {
+                    return {
+                        title: a.title,
+                        color: a.color,
+                        onClick: a.onClick,
+                        icon: a.icon,
+                        label: a.title === 'Add' ? 'Apply' : (a.title && a.title.indexOf('Edit') === 0 ? 'Edit' : (a.title === 'Delete' ? 'Del' : ''))
+                    };
+                });
+
+                return _mBTDbDenseRow({
+                    esc: esc,
+                    icon: '$',
                     title: r.description,
                     subtitle: sub,
-                    info: r.intelligence || '',
-                    classes: 'border-b border-slate-50',
-                    actions: _mBTRateRowActions(r, esc, dispRate, dispCurr)
+                    titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
+                    subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
+                    iconCls: isDark
+                        ? 'w-8 h-8 rounded-lg bg-emerald-900/40 flex items-center justify-center text-emerald-400 shrink-0 text-[10px] leading-4 font-black'
+                        : 'w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 text-[10px] leading-4 font-black',
+                    actions: actions
                 });
-            }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
+            }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Rates Loaded</div>';
 
+            /* Data-driven selects — RATE_REGIONS + MARKET_TIERS from OpenGate */
             var regionOpts = (og.RATE_REGIONS ? Object.keys(og.RATE_REGIONS) : [])
                 .map(function (r) { return '<option value="' + r + '"' + (region === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+            var currentTier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
+            var tierList = (og.MARKET_TIERS && og.MARKET_TIERS.length) ? og.MARKET_TIERS : ['Standard', 'Indie', 'Studio'];
+            var tierOpts = tierList.map(function (t) {
+                return '<option value="' + t + '"' + (currentTier === t ? ' selected' : '') + '>' + t + '</option>';
+            }).join('');
 
             var citation = (typeof og._getRegionIntelligence === 'function') ? og._getRegionIntelligence(region) : '';
+            var cloudBtnCls = cloudSyncOn
+                ? (isDark ? 'bg-blue-900/40 border-blue-700 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-600')
+                : _btnMuted;
+            var shareBtnCls = isSharing
+                ? (isDark ? 'bg-emerald-900/40 border-emerald-700 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
+                : _btnMuted;
 
-            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
-                '<div class="p-3 bg-slate-50 border-b border-slate-100 shrink-0 space-y-3 z-10">' +
-                    '<div class="flex gap-2">' +
-                        '<button onclick="mBT.features.settings.openAddRateModal()" class="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 hover:text-blue-600 shadow-sm flex items-center justify-center gap-2">' + mBTAssets.plus + ' Add Rate</button>' +
-                        '<button onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (cloudSyncOn ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400') + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
-                        '<button onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="flex-1 py-2 border rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ' + (isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-400') + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
-                        '<button onclick="window._mBTOpenApplyRatesConfirm()" class="flex-1 py-2 rounded-lg bg-blue-600 border border-blue-600 text-[9px] font-black uppercase tracking-widest text-white hover:bg-blue-500 shadow-sm flex items-center justify-center gap-2 transition-all">Apply Rates</button>' +
+            return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
+                /* Row 1: actions left + tier/region/Apply right — real <select> dropdowns */
+                '<div class="db-actions-row ' + _toolbarBg + ' shrink-0 z-10">' +
+                    '<div class="db-actions-left">' +
+                        '<button type="button" onclick="mBT.features.settings.openAddRateModal()" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + _btnMuted + '">' + mBTAssets.plus + ' Add Rate</button>' +
+                        '<button type="button" onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + cloudBtnCls + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
+                        '<button type="button" onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + shareBtnCls + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
                     '</div>' +
-                    '<div class="flex items-center gap-2">' +
-                        '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
-                        '<div class="flex gap-1 shrink-0">' +
-                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' +
-                                (function() {
-                                    var currentTier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
-                                    return ['Standard', 'Indie', 'Studio'].map(function(t) {
-                                        return '<option value="' + t + '"' + (currentTier === t ? ' selected' : '') + '>' + t + '</option>';
-                                    }).join('');
-                                })() +
-                            '</select>' +
-                            '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="p-2 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none text-slate-600">' + regionOpts + '</select>' +
-                        '</div>' +
+                    '<div class="db-actions-right">' +
+                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="db-select h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest outline-none cursor-pointer ' + _select + '">' +
+                            tierOpts +
+                        '</select>' +
+                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="db-select h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest outline-none cursor-pointer ' + _select + '">' +
+                            regionOpts +
+                        '</select>' +
+                        '<button type="button" onclick="window._mBTOpenApplyRatesConfirm()" class="h-8 px-2 rounded-lg bg-blue-600 border border-blue-600 text-[9px] leading-4 font-black uppercase tracking-widest text-white hover:bg-blue-500 shadow-sm flex items-center gap-1 transition-all">Apply Rates</button>' +
                     '</div>' +
                 '</div>' +
+                /* Row 2: search alone full width */
+                '<div class="db-toolbar db-toolbar--solo ' + _toolbarBg + ' shrink-0 z-10">' +
+                    '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="db-toolbar-search ' + _search + ' rounded-lg px-2 text-[10px] leading-4 font-black uppercase tracking-widest outline-none">' +
+                '</div>' +
                 _mBTApplyRatesBarHtml() +
-                '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0 bg-white">' + rateRows + '</div>' +
-                (citation ? '<div class="p-2 bg-blue-50/50 border-t border-blue-100 shrink-0 space-y-0.5"><p class="text-[7px] font-medium text-blue-500 leading-snug">' + esc(citation.replace(/^INTELLIGENCE:\s*/i, '')) + '</p><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>' : '<div class="p-2 border-t border-slate-100 shrink-0"><p class="text-[7px] text-slate-400 font-medium">Last sync: ' + lastSyncLabel + '</p></div>') +
+                '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0">' + rateRows + '</div>' +
+                (citation
+                    ? '<div class="px-2 py-2 shrink-0 border-t ' + _footBorder + ' space-y-0"><p class="text-[8px] leading-4 font-medium text-blue-500">' + esc(citation.replace(/^INTELLIGENCE:\s*/i, '')) + '</p><p class="text-[8px] leading-4 ' + _muted + ' font-medium">Last sync: ' + lastSyncLabel + '</p></div>'
+                    : '<div class="px-2 py-2 shrink-0 border-t ' + _footBorder + '"><p class="text-[8px] leading-4 ' + _muted + ' font-medium">Last sync: ' + lastSyncLabel + '</p></div>') +
             '</div>';
         }
 
         if (subTab === 'templates') {
             var templates = og.templates || [];
             var tRows = templates.length ? templates.map(function (t) {
-                return '<div class="flex items-center gap-3 p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors">' +
-                    '<div class="flex-grow overflow-hidden min-w-0">' +
-                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + esc(t.label || t.name || 'Template') + '</div>' +
-                        '<div class="text-[9px] text-slate-400 font-bold truncate">' + esc(t.cat || 'General') + '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('') : '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">No Templates</div>';
+                return _mBTDbDenseRow({
+                    esc: esc,
+                    title: t.label || t.name || 'Template',
+                    subtitle: t.cat || 'General',
+                    titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
+                    subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate'
+                });
+            }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Templates</div>';
 
-            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
-                '<div class="p-3 bg-indigo-50 border-b border-indigo-100 shrink-0">' +
-                    '<input type="text" id="templateSearchInput" placeholder="Search Templates.." class="w-full p-2.5 bg-white border border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-300 transition-all">' +
+            return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
+                '<div class="db-toolbar db-toolbar--solo ' + _contactsTb + ' shrink-0">' +
+                    '<input type="text" id="templateSearchInput" placeholder="Search Templates.." class="db-toolbar-search ' + _searchIndigo + ' rounded-lg px-2 text-[10px] leading-4 font-black uppercase tracking-widest outline-none">' +
                 '</div>' +
-                '<div class="flex-grow overflow-y-auto no-scrollbar">' + tRows + '</div>' +
+                '<div class="flex-grow overflow-y-auto no-scrollbar min-h-0">' + tRows + '</div>' +
             '</div>';
         }
 
@@ -171,21 +241,28 @@
             try { trashRaw = JSON.parse(localStorage.getItem('moo_og_trash') || 'null'); } catch (e) {}
             var trashItems = Array.isArray(trashRaw) ? trashRaw : [];
             var trRows = trashItems.length ? trashItems.map(function (item, idx) {
-                return '<div class="flex items-center gap-3 p-3 border-b border-slate-50 hover:bg-rose-50 transition-colors">' +
-                    '<div class="flex-grow overflow-hidden min-w-0">' +
-                        '<div class="text-[10px] font-black uppercase text-slate-700 truncate">' + esc(item.description || item.name || 'Item') + '</div>' +
-                        '<div class="text-[9px] text-slate-400 font-bold truncate">' + esc(item.deletedAt ? new Date(item.deletedAt).toLocaleDateString() : '') + '</div>' +
-                    '</div>' +
-                    '<button onclick="(function(){var t=JSON.parse(localStorage.getItem(\'moo_og_trash\')||\'[]\');t.splice(' + idx + ',1);localStorage.setItem(\'moo_og_trash\',JSON.stringify(t));mBT.features.settings.open(\'database\',\'trash\');})()" class="shrink-0 px-2 py-1 text-[8px] font-black uppercase text-rose-400 hover:text-rose-600 transition-colors">Remove</button>' +
-                '</div>';
-            }).join('') : '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">Bin is Empty</div>';
+                return _mBTDbDenseRow({
+                    esc: esc,
+                    title: item.description || item.name || 'Item',
+                    subtitle: item.deletedAt ? new Date(item.deletedAt).toLocaleDateString() : '',
+                    titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
+                    subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
+                    rowExtra: isDark ? 'hover:bg-rose-950/20' : 'hover:bg-rose-50',
+                    actions: [{
+                        label: 'Remove',
+                        title: 'Remove',
+                        color: 'rose',
+                        onClick: "(function(){var t=JSON.parse(localStorage.getItem('moo_og_trash')||'[]');t.splice(" + idx + ",1);localStorage.setItem('moo_og_trash',JSON.stringify(t));mBT.features.settings.open('database','trash');})()"
+                    }]
+                });
+            }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">Bin is Empty</div>';
 
-            return '<div class="flex flex-col h-full bg-white overflow-hidden rounded-xl border border-slate-100 shadow-sm">' +
-                '<div class="flex-grow overflow-y-auto no-scrollbar">' + trRows + '</div>' +
+            return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
+                '<div class="flex-grow overflow-y-auto no-scrollbar min-h-0">' + trRows + '</div>' +
             '</div>';
         }
 
-        return '<div class="p-8 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">View Not Found</div>';
+        return '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">View Not Found</div>';
     }
 
     /* Re-renders only the rates list body — no modal reset */
@@ -205,6 +282,10 @@
         var avgsRaw = localStorage.getItem('moo_og_rate_averages');
         var avgs = {};
         try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) {}
+        var isDarkR = localStorage.getItem('mbt_active_theme') === 'dark';
+        var _txtR = isDarkR ? 'text-slate-100' : 'text-slate-700';
+        var _mutedR = isDarkR ? 'text-slate-400' : 'text-slate-400';
+        var _emptyR = isDarkR ? 'text-slate-500' : 'text-slate-300';
         var rateRows = rates.length ? rates.map(function (r) {
             var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
             var avg = avgs[key];
@@ -213,16 +294,28 @@
             if (avg && avg.avg_rate > 0) { dispRate = avg.avg_rate; dispCurr = avg.currency || 'USD'; }
             var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
             if (avg && avg.contributor_count > 0) sub += ' [Research: ' + avg.contributor_count + ']';
-            return RenderEngine.ui.listRow({
-                id: r.id || r.description,
-                icon: mBTAssets.money,
+            var actions = _mBTRateRowActions(r, esc, dispRate, dispCurr).map(function (a) {
+                return {
+                    title: a.title,
+                    color: a.color,
+                    onClick: a.onClick,
+                    icon: a.icon,
+                    label: a.title === 'Add' ? 'Apply' : (a.title && a.title.indexOf('Edit') === 0 ? 'Edit' : (a.title === 'Delete' ? 'Del' : ''))
+                };
+            });
+            return _mBTDbDenseRow({
+                esc: esc,
+                icon: '$',
                 title: r.description,
                 subtitle: sub,
-                info: r.intelligence || '',
-                classes: 'border-b border-slate-50',
-                actions: _mBTRateRowActions(r, esc, dispRate, dispCurr)
+                titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txtR + ' truncate',
+                subCls: 'text-[9px] leading-4 ' + _mutedR + ' font-bold truncate',
+                iconCls: isDarkR
+                    ? 'w-8 h-8 rounded-lg bg-emerald-900/40 flex items-center justify-center text-emerald-400 shrink-0 text-[10px] leading-4 font-black'
+                    : 'w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 text-[10px] leading-4 font-black',
+                actions: actions
             });
-        }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.money, message: 'No Rates Loaded' });
+        }).join('') : '<div class="p-8 text-center ' + _emptyR + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Rates Loaded</div>';
         body.innerHTML = rateRows;
     }
     window._mBTRefreshDbRates = _mBTRefreshDbRates;
@@ -382,14 +475,21 @@
         var cur = (rates[0] && rates[0].currency) || window.displayCurrency || 'JMD';
         var diff = _mBTBuildRateDiff();
 
-        return '<div id="applyRatesBar" class="px-3 py-2 border-b border-slate-100 text-[10px] font-bold text-slate-500 truncate shrink-0">' +
+        var isDarkBar = localStorage.getItem('mbt_active_theme') === 'dark';
+        var barCls = isDarkBar
+            ? 'px-2 py-2 border-b border-amber-900/50 bg-amber-950/40 text-[8px] leading-4 font-bold text-amber-300 uppercase tracking-widest text-center truncate shrink-0'
+            : 'px-2 py-2 border-b border-amber-100 bg-amber-50 text-[8px] leading-4 font-bold text-amber-700 uppercase tracking-widest text-center truncate shrink-0';
+        var paneBorder = isDarkBar ? 'border-slate-700' : 'border-slate-100';
+        var paneBg = isDarkBar ? 'bg-slate-800' : 'bg-white';
+        var doneBg = isDarkBar ? 'bg-emerald-950/40 border-emerald-900/50' : 'bg-emerald-50 border-emerald-100';
+        return '<div id="applyRatesBar" class="' + barCls + '">' +
                 '<span id="applyRatesScopeCount">' + rates.length + '</span> rates &middot; ' +
                 '<span id="applyRatesScopeLabel">' + _mBTEsc(tier + ' / ' + region) + '</span> &middot; ' +
                 '<span id="applyRatesCurLabel">' + _mBTEsc(cur) + '</span> &middot; ' +
                 '<span id="applyRatesMatchLabel">' + diff.length + ' of ' + rates.length + ' line items match</span>' +
             '</div>' +
-            '<div id="applyRatesConfirmPane" class="hidden px-3 py-3 bg-white border-b border-slate-100 shrink-0"></div>' +
-            '<div id="applyRatesDonePane" class="hidden px-3 py-2.5 bg-emerald-50 border-b border-emerald-100 items-center gap-3 shrink-0"></div>';
+            '<div id="applyRatesConfirmPane" class="hidden px-3 py-2 ' + paneBg + ' border-b ' + paneBorder + ' shrink-0"></div>' +
+            '<div id="applyRatesDonePane" class="hidden px-3 py-2 border-b items-center gap-3 shrink-0 ' + doneBg + '"></div>';
     }
 
     /* Re-render just the bar (region/tier changes call this alongside the
@@ -611,6 +711,63 @@
         if (mBTME && typeof mBTME.toast === 'function') mBTME.toast('Rates restored.');
     };
 
+    window.mBT_UI_Settings_setThemeSegment = function (mode) {
+        var themeEl = document.getElementById('themeToggle');
+        var classicEl = document.getElementById('classicThemeToggle');
+        if (mode === 'premium') {
+            mBT.ui.setTheme('dark');
+            if (window.budget) {
+                if (!window.budget.settings) window.budget.settings = {};
+                window.budget.settings.classicTheme = false;
+            }
+        } else if (mode === 'light') {
+            mBT.ui.setTheme('light');
+            if (window.budget) {
+                if (!window.budget.settings) window.budget.settings = {};
+                window.budget.settings.classicTheme = false;
+            }
+        } else if (mode === 'classic') {
+            mBT.ui.setTheme('light');
+            if (window.budget) {
+                if (!window.budget.settings) window.budget.settings = {};
+                window.budget.settings.classicTheme = true;
+            }
+        }
+        if (themeEl) themeEl.checked = (mode === 'premium');
+        if (classicEl) classicEl.checked = (mode === 'classic');
+        if (window.budget && window.budget.settings) {
+            if (typeof saveBudget === 'function') saveBudget();
+            if (typeof render === 'function' && window.budget.sections) render();
+        }
+        if (typeof window.mBT_UI_Settings_updateThemeSegUi === 'function') {
+            window.mBT_UI_Settings_updateThemeSegUi(mode);
+        }
+        var bodyEl = document.getElementById('settingsTabBody');
+        if (bodyEl && bodyEl.querySelector('.settings-general-panel') && typeof window.mBT_UI_Settings_getTabContent === 'function') {
+            bodyEl.innerHTML = window.mBT_UI_Settings_getTabContent('general');
+            if (mBT.features.settings && typeof mBT.features.settings._attachListeners === 'function') {
+                mBT.features.settings._attachListeners('general');
+            }
+        }
+    };
+
+    window.mBT_UI_Settings_updateThemeSegUi = function (mode) {
+        var isDarkNow = localStorage.getItem('mbt_active_theme') === 'dark';
+        var onCls = isDarkNow ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-blue-700 shadow-sm';
+        var offCls = isDarkNow ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800';
+        var wrap = document.getElementById('themeSegWrap');
+        if (wrap) {
+            wrap.className = 'flex gap-1 p-0 h-8 rounded-lg shrink-0 items-center ' + (isDarkNow ? 'bg-slate-700' : 'bg-slate-100');
+        }
+        var btns = document.querySelectorAll('[data-theme-seg]');
+        var i, b, m;
+        for (i = 0; i < btns.length; i++) {
+            b = btns[i];
+            m = b.getAttribute('data-theme-seg');
+            b.className = 'seg h-8 px-2 flex items-center rounded-md text-[9px] leading-4 font-black uppercase tracking-widest ' + (m === mode ? onCls : offCls);
+        }
+    };
+
     window.mBT_UI_Settings_getTabContent = function (tabName, subTab) {
         subTab = subTab || 'lineItems';
         function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -630,197 +787,186 @@
             var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
             var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
 
-            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="settings-card flex items-center gap-3">' +
-                            '<div class="w-10 h-10 rounded-xl shadow border border-slate-100 overflow-hidden bg-[#fdba35] shrink-0">' + mBTAssets.appLogo + '</div>' +
-                            '<div>' +
-                                '<h3 class="text-xs font-black uppercase tracking-widest settings-text-primary">mooBudgetTool</h3>' +
-                                '<p class="text-[9px] text-slate-400 font-bold">Build v' + APP_VERSION + ' &bull; ' + (navigator.onLine ? '<span class="text-emerald-500">Online</span>' : '<span class="text-rose-500">Offline</span>') + '</p>' +
+            var _ring = isDark ? 'ring-slate-600' : 'ring-slate-200';
+            var themeSeg = isClassic ? 'classic' : (isDark ? 'premium' : 'light');
+            var _segWrap = isDark ? 'bg-slate-700' : 'bg-slate-100';
+            var _segOn = isDark ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-blue-700 shadow-sm';
+            var _segOff = isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800';
+            var _fieldCls = 'w-full text-[11px] leading-4 font-bold rounded-lg outline-none border-0 ring-1 ring-inset ' + _ring + ' ' + _inp;
+
+            return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-general-panel animate-in fade-in duration-300">' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Formatting</h3>' +
+                            '<div class="settings-card settings-card-group overflow-hidden">' +
+                                '<div class="settings-format-grid">' +
+                                    '<label class="settings-format-cell">' +
+                                        '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Date format</span>' +
+                                        '<select id="dateFormatSelect" onchange="localStorage.setItem(\'' + projectDateFormatKey + '\', this.value)" class="' + _fieldCls + ' cursor-pointer">' +
+                                            '<option value="YYYYMMDD" ' + (currentDateFormat === 'YYYYMMDD' ? 'selected' : '') + '>YYYY-MM-DD</option>' +
+                                            '<option value="MMDDYYYY" ' + (currentDateFormat === 'MMDDYYYY' ? 'selected' : '') + '>MM-DD-YYYY</option>' +
+                                        '</select>' +
+                                    '</label>' +
+                                    '<label class="settings-format-cell">' +
+                                        '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Name separator</span>' +
+                                        '<input type="text" id="separatorInput" maxlength="1" value="' + esc(currentSeparator) + '" onchange="localStorage.setItem(\'' + projectNameSeparatorKey + '\', this.value)" class="' + _fieldCls + ' text-center">' +
+                                    '</label>' +
+                                    '<label class="settings-format-cell">' +
+                                        '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Decimals</span>' +
+                                        '<select id="decimalPlacesSelect" onchange="if(!budget.settings) budget.settings={}; budget.settings.decimalPlaces=parseInt(this.value); saveBudget(); if(typeof mBTLE!==\'undefined\') mBTLE.reconcile(); render();" class="' + _fieldCls + ' cursor-pointer">' +
+                                            '<option value="0" ' + (decimalPlaces === 0 ? 'selected' : '') + '>0 \u2014 1,500</option>' +
+                                            '<option value="1" ' + (decimalPlaces === 1 ? 'selected' : '') + '>1 \u2014 1,500.0</option>' +
+                                            '<option value="2" ' + (decimalPlaces === 2 ? 'selected' : '') + '>2 \u2014 1,500.00</option>' +
+                                        '</select>' +
+                                    '</label>' +
+                                '</div>' +
                             '</div>' +
-                        '</div>' +
-                        '<div class="settings-card">' +
-                            '<div class="grid grid-cols-3 gap-3">' +
-                                '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Date Format</label>' +
-                                    '<select id="dateFormatSelect" onchange="localStorage.setItem(\'' + projectDateFormatKey + '\', this.value)" class="w-full text-[10px] p-2 ' + _inp + ' border-none rounded-lg font-bold outline-none cursor-pointer">' +
-                                        '<option value="YYYYMMDD" ' + (currentDateFormat === 'YYYYMMDD' ? 'selected' : '') + '>YYYY-MM-DD</option>' +
-                                        '<option value="MMDDYYYY" ' + (currentDateFormat === 'MMDDYYYY' ? 'selected' : '') + '>MM-DD-YYYY</option>' +
-                                    '</select>' +
-                                '</div>' +
-                                '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Separator</label>' +
-                                    '<input type="text" id="separatorInput" maxlength="1" value="' + currentSeparator + '" onchange="localStorage.setItem(\'' + projectNameSeparatorKey + '\', this.value)" class="w-full text-[10px] p-2 ' + _inp + ' border-none rounded-lg font-bold text-center outline-none">' +
-                                '</div>' +
-                                '<div>' +
-                                    '<label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Decimals</label>' +
-                                    '<select id="decimalPlacesSelect" onchange="if(!budget.settings) budget.settings={}; budget.settings.decimalPlaces=parseInt(this.value); saveBudget(); if(typeof mBTLE!==\'undefined\') mBTLE.reconcile(); render();" class="w-full text-[10px] p-2 ' + _inp + ' border-none rounded-lg font-bold outline-none cursor-pointer">' +
-                                        '<option value="0" ' + (decimalPlaces === 0 ? 'selected' : '') + '>0 — 1,500</option>' +
-                                        '<option value="1" ' + (decimalPlaces === 1 ? 'selected' : '') + '>1 — 1,500.0</option>' +
-                                        '<option value="2" ' + (decimalPlaces === 2 ? 'selected' : '') + '>2 — 1,500.00</option>' +
-                                    '</select>' +
-                                '</div>' +
-                            '</div>' +
-                        '</div>' +
-                        '<div class="grid grid-cols-1 md:grid-cols-2 gap-2">' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Allow Page Zoom</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Enable pinch-to-zoom gestures</p>' +
+                        '</section>' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Appearance</h3>' +
+                            '<div class="settings-card settings-card-group">' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Theme</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Premium, Light, or Classic</div>' +
                                     '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<div id="themeSegWrap" class="flex gap-1 p-0 h-8 rounded-lg shrink-0 items-center ' + _segWrap + '">' +
+                                        '<input type="checkbox" id="themeToggle" class="sr-only" tabindex="-1" aria-hidden="true" ' + (localStorage.getItem('mbt_active_theme') === 'dark' ? 'checked' : '') + ' onchange="mBT.ui.setTheme(this.checked ? \'dark\' : \'light\');">' +
+                                        '<input type="checkbox" id="classicThemeToggle" class="sr-only" tabindex="-1" aria-hidden="true" ' + (isClassic ? 'checked' : '') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.classicTheme = this.checked; saveBudget(); render();">' +
+                                        '<button type="button" data-theme-seg="premium" onclick="mBT_UI_Settings_setThemeSegment(\'premium\')" class="seg h-8 px-2 flex items-center rounded-md text-[9px] leading-4 font-black uppercase tracking-widest ' + (themeSeg === 'premium' ? _segOn : _segOff) + '">Premium</button>' +
+                                        '<button type="button" data-theme-seg="light" onclick="mBT_UI_Settings_setThemeSegment(\'light\')" class="seg h-8 px-2 flex items-center rounded-md text-[9px] leading-4 font-black uppercase tracking-widest ' + (themeSeg === 'light' ? _segOn : _segOff) + '">Light</button>' +
+                                        '<button type="button" data-theme-seg="classic" onclick="mBT_UI_Settings_setThemeSegment(\'classic\')" class="seg h-8 px-2 flex items-center rounded-md text-[9px] leading-4 font-black uppercase tracking-widest ' + (themeSeg === 'classic' ? _segOn : _segOff) + '">Classic</button>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Compact view</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Denser layout for small screens</div>' +
+                                    '</div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="compactModeToggle" ' + (isCompact ? 'checked' : '') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">' +
+                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Allow page zoom</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Enable pinch-to-zoom gestures</div>' +
+                                    '</div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="zoomToggle" ' + (allowZoom ? 'checked' : '') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.allowZoom = this.checked; saveBudget(); mBT.ui.updateViewport();" class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>' +
                                     '</label>' +
                                 '</div>' +
                             '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Display Theme</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Toggle Premium Dark / Classic Light</p>' +
+                        '</section>' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Navigation</h3>' +
+                            '<div class="settings-card settings-card-group">' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Open tools in-app</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Stages, Publish etc. open inside the main window</div>' +
                                     '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
-                                        '<input type="checkbox" id="themeToggle" ' + (localStorage.getItem('mbt_active_theme') === 'dark' ? 'checked' : '') + ' onchange="mBT.ui.setTheme(this.checked ? \'dark\' : \'light\');" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>' +
-                                    '</label>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Compact View</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Denser layout for small screens</p>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
-                                        '<input type="checkbox" id="compactModeToggle" ' + (isCompact ? 'checked' : '') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.compactMode = this.checked; saveBudget(); render();" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
-                                    '</label>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Classic Theme</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Legacy visual style (Pre-v19.54)</p>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
-                                        '<input type="checkbox" id="classicThemeToggle" ' + (isClassic ? 'checked' : '') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.classicTheme = this.checked; saveBudget(); render();" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-600"></div>' +
-                                    '</label>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Open Tools In-App</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Stages, Publish etc. open inside main window</p>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="navPrefToggle" ' + (JSON.parse(localStorage.getItem('mBT_openToolsInternal') !== null ? localStorage.getItem('mBT_openToolsInternal') : 'true') ? 'checked' : '') + ' onchange="localStorage.setItem(\'mBT_openToolsInternal\', this.checked);" class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
                                     '</label>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Auto-Fetch Rates</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Refresh exchange rates on startup</p>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Auto-hide nav</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">HUD slides away when idle</div>' +
                                     '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
-                                        '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' onchange="localStorage.setItem(\'' + storageKeyPrefix + 'auto_fetch_rates\', this.checked);" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>' +
-                                    '</label>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Auto-Hide Nav</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">HUD slides away when idle</p>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="autoHideNavToggle" ' + (autoHideNav ? 'checked' : '') + ' onchange="localStorage.setItem(\'mBT_autoHideNav\', this.checked); if(typeof mBTNavHUD !== \'undefined\') mBTNavHUD.apply();" class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>' +
                                     '</label>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Navigation Visibility</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Show/Hide HUD buttons</p>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Navigation visibility</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Show / hide individual HUD buttons</div>' +
                                     '</div>' +
-                                    '<button onclick="mBT.features.settings.openFooterVisModal()" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center gap-1">' + mBTAssets.eye + ' Manage</button>' +
+                                    '<button type="button" onclick="mBT.features.settings.openFooterVisModal()" class="inline-flex items-center gap-2 px-2 h-8 rounded-lg ' + _btnBg + ' text-[9px] leading-4 font-black uppercase tracking-widest shrink-0">' + mBTAssets.eye + ' Manage</button>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Developer Mode</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Show advanced tools and logs</p>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Show funding bar</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Display the Secured / Gap funding meter</div>' +
                                     '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
-                                        '<input type="checkbox" onchange="localStorage.setItem(\'mBT_devMode\', this.checked); location.reload();" ' + (localStorage.getItem('mBT_devMode') === 'true' ? 'checked' : '') + ' class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>' +
-                                    '</label>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Show Funding Bar</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Secured / Gap funding meter</p>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" ' + ((budget.settings && budget.settings.showFundingBar === false) ? '' : 'checked') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.showFundingBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
                                     '</label>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="settings-card">' +
-                                '<div class="flex items-center justify-between">' +
-                                    '<div>' +
-                                        '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Show Timeline Bar</h4>' +
-                                        '<p class="text-[9px] text-slate-400 font-bold mt-0.5">Display the Stages sparkline HUD</p>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Show timeline bar</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Display the Stages sparkline HUD</div>' +
                                     '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer">' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" ' + ((budget.settings && budget.settings.showTimelineBar === false) ? '' : 'checked') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.showTimelineBar = this.checked; saveBudget(); mBT.ui.toolbar.update();" class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
                                     '</label>' +
                                 '</div>' +
                             '</div>' +
-                        '</div>' +
-                        '<div class="grid grid-cols-3 gap-2">' +
+                        '</section>' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Data</h3>' +
+                            '<div class="settings-card settings-card-group">' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Auto-fetch rates</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Refresh exchange rates on startup</div>' +
+                                    '</div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' onchange="localStorage.setItem(\'' + storageKeyPrefix + 'auto_fetch_rates\', this.checked);" class="sr-only peer">' +
+                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                            '</div>' +
+                        '</section>' +
+                        '<div class="grid grid-cols-3 gap-2 mt-4">' +
                              '<a href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/mBT/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ' + _btnBg + ' rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">' + mBTAssets.cloud + ' Get Beta</a>' +
-                             '<button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 py-2 ' + _btnRose + ' rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">' + mBTAssets.zap + ' Fix Bugs</button>' +
-                             '<button onclick="mBTME.close(\'settingsModal\'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 py-2 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] uppercase tracking-widest hover:opacity-90 transition-opacity">' + mBTAssets.coffee + ' Support</button>' +
+                             '<button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 h-8 ' + _btnRose + ' rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest transition-colors">' + mBTAssets.zap + ' Fix Bugs</button>' +
+                             '<button onclick="mBTME.close(\'settingsModal\'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 h-8 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest hover:opacity-90 transition-opacity">' + mBTAssets.coffee + ' Support</button>' +
                         '</div>' +
-                        '<div class="grid grid-cols-2 gap-2 mt-1">' +
-                            '<button onclick="mBT.ui.showLegalDoc(\'UserAgreement.md\')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">User Agreement</button>' +
-                            '<button onclick="mBT.ui.showLegalDoc(\'PrivacyPolicy.md\')" class="py-1.5 bg-slate-50 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors">Privacy Policy</button>' +
+                        '<div class="grid grid-cols-2 gap-2 mt-2">' +
+                            '<button onclick="mBT.ui.showLegalDoc(\'UserAgreement.md\')" class="py-1.5 ' + _btnBg + ' rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors">User Agreement</button>' +
+                            '<button onclick="mBT.ui.showLegalDoc(\'PrivacyPolicy.md\')" class="py-1.5 ' + _btnBg + ' rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors">Privacy Policy</button>' +
                         '</div>' +
-                        '<div id="storageHealthCard" class="settings-card mt-1">' +
+                        '<div id="storageHealthCard" class="settings-card mt-2">' +
                             '<div class="flex justify-between items-center mb-1.5">' +
                                 '<h4 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Storage Health</h4>' +
-                                '<span id="storageHealthPct" class="text-[9px] font-black text-slate-400">Checking...</span>' +
+                                '<span id="storageHealthPct" class="text-[9px] font-black settings-text-muted">Checking...</span>' +
                             '</div>' +
-                            '<div class="w-full bg-slate-200 rounded-full h-1.5 mb-1.5">' +
+                            '<div class="w-full ' + _sw + ' rounded-full h-1.5 mb-1.5">' +
                                 '<div id="storageHealthBar" class="h-1.5 rounded-full bg-emerald-500 transition-all" style="width:0%"></div>' +
                             '</div>' +
-                            '<p id="storageHealthDetail" class="text-[8px] text-slate-400 font-bold">Calculating local storage usage...</p>' +
+                            '<p id="storageHealthDetail" class="text-[8px] settings-text-muted font-bold">Calculating local storage usage...</p>' +
                         '</div>' +
                     '</div>';
         }
         if (tabName === 'connections') {
             /* Webhook lives only in assistant settings sheet (AIModule openChat).
                Same key: storageKeyPrefix + cloudWebhook. Do not reintroduce a card here. */
+            var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var _card = isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-100';
+            var _sep = isDark ? 'border-slate-700' : 'border-slate-100';
+            var _headingMuted = isDark ? 'text-slate-500' : 'text-slate-400';
+            var _stripBg = isDark ? 'bg-slate-900/40' : 'bg-slate-50/60';
+            var _meta = isDark ? 'text-slate-400' : 'text-slate-500';
+            var _metaLight = isDark ? 'text-slate-500' : 'text-slate-400';
+            var _inpWhite = isDark ? 'bg-slate-800 border border-slate-600 text-white' : 'bg-white border border-slate-200 text-slate-800';
+            var _recheckBtn = isDark ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-slate-900 text-white hover:bg-black';
+            var _addRowBg = isDark ? 'bg-slate-900/30' : 'bg-slate-50';
+            var _hint = isDark ? 'text-slate-500' : 'text-slate-400';
+            var _link = isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500';
             var ma = window.mBTAssistant;
             var aiProvidersCardBody = '';
 
             if (!ma) {
-                aiProvidersCardBody = '<div class="p-4 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest">AI Service Unavailable</div>';
+                aiProvidersCardBody = '<div class="settings-card settings-card-group overflow-hidden ' + _card + ' p-4 text-center ' + _hint + ' text-[10px] leading-4 font-black uppercase tracking-widest">AI Service Unavailable</div>';
             } else {
                 var providerKeys = Object.keys(ma.ENDPOINTS || {});
                 var activeProvider = ma.getProvider();
@@ -850,13 +996,13 @@
                     : 'Checking \u00b7 free endpoint';
 
                 var headerStrip =
-                    '<div class="flex items-center gap-4 px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">' +
-                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="connCountLive" class="text-[9px] font-black uppercase tracking-widest text-slate-500">' + liveN + ' live</span></div>' +
-                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="connCountDown" class="text-[9px] font-black uppercase tracking-widest text-slate-500">' + downN + ' down</span></div>' +
-                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-300"></span><span id="connCountNotSet" class="text-[9px] font-black uppercase tracking-widest text-slate-400">' + notSetN + ' not set</span></div>' +
+                    '<div class="settings-row flex items-center gap-4 px-2 border-b ' + _sep + ' ' + _stripBg + '">' +
+                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="connCountLive" class="text-[9px] leading-4 font-black uppercase tracking-widest ' + _meta + '">' + liveN + ' live</span></div>' +
+                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="connCountDown" class="text-[9px] leading-4 font-black uppercase tracking-widest ' + _meta + '">' + downN + ' down</span></div>' +
+                        '<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-300"></span><span id="connCountNotSet" class="text-[9px] leading-4 font-black uppercase tracking-widest ' + _metaLight + '">' + notSetN + ' not set</span></div>' +
                         '<div class="flex-1"></div>' +
-                        '<span id="connCheckedAt" class="text-[9px] font-bold text-slate-400">' + checkedLabel + '</span>' +
-                        '<button type="button" onclick="window.mBT_UI_Conn_recheck()" class="px-2.5 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-black transition-all">Recheck</button>' +
+                        '<span id="connCheckedAt" class="text-[9px] leading-4 font-bold ' + _metaLight + '">' + checkedLabel + '</span>' +
+                        '<button type="button" onclick="window.mBT_UI_Conn_recheck()" class="h-8 px-2 ' + _recheckBtn + ' rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest transition-all shrink-0">Recheck</button>' +
                     '</div>';
 
                 var rowsHtml = '';
@@ -872,20 +1018,22 @@
                 var firstKeyLink = KEY_DASHBOARDS[activeProvider] || KEY_DASHBOARDS.openai || '#';
 
                 var addRow =
-                    '<div class="border-t-2 border-slate-900 bg-slate-50 px-4 py-3">' +
-                        '<div class="flex items-center gap-2">' +
-                            '<button type="button" onclick="window.mBT_UI_Conn_add()" class="w-7 h-7 shrink-0 rounded-lg bg-blue-600 text-white text-sm font-black flex items-center justify-center hover:bg-blue-500 active:scale-95 transition-all" title="Save provider key">+</button>' +
-                            '<div class="w-[190px] shrink-0"><input id="connAddProvider" list="connProviderList" placeholder="Provider name" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 placeholder:text-slate-300"><datalist id="connProviderList">' + datalistOpts + '</datalist></div>' +
-                            '<div class="flex-1 min-w-0"><input id="connAddKey" type="password" placeholder="API key" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 placeholder:text-slate-300"></div>' +
-                            '<a id="connGetKeyLink" href="' + esc(firstKeyLink) + '" target="_blank" rel="noopener" class="shrink-0 text-[8px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-500 px-1">Get key \u2197</a>' +
+                    '<div class="border-t ' + _sep + ' ' + _addRowBg + '">' +
+                        '<div class="settings-row settings-row--single flex items-center gap-2 px-2">' +
+                            '<button type="button" onclick="window.mBT_UI_Conn_add()" class="w-8 h-8 shrink-0 rounded-lg bg-blue-600 text-white text-[12px] leading-4 font-black flex items-center justify-center hover:bg-blue-500 active:scale-95 transition-all" title="Save provider key">+</button>' +
+                            '<div class="w-[140px] shrink-0"><input id="connAddProvider" list="connProviderList" placeholder="Provider name" class="w-full h-8 ' + _inpWhite + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 placeholder:text-slate-300 box-border"><datalist id="connProviderList">' + datalistOpts + '</datalist></div>' +
+                            '<div class="flex-1 min-w-0"><input id="connAddKey" type="password" placeholder="API key" class="w-full h-8 ' + _inpWhite + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 placeholder:text-slate-300 box-border"></div>' +
+                            '<a id="connGetKeyLink" href="' + esc(firstKeyLink) + '" target="_blank" rel="noopener" class="shrink-0 text-[8px] leading-4 font-black uppercase tracking-widest ' + _link + ' px-1">Get key \u2197</a>' +
                         '</div>' +
-                        '<p class="text-[9px] font-bold text-slate-400 mt-2 ml-9">Stored on this device only. Sent to the provider when you use chat, fill or generation.</p>' +
+                        '<div class="settings-row settings-row--single flex items-center px-2">' +
+                            '<p class="text-[9px] leading-4 font-bold ' + _hint + ' ml-8 truncate">Stored on this device only. Sent to the provider when you use chat, fill or generation.</p>' +
+                        '</div>' +
                     '</div>';
 
                 aiProvidersCardBody =
-                    '<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">' +
+                    '<div class="settings-card settings-card-group overflow-hidden ' + _card + '">' +
                         headerStrip +
-                        '<div id="connProviderRows" class="divide-y divide-slate-100 overflow-y-auto no-scrollbar" style="max-height:250px;">' +
+                        '<div id="connProviderRows" class="overflow-y-auto no-scrollbar" style="max-height:250px;">' +
                             rowsHtml +
                         '</div>' +
                         addRow +
@@ -899,17 +1047,37 @@
                 }, 0);
             }
 
-            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="connection-card">' +
+            return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-connections-panel animate-in fade-in duration-300">' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest px-0.5 ' + _headingMuted + '">AI providers</h3>' +
                             aiProvidersCardBody +
-                        '</div>' +
+                        '</section>' +
                     '</div>';
         }
         if (tabName === 'cloud') {
             var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-            var _i = isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-800';
-            var _sep = isDark ? 'border-slate-700' : 'border-slate-50';
+            var _i = isDark ? 'bg-slate-900 text-white ring-1 ring-inset ring-slate-600' : 'bg-slate-50 text-slate-800 ring-1 ring-inset ring-slate-200';
+            var _sep = isDark ? 'border-slate-700' : 'border-slate-100';
             var _sw = isDark ? 'bg-slate-600' : 'bg-slate-200';
+            var _card = isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200';
+            var _headingMuted = isDark ? 'text-slate-500' : 'text-slate-400';
+            var _txt = isDark ? 'text-slate-100' : 'text-slate-800';
+            var _muted = isDark ? 'text-slate-400' : 'text-slate-400';
+            var _mutedStrong = isDark ? 'text-slate-400' : 'text-slate-500';
+            var _pill = isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-400';
+            var _pillDot = isDark ? 'bg-slate-500' : 'bg-slate-300';
+            var _signOut = isDark
+                ? 'h-8 px-2 shrink-0 text-slate-400 rounded-lg border border-slate-600 font-black text-[9px] leading-4 uppercase tracking-widest hover:text-rose-400 hover:border-rose-500 transition-all'
+                : 'h-8 px-2 shrink-0 text-slate-400 rounded-lg border border-slate-200 font-black text-[9px] leading-4 uppercase tracking-widest hover:text-rose-500 hover:border-rose-300 transition-all';
+            var _pwBtn = isDark
+                ? 'text-[9px] leading-4 font-black text-slate-400 uppercase tracking-widest hover:text-slate-200 transition-colors'
+                : 'text-[9px] leading-4 font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors';
+            var _pwSubmit = isDark
+                ? 'w-full h-8 bg-slate-700 text-slate-200 rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-slate-600 transition-all active:scale-95'
+                : 'w-full h-8 bg-slate-100 text-slate-600 rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95';
+            var _avatar = isDark
+                ? 'w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center text-emerald-400 text-[10px] leading-4 font-black border border-emerald-800 shrink-0 uppercase'
+                : 'w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 text-[10px] leading-4 font-black border border-emerald-100 shrink-0 uppercase';
             var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
             var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
             var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
@@ -919,113 +1087,140 @@
             var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
             var ogShareContacts = JSON.parse(localStorage.getItem('moo_og_share_contacts') || 'false');
 
+            /* Data-driven home markets from OpenGate RATE_REGIONS (not demo hardcode) */
+            var _regionMap = (window.mBTOG && mBTOG.RATE_REGIONS) ? mBTOG.RATE_REGIONS : {};
+            var regionOpts = Object.keys(_regionMap).map(function (r) {
+                return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>';
+            }).join('');
+
+            var fieldCls = 'w-full px-2 ' + _i + ' border-none rounded-lg text-[10px] leading-4 font-bold outline-none box-border';
+            var toggleTrack = 'w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all';
+
             var authSectionHtml = isSignedIn ?
-                ('<div class="flex items-center justify-between">' +
-                    '<div class="flex items-center gap-3">' +
-                        '<div class="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs border border-emerald-100 uppercase tracking-tighter">' +
-                            signedInEmail.charAt(0) +
-                        '</div>' +
-                        '<div>' +
-                            '<div class="text-[10px] font-black settings-text-primary tracking-tight leading-none mb-1">' + esc(signedInEmail) + '</div>' +
-                            '<div class="flex items-center gap-1.5">' +
-                                '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>' +
-                                '<span class="text-[8px] text-slate-400 uppercase tracking-widest font-black">Connected to Cloud</span>' +
+                ('<div class="settings-row settings-row--account flex items-center justify-between gap-4 px-2">' +
+                    '<div class="flex items-center gap-2 flex-1 min-w-0">' +
+                        '<div class="' + _avatar + '">' + esc(signedInEmail.charAt(0) || '?') + '</div>' +
+                        '<div class="min-w-0 flex flex-col gap-2">' +
+                            '<div class="text-[10px] leading-4 font-black ' + _txt + ' truncate">' + esc(signedInEmail) + '</div>' +
+                            '<div class="flex items-center gap-2 min-w-0">' +
+                                '<span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>' +
+                                '<span class="text-[8px] leading-4 ' + _muted + ' uppercase tracking-widest font-black truncate">Connected to Cloud</span>' +
                             '</div>' +
                         '</div>' +
                     '</div>' +
-                    '<button onclick="mBT.features.settings.cloudSignOut()" class="px-3 py-1.5 text-slate-400 hover:text-rose-500 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all">Sign Out</button>' +
+                    /* Account-affecting — keep explicit Sign Out affordance (handler unchanged) */
+                    '<button type="button" onclick="mBT.features.settings.cloudSignOut()" class="' + _signOut + '">Sign Out</button>' +
                 '</div>') :
-                ('<p class="text-[10px] font-bold text-slate-400 mb-3 leading-relaxed">Sign in to sync your projects and collaborate on shared budgets.</p>' +
-                '<button onclick="window.mBTShowCollabAuth(function(){ mBT.features.settings.open(\'cloud\'); });" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">Sign In / Create Account</button>');
+                ('<div class="px-2 py-2">' +
+                    '<p class="text-[10px] leading-4 font-bold ' + _muted + ' mb-2">Sign in to sync your projects and collaborate on shared budgets.</p>' +
+                    '<button type="button" onclick="window.mBTShowCollabAuth(function(){ mBT.features.settings.open(\'cloud\'); });" class="w-full h-8 bg-blue-600 text-white rounded-lg font-black text-[10px] leading-4 uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95">Sign In / Create Account</button>' +
+                '</div>');
 
-            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
+            return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-cloud-panel animate-in fade-in duration-300">' +
 
-                        '<!-- Authentication Section -->' +
-                        '<div class="settings-card transition-all duration-300">' +
-                            authSectionHtml +
-                        '</div>' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest ' + _headingMuted + ' px-0.5">Account</h3>' +
+                            '<div class="settings-card settings-card-group rounded-xl overflow-hidden ' + _card + ' transition-all duration-300">' +
+                                authSectionHtml +
+                            '</div>' +
+                        '</section>' +
 
-                        '<!-- User Profile (visible when signed in) -->' +
                         (isSignedIn ?
-                        ('<div class="settings-card space-y-3">' +
-                            '<div>' +
-                                '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Profile Identity</h3>' +
-                                '<p class="text-[9px] text-slate-400 font-bold">Public identity used for community database contributions.</p>' +
-                            '</div>' +
-                            '<div class="grid grid-cols-1 gap-2">' +
-                                '<div class="space-y-1.5">' +
-                                    '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Name</label>' +
-                                    '<input type="text" id="profileDisplayName" placeholder="e.g. Maverick J." value="' + esc(profileName) + '" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                        ('<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest ' + _headingMuted + ' px-0.5">Profile identity</h3>' +
+                            '<div class="settings-card settings-card-group rounded-xl overflow-hidden ' + _card + '">' +
+                                '<div class="settings-intro-row">' +
+                                    '<p class="text-[9px] leading-4 ' + _muted + ' font-bold truncate">Public identity used for community database contributions.</p>' +
                                 '</div>' +
-                                '<div class="grid grid-cols-2 gap-2">' +
-                                    '<div class="space-y-1.5">' +
-                                        '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Home Market</label>' +
-                                        '<select id="profileRegion" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer">' +
-                                            Object.keys(mBTOG.RATE_REGIONS).map(function (r) { return '<option value="' + r + '"' + (profileRegion === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') +
-                                        '</select>' +
+                                '<div class="settings-field-row">' +
+                                    '<span class="text-[8px] leading-4 font-black ' + _muted + ' uppercase tracking-widest">Display name</span>' +
+                                    '<input type="text" id="profileDisplayName" placeholder="e.g. Maverick J." value="' + esc(profileName) + '" class="' + fieldCls + '">' +
+                                '</div>' +
+                                '<div class="settings-field-grid grid grid-cols-2">' +
+                                    '<div class="settings-field-row">' +
+                                        '<span class="text-[8px] leading-4 font-black ' + _muted + ' uppercase tracking-widest">Home market</span>' +
+                                        '<select id="profileRegion" class="' + fieldCls + ' cursor-pointer">' + regionOpts + '</select>' +
                                     '</div>' +
-                                    '<div class="space-y-1.5">' +
-                                        '<label class="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Standard Role</label>' +
-                                        '<input type="text" id="profileRole" placeholder="Producer / DP" value="' + esc(profileRole) + '" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
+                                    '<div class="settings-field-row">' +
+                                        '<span class="text-[8px] leading-4 font-black ' + _muted + ' uppercase tracking-widest">Standard role</span>' +
+                                        '<input type="text" id="profileRole" placeholder="Producer / DP" value="' + esc(profileRole) + '" class="' + fieldCls + '">' +
                                     '</div>' +
                                 '</div>' +
-                            '</div>' +
-                            '<div class="pt-3 border-t ' + _sep + '">' +
-                                '<button onclick="var el=document.getElementById(\'passwordChangeSect\'); el.classList.toggle(\'hidden\');" class="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 mb-2 transition-colors">Change Password?</button>' +
-                                '<div id="passwordChangeSect" class="hidden space-y-2 animate-in slide-in-from-top-2 duration-300">' +
-                                    '<input type="password" id="newPasswordInput" placeholder="New Secret Password" class="w-full px-3 py-2 ' + _i + ' border-none rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 transition-all">' +
-                                    '<button onclick="mBT.features.settings.cloudChangePassword()" class="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Update Security</button>' +
+                                '<div class="settings-row settings-row--single flex items-center px-2 border-t ' + _sep + '">' +
+                                    /* Account-affecting — secondary link style, still requires explicit click + existing confirm in handler */
+                                    '<button type="button" onclick="var el=document.getElementById(\'passwordChangeSect\'); el.classList.toggle(\'hidden\');" class="' + _pwBtn + '">Change Password?</button>' +
+                                '</div>' +
+                                '<div id="passwordChangeSect" class="hidden px-2 pb-2 space-y-2 animate-in slide-in-from-top-2 duration-300">' +
+                                    '<input type="password" id="newPasswordInput" placeholder="New Secret Password" class="' + fieldCls + '">' +
+                                    '<button type="button" onclick="mBT.features.settings.cloudChangePassword()" class="' + _pwSubmit + '">Update Security</button>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--button flex items-center px-2 border-t ' + _sep + '">' +
+                                    '<button type="button" onclick="mBT.features.settings.saveProfile()" class="w-full h-8 bg-slate-900 text-white rounded-lg font-black text-[10px] leading-4 uppercase tracking-widest hover:bg-black transition-all active:scale-95">Synchronize Profile</button>' +
                                 '</div>' +
                             '</div>' +
-                            '<button onclick="mBT.features.settings.saveProfile()" class="w-full py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all active:scale-95">Synchronize Profile</button>' +
-                        '</div>') : '') +
+                        '</section>') : '') +
 
-                        '<!-- DATABASE Community Rates -->' +
-                        '<div class="settings-card">' +
-                            '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Community Rates</h3>' +
-                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Pull updated industry rates from the shared community database. No account required.</p>' +
-                            '<div class="flex items-center justify-between mb-2">' +
-                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-sync on start</span>' +
-                                '<label class="relative inline-flex items-center cursor-pointer">' +
-                                    '<input type="checkbox" id="ogCloudSyncToggle" ' + (ogCloudOn ? 'checked' : '') + ' onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">' +
-                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
-                                '</label>' +
-                            '</div>' +
-                            '<button onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert(\'DATABASE\', n + \' rate(s) pulled from community.\'); mBT.features.settings.open(\'cloud\'); }).catch(function(e){ console.error(\'Sync Failed:\', e); mBTME.alert(\'Sync Error\', \'Failed to sync rates from community.\'); }); } else { mBTME.alert(\'DATABASE\', \'Engine not available.\'); }" class="w-full py-2 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>' +
-                        '</div>' +
-
-                        '<!-- Project Backup + Sync -->' +
-                        '<div class="settings-card">' +
-                            '<div class="flex items-center justify-between mb-0.5">' +
-                                '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary">Background Sync</h3>' +
-                                '<div id="sync-heartbeat-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-400">' +
-                                    '<span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>' +
-                                    'Status Check...' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest ' + _headingMuted + ' px-0.5">Community rates</h3>' +
+                            '<div class="settings-card settings-card-group rounded-xl overflow-hidden ' + _card + '">' +
+                                '<div class="settings-intro-row">' +
+                                    '<p class="text-[9px] leading-4 ' + _muted + ' font-bold truncate">Pull updated industry rates from the shared community database. No account required.</p>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
+                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Auto-sync on start</span>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="ogCloudSyncToggle" ' + (ogCloudOn ? 'checked' : '') + ' onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">' +
+                                        '<div class="' + toggleTrack + ' peer-checked:bg-emerald-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--button flex items-center px-2">' +
+                                    '<button type="button" onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert(\'DATABASE\', n + \' rate(s) pulled from community.\'); mBT.features.settings.open(\'cloud\'); }).catch(function(e){ console.error(\'Sync Failed:\', e); mBTME.alert(\'Sync Error\', \'Failed to sync rates from community.\'); }); } else { mBTME.alert(\'DATABASE\', \'Engine not available.\'); }" class="w-full h-8 bg-emerald-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>' +
                                 '</div>' +
                             '</div>' +
-                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>' +
-                            '<div class="flex items-center justify-between mb-2">' +
-                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Auto-Sync Changes</span>' +
-                                '<label class="relative inline-flex items-center cursor-pointer">' +
-                                    '<input type="checkbox" id="syncOnReconnectToggle" ' + (syncOnReconnect ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_supabase_sync_on_reconnect\', this.checked ? \'true\' : \'false\');" class="sr-only peer">' +
-                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>' +
-                                '</label>' +
-                            '</div>' +
-                            '<button onclick="if(window.mBTSync && localStorage.getItem(\'mbt_supabase_auth_token\')){ mBTSync.pushAll().then(function(r){ mBTME.alert(\'Backup\', r.synced + \' records pushed, \' + r.errors + \' errors.\'); }); } else { mBTME.alert(\'Backup\', \'You must be signed in to force push data.\'); }" class="w-full py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>' +
-                        '</div>' +
+                        '</section>' +
 
-                        '<!-- Contact Sharing Privacy -->' +
-                        '<div class="settings-card">' +
-                            '<h3 class="text-[10px] font-black uppercase tracking-widest settings-text-primary mb-0.5">Contact Sharing</h3>' +
-                            '<p class="text-[9px] text-slate-400 font-bold mb-2">Allow contacts you mark as shared to be published to the OpenGate community roster. Only contacts with sharing enabled are affected.</p>' +
-                            '<div class="flex items-center justify-between">' +
-                                '<span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Publish Shared Contacts</span>' +
-                                '<label class="relative inline-flex items-center cursor-pointer">' +
-                                    '<input type="checkbox" id="ogShareContactsToggle" ' + (ogShareContacts ? 'checked' : '') + ' onchange="mBT.features.settings.toggleContactSharing(this.checked);" class="sr-only peer">' +
-                                    '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>' +
-                                '</label>' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest ' + _headingMuted + ' px-0.5">Background sync</h3>' +
+                            '<div class="settings-card settings-card-group rounded-xl overflow-hidden ' + _card + '">' +
+                                '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
+                                    '<span class="text-[10px] leading-4 font-black uppercase tracking-widest ' + _txt + '">Status</span>' +
+                                    '<div id="sync-heartbeat-pill" class="inline-flex items-center gap-2 h-8 px-2 rounded-full text-[8px] leading-4 font-black uppercase ' + _pill + '">' +
+                                        '<span class="w-2 h-2 rounded-full ' + _pillDot + '"></span>' +
+                                        'Status Check...' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="settings-intro-row">' +
+                                    '<p class="text-[9px] leading-4 ' + _muted + ' font-bold truncate">Automatically sync your projects, stages, and rates to the cloud for cross-device access.</p>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
+                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Auto-sync changes</span>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="syncOnReconnectToggle" ' + (syncOnReconnect ? 'checked' : '') + ' onchange="localStorage.setItem(\'mbt_supabase_sync_on_reconnect\', this.checked ? \'true\' : \'false\');" class="sr-only peer">' +
+                                        '<div class="' + toggleTrack + ' peer-checked:bg-blue-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--button flex items-center px-2">' +
+                                    '<button type="button" onclick="if(window.mBTSync && localStorage.getItem(\'mbt_supabase_auth_token\')){ mBTSync.pushAll().then(function(r){ mBTME.alert(\'Backup\', r.synced + \' records pushed, \' + r.errors + \' errors.\'); }); } else { mBTME.alert(\'Backup\', \'You must be signed in to force push data.\'); }" class="w-full h-8 bg-blue-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-blue-500 transition-all">Force Push Data Now</button>' +
+                                '</div>' +
                             '</div>' +
-                        '</div>' +
+                        '</section>' +
+
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest ' + _headingMuted + ' px-0.5">Contact sharing</h3>' +
+                            '<div class="settings-card settings-card-group rounded-xl overflow-hidden ' + _card + '">' +
+                                '<div class="settings-intro-row">' +
+                                    '<p class="text-[9px] leading-4 ' + _muted + ' font-bold truncate">Allow contacts you mark as shared to be published to the OpenGate community roster. Only contacts with sharing enabled are affected.</p>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
+                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Publish shared contacts</span>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="ogShareContactsToggle" ' + (ogShareContacts ? 'checked' : '') + ' onchange="mBT.features.settings.toggleContactSharing(this.checked);" class="sr-only peer">' +
+                                        '<div class="' + toggleTrack + ' peer-checked:bg-violet-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                            '</div>' +
+                        '</section>' +
+
                     '</div>';
         }
         if (tabName === 'database') {
@@ -1036,11 +1231,16 @@
                 { id: 'templates', label: 'Templates' },
                 { id: 'trash', label: 'Bin' }
             ];
-            var nav = '<div class="flex border-b border-slate-100 bg-slate-50/50 rounded-t-xl select-none">' +
+            var dbIsDark = localStorage.getItem('mbt_active_theme') === 'dark';
+            var navBg = dbIsDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50/50 border-slate-100';
+            var nav = '<div class="flex border-b ' + navBg + ' rounded-t-xl select-none">' +
                 dbTabs.map(function (t) {
                     var isActive = t.id === dbSubTab;
-                    var cls = isActive ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50';
-                    return '<button type="button" data-action="nav-settings-db" data-tab="' + t.id + '" class="flex-1 py-0.5 leading-none text-[10px] font-black uppercase tracking-widest transition-all ' + cls + '">' + t.label + '</button>';
+                    var cls = isActive
+                        ? (dbIsDark ? 'bg-slate-800 text-blue-400 border-b-2 border-blue-500 shadow-sm' : 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm')
+                        : (dbIsDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50');
+                    /* py-2 + leading-4 = 32px sub-tab buttons (demo db-sub-tab) */
+                    return '<button type="button" data-action="nav-settings-db" data-tab="' + t.id + '" class="db-sub-tab flex-1 py-2 text-[10px] leading-4 font-black uppercase tracking-widest transition-all ' + cls + '">' + t.label + '</button>';
                 }).join('') +
                 '</div>';
 
@@ -1053,9 +1253,12 @@
         }
         if (tabName === 'updates') {
             var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
-            var _card = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100';
-            var _update = isDark ? 'bg-amber-900/30 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-100 text-amber-600';
-            var _checking = isDark ? 'bg-blue-900/30 border-blue-700 text-blue-300' : 'bg-blue-50 border-blue-100 text-blue-600';
+            var _card = isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-100';
+            var _divider = isDark ? 'border-t border-slate-700' : 'border-t border-slate-100';
+            var _headingMuted = isDark ? 'text-slate-500' : 'text-slate-400';
+            var _update = isDark ? 'bg-amber-900/30 text-amber-300' : 'bg-amber-50 text-amber-600';
+            var _checking = isDark ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-600';
+            var _ok = isDark ? 'bg-emerald-900/30 text-emerald-300' : 'bg-emerald-50 text-emerald-600';
             var updateStatus = (window.mBT && window.mBT.registry && window.mBT.registry.updateStatus) || {};
             var updateAvailable = updateStatus.available || false;
             var isChecking = updateStatus.checking || false;
@@ -1064,47 +1267,90 @@
             var currentVersion = updateStatus.localVersion ||
                 (typeof window.APP_VERSION !== 'undefined' ? 'v' + window.APP_VERSION : 'unknown');
 
-            var statusMsg = '';
+            var statusRowCls = '';
+            var statusInner = '';
             if (isChecking) {
-                statusMsg = '<div class="border rounded-lg p-3 ' + _checking + '"><p class="text-[9px] font-bold text-center">Checking for updates..</p></div>';
+                statusRowCls = _divider + ' ' + _checking;
+                statusInner = '<p class="text-[9px] leading-4 font-bold text-center">Checking for updates..</p>';
             } else if (updateAvailable) {
-                statusMsg = '<div class="border rounded-lg p-3 ' + _update + '"><p class="text-[9px] font-bold text-center">Update ready — reload to activate the latest version</p></div>';
+                statusRowCls = _divider + ' ' + _update;
+                statusInner = '<p class="text-[9px] leading-4 font-bold text-center">Update ready \u2014 reload to activate the latest version</p>';
             } else {
-                statusMsg = '<div class="border rounded-lg p-3 border-emerald-100 bg-emerald-50 text-emerald-600"><p class="text-[9px] font-bold text-center">You are on the latest version (' + esc(currentVersion) + ')</p></div>';
+                statusRowCls = _divider + ' ' + _ok;
+                statusInner = '<p class="text-[9px] leading-4 font-bold text-center">You are on the latest version (' + esc(currentVersion) + ')</p>';
             }
 
-            return '<div class="h-full overflow-y-auto no-scrollbar p-4 space-y-3 animate-in fade-in duration-300">' +
-                        '<div class="border rounded-xl p-6 ' + _card + ' text-center">' +
-                            '<h3 class="text-xs font-black uppercase tracking-widest mb-6 text-slate-600">Check for mBT Update</h3>' +
-                            '<div class="space-y-3">' +
-                                '<button onclick="mBT.features.settings.checkForUpdates()" ' + (isChecking ? 'disabled' : '') + ' class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 ' + (isChecking ? 'opacity-50 cursor-not-allowed' : '') + '">' +
-                                    (isChecking ? '⏳ Checking..' : 'Check for Updates') +
-                                '</button>' +
-                                (updateAvailable ? '<button onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' : '') +
+            var applyBtn = updateAvailable
+                ? '<div class="settings-row settings-row--button flex items-center px-2 ' + _divider + '">' +
+                    '<button type="button" onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full h-8 bg-emerald-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' +
+                  '</div>'
+                : '';
+
+            return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-updates-panel animate-in fade-in duration-300">' +
+                        '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest px-0.5 ' + _headingMuted + '">Updates</h3>' +
+                            '<div class="settings-card settings-card-group overflow-hidden ' + _card + '">' +
+                                '<div class="settings-row settings-row--button flex items-center px-2">' +
+                                    '<button type="button" onclick="mBT.features.settings.checkForUpdates()" ' + (isChecking ? 'disabled' : '') + ' class="w-full h-8 bg-blue-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 ' + (isChecking ? 'opacity-50 cursor-not-allowed' : '') + '">' +
+                                        (isChecking ? '\u23f3 Checking..' : 'Check for Updates') +
+                                    '</button>' +
+                                '</div>' +
+                                applyBtn +
+                                '<div class="settings-row settings-row--single flex items-center justify-center px-2 ' + statusRowCls + '">' +
+                                    statusInner +
+                                '</div>' +
                             '</div>' +
-                            '<div class="mt-4">' +
-                                statusMsg +
-                            '</div>' +
-                        '</div>' +
+                        '</section>' +
                     '</div>';
         }
         return '<div class="p-8 text-center text-slate-300 font-bold uppercase tracking-widest">Logic Stream Not Found</div>';
     };
 
-    /* --- mBT UI Theme Logic (Bridge Implementation) --- */
+    /* --- mBT UI Theme Logic (Bridge Implementation) ---
+       Tokens live under .mbt-theme-dark on <html> (mbt-core.css). Both
+       documentElement and body must carry the theme class; never leave
+       light/dark coexisting or stale bg-gray-100 next to bg-slate-950. */
     mBT.ui = mBT.ui || {};
+    mBT.ui.applyThemeClasses = function (themeName) {
+        themeName = (themeName === 'dark') ? 'dark' : 'light';
+        var themeClass = 'mbt-theme-' + themeName;
+        var roots = [document.documentElement, document.body];
+        var i, el, cn;
+        for (i = 0; i < roots.length; i++) {
+            el = roots[i];
+            if (!el) continue;
+            cn = String(el.className || '');
+            /* Strip all mbt-theme-* and light/dark body surface utilities */
+            cn = cn.replace(/\bmbt-theme-\S+/g, ' ');
+            cn = cn.replace(/\bbg-gray-100\b/g, ' ');
+            cn = cn.replace(/\bbg-slate-50\b/g, ' ');
+            cn = cn.replace(/\bbg-slate-950\b/g, ' ');
+            cn = cn.replace(/\btext-slate-900\b/g, ' ');
+            cn = cn.replace(/\btext-slate-100\b/g, ' ');
+            cn = cn.replace(/\s+/g, ' ').trim();
+            el.className = cn;
+            if (el.classList) {
+                el.classList.add(themeClass);
+            } else {
+                el.className = (el.className ? el.className + ' ' : '') + themeClass;
+            }
+        }
+        /* Body surface utilities — pair toggled cleanly every switch */
+        if (document.body && document.body.classList) {
+            if (themeName === 'dark') {
+                document.body.classList.add('bg-slate-950');
+                document.body.classList.add('text-slate-100');
+            } else {
+                document.body.classList.add('bg-gray-100');
+                document.body.classList.add('text-slate-900');
+            }
+        }
+    };
     mBT.ui.setTheme = function (themeName) {
         themeName = themeName || 'dark';
+        if (themeName !== 'dark' && themeName !== 'light') themeName = 'light';
         localStorage.setItem('mbt_active_theme', themeName);
-        document.body.className = document.body.className.replace(/\bmbt-theme-\S+/g, '');
-        document.body.classList.add('mbt-theme-' + themeName);
-        if (themeName === 'dark') {
-            document.body.classList.add('bg-slate-950');
-            document.body.classList.remove('bg-slate-50');
-        } else {
-            document.body.classList.add('bg-slate-50');
-            document.body.classList.remove('bg-slate-950');
-        }
+        mBT.ui.applyThemeClasses(themeName);
         window.dispatchEvent(new CustomEvent('mbt:theme-changed', { detail: { theme: themeName } }));
     };
 
@@ -1424,6 +1670,12 @@
 
     function _mBTConnBuildRowHtml(provider, ma, activeProvider, status, escFn) {
         var esc = escFn || _mBTConnEsc;
+        var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
+        var _inp = isDark ? 'bg-slate-700 border border-slate-600 text-white' : 'bg-slate-50 border border-slate-200 text-slate-800';
+        var _fetchBtn = isDark ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600';
+        var _noModel = isDark ? 'text-slate-500' : 'text-slate-300';
+        var _editOn = isDark ? 'text-slate-400 hover:text-blue-400' : 'text-slate-400 hover:text-blue-600';
+        var _editAdd = isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500';
         var hasKey = !!(mBT.features.ai.getStoredApiKey(provider));
         if (provider === 'lmstudio') hasKey = true;
         var view = _mBTConnStatusView(status, hasKey);
@@ -1440,7 +1692,7 @@
 
         var modelCell = '';
         if (!hasKey && provider !== 'lmstudio') {
-            modelCell = '<div class="flex-1 min-w-0 text-[9px] font-bold text-slate-300 px-2">Add a key to see models</div>';
+            modelCell = '<div class="flex-1 min-w-0 text-[9px] leading-4 font-bold ' + _noModel + ' px-2">Add a key to see models</div>';
         } else {
             var modelOpts = '';
             var mi, mid, mlbl;
@@ -1457,7 +1709,7 @@
             }
             modelCell =
                 '<div class="flex-1 min-w-0">' +
-                    '<select data-conn-model="' + esc(provider) + '" onchange="window.mBT_UI_Conn_modelChange(\'' + esc(provider) + '\', this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">' +
+                    '<select data-conn-model="' + esc(provider) + '" onchange="window.mBT_UI_Conn_modelChange(\'' + esc(provider) + '\', this.value)" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
                         modelOpts +
                     '</select>' +
                 '</div>';
@@ -1470,27 +1722,25 @@
         var capsHtml = (hasKey && modelForCaps) ? _mBTConnBuildCapsHtml(provider, modelForCaps, null) : '';
 
         var editLabel = hasKey ? 'Edit' : 'Add';
-        var editCls = hasKey
-            ? 'text-slate-400 hover:text-blue-600'
-            : 'text-blue-600 hover:text-blue-500';
+        var editCls = hasKey ? _editOn : _editAdd;
 
         var rowOpacity = view.opacity ? ' opacity-55 hover:opacity-100' : '';
 
-        return '<div class="flex items-center gap-2 px-4 py-2 hover:bg-slate-50/70 transition-colors' + rowOpacity + '" data-conn-row="' + esc(provider) + '">' +
+        return '<div class="settings-row settings-row--single flex items-center gap-2 px-2' + rowOpacity + '" data-conn-row="' + esc(provider) + '">' +
             '<span data-conn-dot class="w-2 h-2 rounded-full shrink-0 ' + view.dot + '"></span>' +
-            '<div class="w-[190px] shrink-0 min-w-0">' +
-                '<select data-conn-provider-sel="' + esc(provider) + '" onchange="window.mBT_UI_Conn_rowProviderChange(\'' + esc(provider) + '\', this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">' +
+            '<div class="w-[140px] shrink-0 min-w-0">' +
+                '<select data-conn-provider-sel="' + esc(provider) + '" onchange="window.mBT_UI_Conn_rowProviderChange(\'' + esc(provider) + '\', this.value)" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
                     opts +
                 '</select>' +
             '</div>' +
-            '<div class="w-[124px] shrink-0 flex items-center gap-1.5" data-conn-state-cell="' + esc(provider) + '">' +
-                '<button type="button" onclick="window.mBT_UI_Conn_fetch(\'' + esc(provider) + '\')" class="px-2 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-[8px] font-black uppercase tracking-widest text-slate-500 transition-all">Fetch</button>' +
-                '<span data-conn-word class="text-[9px] font-black uppercase tracking-widest ' + view.wordCls + '">' + esc(view.word) + '</span>' +
-                '<span data-conn-detail class="text-[8px] font-bold text-slate-400">' + esc(view.detail) + '</span>' +
+            '<div class="w-[100px] shrink-0 flex items-center gap-1.5" data-conn-state-cell="' + esc(provider) + '">' +
+                '<button type="button" onclick="window.mBT_UI_Conn_fetch(\'' + esc(provider) + '\')" class="h-8 px-2 ' + _fetchBtn + ' rounded-lg text-[8px] leading-4 font-black uppercase tracking-widest transition-all">Fetch</button>' +
+                '<span data-conn-word class="text-[9px] leading-4 font-black uppercase tracking-widest ' + view.wordCls + '">' + esc(view.word) + '</span>' +
+                '<span data-conn-detail class="text-[8px] leading-4 font-bold text-slate-400">' + esc(view.detail) + '</span>' +
             '</div>' +
             modelCell +
             '<div class="w-[64px] shrink-0 flex items-center justify-center gap-1 text-slate-400" data-conn-caps="' + esc(provider) + '">' + capsHtml + '</div>' +
-            '<button type="button" onclick="window.mBT_UI_Conn_edit(\'' + esc(provider) + '\')" class="w-[34px] shrink-0 text-[9px] font-black uppercase tracking-widest ' + editCls + '">' + editLabel + '</button>' +
+            '<button type="button" onclick="window.mBT_UI_Conn_edit(\'' + esc(provider) + '\')" class="w-8 shrink-0 text-[9px] leading-4 font-black uppercase tracking-widest ' + editCls + '">' + editLabel + '</button>' +
         '</div>';
     }
 
