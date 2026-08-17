@@ -9,6 +9,14 @@
     window.mBT = window.mBT || {};
     window.mBT.ui = window.mBT.ui || {};
 
+    function esc(str) {
+        if (window.mBT && window.mBT.ui && window.mBT.ui.render && typeof window.mBT.ui.render.esc === 'function') {
+            return window.mBT.ui.render.esc(str);
+        }
+        if (str == null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     window.mBT.ui.toolbar = {
         /**
          * Renders the project identity header (L2969-2982).
@@ -23,7 +31,7 @@
                 : '';
             return '<header class="mb-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3">' +
                 '    <div class="flex items-center gap-4 w-full md:w-auto flex-grow min-w-0">' +
-                '        <input type="text" id="projectName" value="' + budget.projectName + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
+                '        <input type="text" id="projectName" value="' + esc(budget.projectName) + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
                 reviewPill +
                 '        <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>' +
                 '        <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>' +
@@ -65,7 +73,7 @@
                 '        <div class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px]">' +
                 '            <div class="flex items-center gap-2 mb-1">' +
                 '                <div class="flex items-center bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 shrink-0">' +
-                '                    <input type="number" step="0.1" id="discountPercentage" value="' + (budget.discountPercentage || 0) + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none">' +
+                '                    <input type="number" step="0.1" id="discountPercentage" value="' + esc(budget.discountPercentage || 0) + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none">' +
                 '                    <span class="text-[9px] font-black text-slate-300 ml-0.5">%</span>' +
                 '                </div>' +
                 '                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Discount</label>' +
@@ -75,7 +83,7 @@
                 '        <div id="contingencyFringesCard" class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px] cursor-pointer hover:border-orange-200 hover:bg-orange-50 transition-all">' +
                 '            <div class="flex items-center gap-2 mb-1">' +
                 '                <div class="flex items-center bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 shrink-0">' +
-                '                    <input type="number" step="0.1" id="contingencyPercentage" value="' + budget.contingencyPercentage + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none" onclick="event.stopPropagation()">' +
+                '                    <input type="number" step="0.1" id="contingencyPercentage" value="' + esc(budget.contingencyPercentage) + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none" onclick="event.stopPropagation()">' +
                 '                    <span class="text-[9px] font-black text-slate-300 ml-0.5">%</span>' +
                 '                </div>' +
                 '                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Contingency &amp; Fringes</label>' +
@@ -86,7 +94,7 @@
                 '        <div class="flex-1 px-3 py-1 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-h-[52px]">' +
                 '            <div class="flex items-center gap-2 mb-1">' +
                 '                <div class="flex items-center bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-100 shrink-0">' +
-                '                    <input type="number" step="0.1" id="salesTaxPercentage" value="' + budget.salesTaxPercentage + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none">' +
+                '                    <input type="number" step="0.1" id="salesTaxPercentage" value="' + esc(budget.salesTaxPercentage) + '" class="w-7 text-right text-[10px] font-black text-blue-600 bg-transparent outline-none">' +
                 '                    <span class="text-[9px] font-black text-slate-300 ml-0.5">%</span>' +
                 '                </div>' +
                 '                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">Sales Tax</label>' +
@@ -101,7 +109,7 @@
                 '            </div>' +
                 '            <div class="min-w-0">' +
                 '                <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest truncate">Tax Incentive Rebate</p>' +
-                '                <p id="taxIncentiveJurisdiction" class="text-[9px] text-slate-400 font-bold truncate">' + (budget.jurisdiction && budget.jurisdiction.name ? budget.jurisdiction.name + ' &bull; ' + (budget.jurisdiction.incentiveRate || 0) + '%' : 'Not configured') + '</p>' +
+                '                <p id="taxIncentiveJurisdiction" class="text-[9px] text-slate-400 font-bold truncate">' + (budget.jurisdiction && budget.jurisdiction.name ? esc(budget.jurisdiction.name) + ' &bull; ' + (budget.jurisdiction.incentiveRate || 0) + '%' : 'Not configured') + '</p>' +
                 '            </div>' +
                 '        </div>' +
                 '        <p id="summaryIncentiveRebate" class="text-sm font-black text-emerald-600 leading-tight ml-2 truncate flex-shrink-0">--</p>' +
@@ -332,11 +340,11 @@
                     '<select id="projectSelect" data-action="project-switch" class="w-full md:w-auto appearance-none bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-700 rounded-xl pl-3 pr-8 py-2.5 outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer min-w-[140px] transition-all hover:bg-slate-100">';
 
                 if (projects.length === 0 && typeof currentProjectName !== 'undefined' && currentProjectName) {
-                    html += '<option value="' + currentProjectName + '" selected>' + currentProjectName + '</option>';
+                    html += '<option value="' + esc(currentProjectName) + '" selected>' + esc(currentProjectName) + '</option>';
                 }
                 projects.forEach(function (p) {
                     var selected = (typeof currentProjectName !== 'undefined' && p === currentProjectName) ? 'selected' : '';
-                    html += '<option value="' + p + '" ' + selected + '>' + p + '</option>';
+                    html += '<option value="' + esc(p) + '" ' + selected + '>' + esc(p) + '</option>';
                 });
 
                 html += '</select>' +

@@ -22,6 +22,15 @@
             .replace(/'/g, '&#39;');
     }
 
+    function safeAssetUrl(url) {
+        var raw = String(url || '').trim();
+        var schemeCheck = raw.replace(/[\u0000-\u0020\u007f]/g, '');
+        if (!raw || /^\/\//.test(raw)) return '';
+        if (/^https?:\/\//i.test(raw)) return esc(raw);
+        if (/^[a-z][a-z0-9+.-]*:/i.test(schemeCheck)) return '';
+        return esc(raw);
+    }
+
     function notify(title, msg) {
         if (typeof mBTME !== 'undefined' && mBTME.alert) {
             mBTME.alert(title, msg);
@@ -406,7 +415,7 @@
 
                 clone.querySelectorAll('textarea').forEach(function (el) {
                     var div = document.createElement('div');
-                    div.innerHTML = el.value.replace(/\n/g, '<br>');
+                    div.innerHTML = esc(el.value).replace(/\n/g, '<br>');
                     div.className = el.className + ' whitespace-pre-wrap';
                     div.style.cssText = 'height:auto;border:none;resize:none;background:transparent;color:#000';
                     el.parentNode.replaceChild(div, el);
@@ -473,7 +482,7 @@
 
                 clone.querySelectorAll('textarea').forEach(function (el) {
                     var div = document.createElement('div');
-                    div.innerHTML = el.value.replace(/\n/g, '<br>');
+                    div.innerHTML = esc(el.value).replace(/\n/g, '<br>');
                     div.className = el.className + ' whitespace-pre-wrap';
                     div.style.cssText = 'height:auto;border:none;resize:none';
                     el.parentNode.replaceChild(div, el);
@@ -917,7 +926,8 @@
                 /* Brand letterhead — logo left, company text right */
                 var brandHtml = '';
                 if (brand.logo || brand.name || brand.address) {
-                    var logoHtml = brand.logo ? '<img src="' + brand.logo + '" alt="" class="ts-brand-logo">' : '';
+                    var logoSrc = safeAssetUrl(brand.logo);
+                    var logoHtml = logoSrc ? '<img src="' + logoSrc + '" alt="" class="ts-brand-logo">' : '';
                     var textHtml = (brand.name || brand.address) ?
                         '<div class="ts-brand-text"><div class="ts-brand-name">' + esc(brand.name || '') + '</div>' +
                         (brand.address ? '<div class="ts-brand-addr">' + esc(brand.address) + '</div>' : '') + '</div>' : '';
@@ -2688,7 +2698,8 @@
                     var d = (options && options.editorData) || this.getDefaultData(budgetData);
                     var brand = (options && options.brand) || {};
                     var title = esc(d.projectTitle || (budgetData && budgetData.projectName) || 'Funding Pitch');
-                    var logoHtml = brand.logo ? '<img src="' + brand.logo + '" style="max-height:48px;margin-bottom:8px;"><br>' : '';
+                    var logoSrc = safeAssetUrl(brand.logo);
+                    var logoHtml = logoSrc ? '<img src="' + logoSrc + '" style="max-height:48px;margin-bottom:8px;"><br>' : '';
                     function section(heading, content) {
                         return content ? '<div style="margin:14px 0;"><div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;border-bottom:1px solid #e2e8f0;padding-bottom:3px;margin-bottom:6px;">' + heading + '</div><div style="font-size:10pt;color:#1e293b;">' + content + '</div></div>' : '';
                     }
@@ -2739,7 +2750,8 @@
                     var brand = (options && options.brand) || {};
                     var title = esc(d.projectTitle || (budgetData && budgetData.projectName) || 'Storyboard');
                     var cols = parseInt(d.columns, 10) || 3;
-                    var logoHtml = brand.logo ? '<img src="' + brand.logo + '" style="max-height:36px;margin-bottom:6px;"><br>' : '';
+                    var logoSrc = safeAssetUrl(brand.logo);
+                    var logoHtml = logoSrc ? '<img src="' + logoSrc + '" style="max-height:36px;margin-bottom:6px;"><br>' : '';
                     var css = '.sb-grid{display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:10px;margin-top:12px;}' +
                         '.sb-frame{border:1px solid #cbd5e1;border-radius:4px;overflow:hidden;}' +
                         '.sb-image{height:80px;background:#f8fafc;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:8pt;border-bottom:1px solid #e2e8f0;position:relative;}' +
@@ -3578,8 +3590,9 @@
                     ? '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:72pt;font-weight:900;color:rgba(0,0,0,0.06);white-space:nowrap;pointer-events:none;z-index:0;">' + esc(watermark) + '</div>'
                     : '';
 
-                var logoHtml = (brand.logo)
-                    ? '<img src="' + brand.logo + '" style="max-height:48px;max-width:160px;object-fit:contain;margin-bottom:8px;" alt="Logo">'
+                var logoSrc = safeAssetUrl(brand.logo);
+                var logoHtml = logoSrc
+                    ? '<img src="' + logoSrc + '" style="max-height:48px;max-width:160px;object-fit:contain;margin-bottom:8px;" alt="Logo">'
                     : '';
 
                 var css = '.toc-page{font-family:Helvetica,Arial,sans-serif;color:#1e293b;background:#fff;width:8in;min-height:10in;padding:1.5in 1.2in;box-sizing:border-box;position:relative;}.toc-rule{border:none;border-top:2px solid #0f172a;margin:18px 0;}table.toc-list{width:100%;border-collapse:collapse;}table.toc-list tr+tr td{border-top:1px solid #e2e8f0;}';

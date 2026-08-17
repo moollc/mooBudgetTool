@@ -175,6 +175,18 @@ mBT is open-source under the MIT license. Issues and PRs welcome.
 
 ---
 
+## Credits and data sources
+
+Open-source libraries, typography, and the union, guild, and film commission
+sources behind Open Gate's rate data are acknowledged in
+[CREDITS.md](CREDITS.md).
+
+Open Gate rates are calibrated against published rate cards. They are a planning
+reference, not a substitute for current union scale. Confirm with the relevant
+union or guild before contracting.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

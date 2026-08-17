@@ -2048,14 +2048,12 @@
                     return;
                 }
 
-                dom.getElementById('modal-list').innerHTML = all.map(function(item) {
+                var modalList = dom.getElementById('modal-list');
+                modalList.innerHTML = all.map(function(item) {
                     var badge = item.isExisting
                         ? '<span class="text-[7px] font-black text-emerald-600 uppercase tracking-widest">From Budget · ' + esc(item.secName) + '</span>'
                         : '<span class="text-[7px] font-black text-blue-400 uppercase tracking-widest">Rate DB</span>';
-                    var action = item.isExisting
-                        ? 'mBTStages._assignExisting(\'' + esc(item.id) + '\')'
-                        : 'mBTStages._assignFromOG(\'' + esc(item.id) + '\')';
-                    return '<div onclick="' + action + '" class="p-3 border-b border-slate-50 bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors">' +
+                    return '<div data-stage-action="' + (item.isExisting ? 'existing' : 'og') + '" data-item-id="' + esc(item.id) + '" class="p-3 border-b border-slate-50 bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors">' +
                         '<div>' +
                             '<div class="text-[11px] font-bold text-slate-700">' + esc(item.description) + '</div>' +
                             badge +
@@ -2063,6 +2061,17 @@
                         '<div class="text-[10px] font-mono font-bold text-slate-500 ml-4 shrink-0">' + fmt(item.rate) + '</div>' +
                     '</div>';
                 }).join('');
+                var actionRows = modalList.querySelectorAll('[data-stage-action]');
+                for (var actionIdx = 0; actionIdx < actionRows.length; actionIdx++) {
+                    actionRows[actionIdx].addEventListener('click', function() {
+                        var itemId = this.getAttribute('data-item-id');
+                        if (this.getAttribute('data-stage-action') === 'existing') {
+                            mBTStages._assignExisting(itemId);
+                        } else {
+                            mBTStages._assignFromOG(itemId);
+                        }
+                    });
+                }
             },
 
             _assignExisting: function(itemId) {

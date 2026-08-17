@@ -338,7 +338,7 @@
                         '<div class="flex items-center sm:items-start justify-between mb-1 sm:mb-3">' +
                             '<div>' +
                                 '<p class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight pr-2">' + esc(t.label || key) + '</p>' +
-                                '<p class="text-[8px] sm:text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections' + (window.innerWidth < 640 ? ' &bull; ' + desc.substring(0,20) + '..' : '') + '</p>' +
+                                '<p class="text-[8px] sm:text-[9px] text-slate-400 mt-0.5">' + sectionCount + ' sections' + (window.innerWidth < 640 ? ' &bull; ' + esc(desc.substring(0,20)) + '..' : '') + '</p>' +
                             '</div>' +
                             '<span class="bg-violet-100 text-violet-600 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">Custom</span>' +
                         '</div>' +

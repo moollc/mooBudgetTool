@@ -143,6 +143,10 @@
             return d.innerHTML;
         }
 
+        function escAttr(str) {
+            return esc(str).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+
         /* --- Show a named state panel --- */
         function showState(name) {
             ['loading', 'error', 'diff', 'clean'].forEach(function(s) {
@@ -192,18 +196,18 @@
                     'section_missing': 'Section missing on one side'
                 }[c.conflict_type] || c.conflict_type;
 
-                return '<div class="conflict-row rounded-xl bg-white border border-slate-200 p-3 fade-in" data-section="' + esc(c.section_name) + '">' +
+                return '<div class="conflict-row rounded-xl bg-white border border-slate-200 p-3 fade-in" data-section="' + escAttr(c.section_name) + '">' +
                     '<div class="flex items-center justify-between mb-2">' +
                         '<div>' +
                             '<p class="text-[10px] font-black uppercase tracking-widest text-slate-800">' + esc(c.section_name) + '</p>' +
                             '<p class="text-[8px] text-amber-600 font-bold uppercase">' + esc(typeLabel) + '</p>' +
                         '</div>' +
                         '<div class="flex gap-1.5">' +
-                            '<button onclick="mBTDiff.choose(\'' + esc(c.section_name) + '\', \'local\');" ' +
-                                'data-choice-btn="' + esc(c.section_name) + '-local" ' +
+                            '<button data-section="' + escAttr(c.section_name) + '" data-side="local" ' +
+                                'data-choice-btn="' + escAttr(c.section_name) + '-local" ' +
                                 'class="choice-btn px-2.5 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-colors bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100">Keep Local</button>' +
-                            '<button onclick="mBTDiff.choose(\'' + esc(c.section_name) + '\', \'remote\');" ' +
-                                'data-choice-btn="' + esc(c.section_name) + '-remote" ' +
+                            '<button data-section="' + escAttr(c.section_name) + '" data-side="remote" ' +
+                                'data-choice-btn="' + escAttr(c.section_name) + '-remote" ' +
                                 'class="choice-btn px-2.5 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-colors bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100">Keep Remote</button>' +
                         '</div>' +
                     '</div>' +
@@ -221,6 +225,12 @@
             }).join('');
 
             list.innerHTML = html;
+            var choiceButtons = list.querySelectorAll('[data-choice-btn]');
+            for (var choiceIdx = 0; choiceIdx < choiceButtons.length; choiceIdx++) {
+                choiceButtons[choiceIdx].addEventListener('click', function() {
+                    choose(this.getAttribute('data-section'), this.getAttribute('data-side'));
+                });
+            }
             updateScrollAffordance();
         }
 
@@ -247,17 +257,18 @@
             _state.choices[sectionName] = side;
 
             /* Update button ring styles */
-            ['local', 'remote'].forEach(function(s) {
-                var btn = document.querySelector('[data-choice-btn="' + sectionName + '-' + s + '"]');
-                if (!btn) return;
-                if (s === side) {
-                    btn.classList.add('ring-2', s === 'local' ? 'ring-blue-500' : 'ring-emerald-500');
+            var buttons = document.querySelectorAll('[data-choice-btn]');
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                if (btn.getAttribute('data-section') !== sectionName) continue;
+                if (btn.getAttribute('data-side') === side) {
+                    btn.classList.add('ring-2', side === 'local' ? 'ring-blue-500' : 'ring-emerald-500');
                     btn.style.fontWeight = '900';
                 } else {
                     btn.classList.remove('ring-2', 'ring-blue-500', 'ring-emerald-500');
                     btn.style.fontWeight = '';
                 }
-            });
+            }
 
             /* Enable commit button once all conflicts are resolved */
             var allResolved = _state.conflicts.every(function(c) { return _state.choices[c.section_name]; });

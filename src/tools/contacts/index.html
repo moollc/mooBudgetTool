@@ -257,12 +257,27 @@ var mBTContacts = (function () {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    var CURRENCY_CODES = {
+        JMD: true, USD: true, EUR: true, GBP: true, CAD: true, MXN: true,
+        AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true
+    };
+
+    function safeCurrency(code) {
+        var value = String(code || '').toUpperCase();
+        return Object.prototype.hasOwnProperty.call(CURRENCY_CODES, value) ? value : 'JMD';
+    }
+
+    function safeHttpUrl(url) {
+        var value = String(url || '').trim();
+        return /^https?:\/\//i.test(value) ? value : '';
+    }
+
     function fmt(n) {
-        return state.currency + ' ' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        return esc(safeCurrency(state.currency)) + ' ' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
 
     function fmtCurrency(n) {
-        return state.currency + ' ' + (parseFloat(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return esc(safeCurrency(state.currency)) + ' ' + (parseFloat(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function walletSnack(msg) {
@@ -281,9 +296,15 @@ var mBTContacts = (function () {
         var html = '';
         DEPTS.forEach(function (d) {
             var isActive = (d === 'All' && state.currentDept === '') || d === state.currentDept;
-            html += '<button onclick="mBTContacts.setDept(\'' + esc(d) + '\')" class="dept-pill' + (isActive ? ' active' : '') + ' shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">' + esc(d) + '</button>';
+            html += '<button data-dept="' + esc(d) + '" class="dept-pill' + (isActive ? ' active' : '') + ' shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">' + esc(d) + '</button>';
         });
         bar.innerHTML = html;
+        var deptButtons = bar.querySelectorAll('[data-dept]');
+        for (var i = 0; i < deptButtons.length; i++) {
+            deptButtons[i].addEventListener('click', function () {
+                setDept(this.getAttribute('data-dept'));
+            });
+        }
     }
 
     /* --- Tab switching --- */
@@ -357,7 +378,7 @@ var mBTContacts = (function () {
             state.budget = results[1] || null;
             state.budgetCrew = extractBudgetCrew(state.budget);
             state.pos = (state.budget && state.budget.ledgers && Array.isArray(state.budget.ledgers.pos)) ? state.budget.ledgers.pos : [];
-            state.currency = params.get('currency') || (state.budget && state.budget.displayCurrency) || 'JMD';
+            state.currency = safeCurrency(params.get('currency') || (state.budget && state.budget.displayCurrency) || 'JMD');
 
             /* Merge shared contacts (read-only, marked with sharedFrom) */
             var shared = results[2] || [];
@@ -373,6 +394,7 @@ var mBTContacts = (function () {
                         email:      sc.email || null,
                         phone:      sc.phone || null,
                         rate:       sc.rate || null,
+                        currency:   sc.currency || null,
                         portfolio:  sc.portfolio || [],
                         sharedFrom: sc.owner_name || 'OpenGate',
                         readOnly:   true
@@ -723,11 +745,14 @@ var mBTContacts = (function () {
         } else {
             portfolio.forEach(function (p) {
                 if (p.type === 'link') {
-                    html += '<a href="' + esc(p.url) + '" target="_blank" rel="noopener noreferrer" ' +
-                        'class="flex items-center gap-2 p-2 bg-blue-50 rounded-xl mb-1 hover:bg-blue-100 transition-colors no-underline">' +
-                        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
-                        '<span class="text-[9px] font-bold text-blue-700 truncate">' + esc(p.label || p.url) + '</span>' +
-                        '</a>';
+                    var portfolioUrl = safeHttpUrl(p.url);
+                    if (portfolioUrl) {
+                        html += '<a href="' + esc(portfolioUrl) + '" target="_blank" rel="noopener noreferrer" ' +
+                            'class="flex items-center gap-2 p-2 bg-blue-50 rounded-xl mb-1 hover:bg-blue-100 transition-colors no-underline">' +
+                            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+                            '<span class="text-[9px] font-bold text-blue-700 truncate">' + esc(p.label || p.url) + '</span>' +
+                            '</a>';
+                    }
                 } else {
                     /* File — offer download or inline preview for images/PDFs */
                     var isImage = p.mimeType && p.mimeType.indexOf('image/') === 0;
@@ -908,9 +933,30 @@ var mBTContacts = (function () {
     }
 
     function commitDelete(contact) {
+        /* Store A: IndexedDB */
         STORAGE.deleteContact(contact.id).then(function () {
             updateSaveAllBtn();
         }).catch(function (e) { console.error('[mBTContacts] Delete error:', e); });
+
+        /* Store B: mBTOG.contacts, persisted as moo_contacts. Without this the
+           merged roster in index.html pulls the contact straight back. */
+        try {
+            var og = (window.parent && window.parent.mBTOG) || window.mBTOG || null;
+            if (og && og.contacts && og.contacts.length) {
+                var targetId = contact.id || '';
+                var targetName = String(contact.name || '').toLowerCase();
+                var before = og.contacts.length;
+                og.contacts = og.contacts.filter(function (c) {
+                    if (!c) { return false; }
+                    if (targetId && c.id === targetId) { return false; }
+                    if (targetName && String(c.name || '').toLowerCase() === targetName) { return false; }
+                    return true;
+                });
+                if (og.contacts.length !== before && typeof og.saveContacts === 'function') {
+                    og.saveContacts();
+                }
+            }
+        } catch (ex) { console.error('[mBTContacts] OG delete error:', ex); }
     }
 
     function undoDelete() {
@@ -989,7 +1035,14 @@ var mBTContacts = (function () {
         window.parent.postMessage({
             type: 'mbt:tool-action',
             action: 'inject-contact',
-            payload: { name: c.name, department: c.department, rate: finalRate, email: c.email || null, phone: c.phone || null }
+            payload: {
+                contactId: c.id || null,
+                name: c.name,
+                department: c.department,
+                rate: finalRate,
+                email: c.email || null,
+                phone: c.phone || null
+            }
         }, window.location.origin);
     }
 
@@ -1220,7 +1273,11 @@ var mBTContacts = (function () {
                 window.parent.postMessage({
                     type: 'mbt:tool-action',
                     action: 'update-contact-rate',
-                    payload: { name: contact.name, rate: syncRate }
+                    payload: {
+                        contactId: contact.id || state.editingId || null,
+                        name: contact.name,
+                        rate: syncRate
+                    }
                 }, window.location.origin);
             }
             return STORAGE.getAllContacts();
@@ -1303,7 +1360,7 @@ var mBTContacts = (function () {
     window.addEventListener('message', function(e) {
         if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
         if (!e.data || e.data.type !== 'mbt:displayCurrency') return;
-        state.currency = e.data.currency || 'JMD';
+        state.currency = safeCurrency(e.data.currency);
         if (typeof render === 'function') render();
     });
 
