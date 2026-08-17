@@ -336,14 +336,41 @@ window.mBTAIModule = {
         if (!og || !og.rates || !og.rates.length) return '';
 
         var MAX_ROWS = 60;
+        var MAX_NOTES = 12;
+        var MAX_NOTE_LEN = 240;
         var picked = [];
         var seen = {};
+        var queryMatched = {};
         var i, r;
 
-        function add(rate) {
+        /* fromQuery marks rows pulled by the user's own words in step 1. Only
+           those carry a note; the spine pad stays rates-only so a simple ask
+           does not drag 8 unrelated notes into the prompt. A row matched by the
+           query and also on the spine keeps its note, because add() returns on
+           the first sighting and the spine pass never overwrites the flag. */
+        function add(rate, fromQuery) {
             if (!rate || seen[rate.description]) return;
             seen[rate.description] = true;
+            if (fromQuery) queryMatched[rate.description] = true;
             picked.push(rate);
+        }
+
+        /* Notes are prose written for a producer, so they can carry newlines and
+           run long. Flatten and clip for the prompt. Never assigns back onto the
+           rate object: this function is read-only over OpenGate data. */
+        function noteFor(rate) {
+            if (!rate) return '';
+            /* own-property check: a description like "constructor" would inherit
+               a truthy value straight off Object.prototype otherwise */
+            if (!Object.prototype.hasOwnProperty.call(queryMatched, rate.description)) return '';
+            var note = rate.intelligence;
+            if (typeof note !== 'string') return '';
+            note = note.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+            if (!note) return '';
+            if (note.length > MAX_NOTE_LEN) {
+                note = note.slice(0, MAX_NOTE_LEN).replace(/\s+\S*$/, '') + '...';
+            }
+            return note;
         }
 
         /* 1. Match words from the user's request against the rate card. */
@@ -356,7 +383,7 @@ window.mBTAIModule = {
             var w = words[i];
             if (!w || w.length < 3 || STOP[w]) continue;
             var hits = og.search(w) || [];
-            for (var j = 0; j < hits.length && j < 8; j++) add(hits[j]);
+            for (var j = 0; j < hits.length && j < 8; j++) add(hits[j], true);
             if (picked.length >= MAX_ROWS) break;
         }
 
@@ -374,10 +401,19 @@ window.mBTAIModule = {
         var lines = [];
         lines.push('OPENGATE RATE CARD (' + (og.settings && og.settings.location ? og.settings.location : 'local') + ', ' + cur + '):');
         lines.push('These are researched market rates. USE THESE NUMBERS. Do not estimate a rate for anything listed here.');
+        lines.push('Notes under a role are traps and exclusions (kit, buyouts, prep). The number on the card line is the rate. Ignore dollar figures inside notes.');
+        var notesUsed = 0;
         for (i = 0; i < picked.length && i < MAX_ROWS; i++) {
             r = picked[i];
             lines.push('  ' + r.description + ' = ' + r.rate + ' per ' + (r.unit || 'Day') +
                        (r.itemType === 'equipment' ? ' [gear]' : ' [crew]'));
+            if (notesUsed < MAX_NOTES) {
+                var note = noteFor(r);
+                if (note) {
+                    lines.push('    note: ' + note);
+                    notesUsed++;
+                }
+            }
         }
         lines.push('If something the user needs is NOT on this list, say so plainly and give your best estimate clearly labelled as an estimate. Never silently invent a rate that contradicts this card.');
         return lines.join('\n');
@@ -1037,18 +1073,25 @@ window.mBTAIModule = {
         var provider = self.getSelectedProvider();
         var apiKey   = self.getStoredApiKey(provider);
 
+        /* Same shape as openSourcingAnalysis: this reads budget.sections below,
+           so with no project loaded it would throw before any AI call. */
+        if (!budget) { mBTME.alert('No Project', 'Load a project before running Budget Analysis.'); return; }
+
         if (!apiKey) return mBTME.alert('Assistant Offline', 'Please configure API Key in settings.');
 
         var context = {
             project:          budget.projectName,
             total:            budget.grandTotal,
-            currency:         window.displayCurrency,
+            currency:         window.displayCurrency || '',
             sections:         Object.keys(budget.sections).map(function (k) {
                 return { name: k, total: budget.sections[k].total, itemCount: budget.sections[k].items.length };
             }),
             documents:        (budget.documents || []).map(function (d) { return { type: d.type, label: d.label }; }),
             attachments:      (budget.attachments || []).map(function (a) { return a.name; }),
-            crewSummary:      Object.values(budget.sections).reduce(function (acc, sec) {
+            /* Object.values is ES2017; this tree is ES5. Same count over the
+               same items.filter, reached through the section keys instead. */
+            crewSummary:      Object.keys(budget.sections).reduce(function (acc, k) {
+                var sec = budget.sections[k];
                 return acc + sec.items.filter(function (i) { return i.crew && i.crew.name; }).length;
             }, 0) + ' assigned',
             previousAnalysis: ((budget.aiContext && budget.aiContext.analysis) || '').substring(0, 1000)
@@ -1059,6 +1102,16 @@ window.mBTAIModule = {
         if (mBTME.showLoader) mBTME.showLoader('Assistant Analysis in progress..');
         return self.callUnifiedAI(provider, apiKey, prompt).then(function (result) {
             if (mBTME.hideLoader) mBTME.hideLoader();
+
+            /* callUnifiedAI resolves with an 'Analysis Failed: ...' string rather
+               than rejecting. Without this the error text was written into
+               budget.aiContext.analysis, saved, shown in a modal titled Budget
+               Analysis, and fed back as previousAnalysis on the next run. Same
+               check generateBudgetFromPrompt does. */
+            if (typeof result === 'string' && result.indexOf('Analysis Failed:') === 0) {
+                mBTME.alert('Analysis Failed', result.replace('Analysis Failed: ', '') || 'AI request failed.');
+                return;
+            }
 
             self._ensureAiContext(budget);
             budget.aiContext.analysis = result;
@@ -2647,6 +2700,16 @@ window.mBTAIModule = {
                 }
                 self._chatSession.lastFailedText = '';
                 self._chatSession.lastFailedMsg = '';
+                self._chatRender();
+            }).catch(function (err) {
+                /* inflight is cleared inside the handler above, so a throw there
+                   (or a rejection callUnifiedAI did not swallow) used to leave it
+                   true and doSend would return early on every later message.
+                   Reuses the existing failed-send banner, no new modal. */
+                if (!self._chatSession || self._chatSession.genId !== myGen) return;
+                self._chatSession.inflight = false;
+                self._chatSession.lastFailedText = text;
+                self._chatSession.lastFailedMsg = (err && err.message) || 'Request failed.';
                 self._chatRender();
             });
         }

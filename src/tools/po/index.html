@@ -181,6 +181,16 @@
             return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        var CURRENCY_CODES = {
+            JMD: true, USD: true, EUR: true, GBP: true, CAD: true, MXN: true,
+            AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true
+        };
+
+        function safeCurrency(code) {
+            var value = String(code || '').toUpperCase();
+            return Object.prototype.hasOwnProperty.call(CURRENCY_CODES, value) ? value : 'JMD';
+        }
+
         /* --- Currency Format (v23.58, mirrors stages v23.55).
            Ledger amounts are stored in the budget's base currency — convert to the live
            display currency (state.currency) using the same rate table the parent uses. --- */
@@ -206,14 +216,14 @@
         }
 
         function fmt(n) {
-            var display = state.currency || 'JMD';
+            var display = safeCurrency(state.currency || 'JMD');
             var base = (state.budget && state.budget.currency) ? state.budget.currency : 'JMD';
             var num = parseFloat(n) || 0;
             if (base !== display) {
                 var rates = _rateTable();
                 if (rates && rates[base] && rates[display]) num = num / rates[base] * rates[display];
             }
-            return display + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return esc(display) + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         function genId() { return 'po_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4); }
@@ -588,7 +598,7 @@
         function init() {
             var params = new URLSearchParams(window.location.search);
             state.projectKey = params.get('projectKey') || '';
-            state.currency = params.get('currency') || 'JMD';
+            state.currency = safeCurrency(params.get('currency') || 'JMD');
 
             document.getElementById('btn-back').addEventListener('click', function() {
                 window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
@@ -636,7 +646,7 @@
 
         /* --- v23.58: live display-currency switch from parent (mirrors stages) --- */
         function setDisplayCurrency(code, rates) {
-            state.currency = code || 'JMD';
+            state.currency = safeCurrency(code);
             if (rates) _syncedRates = rates;
             renderPOs();
             renderCash();

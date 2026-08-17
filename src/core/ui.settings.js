@@ -7,28 +7,48 @@
 (function (window) {
     'use strict';
 
+    function _mBTJsString(str) {
+        return String(str || '')
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, '\\\'')
+            .replace(/\r/g, '\\r')
+            .replace(/\n/g, '\\n')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
+    }
+
+    function esc(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     /* Row actions for a rate list entry. Add is always available; Edit and
        Delete are only offered on rows the user owns (source !== 'default').
        Default card rates stay read only here, editing one opens the same
        modal but writes a new user override rather than mutating the card. */
     function _mBTRateRowActions(r, esc, dispRate, dispCurr) {
+        var safeRate = parseFloat(dispRate);
+        if (!isFinite(safeRate)) safeRate = 0;
         var actions = [{
             icon: mBTAssets.plus, title: 'Add', color: 'blue',
-            onClick: "mBT.features.settings.addRateToBudget('" + esc(r.description) + "', " + dispRate + ", '" + r.unit + "', '" + dispCurr + "')"
+            act: 'rate-add', arg1: r.description, arg2: safeRate, arg3: r.unit, arg4: dispCurr
         }];
         if (r.source !== 'default') {
             actions.push({
                 icon: mBTAssets.edit, title: 'Edit', color: 'slate',
-                onClick: "mBT.features.settings.editRate('" + esc(r.description) + "')"
+                act: 'rate-edit', arg1: r.description
             });
             actions.push({
                 icon: mBTAssets.trash, title: 'Delete', color: 'rose',
-                onClick: "mBT.features.settings.deleteRate('" + esc(r.description) + "')"
+                act: 'rate-delete', arg1: r.description
             });
         } else {
             actions.push({
                 icon: mBTAssets.edit, title: 'Edit (creates your override)', color: 'slate',
-                onClick: "mBT.features.settings.editRate('" + esc(r.description) + "')"
+                act: 'rate-edit', arg1: r.description
             });
         }
         return actions;
@@ -46,7 +66,16 @@
         var rowExtra = opts.rowExtra || '';
         var actions = opts.actions || [];
         var actionHtml = actions.map(function (a) {
-            return '<button type="button" aria-label="' + esc(a.title || 'Action') + '" onclick="' + a.onClick + '" class="shrink-0 h-8 px-2 text-[8px] leading-4 font-black uppercase text-' + (a.color || 'blue') + '-600 hover:opacity-80 transition-opacity" title="' + esc(a.title || '') + '">' +
+            /* Actions carry their arguments as data-* and are run by the delegated
+               listener at the bottom of this file. The argument values never enter
+               an executable string, so a rate description or contact name holding a
+               quote is inert data rather than code. */
+            var attrs = ' data-mbt-act="' + esc(a.act || '') + '"';
+            if (a.arg1 != null) attrs += ' data-mbt-a1="' + esc(a.arg1) + '"';
+            if (a.arg2 != null) attrs += ' data-mbt-a2="' + esc(a.arg2) + '"';
+            if (a.arg3 != null) attrs += ' data-mbt-a3="' + esc(a.arg3) + '"';
+            if (a.arg4 != null) attrs += ' data-mbt-a4="' + esc(a.arg4) + '"';
+            return '<button type="button" aria-label="' + esc(a.title || 'Action') + '"' + attrs + ' class="shrink-0 h-8 px-2 text-[8px] leading-4 font-black uppercase text-' + (a.color || 'blue') + '-600 hover:opacity-80 transition-opacity" title="' + esc(a.title || '') + '">' +
                 (a.label ? esc(a.label) : (a.icon || '')) +
                 '</button>';
         }).join('');
@@ -90,13 +119,7 @@
                     subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
                     iconCls: isDark
                         ? 'w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300 shrink-0'
-                        : 'w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0',
-                    actions: [{
-                        label: 'Add',
-                        title: 'Add to Budget',
-                        color: 'blue',
-                        onClick: "mBT.data.addCrewToBudget('" + esc(c.name) + "', '" + esc(c.role) + "')"
-                    }]
+                        : 'w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0'
                 });
             }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Contacts Found</div>';
 
@@ -149,7 +172,11 @@
                     return {
                         title: a.title,
                         color: a.color,
-                        onClick: a.onClick,
+                        act: a.act,
+                        arg1: a.arg1,
+                        arg2: a.arg2,
+                        arg3: a.arg3,
+                        arg4: a.arg4,
                         icon: a.icon,
                         label: a.title === 'Add' ? 'Apply' : (a.title && a.title.indexOf('Edit') === 0 ? 'Edit' : (a.title === 'Delete' ? 'Del' : ''))
                     };
@@ -252,7 +279,7 @@
                         label: 'Remove',
                         title: 'Remove',
                         color: 'rose',
-                        onClick: "(function(){var t=JSON.parse(localStorage.getItem('moo_og_trash')||'[]');t.splice(" + idx + ",1);localStorage.setItem('moo_og_trash',JSON.stringify(t));mBT.features.settings.open('database','trash');})()"
+                        act: 'trash-remove', arg1: idx
                     }]
                 });
             }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">Bin is Empty</div>';
@@ -298,7 +325,11 @@
                 return {
                     title: a.title,
                     color: a.color,
-                    onClick: a.onClick,
+                    act: a.act,
+                    arg1: a.arg1,
+                    arg2: a.arg2,
+                    arg3: a.arg3,
+                    arg4: a.arg4,
                     icon: a.icon,
                     label: a.title === 'Add' ? 'Apply' : (a.title && a.title.indexOf('Edit') === 0 ? 'Edit' : (a.title === 'Delete' ? 'Del' : ''))
                 };
@@ -796,19 +827,28 @@
 
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-general-panel animate-in fade-in duration-300">' +
                         '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Company</h3>' +
+                            '<div class="settings-card settings-card-group overflow-hidden">' +
+                                '<label class="settings-format-cell">' +
+                                    '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Company name</span>' +
+                                    '<input type="text" id="companyNameInput" value="' + esc(budget.company || '') + '" placeholder="Independent" onchange="budget.company = this.value; saveBudget(); if (typeof render === \'function\') render();" class="' + _fieldCls + '">' +
+                                '</label>' +
+                            '</div>' +
+                        '</section>' +
+                        '<section>' +
                             '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Formatting</h3>' +
                             '<div class="settings-card settings-card-group overflow-hidden">' +
                                 '<div class="settings-format-grid">' +
                                     '<label class="settings-format-cell">' +
                                         '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Date format</span>' +
-                                        '<select id="dateFormatSelect" onchange="localStorage.setItem(\'' + projectDateFormatKey + '\', this.value)" class="' + _fieldCls + ' cursor-pointer">' +
+                                        '<select id="dateFormatSelect" class="' + _fieldCls + ' cursor-pointer">' +
                                             '<option value="YYYYMMDD" ' + (currentDateFormat === 'YYYYMMDD' ? 'selected' : '') + '>YYYY-MM-DD</option>' +
                                             '<option value="MMDDYYYY" ' + (currentDateFormat === 'MMDDYYYY' ? 'selected' : '') + '>MM-DD-YYYY</option>' +
                                         '</select>' +
                                     '</label>' +
                                     '<label class="settings-format-cell">' +
                                         '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Name separator</span>' +
-                                        '<input type="text" id="separatorInput" maxlength="1" value="' + esc(currentSeparator) + '" onchange="localStorage.setItem(\'' + projectNameSeparatorKey + '\', this.value)" class="' + _fieldCls + ' text-center">' +
+                                        '<input type="text" id="separatorInput" maxlength="1" value="' + esc(currentSeparator) + '" class="' + _fieldCls + ' text-center">' +
                                     '</label>' +
                                     '<label class="settings-format-cell">' +
                                         '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Decimals</span>' +
@@ -920,16 +960,16 @@
                                         '<div class="text-[9px] leading-4 font-bold settings-text-muted">Refresh exchange rates on startup</div>' +
                                     '</div>' +
                                     '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
-                                        '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' onchange="localStorage.setItem(\'' + storageKeyPrefix + 'auto_fetch_rates\', this.checked);" class="sr-only peer">' +
+                                        '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>' +
                                     '</label>' +
                                 '</div>' +
                             '</div>' +
                         '</section>' +
                         '<div class="grid grid-cols-3 gap-2 mt-4">' +
-                             '<a href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/main/mBT/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ' + _btnBg + ' rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">' + mBTAssets.cloud + ' Get Beta</a>' +
+                             '<a href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/mBT/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ' + _btnBg + ' rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">' + mBTAssets.cloud + ' Get Beta</a>' +
                              '<button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 h-8 ' + _btnRose + ' rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest transition-colors">' + mBTAssets.zap + ' Fix Bugs</button>' +
-                             '<button onclick="mBTME.close(\'settingsModal\'); showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 h-8 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest hover:opacity-90 transition-opacity">' + mBTAssets.coffee + ' Support</button>' +
+                             '<button onclick="mBTME.close(\'settingsModal\'); if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeWidget===\'function\')window.mBTRouter.showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 h-8 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest hover:opacity-90 transition-opacity">' + mBTAssets.coffee + ' Support</button>' +
                         '</div>' +
                         '<div class="grid grid-cols-2 gap-2 mt-2">' +
                             '<button onclick="mBT.ui.showLegalDoc(\'UserAgreement.md\')" class="py-1.5 ' + _btnBg + ' rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors">User Agreement</button>' +
@@ -1387,12 +1427,12 @@
         if (cSel) {
             if (cached.length) {
                 cSel.innerHTML = cached.map(function (m) {
-                    var id = m.id || m;
-                    var lbl = m.name || m.id || m;
-                    return '<option value="' + id + '"' + (saved === id ? ' selected' : '') + '>' + lbl + '</option>';
+                    var id = String(m.id || m);
+                    var lbl = String(m.name || m.id || m);
+                    return '<option value="' + esc(id) + '"' + (saved === id ? ' selected' : '') + '>' + esc(lbl) + '</option>';
                 }).join('');
             } else {
-                cSel.innerHTML = saved ? '<option value="' + saved + '" selected>' + saved + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
+                cSel.innerHTML = saved ? '<option value="' + esc(saved) + '" selected>' + esc(saved) + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
             }
         }
     };
@@ -1597,15 +1637,15 @@
         var iconChat = (window.mBTAssets && mBTAssets.capChat) || (window.mBTAssets && mBTAssets.chat) || '';
         var iconImage = (window.mBTAssets && mBTAssets.capImage) || (window.mBTAssets && mBTAssets.image) || '';
         var iconVideo = (window.mBTAssets && mBTAssets.capVideo) || (window.mBTAssets && mBTAssets.film) || '';
-        var pEsc = _mBTConnJsEsc(provider);
-        var mEsc = _mBTConnJsEsc(modelId || '');
+        var pAttr = _mBTConnEsc(provider);
+        var mAttr = _mBTConnEsc(modelId || '');
         /* Supported caps: full colour. Off caps: faint, still clickable so a wrong
            guess is one tap either way. Default detection only lights supported ones. */
         function capBtn(kind, title, icon, on) {
             var cls = on
                 ? 'cursor-pointer rounded p-0.5 text-slate-500 hover:bg-indigo-100 hover:text-indigo-600'
                 : 'cursor-pointer rounded p-0.5 text-slate-300 opacity-25 hover:opacity-60';
-            return '<span role="button" tabindex="0" data-conn-cap="' + kind + '" title="' + title + '" onclick="window.mBT_UI_Conn_toggleCap(\'' + pEsc + '\',\'' + mEsc + '\',\'' + kind + '\')" class="' + cls + '">' + icon + '</span>';
+            return '<span role="button" tabindex="0" data-conn-cap="' + kind + '" title="' + title + '" data-mbt-act="conn-toggle-cap" data-mbt-a1="' + pAttr + '" data-mbt-a2="' + mAttr + '" data-mbt-a3="' + kind + '" class="' + cls + '">' + icon + '</span>';
         }
         parts.push(capBtn('chat', 'Chat', iconChat, caps.chat));
         parts.push(capBtn('image', 'Image generation', iconImage, caps.image));
@@ -1709,7 +1749,7 @@
             }
             modelCell =
                 '<div class="flex-1 min-w-0">' +
-                    '<select data-conn-model="' + esc(provider) + '" onchange="window.mBT_UI_Conn_modelChange(\'' + esc(provider) + '\', this.value)" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
+                    '<select data-conn-model="' + esc(provider) + '" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
                         modelOpts +
                     '</select>' +
                 '</div>';
@@ -1729,18 +1769,18 @@
         return '<div class="settings-row settings-row--single flex items-center gap-2 px-2' + rowOpacity + '" data-conn-row="' + esc(provider) + '">' +
             '<span data-conn-dot class="w-2 h-2 rounded-full shrink-0 ' + view.dot + '"></span>' +
             '<div class="w-[140px] shrink-0 min-w-0">' +
-                '<select data-conn-provider-sel="' + esc(provider) + '" onchange="window.mBT_UI_Conn_rowProviderChange(\'' + esc(provider) + '\', this.value)" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
+                '<select data-conn-provider-sel="' + esc(provider) + '" class="w-full h-8 ' + _inp + ' rounded-lg px-2 text-[10px] leading-4 font-bold outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer box-border">' +
                     opts +
                 '</select>' +
             '</div>' +
             '<div class="w-[100px] shrink-0 flex items-center gap-1.5" data-conn-state-cell="' + esc(provider) + '">' +
-                '<button type="button" onclick="window.mBT_UI_Conn_fetch(\'' + esc(provider) + '\')" class="h-8 px-2 ' + _fetchBtn + ' rounded-lg text-[8px] leading-4 font-black uppercase tracking-widest transition-all">Fetch</button>' +
+                '<button type="button" data-mbt-act="conn-fetch" data-mbt-a1="' + esc(provider) + '" class="h-8 px-2 ' + _fetchBtn + ' rounded-lg text-[8px] leading-4 font-black uppercase tracking-widest transition-all">Fetch</button>' +
                 '<span data-conn-word class="text-[9px] leading-4 font-black uppercase tracking-widest ' + view.wordCls + '">' + esc(view.word) + '</span>' +
                 '<span data-conn-detail class="text-[8px] leading-4 font-bold text-slate-400">' + esc(view.detail) + '</span>' +
             '</div>' +
             modelCell +
             '<div class="w-[64px] shrink-0 flex items-center justify-center gap-1 text-slate-400" data-conn-caps="' + esc(provider) + '">' + capsHtml + '</div>' +
-            '<button type="button" onclick="window.mBT_UI_Conn_edit(\'' + esc(provider) + '\')" class="w-8 shrink-0 text-[9px] leading-4 font-black uppercase tracking-widest ' + editCls + '">' + editLabel + '</button>' +
+            '<button type="button" data-mbt-act="conn-edit" data-mbt-a1="' + esc(provider) + '" class="w-8 shrink-0 text-[9px] leading-4 font-black uppercase tracking-widest ' + editCls + '">' + editLabel + '</button>' +
         '</div>';
     }
 
@@ -2088,7 +2128,7 @@
                 '<input type="password" id="connEditKeyInput" value="' + _mBTConnEsc(existing) + '" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] font-mono outline-none focus:ring-2 focus:ring-blue-100" placeholder="sk-..">' +
                 (link !== '#' ? '<a href="' + _mBTConnEsc(link) + '" target="_blank" rel="noopener" class="text-[9px] font-black uppercase tracking-widest text-blue-600">Get key \u2197</a>' : '') +
                 '<div class="flex gap-2 pt-1">' +
-                    '<button type="button" onclick="window.mBT_UI_Conn_saveEdit(\'' + _mBTConnEsc(provider) + '\')" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500">Save</button>' +
+                    '<button type="button" data-mbt-act="conn-save-edit" data-mbt-a1="' + _mBTConnEsc(provider) + '" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500">Save</button>' +
                     '<button type="button" onclick="mBTME.close(\'connEditKey\')" class="px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200">Cancel</button>' +
                 '</div>' +
             '</div>';
@@ -2258,13 +2298,13 @@
                 m = list[i];
                 mid = m.id || m;
                 tag = m.free ? ' (Free)' : (m.price ? ' ($' + (m.price * 1000000).toFixed(2) + '/M)' : '');
-                html += '<option value="' + mid + '"' + (mid === pick ? ' selected' : '') + '>' + (m.name || mid) + tag + '</option>';
+                html += '<option value="' + esc(mid) + '"' + (mid === pick ? ' selected' : '') + '>' + esc(m.name || mid) + tag + '</option>';
             }
         } else {
             for (i = 0; i < list.length; i++) {
                 id  = list[i].id  || list[i];
                 lbl = list[i].name || list[i].id || list[i];
-                html += '<option value="' + id + '"' + (id === pick ? ' selected' : '') + '>' + lbl + '</option>';
+                html += '<option value="' + esc(id) + '"' + (id === pick ? ' selected' : '') + '>' + esc(lbl) + '</option>';
             }
         }
         sel.innerHTML = html || '<option value="" disabled selected>No models found</option>';
@@ -2415,15 +2455,15 @@
                     selectedModel = (firstId && String(firstId).trim()) ? firstId : '';
                 }
                 isel.innerHTML = cached.map(function (m) {
-                    var id = m.id || m;
-                    var lbl = m.name || m.id || m;
-                    return '<option value="' + id + '"' + (selectedModel === id ? ' selected' : '') + '>' + lbl + '</option>';
+                    var id = String(m.id || m);
+                    var lbl = String(m.name || m.id || m);
+                    return '<option value="' + esc(id) + '"' + (selectedModel === id ? ' selected' : '') + '>' + esc(lbl) + '</option>';
                 }).join('');
                 if (selectedModel) {
                     localStorage.setItem('mbt_ai_image_model', selectedModel);
                 }
             } else {
-                isel.innerHTML = selectedModel ? '<option value="' + selectedModel + '" selected>' + selectedModel + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
+                isel.innerHTML = selectedModel ? '<option value="' + esc(selectedModel) + '" selected>' + esc(selectedModel) + '</option>' : '<option value="" disabled selected>— fetch models —</option>';
             }
         }
 
@@ -2718,6 +2758,123 @@
     };
 
     window.mBT_UI_Settings_renderDbView = renderDbView;
+
+    /* Delegated handler for every data-mbt-act control rendered by this file.
+       Replaces the onclick strings that used to concatenate arguments into
+       executable JS. Arguments arrive as data-* text and are passed straight to
+       the same functions the onclick called, so behaviour is unchanged and a
+       value containing a quote can no longer break out into code.
+
+       Delegation on document is what lets these survive the settings re-renders
+       (getTabContent, _mBTRefreshDbRates) and reach controls inside mBTME modals,
+       neither of which runs an attach step this file owns. */
+    function _mBTSettingsActionTarget(node) {
+        while (node && node !== document) {
+            if (node.getAttribute && node.getAttribute('data-mbt-act')) return node;
+            node = node.parentNode;
+        }
+        return null;
+    }
+
+    function _mBTSettingsRunAction(el) {
+        var act = el.getAttribute('data-mbt-act');
+        var a1 = el.getAttribute('data-mbt-a1');
+        var a2 = el.getAttribute('data-mbt-a2');
+        var a3 = el.getAttribute('data-mbt-a3');
+        var a4 = el.getAttribute('data-mbt-a4');
+        var settings = (window.mBT && mBT.features && mBT.features.settings) || null;
+
+        if (act === 'rate-add') {
+            /* rate arrived as attribute text; the onclick built it as a number literal */
+            var rateNum = parseFloat(a2);
+            if (!isFinite(rateNum)) rateNum = 0;
+            if (settings && settings.addRateToBudget) settings.addRateToBudget(a1, rateNum, a3, a4);
+            return;
+        }
+        if (act === 'rate-edit') {
+            if (settings && settings.editRate) settings.editRate(a1);
+            return;
+        }
+        if (act === 'rate-delete') {
+            if (settings && settings.deleteRate) settings.deleteRate(a1);
+            return;
+        }
+        if (act === 'crew-add') {
+            if (window.mBT && mBT.data && mBT.data.addCrewToBudget) mBT.data.addCrewToBudget(a1, a2);
+            return;
+        }
+        if (act === 'trash-remove') {
+            var idx = parseInt(a1, 10);
+            if (!isFinite(idx)) return;
+            var trash = [];
+            try { trash = JSON.parse(localStorage.getItem('moo_og_trash') || '[]'); } catch (e) { trash = []; }
+            if (!Array.isArray(trash)) trash = [];
+            trash.splice(idx, 1);
+            localStorage.setItem('moo_og_trash', JSON.stringify(trash));
+            if (settings && settings.open) settings.open('database', 'trash');
+            return;
+        }
+        if (act === 'conn-fetch') {
+            if (window.mBT_UI_Conn_fetch) window.mBT_UI_Conn_fetch(a1);
+            return;
+        }
+        if (act === 'conn-edit') {
+            if (window.mBT_UI_Conn_edit) window.mBT_UI_Conn_edit(a1);
+            return;
+        }
+        if (act === 'conn-save-edit') {
+            if (window.mBT_UI_Conn_saveEdit) window.mBT_UI_Conn_saveEdit(a1);
+            return;
+        }
+        if (act === 'conn-toggle-cap') {
+            if (window.mBT_UI_Conn_toggleCap) window.mBT_UI_Conn_toggleCap(a1, a2, a3);
+            return;
+        }
+    }
+
+    if (!window._mBTSettingsActionsBound) {
+        window._mBTSettingsActionsBound = true;
+        document.addEventListener('click', function (evt) {
+            var el = _mBTSettingsActionTarget(evt.target);
+            if (!el) return;
+            _mBTSettingsRunAction(el);
+        });
+        document.addEventListener('change', function (evt) {
+            var target = evt.target;
+            var provider;
+            if (!target || !target.getAttribute) return;
+            provider = target.getAttribute('data-conn-model');
+            if (provider !== null) {
+                window.mBT_UI_Conn_modelChange(provider, target.value);
+                return;
+            }
+            provider = target.getAttribute('data-conn-provider-sel');
+            if (provider !== null) {
+                window.mBT_UI_Conn_rowProviderChange(provider, target.value);
+                return;
+            }
+            if (target.id === 'dateFormatSelect') {
+                if (window.projectDateFormatKey) localStorage.setItem(window.projectDateFormatKey, target.value);
+                return;
+            }
+            if (target.id === 'separatorInput') {
+                if (window.projectNameSeparatorKey) localStorage.setItem(window.projectNameSeparatorKey, target.value);
+                return;
+            }
+            if (target.id === 'autoFetchRatesToggle') {
+                localStorage.setItem((window.storageKeyPrefix || '') + 'auto_fetch_rates', target.checked);
+            }
+        });
+        /* The cap toggles render as role="button" spans, so keyboard activation
+           has to be wired explicitly the way a real button gets it for free. */
+        document.addEventListener('keydown', function (evt) {
+            if (evt.key !== 'Enter' && evt.key !== ' ' && evt.key !== 'Spacebar') return;
+            var el = _mBTSettingsActionTarget(evt.target);
+            if (!el || el.tagName === 'BUTTON') return;
+            evt.preventDefault();
+            _mBTSettingsRunAction(el);
+        });
+    }
 
     /* Phase 193: Keep imgModelSelect in sync after storyboard generates an image.
        Storyboard dispatches 'mbtImageGenerated' with the model that was actually used. */

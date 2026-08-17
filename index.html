@@ -26,19 +26,19 @@
     <meta property="og:site_name" content="mooBudgetTool">
     <meta property="og:title" content="mooBudgetTool">
     <meta property="og:description" content="Offline-first film production budgeting with real regional rates. Build, schedule and cost a shoot with no connection.">
-    <meta property="og:url" content="https://moollc.github.io/mooBudgetTool/">
-    <meta property="og:image" content="https://moollc.github.io/mooBudgetTool/assets/og-card-v2.png">
+    <meta property="og:url" content="https://mbt.moo.llc/">
+    <meta property="og:image" content="https://mbt.moo.llc/assets/og-card-v2.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="mooBudgetTool, offline-first film production budgeting">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="mooBudgetTool">
     <meta name="twitter:description" content="Offline-first film production budgeting with real regional rates.">
-    <meta name="twitter:image" content="https://moollc.github.io/mooBudgetTool/assets/og-card-v2.png">
+    <meta name="twitter:image" content="https://mbt.moo.llc/assets/og-card-v2.png">
 
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
-    <title>mooBudgetTool v24.13</title>
+    <title>mooBudgetTool v24.14</title>
     <script>
         /* Pre-paint theme on <html> so tokens resolve before body paint */
         (function () {
@@ -68,7 +68,15 @@
             d.textContent = String(str || '');
             return d.innerHTML;
         }
+        function safePortfolioHref(url) {
+            if (!url) return '#';
+            var u = String(url).trim();
+            if (/^javascript:/i.test(u) || /^data:\s*text\/html/i.test(u)) return '#';
+            if (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || /^tel:/i.test(u) || /^data:image\//i.test(u) || u.charAt(0) === '/') return u;
+            return '#';
+        }
         window.esc = esc;
+        window.safePortfolioHref = safePortfolioHref;
         window.toDisp = toDisp;
         window.fromDisp = fromDisp;
         /* Phase 137 Stabilization: Hoist registries to prevent ReferenceErrors in external consumers */
@@ -726,7 +734,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.13";
+    var APP_VERSION = "24.14";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -859,7 +867,7 @@
             (function () {
                 var _autoSelFields = {
                     rate: 1, quantity: 1, actual: 1,
-                    actualQuantity: 1, actualRate: 1, description: 1
+                    actualQuantity: 1, actualRate: 1
                 };
                 document.addEventListener('focusin', function (e) {
                     if (e.target && e.target.tagName === 'INPUT') {
@@ -4602,6 +4610,18 @@
                 var cursorClass = onClick ? 'cursor-pointer' : '';
 
                 var actionHtml = actions.map(function (a) {
+                    if (a.dataAction) {
+                        var dataAttrs = ' data-action="' + a.dataAction + '"';
+                        if (a.dataDesc != null) dataAttrs += ' data-rate-desc="' + mBT.ui.render.esc(a.dataDesc) + '"';
+                        if (a.dataRate != null) dataAttrs += ' data-rate-val="' + mBT.ui.render.esc(a.dataRate) + '"';
+                        if (a.dataUnit != null) dataAttrs += ' data-rate-unit="' + mBT.ui.render.esc(a.dataUnit) + '"';
+                        if (a.dataCurr != null) dataAttrs += ' data-rate-curr="' + mBT.ui.render.esc(a.dataCurr) + '"';
+                        if (a.dataItemDesc != null) dataAttrs += ' data-item-desc="' + mBT.ui.render.esc(a.dataItemDesc) + '"';
+                        if (a.dataItemRate != null) dataAttrs += ' data-item-rate="' + mBT.ui.render.esc(a.dataItemRate) + '"';
+                        if (a.dataItemUnit != null) dataAttrs += ' data-item-unit="' + mBT.ui.render.esc(a.dataItemUnit) + '"';
+                        if (a.dataItemCurr != null) dataAttrs += ' data-item-curr="' + mBT.ui.render.esc(a.dataItemCurr) + '"';
+                        return '<button type="button" aria-label="' + (a.title || 'Action') + '"' + dataAttrs + ' class="p-2 text-slate-300 hover:text-' + (a.color || 'blue') + '-500 transition-colors scale-90 hover:scale-100" title="' + (a.title || '') + '">' + a.icon + '</button>';
+                    }
                     return '<button type="button" aria-label="' + (a.title || 'Action') + '" onclick="' + a.onClick + '" class="p-2 text-slate-300 hover:text-' + (a.color || 'blue') + '-500 transition-colors scale-90 hover:scale-100" title="' + (a.title || '') + '">' + a.icon + '</button>';
                 }).join('');
 
@@ -4729,7 +4749,7 @@
                 '</div>' +
                 '</div>' +
                 '<div class="mt-6 pt-6 border-t border-slate-200/50">' +
-                '<button onclick="mBT.features.finance.processPayment(\'' + contactId + '\')" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2">' +
+                '<button type="button" data-action="finance-process-payment" data-contact-id="' + this.esc(contactId) + '" class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-500 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2">' +
                 '<span>Process Payment</span>' +
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' +
                 '</button>' +
@@ -4861,7 +4881,7 @@
                 '<span class="drag-handle section-drag-handle pointer-events-auto text-slate-300 hover:text-slate-400 cursor-grab active:cursor-grabbing" title="Drag to reorder section" onclick="event.stopPropagation();">' +
                 secDragIcon +
                 '</span>' +
-                '<button type="button" data-section-lock-btn="' + safeName + '" onclick="event.stopPropagation(); window.lockSectionRates(\'' + rawId + '\');" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
+                '<button type="button" data-section-lock-btn="' + safeName + '" data-action="section-lock-rates" data-id="' + safeName + '" class="pointer-events-auto px-2 py-1 rounded-lg transition-all ' + secLockColor + '" title="' + secLockTitle + '">' +
                 '<span class="scale-75">' + secLockIcon + '</span>' +
                 '</button>' +
                 '<span data-section-cap-badge="' + safeName + '" class="hidden text-[8px] font-black text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none pointer-events-none"></span>' +
@@ -4888,9 +4908,13 @@
             var safeSection = this.esc(sectionName);
             var crew = item.crew || {};
             var initials = crew.name ? crew.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase() : '?';
+            initials = this.esc(initials);
             var telLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.call(crew.phone) : "#";
             var waLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.whatsapp(crew.phone) : "#";
-            var mailLink = (typeof mBTPublisher !== "undefined" && mBTPublisher.comm) ? mBTPublisher.comm.email(crew.email) : "#";
+            var mailLink = '#';
+            if (crew.email) {
+                mailLink = 'mailto:' + encodeURIComponent(String(crew.email).replace(/^mailto:/i, ''));
+            }
             var assets = (typeof mBTAssets !== "undefined") ? mBTAssets : {};
             return '<div class="crew-wrapper inline-block" data-crew-wrapper-id="' + safeId + '">' +
                 '<button data-action="crew-toggle" class="crew-avatar rounded border border-slate-200 flex items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all ' + (crew.name ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white') + ' relative z-20">' +
@@ -4898,9 +4922,9 @@
                 '</button>' +
                 '<div class="crew-popup">' +
                 (crew.name ?
-                    (crew.phone && telLink !== '#' ? '<a href="' + telLink + '" class="contact-action-btn action-call" title="Call">' + (assets.phone || '') + '</a>' : '') +
-                    (crew.phone && waLink !== '#' ? '<a href="' + waLink + '" target="_blank" class="contact-action-btn action-wa" title="WhatsApp">' + (assets.wa || '') + '</a>' : '') +
-                    (crew.email && mailLink !== '#' ? '<a href="' + mailLink + '" class="contact-action-btn action-email" title="Email">' + (assets.mail || '') + '</a>' : '') +
+                    (crew.phone && telLink !== '#' ? '<a href="' + this.esc(telLink) + '" class="contact-action-btn action-call" title="Call">' + (assets.phone || '') + '</a>' : '') +
+                    (crew.phone && waLink !== '#' ? '<a href="' + this.esc(waLink) + '" target="_blank" class="contact-action-btn action-wa" title="WhatsApp">' + (assets.wa || '') + '</a>' : '') +
+                    (crew.email && mailLink !== '#' ? '<a href="' + this.esc(mailLink) + '" class="contact-action-btn action-email" title="Email">' + (assets.mail || '') + '</a>' : '') +
                     '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="contact-action-btn action-profile" title="Profile">' + (assets.user || '') + '</button>' :
                     '<button data-action="crew-profile" data-id="' + safeId + '" data-section="' + safeSection + '" class="flex items-center gap-1 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">' +
                     '<span class="pointer-events-none">Assign</span> ' + (assets.plus || '') +
@@ -5019,9 +5043,10 @@
                 '<button data-action="row-delete" data-id="' + safeId + '" data-section="' + safeSection + '" class="text-slate-200 hover:text-rose-500 transition-colors scale-75 md:scale-100" ' + (item.memoStatus === 'Pending' ? 'style="display:none;"' : '') + '>' + (assets.trash || '') + '</button>' +
                 '</td>';
 
-            if (item.contact_id) {
+            var linkId = item.contactId || item.contact_id;
+            if (linkId) {
                 html += '<td class="px-1 ' + rowPad + ' text-center w-8">' +
-                    '<button data-action="quick-pay" data-contact-id="' + this.esc(item.contact_id) + '" data-item-id="' + safeId + '" data-section="' + safeSection + '" class="text-emerald-400 hover:text-emerald-600 transition-colors scale-75 md:scale-100" title="Quick Pay">' +
+                    '<button data-action="quick-pay" data-contact-id="' + this.esc(linkId) + '" data-item-id="' + safeId + '" data-section="' + safeSection + '" class="text-emerald-400 hover:text-emerald-600 transition-colors scale-75 md:scale-100" title="Quick Pay">' +
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' +
                     '</button>' +
                     '</td>';
@@ -5751,7 +5776,7 @@
             var term = val.toLowerCase();
             var filtered = rates.filter(function (r) { return r.description.toLowerCase().includes(term); });
 
-            var customBtn = '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(val) + '\', 0, \'Day\')" class="w-full text-left p-3 rounded-lg border border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">' +
+            var customBtn = '<button type="button" data-action="og-commit-add-item" data-item-desc="' + RenderEngine.esc(val) + '" data-item-rate="0" data-item-unit="Day" class="w-full text-left p-3 rounded-lg border border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">' +
                 '<span class="text-[10px] font-black uppercase tracking-widest">+ Create "' + (RenderEngine.esc(val) || 'New Item') + '"</span>' +
                 '</button>';
 
@@ -5759,8 +5784,8 @@
                 var reg = getRegionalRate(r);
                 var displayStr = reg.rate.toLocaleString() + ' ' + reg.currency;
 
-                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + reg.rate + ', \'' + r.unit + '\', \'' + reg.currency + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
-                    '<span class="text-[10px] font-bold text-slate-700 uppercase">' + r.description + '</span>' +
+                return '<button type="button" data-action="og-commit-add-item" data-item-desc="' + RenderEngine.esc(r.description) + '" data-item-rate="' + reg.rate + '" data-item-unit="' + RenderEngine.esc(r.unit) + '" data-item-curr="' + RenderEngine.esc(reg.currency) + '" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
+                    '<span class="text-[10px] font-bold text-slate-700 uppercase">' + RenderEngine.esc(r.description) + '</span>' +
                     '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + displayStr + ' / ' + r.unit + '</span>' +
                     '</button>';
             }).join('');
@@ -5773,14 +5798,14 @@
             '<input type="text" oninput="window._filterItemSelector(this.value)" placeholder="SEARCH OPEN GATE.." class="w-full p-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-500 transition-all" autofocus>' +
             '</div>' +
             '<div id="ogItemList" class="flex-grow overflow-y-auto p-2 bg-white no-scrollbar">' +
-            '<button onclick="window._commitAddItem(\'New Item\', 0, \'Day\')" class="w-full text-left p-3 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">' +
+            '<button type="button" data-action="og-commit-add-item" data-item-desc="New Item" data-item-rate="0" data-item-unit="Day" class="w-full text-left p-3 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all mb-2 flex justify-between items-center group">' +
             '<span class="text-[10px] font-black uppercase tracking-widest">+ Create Custom</span>' +
             '</button>' +
             rates.map(function (r) {
                 /* getRegionalRate returns { rate, currency } — pass the fields, not the object */
                 var reg = getRegionalRate(r);
-                return '<button onclick="window._commitAddItem(\'' + RenderEngine.esc(r.description) + '\', ' + reg.rate + ', \'' + r.unit + '\', \'' + reg.currency + '\')" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
-                    '<span class="text-[10px] font-bold text-slate-700 uppercase">' + r.description + '</span>' +
+                return '<button type="button" data-action="og-commit-add-item" data-item-desc="' + RenderEngine.esc(r.description) + '" data-item-rate="' + reg.rate + '" data-item-unit="' + RenderEngine.esc(r.unit) + '" data-item-curr="' + RenderEngine.esc(reg.currency) + '" class="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex justify-between items-center group border-b border-slate-50 last:border-0">' +
+                    '<span class="text-[10px] font-bold text-slate-700 uppercase">' + RenderEngine.esc(r.description) + '</span>' +
                     '<span class="text-[9px] font-mono text-slate-400 group-hover:text-blue-500 font-bold">' + reg.rate.toLocaleString() + ' ' + reg.currency + ' / ' + r.unit + '</span>' +
                     '</button>';
             }).join('') +
@@ -6897,7 +6922,7 @@
                 'strip-12': { label: 'Strip (12)', width: '14in', height: '8.5in', cols: 12 }
             }
         },
-        state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1, _cache: null },
+        state: { currentDocId: null, isEditing: false, grid: null, history: [], historyPointer: -1, _cache: null, _previewJpegUrl: null, _previewDocLabel: '' },
 
         // --- PERSISTENCE LAYER (Phase 1.2) ---
         _saveTimer: null,
@@ -7137,8 +7162,10 @@
                 }
 
                 if (mBTME.hideLoader) mBTME.hideLoader();
+                self.state._previewJpegUrl = jpegURL;
+                self.state._previewDocLabel = doc.label || 'document';
                 mBTME.open('preview', 'Snapshot: ' + mode.toUpperCase(),
-                    '<div class="flex flex-col items-center bg-slate-900 h-full p-8 overflow-auto no-scrollbar"><img src="' + jpegURL + '" id="finalPreviewImage" class="shadow-2xl border border-black max-w-full h-auto mb-24 bg-white rounded-sm"><div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-4 z-[10001]"><button onclick="mBTPublisher.downloadJPEG(\'' + jpegURL + '\', \'' + doc.label + '\')" class="flex items-center gap-3 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95">Download JPEG</button><button onclick="mBTDB.sendToDistribution(\'' + jpegURL + '\')" class="flex items-center gap-3 bg-emerald-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95">Send to Crew</button><button onclick="mBTME.close(\'previewModal\')" class="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-slate-100 transition-all">Close</button></div></div>', 'w-full h-full');
+                    '<div class="flex flex-col items-center bg-slate-900 h-full p-8 overflow-auto no-scrollbar"><img src="' + esc(jpegURL) + '" id="finalPreviewImage" class="shadow-2xl border border-black max-w-full h-auto mb-24 bg-white rounded-sm"><div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-4 z-[10001]"><button type="button" data-action="preview-download-jpeg" class="flex items-center gap-3 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-blue-500 transition-all active:scale-95">Download JPEG</button><button type="button" data-action="preview-send-crew" class="flex items-center gap-3 bg-emerald-600 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-emerald-500 transition-all active:scale-95">Send to Crew</button><button onclick="mBTME.close(\'previewModal\')" class="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl hover:bg-slate-100 transition-all">Close</button></div></div>', 'w-full h-full');
             });
         },
 
@@ -7727,13 +7754,13 @@
 
             // Champion Layout Masthead (3-Column Grid)
             var html = '<div class="flex justify-between items-end border-b-4 border-black pb-2 mb-2">' +
-                '<input ' + lock + ' value="' + (d.meta.productionTitle || 'UNTITLED PROJECT') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.productionTitle\', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">' +
+                '<input ' + lock + ' value="' + esc(d.meta.productionTitle || 'UNTITLED PROJECT') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\', \'meta.productionTitle\', this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\', \'meta.productionTitle\', this.value)" class="text-4xl font-black uppercase w-full outline-none leading-none tracking-tighter" placeholder="TITLE">' +
                 '<div class="text-right shrink-0">' +
                 '<div class="text-2xl font-black">CALL SHEET</div>' +
                 '<div class="flex gap-4 text-xs font-bold mt-1">' +
-                '<div>DATE: <input type="date" value="' + d.meta.shootDate + '" onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.shootDate\', this.value); mBTDB.renderFrame();" class="inline-block w-auto border-b border-slate-300"></div>' +
-                '<div>CALL: <input type="time" value="' + d.meta.crewCallTime + '" onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.crewCallTime\', this.value)" class="inline-block w-24 text-center border-b border-slate-300"></div>' +
-                '<div class="flex items-center gap-1.5 ' + (this.state.isEditing ? '' : 'hidden') + '"><input type="checkbox" ' + (is24h ? 'checked' : '') + ' onchange="mBTDB.updateData(\'' + doc.id + '\', \'meta.is24h\', this.checked); mBTDB.renderFrame();" class="w-3 h-3 cursor-pointer"> 24h</div>' +
+                '<div>DATE: <input type="date" value="' + esc(d.meta.shootDate) + '" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\', \'meta.shootDate\', this.value); mBTDB.renderFrame();" class="inline-block w-auto border-b border-slate-300"></div>' +
+                '<div>CALL: <input type="time" value="' + esc(d.meta.crewCallTime) + '" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\', \'meta.crewCallTime\', this.value)" class="inline-block w-24 text-center border-b border-slate-300"></div>' +
+                '<div class="flex items-center gap-1.5 ' + (this.state.isEditing ? '' : 'hidden') + '"><input type="checkbox" ' + (is24h ? 'checked' : '') + ' onchange="mBTDB.updateData(\'' + esc(doc.id) + '\', \'meta.is24h\', this.checked); mBTDB.renderFrame();" class="w-3 h-3 cursor-pointer"> 24h</div>' +
                 '</div>' +
                 '</div>' +
                 '</div>' +
@@ -7745,14 +7772,14 @@
                 '<span>' + this.icons.mapPin + '</span>' +
                 '</div>' +
                 '<div class="flex-grow space-y-1">' +
-                '<textarea ' + lock + ' oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.address\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.address\',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address..">' + (d.production.address || '') + '</textarea>' +
+                '<textarea ' + lock + ' oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'production.address\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'production.address\',this.value)" class="w-full resize-none h-8 leading-tight font-bold" placeholder="Office Address..">' + esc(d.production.address || '') + '</textarea>' +
                 '<div class="grid grid-cols-[auto_1fr] gap-x-2 items-center">' +
-                '<span class="font-bold">PH:</span> <input ' + lock + ' value="' + (d.production.phone || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.phone\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.phone\',this.value)" class="w-full" placeholder="Office Phone">' +
-                '<span class="font-bold">EMAIL:</span> <input ' + lock + ' value="' + (d.production.email || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.email\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.email\',this.value)" class="w-full" placeholder="production@email.com">' +
+                '<span class="font-bold">PH:</span> <input ' + lock + ' value="' + esc(d.production.phone || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'production.phone\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'production.phone\',this.value)" class="w-full" placeholder="Office Phone">' +
+                '<span class="font-bold">EMAIL:</span> <input ' + lock + ' value="' + esc(d.production.email || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'production.email\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'production.email\',this.value)" class="w-full" placeholder="production@email.com">' +
                 '</div>' +
                 '<div class="flex gap-2 pt-1 border-t border-slate-100 mt-1">' +
-                '<div class="flex-1"><span class="font-bold">WIFI:</span> <input ' + lock + ' value="' + (d.production.wifi || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.wifi\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.wifi\',this.value)" class="w-16" placeholder="Network"></div>' +
-                '<div class="flex-1"><span class="font-bold">PASS:</span> <input ' + lock + ' value="' + (d.production.pass || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'production.pass\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'production.pass\',this.value)" class="w-16" placeholder="Password"></div>' +
+                '<div class="flex-1"><span class="font-bold">WIFI:</span> <input ' + lock + ' value="' + esc(d.production.wifi || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'production.wifi\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'production.wifi\',this.value)" class="w-16" placeholder="Network"></div>' +
+                '<div class="flex-1"><span class="font-bold">PASS:</span> <input ' + lock + ' value="' + esc(d.production.pass || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'production.pass\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'production.pass\',this.value)" class="w-16" placeholder="Password"></div>' +
                 '</div>' +
                 '</div>' +
                 '</div>' +
@@ -7762,7 +7789,7 @@
                 (d.locations || []).map(function (l, i) {
                     return '<div class="mb-2">' +
                         '<div class="flex justify-between"><span class="font-bold">' + esc(l.name || '') + '</span> <span class="opacity-50">HOSP:</span>' +
-                        '<input ' + lock + ' value="' + (l.hospital || '') + '" onchange="mBTDB.updateRow(\'' + doc.id + '\',\'locations\',' + i + ',\'hospital\',this.value)" class="w-full bg-transparent border-b border-red-100 focus:border-red-500 text-red-600" placeholder="Nearest Hospital..">' +
+                        '<input ' + lock + ' value="' + esc(l.hospital || '') + '" onchange="mBTDB.updateRow(\'' + esc(doc.id) + '\',\'locations\',' + i + ',\'hospital\',this.value)" class="w-full bg-transparent border-b border-red-100 focus:border-red-500 text-red-600" placeholder="Nearest Hospital..">' +
                         '</div>' +
                         '</div>';
                 }).join('') +
@@ -7773,28 +7800,28 @@
                 '<div class="font-bold border-b border-black mb-1 flex justify-between items-center cursor-pointer hover:bg-slate-50" onclick="if(!event.target.closest(\'button\')) { var b=this.nextElementSibling; b.classList.toggle(\'hidden\'); }">' +
                 '<span>AGENCY / CLIENT</span> ' +
                 '<div class="flex gap-2">' +
-                '<button onclick="mBTDB.syncAgencyInfo(\'' + doc.id + '\')" class="text-slate-400 hover:text-blue-600 transition-colors" title="Sync from Database">' + this.icons.sync + '</button>' +
+                '<button onclick="mBTDB.syncAgencyInfo(\'' + esc(doc.id) + '\')" class="text-slate-400 hover:text-blue-600 transition-colors" title="Sync from Database">' + this.icons.sync + '</button>' +
                 '<span class="text-[8px] text-slate-400"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em; height:1em; vertical-align:middle;"><polyline points="6 9 12 15 18 9"></polyline></svg></span>' +
                 '</div>' +
                 '</div>' +
                 '<div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mb-2 hidden">' +
                 '<span class="font-bold">PRODUCER:</span>' +
                 '<div class="flex items-center gap-1">' +
-                '<input ' + lock + ' value="' + (d.agency.producer || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'agency.producer\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.producer\',this.value)" class="w-full" placeholder="Name">' +
-                (d.agency.producer ? '<button onclick="mBTDB.openContactByName(\'' + d.agency.producer + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
+                '<input ' + lock + ' value="' + esc(d.agency.producer || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'agency.producer\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'agency.producer\',this.value)" class="w-full" placeholder="Name">' +
+                (d.agency.producer ? '<button type="button" data-action="db-open-contact" data-contact-name="' + esc(d.agency.producer) + '" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
                 '</div>' +
                 '<span class="font-bold">CREATIVE:</span>' +
                 '<div class="flex items-center gap-1">' +
-                '<input ' + lock + ' value="' + (d.agency.creative || '') + '" oninput="mBTDB.updateDataDebounced(\'' + doc.id + '\',\'agency.creative\',this.value)" onchange="mBTDB.updateData(\'' + doc.id + '\',\'agency.creative\',this.value)" class="w-full" placeholder="Name">' +
-                (d.agency.creative ? '<button onclick="mBTDB.openContactByName(\'' + d.agency.creative + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
+                '<input ' + lock + ' value="' + esc(d.agency.creative || '') + '" oninput="mBTDB.updateDataDebounced(\'' + esc(doc.id) + '\',\'agency.creative\',this.value)" onchange="mBTDB.updateData(\'' + esc(doc.id) + '\',\'agency.creative\',this.value)" class="w-full" placeholder="Name">' +
+                (d.agency.creative ? '<button type="button" data-action="db-open-contact" data-contact-name="' + esc(d.agency.creative) + '" class="text-blue-600 hover:scale-110 transition-transform">' + this.icons.user + '</button>' : '') +
                 '</div>' +
                 '</div>' +
                 '<div class="font-bold border-b border-black mb-1 mt-auto">CONDITIONS</div>' +
                 '<div class="flex justify-between mb-1">' +
-                '<span>Sunrise: <input ' + lock + ' value="' + ((d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[0]) || '') + '" class="w-12 text-center border-b border-slate-200"></span>' +
-                '<span>Sunset: <input ' + lock + ' value="' + ((d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[1]) || '') + '" class="w-12 text-center border-b border-slate-200"></span>' +
+                '<span>Sunrise: <input ' + lock + ' value="' + esc((d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[0]) || '') + '" class="w-12 text-center border-b border-slate-200"></span>' +
+                '<span>Sunset: <input ' + lock + ' value="' + esc((d.meta.sunriseSunset && d.meta.sunriseSunset.split('/')[1]) || '') + '" class="w-12 text-center border-b border-slate-200"></span>' +
                 '</div>' +
-                '<textarea ' + lock + ' class="w-full h-8 resize-none" placeholder="Weather forecast..">' + ((d.locations && d.locations[0] && d.locations[0].weather) || '') + '</textarea>' +
+                '<textarea ' + lock + ' class="w-full h-8 resize-none" placeholder="Weather forecast..">' + esc((d.locations && d.locations[0] && d.locations[0].weather) || '') + '</textarea>' +
                 '</div>' +
                 '</div>';
 
@@ -7820,15 +7847,15 @@
             var renderRow = function (c, i) {
                 return '<div class="flex flex-col border-b border-slate-100 pb-1 mb-1 last:border-0 group/row">' +
                     '<!-- Role Header -->' +
-                    '<input ' + lock + ' value="' + (c.role || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'contacts\',' + i + ',\'role\',this.value)" class="text-[7px] font-black uppercase tracking-widest text-slate-400 bg-transparent border-none p-0 w-full outline-none mb-0.5 focus:text-blue-600 transition-colors" placeholder="ROLE">' +
+                    '<input ' + lock + ' value="' + esc(c.role || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'contacts\',' + i + ',\'role\',this.value)" class="text-[7px] font-black uppercase tracking-widest text-slate-400 bg-transparent border-none p-0 w-full outline-none mb-0.5 focus:text-blue-600 transition-colors" placeholder="ROLE">' +
                     '<!-- Name Row -->' +
                     '<div class="flex items-center gap-2">' +
                     '<!-- Import Button (Left) -->' +
-                    (this.state.isEditing ? '<button class="text-slate-300 hover:text-blue-500 transition-colors shrink-0" onclick="mBTDB.pullFromOpenGate(\'' + docId + '\', \'contacts.' + i + '.name\', \'' + (c.role || 'crew') + '\')" title="Import from DB">' + this.icons.user + '</button>' : '') +
+                    (this.state.isEditing ? '<button type="button" class="text-slate-300 hover:text-blue-500 transition-colors shrink-0" data-action="db-pull-og" data-doc-id="' + esc(docId) + '" data-og-path="contacts.' + i + '.name" data-og-role="' + esc(c.role || 'crew') + '" title="Import from DB">' + this.icons.user + '</button>' : '') +
                     '<!-- Name Input -->' +
-                    '<input ' + lock + ' value="' + (c.name || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'contacts\',' + i + ',\'name\',this.value)" class="flex-grow bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name..">' +
+                    '<input ' + lock + ' value="' + esc(c.name || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'contacts\',' + i + ',\'name\',this.value)" class="flex-grow bg-transparent border-none p-0 text-[10px] font-bold text-slate-900 outline-none placeholder-slate-300" placeholder="Name..">' +
                     '<!-- Delete Button (Right) -->' +
-                    '<button onclick="mBTDB.deleteRow(\'' + docId + '\',\'contacts\',' + i + ',\'contacts\')" class="text-slate-200 hover:text-red-500 transition-colors shrink-0 ' + hideTool + '" title="Remove Contact">' + this.icons.trash + '</button>' +
+                    '<button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'contacts\',' + i + ',\'contacts\')" class="text-slate-200 hover:text-red-500 transition-colors shrink-0 ' + hideTool + '" title="Remove Contact">' + this.icons.trash + '</button>' +
                     '</div>' +
                     '</div>';
             };
@@ -7862,38 +7889,37 @@
                 '<span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">SET</span>' +
                 '<input type="text" ' + lock + ' value="' + esc(sunset || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); var current = \'' + sunRaw + '\'.split(\'/\'); current[1]=this.value; mBTDB.updateData(\'' + docId + '\',\'meta.sunriseSunset\',current.join(\'/\'))" class="bg-transparent text-[10px] font-bold w-16 text-center outline-none disabled:text-slate-800" placeholder="18:00">' +
                 '</div>' +
-                '</div>';
-
-            '<div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar widget-list-grid">' + (d.locations || []).map(function (l, i) {
+                '</div>' +
+                '<div class="flex-grow overflow-y-auto p-2 space-y-3 no-scrollbar widget-list-grid">' + (d.locations || []).map(function (l, i) {
                 return '<div class="flex flex-col gap-1 border-b-2 border-black pb-2 mb-1 relative group/loc">' +
                     '<!-- Row 1: Name and Time (Refined Font Size & Width) -->' +
                     '<div class="flex justify-between items-end gap-2 mb-1">' +
                     '<div class="flex-grow">' +
                     '<label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">LOCATION ' + (i + 1) + '</label>' +
-                    '<input ' + lock + ' value="' + l.name + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'locations\',' + i + ',\'name\',this.value)" class="w-full bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase tracking-tight outline-none placeholder-slate-300" placeholder="NAME">' +
+                    '<input ' + lock + ' value="' + esc(l.name || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'name\',this.value)" class="w-full bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase tracking-tight outline-none placeholder-slate-300" placeholder="NAME">' +
                     '</div>' +
                     '<div class="w-20 text-right shrink-0">' +
                     '<label class="text-[7px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">CALL</label>' +
-                    '<input ' + lock + ' type="text" value="' + (l.timeOnLocation || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'locations\',' + i + ',\'timeOnLocation\',this.value)" class="w-full bg-transparent border-none p-0 text-xs font-black text-blue-600 text-center outline-none" placeholder="00:00">' +
+                    '<input ' + lock + ' type="text" value="' + esc(l.timeOnLocation || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'timeOnLocation\',this.value)" class="w-full bg-transparent border-none p-0 text-xs font-black text-blue-600 text-center outline-none" placeholder="00:00">' +
                     '</div>' +
                     '</div>' +
                     '<!-- Row 2: Address (Compact Height) -->' +
                     '<div class="w-full">' +
-                    '<textarea ' + lock + ' onchange="mBTDB.updateRow(\'' + docId + '\',\'locations\',' + i + ',\'address\',this.value)" class="w-full bg-slate-50 border-none rounded px-2 py-1 text-[9px] font-bold text-slate-700 placeholder-slate-400 h-10 resize-none leading-relaxed" placeholder="Full Address..">' + l.address + '</textarea>' +
+                    '<textarea ' + lock + ' onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'address\',this.value)" class="w-full bg-slate-50 border-none rounded px-2 py-1 text-[9px] font-bold text-slate-700 placeholder-slate-400 h-10 resize-none leading-relaxed" placeholder="Full Address..">' + esc(l.address || '') + '</textarea>' +
                     '</div>' +
                     '<!-- Row 3: Hospital -->' +
                     '<div class="flex items-center gap-1 bg-red-50 px-2 py-1 rounded border border-red-100">' +
                     '<span class="text-[8px] font-black text-red-500 uppercase tracking-widest shrink-0">HOSP</span>' +
-                    '<input ' + lock + ' value="' + (l.hospital || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'locations\',' + i + ',\'hospital\',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-red-700 placeholder-red-200" placeholder="Nearest Medical..">' +
+                    '<input ' + lock + ' value="' + esc(l.hospital || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'hospital\',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-red-700 placeholder-red-200" placeholder="Nearest Medical..">' +
                     '</div>' +
                     '<!-- Row 4: Weather (Stacked Below, Compact) -->' +
                     '<div class="relative bg-blue-50 px-2 py-1 rounded border border-blue-100 h-8 flex items-center">' +
-                    '<input ' + lock + ' value="' + (l.weather || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'locations\',' + i + ',\'weather\',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-blue-800 placeholder-blue-200 pr-5" placeholder="Weather..">' +
-                    '<button id="w-btn-' + i + '" onclick="mBTDB.autoFillLocationDetails(\'' + docId + '\', ' + i + ')" class="absolute top-1/2 -translate-y-1/2 right-1 text-blue-400 hover:text-blue-600 transition-colors ' + hideTool + '" title="Auto-Fill details">' +
+                    '<input ' + lock + ' value="' + esc(l.weather || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'weather\',this.value)" class="w-full bg-transparent border-none p-0 text-[9px] font-bold text-blue-800 placeholder-blue-200 pr-5" placeholder="Weather..">' +
+                    '<button id="w-btn-' + i + '" onclick="mBTDB.autoFillLocationDetails(\'' + esc(docId) + '\', ' + i + ')" class="absolute top-1/2 -translate-y-1/2 right-1 text-blue-400 hover:text-blue-600 transition-colors ' + hideTool + '" title="Auto-Fill details">' +
                     this.icons.wand +
                     '</button>' +
                     '</div>' +
-                    '<button onclick="mBTDB.deleteRow(\'' + docId + '\',\'locations\',' + i + ',\'logistics\')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ' + hideTool + '"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>' +
+                    '<button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'locations\',' + i + ',\'logistics\')" class="absolute top-0 right-0 text-slate-200 hover:text-red-500 transition-colors ' + hideTool + '"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>' +
                     '</div>';
             }).join('') + '</div>' +
                 '<div class="p-2 border-t border-black bg-slate-50 ' + hideTool + '">' +
@@ -8007,19 +8033,19 @@
                     var isMeal = row.type === 'meal';
                     var rowBg = isMeal ? 'bg-slate-100 font-bold' : '';
                     var rowHtml = '<tr class="' + rowBg + ' hover:bg-blue-50 transition-colors">' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + row.time + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'time\',this.value)" class="text-center font-bold" placeholder="00:00"></td>';
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(row.time) + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'time\',this.value)" class="text-center font-bold" placeholder="00:00"></td>';
 
                     if (isMeal) {
-                        rowHtml += '<td colspan="5" class="p-1 text-center uppercase tracking-widest text-[10px]"><input ' + lock + ' value="' + row.description + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'description\',this.value)" class="text-center w-full uppercase"></td>';
+                        rowHtml += '<td colspan="5" class="p-1 text-center uppercase tracking-widest text-[10px]"><input ' + lock + ' value="' + esc(row.description) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'description\',this.value)" class="text-center w-full uppercase"></td>';
                     } else {
-                        rowHtml += '<td class="p-1"><input ' + lock + ' value="' + row.scene + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'scene\',this.value)" class="text-center"></td>' +
-                            '<td class="p-1"><input ' + lock + ' value="' + row.ie + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'ie\',this.value)" class="text-center uppercase"></td>' +
-                            '<td class="p-1"><input ' + lock + ' value="' + row.description + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'description\',this.value)" class="font-medium w-full"></td>' +
-                            '<td class="p-1"><input ' + lock + ' value="' + row.cast + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'cast\',this.value)" class="text-center font-bold text-slate-600"></td>' +
-                            '<td class="p-1"><input ' + lock + ' value="' + row.loc + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'schedule\',' + i + ',\'loc\',this.value)" class="text-xs"></td>';
+                        rowHtml += '<td class="p-1"><input ' + lock + ' value="' + esc(row.scene) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'scene\',this.value)" class="text-center"></td>' +
+                            '<td class="p-1"><input ' + lock + ' value="' + esc(row.ie) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'ie\',this.value)" class="text-center uppercase"></td>' +
+                            '<td class="p-1"><input ' + lock + ' value="' + esc(row.description) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'description\',this.value)" class="font-medium w-full"></td>' +
+                            '<td class="p-1"><input ' + lock + ' value="' + esc(row.cast) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'cast\',this.value)" class="text-center font-bold text-slate-600"></td>' +
+                            '<td class="p-1"><input ' + lock + ' value="' + esc(row.loc) + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'schedule\',' + i + ',\'loc\',this.value)" class="text-xs"></td>';
                     }
 
-                    rowHtml += '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + docId + '\',\'schedule\',' + i + ', \'schedule\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
+                    rowHtml += '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'schedule\',' + i + ', \'schedule\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
                         '</tr>';
                     return rowHtml;
                 }).join('') +
@@ -8054,20 +8080,20 @@
                 (d.crew || []).map(function (c, i) {
                     return '<tr class="hover:bg-slate-50 transition-colors">' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' value="' + (c.department || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'department\',this.value)" class="font-black uppercase text-[8px] text-slate-400 block w-full mb-0.5" placeholder="DEPT">' +
-                        '<input ' + lock + ' value="' + (c.position || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'position\',this.value)" class="font-bold text-slate-800" placeholder="Position">' +
+                        '<input ' + lock + ' value="' + esc(c.department || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'department\',this.value)" class="font-black uppercase text-[8px] text-slate-400 block w-full mb-0.5" placeholder="DEPT">' +
+                        '<input ' + lock + ' value="' + esc(c.position || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'position\',this.value)" class="font-bold text-slate-800" placeholder="Position">' +
                         '</td>' +
                         '<td class="p-1">' +
                         '<div class="flex items-center gap-1">' +
-                        '<input ' + lock + ' value="' + (c.name || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'name\',this.value)" class="font-bold text-slate-900 w-full" placeholder="Name">' +
-                        (self.state.isEditing ? '<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate(\'' + docId + '\',\'crew.' + i + '.name\',\'' + (c.position || 'crew') + '\')">' + self.icons.user + '</div>' :
-                            (c.name ? '<button onclick="mBTDB.openContactByName(\'' + c.name + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + self.icons.user + '</button>' : '')) +
+                        '<input ' + lock + ' value="' + esc(c.name || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'name\',this.value)" class="font-bold text-slate-900 w-full" placeholder="Name">' +
+                        (self.state.isEditing ? '<div class="cursor-pointer text-slate-300 hover:text-blue-500" data-action="db-pull-og" data-doc-id="' + esc(docId) + '" data-og-path="crew.' + i + '.name" data-og-role="' + esc(c.position || 'crew') + '">' + self.icons.user + '</div>' :
+                            (c.name ? '<button type="button" data-action="db-open-contact" data-contact-name="' + esc(c.name) + '" class="text-blue-600 hover:scale-110 transition-transform">' + self.icons.user + '</button>' : '')) +
                         '</div>' +
-                        '<input ' + lock + ' value="' + (c.contact || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'contact\',this.value)" class="text-[8px] font-mono text-slate-400 w-full" placeholder="Phone/Email">' +
+                        '<input ' + lock + ' value="' + esc(c.contact || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'contact\',this.value)" class="text-[8px] font-mono text-slate-400 w-full" placeholder="Phone/Email">' +
                         '</td>' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + (c.callTime || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'callTime\',this.value)" class="text-center font-black text-blue-600" placeholder="00:00"></td>' +
-                        '<td class="p-1"><input ' + lock + ' value="' + (c.notes || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'crew\',' + i + ',\'notes\',this.value)" class="italic text-slate-600 w-full" placeholder="Specific notes.."></td>' +
-                        '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + docId + '\',\'crew\',' + i + ', \'crew\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(c.callTime || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'callTime\',this.value)" class="text-center font-black text-blue-600" placeholder="00:00"></td>' +
+                        '<td class="p-1"><input ' + lock + ' value="' + esc(c.notes || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'crew\',' + i + ',\'notes\',this.value)" class="italic text-slate-600 w-full" placeholder="Specific notes.."></td>' +
+                        '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'crew\',' + i + ', \'crew\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
                         '</tr>';
                 }).join('') +
                 '</tbody>' +
@@ -8103,21 +8129,21 @@
                 '<tbody>' +
                 (d.cast || []).map(function (c, i) {
                     return '<tr>' +
-                        '<td class="p-1"><input ' + lock + ' value="' + (c.character || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'character\',this.value)" class="font-bold text-slate-500 uppercase"></td>' +
+                        '<td class="p-1"><input ' + lock + ' value="' + esc(c.character || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'character\',this.value)" class="font-bold text-slate-500 uppercase"></td>' +
                         '<td class="p-1">' +
                         '<div class="flex items-center gap-1">' +
-                        '<input ' + lock + ' value="' + (c.actor || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'actor\',this.value)" class="font-black text-slate-900 w-full">' +
-                        (self.state.isEditing ? '<div class="cursor-pointer text-slate-300 hover:text-blue-500" onclick="mBTDB.pullFromOpenGate(\'' + docId + '\',\'cast.' + i + '.actor\',\'actor\')">' + self.icons.user + '</div>' :
-                            (c.actor ? '<button onclick="mBTDB.openContactByName(\'' + c.actor + '\')" class="text-blue-600 hover:scale-110 transition-transform">' + self.icons.user + '</button>' : '')) +
+                        '<input ' + lock + ' value="' + esc(c.actor || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'actor\',this.value)" class="font-black text-slate-900 w-full">' +
+                        (self.state.isEditing ? '<div class="cursor-pointer text-slate-300 hover:text-blue-500" data-action="db-pull-og" data-doc-id="' + esc(docId) + '" data-og-path="cast.' + i + '.actor" data-og-role="actor">' + self.icons.user + '</div>' :
+                            (c.actor ? '<button type="button" data-action="db-open-contact" data-contact-name="' + esc(c.actor) + '" class="text-blue-600 hover:scale-110 transition-transform">' + self.icons.user + '</button>' : '')) +
                         '</div>' +
                         '</td>' +
-                        '<td class="p-1"><input ' + lock + ' value="' + (c.swf || 'W') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'swf\',this.value)" class="text-center font-black uppercase text-[9px]" placeholder="S/W/F"></td>' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + (c.pickup || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'pickup\',this.value)" class="text-center" placeholder="--:--"></td>' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + (c.bf || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'bf\',this.value)" class="text-center" placeholder="--:--"></td>' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + (c.hmu || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'hmu\',this.value)" class="text-center" placeholder="--:--"></td>' +
-                        '<td class="p-1"><input ' + lock + ' type="text" value="' + (c.costume || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'costume\',this.value)" class="text-center" placeholder="--:--"></td>' +
-                        '<td class="p-1 bg-slate-50"><input ' + lock + ' type="text" value="' + (c.setCall || '') + '" onchange="mBTDB.formatTime(this, \'' + docId + '\'); mBTDB.updateRow(\'' + docId + '\',\'cast\',' + i + ',\'setCall\',this.value)" class="text-center font-black text-slate-900" placeholder="00:00"></td>' +
-                        '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + docId + '\',\'cast\',' + i + ', \'cast\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
+                        '<td class="p-1"><input ' + lock + ' value="' + esc(c.swf || 'W') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'swf\',this.value)" class="text-center font-black uppercase text-[9px]" placeholder="S/W/F"></td>' +
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(c.pickup || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'pickup\',this.value)" class="text-center" placeholder="--:--"></td>' +
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(c.bf || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'bf\',this.value)" class="text-center" placeholder="--:--"></td>' +
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(c.hmu || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'hmu\',this.value)" class="text-center" placeholder="--:--"></td>' +
+                        '<td class="p-1"><input ' + lock + ' type="text" value="' + esc(c.costume || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'costume\',this.value)" class="text-center" placeholder="--:--"></td>' +
+                        '<td class="p-1 bg-slate-50"><input ' + lock + ' type="text" value="' + esc(c.setCall || '') + '" onchange="mBTDB.formatTime(this, \'' + esc(docId) + '\'); mBTDB.updateRow(\'' + esc(docId) + '\',\'cast\',' + i + ',\'setCall\',this.value)" class="text-center font-black text-slate-900" placeholder="00:00"></td>' +
+                        '<td class="p-1 text-center ' + hideTool + '"><button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'cast\',' + i + ', \'cast\')" class="text-slate-300 hover:text-red-500">x</button></td>' +
                         '</tr>';
                 }).join('') +
                 '</tbody>' +
@@ -8188,7 +8214,7 @@
                 ' onchange="mBTDB.updateData(\'' + doc.id + '\', \'additional.' + widgetId + '\', this.value)" ' +
                 ' class="' + styleClass + ' w-full h-full disabled:bg-transparent disabled:border-none" ' +
                 ' style="' + customStyle + '" ' +
-                ' placeholder="' + placeholder + '">' + (val || '') + '</textarea>' +
+                ' placeholder="' + placeholder + '">' + esc(val || '') + '</textarea>' +
                 hudHtml +
                 '</div>' +
                 '</div>';
@@ -8626,22 +8652,22 @@
                 (d.transport || []).map(function (t, i) {
                     return '<tr class="hover:bg-slate-50 transition-colors">' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' value="' + (t.driver || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'transport\',' + i + ',\'driver\',this.value)" class="font-bold text-slate-900 w-full" placeholder="Driver Name">' +
+                        '<input ' + lock + ' value="' + esc(t.driver || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'driver\',this.value)" class="font-bold text-slate-900 w-full" placeholder="Driver Name">' +
                         '</td>' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' value="' + (t.vehicle || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'transport\',' + i + ',\'vehicle\',this.value)" class="text-slate-600 w-full" placeholder="Type/Plate">' +
+                        '<input ' + lock + ' value="' + esc(t.vehicle || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'vehicle\',this.value)" class="text-slate-600 w-full" placeholder="Type/Plate">' +
                         '</td>' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' value="' + (t.pax || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'transport\',' + i + ',\'pax\',this.value)" class="text-center font-mono" placeholder="#">' +
+                        '<input ' + lock + ' value="' + esc(t.pax || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'pax\',this.value)" class="text-center font-mono" placeholder="#">' +
                         '</td>' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' type="time" value="' + (t.pickup || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'transport\',' + i + ',\'pickup\',this.value)" class="text-center font-black text-blue-600">' +
+                        '<input ' + lock + ' type="time" value="' + esc(t.pickup || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'pickup\',this.value)" class="text-center font-black text-blue-600">' +
                         '</td>' +
                         '<td class="p-1">' +
-                        '<input ' + lock + ' value="' + (t.route || '') + '" onchange="mBTDB.updateRow(\'' + docId + '\',\'transport\',' + i + ',\'route\',this.value)" class="w-full italic text-slate-500" placeholder="Loc A > Loc B">' +
+                        '<input ' + lock + ' value="' + esc(t.route || '') + '" onchange="mBTDB.updateRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'route\',this.value)" class="w-full italic text-slate-500" placeholder="Loc A > Loc B">' +
                         '</td>' +
                         '<td class="p-1 text-center ' + hideTool + '">' +
-                        '<button onclick="mBTDB.deleteRow(\'' + docId + '\',\'transport\',' + i + ',\'transport\')" class="text-slate-300 hover:text-red-500 font-bold">x</button>' +
+                        '<button onclick="mBTDB.deleteRow(\'' + esc(docId) + '\',\'transport\',' + i + ',\'transport\')" class="text-slate-300 hover:text-red-500 font-bold">x</button>' +
                         '</td>' +
                         '</tr>';
                 }).join('') +
@@ -8681,7 +8707,7 @@
                 '<div class="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1 flex items-center gap-2">' +
                 (this.icons.hazard || "") + ' HEALTH & SAFETY PROTOCOLS' +
                 '</div>' +
-                '<textarea ' + lock + ' onchange="mBTDB.updateData(\'' + docId + '\', \'additional.' + widgetId + '\', this.value)" class="w-full h-full resize-none text-[9px] font-bold text-slate-800 bg-transparent outline-none leading-relaxed" placeholder="Enter safety details..">' + (val || defaultSafety) + '</textarea>' +
+                '<textarea ' + lock + ' onchange="mBTDB.updateData(\'' + esc(docId) + '\', \'additional.' + widgetId + '\', this.value)" class="w-full h-full resize-none text-[9px] font-bold text-slate-800 bg-transparent outline-none leading-relaxed" placeholder="Enter safety details..">' + esc(val || defaultSafety) + '</textarea>' +
                 '</div>';
         },
 
@@ -9164,10 +9190,10 @@
                 var listHtml = matches.map(function (c, i) {
                     return '<button onclick="mBTDB._resolveOGSelection(' + i + ')" class="w-full text-left p-3 bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-xl transition-all group mb-2">' +
                         '<div class="flex justify-between items-center">' +
-                        '<div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">' + c.name + '</div>' +
-                        '<div class="text-[8px] font-bold text-slate-300 bg-white border border-slate-200 rounded px-1.5 py-0.5">' + c.source + '</div>' +
+                        '<div class="text-[10px] font-black uppercase text-slate-700 group-hover:text-blue-700">' + esc(c.name) + '</div>' +
+                        '<div class="text-[8px] font-bold text-slate-300 bg-white border border-slate-200 rounded px-1.5 py-0.5">' + esc(c.source) + '</div>' +
                         '</div>' +
-                        '<div class="text-[9px] text-slate-400 font-mono">' + (c.contact || 'No Contact') + '</div>' +
+                        '<div class="text-[9px] text-slate-400 font-mono">' + esc(c.contact || 'No Contact') + '</div>' +
                         '</button>';
                 }).join('');
 
@@ -9653,7 +9679,7 @@
                     '<span class="text-[8px] font-mono text-slate-400 shrink-0">' + new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
                     '</div>' +
                     '<div class="flex justify-between items-center">' +
-                    '<div class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">' + l.section + '</div>' +
+                    '<div class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">' + mBT.ui.render.esc(l.section) + '</div>' +
                     revertBtn +
                     '</div>' +
                     renderDiff(l.diff) +
@@ -10709,7 +10735,11 @@
                                 icon: mBTAssets.plus,
                                 title: 'Add to Budget',
                                 color: 'blue',
-                                onClick: 'mBT.features.settings.addRateToBudget(\'' + ((r.description || '').replace(/'/g, "\\'")) + '\', ' + (parseFloat(r.rate) || 0) + ', \'' + (r.unit || 'day') + '\', \'USD\')'
+                                dataAction: 'settings-add-rate',
+                                dataDesc: r.description || '',
+                                dataRate: String(parseFloat(r.rate) || 0),
+                                dataUnit: r.unit || 'day',
+                                dataCurr: 'USD'
                             }]
                         });
                     });
@@ -12478,6 +12508,7 @@
                     role: c.role || c.department || '',
                     department: c.department || c.role || '',
                     rate: c.rate || null,
+                    currency: c.currency || null,
                     walletType: c.walletType || '',
                     walletAddress: c.walletAddress || '',
                     portfolio: c.portfolio || []
@@ -12526,6 +12557,7 @@
                 department: payload.department || payload.role || existing.department || existing.role || '',
                 category: existing.category || 'Crew',
                 rate: existing.rate != null ? existing.rate : null,
+                currency: existing.currency || payload.currency || null,
                 walletType: existing.walletType || '',
                 walletAddress: existing.walletAddress || '',
                 portfolio: existing.portfolio || [],
@@ -12538,6 +12570,8 @@
                 role: payload.role || '',
                 department: payload.department || payload.role || '',
                 category: 'Crew',
+                rate: payload.rate != null ? payload.rate : null,
+                currency: payload.currency || null,
                 portfolio: [],
                 source: 'device'
             };
@@ -12586,7 +12620,14 @@
             // Resolve global payments if local item lacks them but has a name match
             var contextForHistory = item;
             if (!item.payments && item.crew && item.crew.name) {
-                var globalC = mBTOG.contacts.find(function (c) { return c.name.toLowerCase() === item.crew.name.toLowerCase(); });
+                var globalC = null;
+                var linkedContactId = item.contactId || item.contact_id;
+                if (linkedContactId) {
+                    globalC = mBTOG.contacts.find(function (c) { return c.id === linkedContactId; });
+                }
+                if (!globalC) {
+                    globalC = mBTOG.contacts.find(function (c) { return c.name && c.name.toLowerCase() === item.crew.name.toLowerCase(); });
+                }
                 if (globalC) contextForHistory = globalC;
             }
             ledgerHtml = mBT.ui.render.paymentHistory(contextForHistory);
@@ -12613,7 +12654,7 @@
                 '<div class="flex flex-wrap gap-1">';
             crew.portfolio.forEach(function (p) {
                 if (p.type === 'link') {
-                    portfolioHtml += '<a href="' + mBT.ui.render.esc(p.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                    portfolioHtml += '<a href="' + mBT.ui.render.esc(safePortfolioHref(p.url)) + '" target="_blank" rel="noopener noreferrer" ' +
                         'class="flex items-center gap-1 text-[8px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors no-underline">' +
                         mBT.ui.render.esc(p.label || p.url) + '</a>';
                 } else if (p.data) {
@@ -12627,7 +12668,7 @@
 
         var profileHtml = '<div class="space-y-3 pt-2">' +
             '<div class="flex justify-end">' +
-            '<button type="button" id="importContactBtn" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">' + (mBTAssets.plus || "") + ' Import Contact</button>' +
+            '<button type="button" id="importContactBtn" class="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg">' + (mBTAssets.plus || "") + ' Select Contact</button>' +
             '</div>' +
             (linkedBadges ? '<div class="flex flex-wrap gap-1">' + linkedBadges + '</div>' : '') +
             /* Hidden field carries the full contact JSON from picker */
@@ -12696,18 +12737,47 @@
                     }
 
                     /* Build the full crew object — merge typed fields over imported contact */
-                    var crewObj = importedContact ? {
-                        contactId: importedContact.id || null,
-                        name: name || importedContact.name || '',
-                        phone: phone || importedContact.phone || '',
-                        email: email || importedContact.email || '',
-                        role: importedContact.role || '',
-                        department: importedContact.department || '',
-                        rate: importedContact.rate || null,
-                        walletType: importedContact.walletType || '',
-                        walletAddress: importedContact.walletAddress || '',
-                        portfolio: importedContact.portfolio || []
-                    } : { name: name, phone: phone, email: email };
+                    var crewObj;
+                    if (importedContact) {
+                        var importRate = importedContact.rate;
+                        var hasImportRate = (importRate !== null && importRate !== undefined && importRate !== '');
+                        var importCurrency = importedContact.currency || null;
+                        var budgetBase = (typeof budget !== 'undefined' && budget && budget.currency) || 'JMD';
+                        var crewRate = importRate;
+                        if (hasImportRate && importCurrency && importCurrency !== budgetBase) {
+                            try {
+                                if (window.mBT && mBT.le && typeof mBT.le.convertCurrency === 'function') {
+                                    crewRate = Math.round(mBT.le.convertCurrency(importRate, importCurrency, budgetBase));
+                                }
+                            } catch (convEx) { /* engine unavailable */ }
+                        }
+                        crewObj = {
+                            contactId: importedContact.id || null,
+                            name: name || importedContact.name || '',
+                            phone: phone || importedContact.phone || '',
+                            email: email || importedContact.email || '',
+                            role: importedContact.role || '',
+                            department: importedContact.department || '',
+                            rate: hasImportRate ? crewRate : null,
+                            currency: importCurrency,
+                            walletType: importedContact.walletType || '',
+                            walletAddress: importedContact.walletAddress || '',
+                            portfolio: importedContact.portfolio || []
+                        };
+                    } else {
+                        crewObj = {
+                            name: name,
+                            phone: phone,
+                            email: email,
+                            role: crew.role || '',
+                            department: crew.department || '',
+                            rate: (crew.rate !== undefined ? crew.rate : null),
+                            currency: crew.currency || null,
+                            walletType: crew.walletType || '',
+                            walletAddress: crew.walletAddress || '',
+                            portfolio: crew.portfolio || []
+                        };
+                    }
 
                     if (itemId && itemId.startsWith('dummy_new_contact')) {
                         if (!name) return mBTME.alert("Required", "Name is required.");
@@ -12738,6 +12808,13 @@
                     }
                     else if (item) {
                         item.crew = crewObj;
+                        if (importedContact && crewObj.rate != null && crewObj.rate !== '') {
+                            var lineRate = parseFloat(crewObj.rate);
+                            if (!isNaN(lineRate) && lineRate > 0) {
+                                item.rate = lineRate;
+                                if (item.baseRate == null || item.baseRate === 0) item.baseRate = lineRate;
+                            }
+                        }
                         mBTME.close('crewProfileModal');
                         if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
                         if (typeof render === 'function') render();
@@ -12748,6 +12825,48 @@
 
             var importBtn = document.getElementById('importContactBtn');
             if (importBtn) {
+                function parseVCard(text) {
+                    var contacts = [];
+                    var blocks = text.split(/BEGIN:VCARD/i);
+                    for (var i = 1; i < blocks.length; i++) {
+                        var block = blocks[i];
+                        var fnMatch    = block.match(/^FN[^:]*:(.+)$/m);
+                        var telMatch   = block.match(/^TEL[^:]*:(.+)$/m);
+                        var emailMatch = block.match(/^EMAIL[^:]*:(.+)$/m);
+                        if (!fnMatch) continue;
+                        contacts.push({
+                            name:  fnMatch[1].trim().replace(/\r$/, ''),
+                            phone: telMatch   ? telMatch[1].trim().replace(/\r$/, '')   : null,
+                            email: emailMatch ? emailMatch[1].trim().replace(/\r$/, '') : null
+                        });
+                    }
+                    return contacts;
+                }
+
+                function applyImportedDeviceContact(name, phone, email) {
+                    if (!name) return;
+                    var roleHint = (item && item.description) ? item.description : '';
+                    window.mBTSaveContactToRoster({
+                        name: name,
+                        phone: phone,
+                        email: email,
+                        role: roleHint,
+                        department: roleHint
+                    }).then(function (saved) {
+                        if (saved && typeof window.mBTApplyCrewContactPick === 'function') {
+                            window.mBTApplyCrewContactPick(saved);
+                        } else {
+                            if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
+                            if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
+                            if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
+                        }
+                    }).catch(function () {
+                        if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
+                        if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
+                        if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
+                    });
+                }
+
                 function importFromPhoneContacts() {
                     navigator.contacts.select(['name', 'tel', 'email'], { multiple: false }).then(function (contacts) {
                         if (!contacts.length) return;
@@ -12756,79 +12875,138 @@
                         var phone = (c.tel && c.tel[0]) ? c.tel[0] : '';
                         var email = (c.email && c.email[0]) ? c.email[0] : '';
                         if (!name) return;
-                        var roleHint = (item && item.description) ? item.description : '';
-                        window.mBTSaveContactToRoster({
-                            name: name,
-                            phone: phone,
-                            email: email,
-                            role: roleHint,
-                            department: roleHint
-                        }).then(function (saved) {
-                            if (saved && typeof window.mBTApplyCrewContactPick === 'function') {
-                                window.mBTApplyCrewContactPick(saved);
-                            } else {
-                                if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
-                                if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
-                                if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
-                            }
-                        }).catch(function () {
-                            if (document.getElementById('crewName')) document.getElementById('crewName').value = name;
-                            if (document.getElementById('crewPhone')) document.getElementById('crewPhone').value = phone;
-                            if (document.getElementById('crewEmail')) document.getElementById('crewEmail').value = email;
-                        });
+                        applyImportedDeviceContact(name, phone, email);
                     }).catch(function (ex) { console.log('Contact Import cancelled'); });
+                }
+
+                function openVCardContactPicker(contacts) {
+                    var listHtml = '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar" id="vcardContactPickerList">';
+                    contacts.forEach(function (c, idx) {
+                        listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" data-idx="' + idx + '">' +
+                            '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                            '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                            '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.phone || c.email || '') + '</div></div>' +
+                            '</div>';
+                    });
+                    listHtml += '</div>';
+                    mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
+                    setTimeout(function () {
+                        var items = document.querySelectorAll('#vcardContactPickerList .cp-item');
+                        for (var j = 0; j < items.length; j++) {
+                            (function (el) {
+                                el.addEventListener('click', function () {
+                                    var idx = parseInt(el.getAttribute('data-idx'), 10);
+                                    var picked = contacts[idx];
+                                    mBTME.close('contactPickerModal');
+                                    if (picked) applyImportedDeviceContact(picked.name, picked.phone || '', picked.email || '');
+                                });
+                            })(items[j]);
+                        }
+                    }, 50);
+                }
+
+                function importFromDeviceVCard() {
+                    var inp = document.createElement('input');
+                    inp.type = 'file';
+                    inp.accept = '.vcf,text/vcard,text/x-vcard';
+                    inp.style.display = 'none';
+                    document.body.appendChild(inp);
+                    inp.onchange = function () {
+                        var file = inp.files && inp.files[0];
+                        if (inp.parentNode) inp.parentNode.removeChild(inp);
+                        if (!file) return;
+                        var reader = new FileReader();
+                        reader.onload = function (ev) {
+                            var parsed = parseVCard(ev.target.result);
+                            if (!parsed.length) {
+                                mBTME.alert('No Contacts', 'This file had no readable contact records. Export a .vcf from Contacts with at least one named contact and try again.');
+                                return;
+                            }
+                            if (parsed.length === 1) {
+                                applyImportedDeviceContact(parsed[0].name, parsed[0].phone || '', parsed[0].email || '');
+                                return;
+                            }
+                            openVCardContactPicker(parsed);
+                        };
+                        reader.readAsText(file);
+                    };
+                    inp.click();
+                }
+
+                function importFromDevice() {
+                    if ('contacts' in navigator && 'ContactsManager' in window) {
+                        importFromPhoneContacts();
+                    } else {
+                        importFromDeviceVCard();
+                    }
                 }
 
                 function openSavedContactPicker() {
                     /* Same merge as inline pre-search via mBTFetchMergedContactRoster */
                     window.mBTFetchMergedContactRoster().then(function (roster) {
-                        if (!roster.length) {
-                            mBTME.alert('No Contacts', 'No contacts saved yet. Add them via the Contacts tool first.');
-                            return;
-                        }
-                        var listHtml = '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
+                        var listHtml = '<button type="button" id="importFromDeviceBtn" class="w-full py-3 px-4 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95 mb-3">IMPORT FROM DEVICE</button>' +
+                            '<input type="text" id="contactPickerSearch" placeholder="Search name or role..." ' +
                             'class="w-full p-2.5 bg-slate-100 rounded-xl text-xs font-bold outline-none mb-3" ' +
-                            'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">' +
-                            '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
-                        roster.forEach(function (c) {
-                            /* Encode full contact as JSON in a data attribute for pickup by onclick */
-                            var safeJson = mBT.ui.render.esc(JSON.stringify({
-                                id: c.id || '',
-                                name: c.name || '',
-                                phone: c.phone || '',
-                                email: c.email || '',
-                                role: c.role || c.department || '',
-                                department: c.department || c.role || '',
-                                rate: c.rate || null,
-                                walletType: c.walletType || '',
-                                walletAddress: c.walletAddress || '',
-                                portfolio: c.portfolio || []
-                            }));
-                            listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
-                                'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || c.department || '')) + '" ' +
-                                'data-cname="' + mBT.ui.render.esc(c.name || '') + '" ' +
-                                'data-cphone="' + mBT.ui.render.esc(c.phone || '') + '" ' +
-                                'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
-                                'data-cjson="' + safeJson + '" ' +
-                                'onclick="(function(el){' +
-                                'var n=document.getElementById(\'crewName\');' +
-                                'var p=document.getElementById(\'crewPhone\');' +
-                                'var e=document.getElementById(\'crewEmail\');' +
-                                'if(n) n.value=el.dataset.cname||\'\';' +
-                                'if(p) p.value=el.dataset.cphone||\'\';' +
-                                'if(e) e.value=el.dataset.cemail||\'\';' +
-                                'var h=document.getElementById(\'crewImportData\');' +
-                                'if(h) h.value=el.dataset.cjson;' +
-                                'mBTME.close(\'contactPickerModal\');' +
-                                '})(this)">' +
-                                '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
-                                '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
-                                '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.department || c.category || '') + '</div></div>' +
-                                '</div>';
-                        });
-                        listHtml += '</div>';
-                        mBTME.open('contactPicker', 'Select Contact', listHtml, 'max-w-xs');
+                            'oninput="(function(v){var items=document.querySelectorAll(\'.cp-item\');items.forEach(function(el){el.style.display=el.dataset.name.toLowerCase().indexOf(v.toLowerCase())>-1?\'flex\':\'none\';});})(this.value)">';
+                        if (!roster.length) {
+                            listHtml += '<div class="p-4 text-center text-xs font-bold text-slate-400">No contacts saved yet. Add them via the Contacts tool.</div>';
+                        } else {
+                            listHtml += '<div class="space-y-1 max-h-64 overflow-y-auto no-scrollbar">';
+                            roster.forEach(function (c) {
+                                /* Encode full contact as JSON in a data attribute for pickup by onclick */
+                                var safeJson = mBT.ui.render.esc(JSON.stringify({
+                                    id: c.id || '',
+                                    name: c.name || '',
+                                    phone: c.phone || '',
+                                    email: c.email || '',
+                                    role: c.role || c.department || '',
+                                    department: c.department || c.role || '',
+                                    rate: c.rate || null,
+                                    currency: c.currency || null,
+                                    walletType: c.walletType || '',
+                                    walletAddress: c.walletAddress || '',
+                                    portfolio: c.portfolio || []
+                                }));
+                                listHtml += '<div class="cp-item flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors" ' +
+                                    'data-name="' + mBT.ui.render.esc((c.name || '') + ' ' + (c.role || c.department || '')) + '" ' +
+                                    'data-cname="' + mBT.ui.render.esc(c.name || '') + '" ' +
+                                    'data-cphone="' + mBT.ui.render.esc(c.phone || '') + '" ' +
+                                    'data-cemail="' + mBT.ui.render.esc(c.email || '') + '" ' +
+                                    'data-cjson="' + safeJson + '" ' +
+                                    'onclick="(function(el){' +
+                                    'var n=document.getElementById(\'crewName\');' +
+                                    'var p=document.getElementById(\'crewPhone\');' +
+                                    'var e=document.getElementById(\'crewEmail\');' +
+                                    'if(n) n.value=el.dataset.cname||\'\';' +
+                                    'if(p) p.value=el.dataset.cphone||\'\';' +
+                                    'if(e) e.value=el.dataset.cemail||\'\';' +
+                                    'var h=document.getElementById(\'crewImportData\');' +
+                                    'if(h) h.value=el.dataset.cjson;' +
+                                    'mBTME.close(\'contactPickerModal\');' +
+                                    '})(this)">' +
+                                    '<div class="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">' + mBT.ui.render.esc((c.name || '?').charAt(0).toUpperCase()) + '</div>' +
+                                    '<div><div class="text-xs font-black text-slate-800">' + mBT.ui.render.esc(c.name || '') + '</div>' +
+                                    '<div class="text-[9px] text-slate-400 font-bold">' + mBT.ui.render.esc(c.role || c.department || c.category || '') + '</div></div>' +
+                                    '</div>';
+                            });
+                            listHtml += '</div>';
+                        }
+                        listHtml += '<button type="button" id="contactPickerCancelBtn" class="w-full mt-3 py-2.5 px-4 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-all active:scale-95">Cancel</button>';
+                        mBTME.open('contactPicker', '', listHtml, 'max-w-xs', { hideHeader: true });
                         setTimeout(function () {
+                            var deviceBtn = document.getElementById('importFromDeviceBtn');
+                            if (deviceBtn) {
+                                deviceBtn.addEventListener('click', function () {
+                                    mBTME.close('contactPickerModal');
+                                    importFromDevice();
+                                });
+                            }
+                            var cancelBtn = document.getElementById('contactPickerCancelBtn');
+                            if (cancelBtn) {
+                                cancelBtn.addEventListener('click', function () {
+                                    mBTME.close('contactPickerModal');
+                                });
+                            }
                             var s = document.getElementById('contactPickerSearch');
                             if (s) s.focus();
                         }, 80);
@@ -12836,31 +13014,7 @@
                 }
 
                 importBtn.addEventListener('click', function () {
-                    if ('contacts' in navigator && 'ContactsManager' in window) {
-                        var choiceHtml = '<div class="space-y-3 p-1">' +
-                            '<button type="button" id="importFromPhoneBtn" class="w-full py-3 px-4 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95">Import from phone</button>' +
-                            '<button type="button" id="importFromSavedBtn" class="w-full py-3 px-4 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-all active:scale-95">Choose saved contact</button>' +
-                            '</div>';
-                        mBTME.open('importContactSource', 'Import Contact', choiceHtml, 'max-w-xs');
-                        setTimeout(function () {
-                            var phoneBtn = document.getElementById('importFromPhoneBtn');
-                            var savedBtn = document.getElementById('importFromSavedBtn');
-                            if (phoneBtn) {
-                                phoneBtn.addEventListener('click', function () {
-                                    mBTME.close('importContactSourceModal');
-                                    importFromPhoneContacts();
-                                });
-                            }
-                            if (savedBtn) {
-                                savedBtn.addEventListener('click', function () {
-                                    mBTME.close('importContactSourceModal');
-                                    openSavedContactPicker();
-                                });
-                            }
-                        }, 50);
-                    } else {
-                        openSavedContactPicker();
-                    }
+                    openSavedContactPicker();
                 });
             }
 
@@ -13066,9 +13220,11 @@
     window.renderStageDatabaseList = function (items, stageKey, targetSectionName) {
         if (!items.length) return '<div class="p-4 text-center text-xs text-gray-400">No matches.</div>';
         return items.map(function (item) {
-            return '<div onclick="' + (item.isExisting ? 'assignItemToStage(\'' + RenderEngine.esc(item.id) + '\', \'' + RenderEngine.esc(stageKey) + '\')' : 'addStageItemToBudget(\'' + RenderEngine.esc(item.description) + '\', ' + item.rate + ', \'' + RenderEngine.esc(item.unit) + '\', \'' + RenderEngine.esc(stageKey) + '\', \'' + RenderEngine.esc(targetSectionName) + '\')') + '" ' +
-                'class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">' +
-                '<div><div class="text-sm font-bold text-gray-700">' + item.description + '</div>' + (item.isExisting ? '<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ' + item.sectionName + '</div>' : '') + '</div>' +
+            var rowAttrs = item.isExisting
+                ? 'data-action="stage-assign-item" data-item-id="' + RenderEngine.esc(item.id) + '" data-stage-key="' + RenderEngine.esc(stageKey) + '"'
+                : 'data-action="stage-add-budget-item" data-item-desc="' + RenderEngine.esc(item.description) + '" data-item-rate="' + (item.rate || 0) + '" data-item-unit="' + RenderEngine.esc(item.unit) + '" data-stage-key="' + RenderEngine.esc(stageKey) + '" data-target-section="' + RenderEngine.esc(targetSectionName) + '"';
+            return '<div ' + rowAttrs + ' class="p-3 border-b bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center group">' +
+                '<div><div class="text-sm font-bold text-gray-700">' + RenderEngine.esc(item.description) + '</div>' + (item.isExisting ? '<div class="text-[9px] text-emerald-600 font-bold">LINK FROM: ' + RenderEngine.esc(item.sectionName) + '</div>' : '') + '</div>' +
                 '<div class="font-mono text-xs text-gray-500 font-bold">' + mBTLE.format.currency(item.rate) + '</div>' +
                 '</div>';
         }).join('');
@@ -13807,7 +13963,7 @@
             lastAction = safeAction + ': ' + safeTarget;
         } else if (typeof historyStack !== 'undefined' && historyStack.length > 0) {
             var snap = historyStack[historyIndex];
-            lastAction = (snap && snap.description) ? snap.description : 'Ready to Go!';
+            lastAction = (snap && snap.description) ? mBT.ui.render.esc(snap.description) : 'Ready to Go!';
         }
 
         container.innerHTML =
@@ -14100,12 +14256,57 @@
         mBT.core.action('stages-modal', function () { showStagesModal(); });
         mBT.core.action('docs-modal', function () { showDocumentsModal(); });
         mBT.core.action('settings-modal', function () { showSettingsModal(); });
-        mBT.core.action('support-modal', function () { showCoffeeWidget(); });
+        mBT.core.action('support-modal', function () {
+            if (window.mBTRouter && typeof window.mBTRouter.showCoffeeWidget === 'function') window.mBTRouter.showCoffeeWidget();
+        });
         /* Phase 92.8: Activity Feed opens Multiplayer Hub */
         mBT.core.action('activity-feed', function () { openShareHub(); });
 
         /* D. Budget Interaction (The Synapse) */
         mBT.core.action('section-toggle', function (e, el) { handleToggleSection(el.dataset.id, el); });
+        mBT.core.action('section-lock-rates', function (e, el) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (typeof window.lockSectionRates === 'function') window.lockSectionRates(el.dataset.id);
+        });
+        mBT.core.action('finance-process-payment', function (e, el) {
+            if (mBT.features && mBT.features.finance && typeof mBT.features.finance.processPayment === 'function') {
+                mBT.features.finance.processPayment(el.dataset.contactId);
+            }
+        });
+        mBT.core.action('settings-add-rate', function (e, el) {
+            if (mBT.features && mBT.features.settings && typeof mBT.features.settings.addRateToBudget === 'function') {
+                mBT.features.settings.addRateToBudget(el.dataset.rateDesc, parseFloat(el.dataset.rateVal) || 0, el.dataset.rateUnit || 'day', el.dataset.rateCurr || 'USD');
+            }
+        });
+        mBT.core.action('og-commit-add-item', function (e, el) {
+            if (typeof window._commitAddItem === 'function') {
+                window._commitAddItem(el.dataset.itemDesc || '', parseFloat(el.dataset.itemRate) || 0, el.dataset.itemUnit || 'Day', el.dataset.itemCurr || '');
+            }
+        });
+        mBT.core.action('stage-assign-item', function (e, el) {
+            if (typeof window.assignItemToStage === 'function') window.assignItemToStage(el.dataset.itemId, el.dataset.stageKey);
+        });
+        mBT.core.action('stage-add-budget-item', function (e, el) {
+            if (typeof window.addStageItemToBudget === 'function') {
+                window.addStageItemToBudget(el.dataset.itemDesc, parseFloat(el.dataset.itemRate) || 0, el.dataset.itemUnit, el.dataset.stageKey, el.dataset.targetSection);
+            }
+        });
+        mBT.core.action('preview-download-jpeg', function () {
+            if (mBTDB.state._previewJpegUrl && typeof mBTPublisher !== 'undefined' && mBTPublisher.downloadJPEG) {
+                mBTPublisher.downloadJPEG(mBTDB.state._previewJpegUrl, mBTDB.state._previewDocLabel || 'document');
+            }
+        });
+        mBT.core.action('preview-send-crew', function () {
+            if (mBTDB.state._previewJpegUrl) mBTDB.sendToDistribution(mBTDB.state._previewJpegUrl);
+        });
+        mBT.core.action('db-open-contact', function (e, el) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            mBTDB.openContactByName(el.dataset.contactName || '');
+        });
+        mBT.core.action('db-pull-og', function (e, el) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            mBTDB.pullFromOpenGate(el.dataset.docId, el.dataset.ogPath, el.dataset.ogRole || 'crew');
+        });
         mBT.core.action('section-add', function (e, el) { showItemSelectorModal(el.dataset.id); });
         mBT.core.action('row-delete', function (e, el) { handleRemoveItem(el.dataset.section, el.dataset.id); });
 

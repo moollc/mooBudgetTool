@@ -35,5 +35,39 @@ The **mBT (mooBudgetTool)** ecosystem is built upon the incredible work of the o
 - **Inter** — Rasmus Andersson. [Google Fonts](https://fonts.google.com/specimen/Inter)
 - **Roboto Condensed** — Christian Robertson. [Google Fonts](https://fonts.google.com/specimen/Roboto+Condensed)
 
+## Rate Data Sources (Open Gate)
+
+Open Gate's crew and equipment rates are built from published union rate cards,
+government film commission data, and industry rate guides. USA is the 1.0 anchor;
+all regional figures are cost multipliers against that base, not live FX
+conversions of union scale.
+
+These bodies publish the rate cards the model is calibrated against. mBT is not
+affiliated with, endorsed by, or a substitute for any of them. **Always confirm
+current scale with the relevant union or guild before contracting.**
+
+### Unions and guilds
+- **IATSE**: Area Standards Agreement and Commercial Production Agreement; US crew scale. [Website](https://iatse.net)
+- **DGA**: Directors Guild of America; director, UPM and AD scale. [Website](https://dga.org)
+- **SAG-AFTRA**: performer scale, per diem and meal penalty structure. [Website](https://sagaftra.org)
+- **BECTU**: UK crew rate cards, including art department and costume. [Website](https://bectu.org.uk)
+- **BCCFU**: BC and Yukon Council of Film Unions; Canadian schedule system. [Website](https://bccfu.com)
+- **IATSE Local 873**: Toronto rate schedules. [Website](https://iatse873.com)
+- **MEAA**: Media, Entertainment & Arts Alliance; Australian classification levels. [Website](https://meaa.org)
+- **AICP**: Association of Independent Commercial Producers; commercial bid structure. [Website](https://aicp.com)
+
+### Film commissions and government bodies
+Film Facilitation Office India, NFDC India, Thailand Film Office, FDCP
+Philippines, Vietnam Ministry of Culture, Polish Film Institute, IMCINE Mexico,
+ANCINE Brazil, Colombia Film Commission, Proimágenes Colombia, NFVF South Africa.
+
+### Exchange rate data
+- **XE.com**: currency conversion reference. [Website](https://xe.com)
+- **ExchangeRate-API**: live rate validation. [Website](https://exchangerate-api.com)
+
+Individual figures carry their own citation and a confidence marker in the
+research record. Where a rate could not be sourced from a card, it is marked as
+inferred from a comparable role rather than presented as verified.
+
 ---
 *Developed with ❤️ by Jayson Moo-Young*

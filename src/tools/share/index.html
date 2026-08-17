@@ -437,18 +437,20 @@
 
             augmentedPeers.forEach(function(p) {
                 var isMe = p.userId === state.myUserId;
+                var displayLabel = p.displayName || 'Collaborator';
+                var avatarLetter = esc((p.displayName || 'G').charAt(0)).toUpperCase();
                 html += '<tr class="hover:bg-white/5 transition-colors">' +
                     '<td class="px-4 py-1.5 flex items-center gap-3">' +
-                        '<div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-black text-slate-400 shrink-0">' + (p.displayName || 'G')[0].toUpperCase() + '</div>' +
+                        '<div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-black text-slate-400 shrink-0">' + avatarLetter + '</div>' +
                         '<div class="font-bold flex flex-col">' +
-                            '<span class="text-slate-200">' + (p.displayName || 'Collaborator') + (isMe ? ' (You)' : '') + '</span>' +
+                            '<span class="text-slate-200">' + esc(displayLabel) + (isMe ? ' (You)' : '') + '</span>' +
                         '</div>' +
                     '</td>' +
                     '<td class="px-4 py-1.5">' +
                         '<span class="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online</span>' +
                     '</td>' +
                     '<td class="px-4 py-1.5 text-right">' +
-                        '<select data-user="' + (p.userId) + '" ' + (isMe ? 'disabled ' : '') + 'class="ml-auto block w-24 text-[9px] font-black uppercase tracking-widest p-1.5 outline-none rounded-md border ' + getRoleColor(p.role || 'viewer') + '">' +
+                        '<select data-user="' + esc(p.userId || '') + '" ' + (isMe ? 'disabled ' : '') + 'class="ml-auto block w-24 text-[9px] font-black uppercase tracking-widest p-1.5 outline-none rounded-md border ' + getRoleColor(p.role || 'viewer') + '">' +
                             '<option value="viewer" ' + ((p.role === 'viewer' || !p.role) ? 'selected' : '') + '>Viewer</option>' +
                             '<option value="editor" ' + (p.role === 'editor' ? 'selected' : '') + '>Editor</option>' +
                             '<option value="admin" ' + (p.role === 'admin' ? 'selected' : '') + '>Admin</option>' +

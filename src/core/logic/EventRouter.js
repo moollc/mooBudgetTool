@@ -108,13 +108,19 @@ window.mBTRouter = (function () {
         }
         if (!doc) return;
 
+        var escFn = (window.mBT && window.mBT.ui && window.mBT.ui.render && window.mBT.ui.render.esc)
+            ? window.mBT.ui.render.esc
+            : function (s) {
+                if (s == null) return '';
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            };
+
         var shareText = (typeof mBTPublisher !== 'undefined' && mBTPublisher.comm)
             ? mBTPublisher.comm.generateShareSheet(doc)
             : 'Reviewing ' + doc.label;
 
         var waLink   = 'https://wa.me/?text=' + encodeURIComponent(shareText);
         var mailLink = 'mailto:?subject=' + encodeURIComponent('Document Review: ' + doc.label) + '&body=' + encodeURIComponent(shareText);
-        var safeST   = shareText.replace(/'/g, "\\'");
         var assets   = window.mBTAssets || {};
 
         var content =
@@ -123,7 +129,7 @@ window.mBTRouter = (function () {
             '<div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-xl">' +
             (assets.paperPlane || '') + '</div>' +
             '<h3 class="text-sm font-black uppercase tracking-widest text-slate-900">Distribute Document</h3>' +
-            '<p class="text-[10px] text-slate-400 font-bold mt-1">' + doc.label + '</p>' +
+            '<p class="text-[10px] text-slate-400 font-bold mt-1">' + escFn(doc.label) + '</p>' +
             '</div>' +
             '<div class="grid grid-cols-2 gap-3 mb-4">' +
             '<a href="' + waLink + '" target="_blank" class="flex flex-col items-center gap-2 p-4 bg-[#25D366]/10 border border-[#25D366]/20 rounded-xl hover:bg-[#25D366]/20 transition-all group no-underline">' +
@@ -137,8 +143,8 @@ window.mBTRouter = (function () {
             '<div class="bg-slate-50 p-3 rounded-xl border border-slate-100">' +
             '<label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Quick Copy Message</label>' +
             '<div class="flex gap-2">' +
-            '<input type="text" value="' + shareText + '" class="flex-grow bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none" readonly>' +
-            '<button onclick="navigator.clipboard.writeText(\'' + safeST + '\'); this.innerHTML=\'Copied!\';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>' +
+            '<input type="text" value="' + escFn(shareText) + '" class="flex-grow bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none" readonly>' +
+            '<button type="button" onclick="var _inp=this.parentNode.querySelector(\'input\'); if(_inp) navigator.clipboard.writeText(_inp.value); this.textContent=\'Copied!\';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>' +
             '</div></div></div>';
 
         if (window.mBTME) mBTME.open('shareSelector', 'Share', content, 'max-w-sm', { hideHeader: true, noPadding: true });
@@ -364,12 +370,81 @@ window.mBTRouter = (function () {
             rate:          lineItem.rate,
             quantity:      lineItem.quantity,
             unit:          lineItem.unit,
+            contactId:     lineItem.contactId || null,
             contact_id:    lineItem.contact_id || null,
             contact_name:  lineItem.description,
             contact_phone: (lineItem.crew && lineItem.crew.phone) || null,
-            contact_email: (lineItem.crew && lineItem.crew.email) || null
+            contact_email: lineItem.contact_email || (lineItem.crew && lineItem.crew.email) || null
         };
-        budget.globalItems.push(gi);
+        var idx = -1;
+        var mi;
+        for (mi = 0; mi < budget.globalItems.length; mi++) {
+            if (budget.globalItems[mi].id && lineItem.id && budget.globalItems[mi].id === lineItem.id) {
+                idx = mi;
+                break;
+            }
+        }
+        if (idx < 0 && lineItem.contactId) {
+            for (mi = 0; mi < budget.globalItems.length; mi++) {
+                if (budget.globalItems[mi].contactId === lineItem.contactId) {
+                    idx = mi;
+                    break;
+                }
+            }
+        }
+        if (idx >= 0) {
+            budget.globalItems[idx] = gi;
+        } else {
+            budget.globalItems.push(gi);
+        }
+    }
+
+    /* --- Update grid line items by contactId first, then description / crew name (legacy) --- */
+    function _updateContactRateByMatch(budget, contactId, matchLower, newRate, newName) {
+        if (!budget || !budget.sections) return false;
+        if (!contactId && !matchLower) return false;
+        var updated = false;
+        var idMatched = false;
+        var sk, items, ii, it, desc, crewName;
+        var secKeys = Object.keys(budget.sections);
+        if (contactId) {
+            for (var si = 0; si < secKeys.length; si++) {
+                sk = secKeys[si];
+                items = budget.sections[sk].items || [];
+                for (ii = 0; ii < items.length; ii++) {
+                    it = items[ii];
+                    if (!it || !it.contactId || it.contactId !== contactId) continue;
+                    it.rate = newRate;
+                    if (newName) {
+                        it.description = newName;
+                        if (it.crew) {
+                            it.crew.name = newName;
+                        } else {
+                            it.crew = { name: newName, phone: '', email: '' };
+                        }
+                    }
+                    updated = true;
+                    idMatched = true;
+                }
+            }
+        }
+        if (idMatched) return updated;
+        for (var sj = 0; sj < secKeys.length; sj++) {
+            sk = secKeys[sj];
+            items = budget.sections[sk].items || [];
+            for (ii = 0; ii < items.length; ii++) {
+                it = items[ii];
+                if (!it) continue;
+                desc = (it.description || '').toLowerCase();
+                crewName = (it.crew && it.crew.name) ? it.crew.name.toLowerCase() : '';
+                if (matchLower && (desc === matchLower || crewName === matchLower)) {
+                    it.rate = newRate;
+                    if (contactId) it.contactId = contactId;
+                    updated = true;
+                }
+            }
+        }
+        return updated;
     }
 
     /* --- Update grid line items (sections) by description / crew name match --- */
@@ -469,6 +544,7 @@ window.mBTRouter = (function () {
             if (payload.name && budget) {
                 var pushName = String(payload.name).trim();
                 var pushNameKey = pushName.toLowerCase();
+                var pushId = payload.contactId || null;
                 var existingItem = null;
                 var existingSectionKey = null;
                 var secKeys = budget.sections ? Object.keys(budget.sections) : [];
@@ -478,12 +554,17 @@ window.mBTRouter = (function () {
                     for (ii = 0; ii < secItems.length; ii++) {
                         cand = secItems[ii];
                         if (!cand) continue;
-                        if (String(cand.description || '').trim().toLowerCase() === pushNameKey) {
+                        if (pushId && cand.contactId && cand.contactId === pushId) {
                             existingItem = cand;
                             existingSectionKey = secKeys[si];
                             break;
                         }
-                        if (cand.crew && String(cand.crew.name || '').trim().toLowerCase() === pushNameKey) {
+                        if (!existingItem && String(cand.description || '').trim().toLowerCase() === pushNameKey) {
+                            existingItem = cand;
+                            existingSectionKey = secKeys[si];
+                            break;
+                        }
+                        if (!existingItem && cand.crew && String(cand.crew.name || '').trim().toLowerCase() === pushNameKey) {
                             existingItem = cand;
                             existingSectionKey = secKeys[si];
                             break;
@@ -492,12 +573,14 @@ window.mBTRouter = (function () {
                 }
                 if (existingItem) {
                     var upRate = parseFloat(payload.rate);
+                    existingItem.contactId = pushId || existingItem.contactId || null;
+                    if (payload.email) existingItem.contact_email = payload.email;
+                    existingItem.description = pushName;
                     existingItem.crew = {
                         name: pushName,
                         phone: payload.phone || (existingItem.crew && existingItem.crew.phone) || '',
                         email: payload.email || (existingItem.crew && existingItem.crew.email) || ''
                     };
-                    if (payload.email) existingItem.contact_id = payload.email;
                     if (!isNaN(upRate) && upRate > 0) {
                         existingItem.rate = upRate;
                         if (existingItem.baseRate == null || existingItem.baseRate === 0) existingItem.baseRate = upRate;
@@ -520,7 +603,8 @@ window.mBTRouter = (function () {
                             multiplier:  1,
                             actual:      0,
                             rateType:    'negotiable',
-                            contact_id:  payload.email || null,
+                            contactId:   pushId || null,
+                            contact_email: payload.email || null,
                             crew:        { name: pushName, phone: payload.phone || '', email: payload.email || '' }
                         };
                         section.items.push(newCrewItem);
@@ -542,22 +626,38 @@ window.mBTRouter = (function () {
 
         /* --- update-contact-rate: sync edited CRM rate to matching budget line items --- */
         } else if (action === 'update-contact-rate' && budget) {
+            var crId = payload.contactId || null;
             var crName = (payload.name || '').toLowerCase();
+            var crNameDisplay = payload.name || '';
             var crRate = parseFloat(payload.rate);
             /* Rate 0 is valid (free/gratis); only reject missing/NaN rates */
-            if (crName && !isNaN(crRate)) {
-                var crUpdated = _updateSectionRatesByMatch(budget, crName, crRate);
+            if ((crId || crName) && !isNaN(crRate)) {
+                var crUpdated = _updateContactRateByMatch(budget, crId, crName, crRate, crNameDisplay);
                 if (budget.globalItems) {
-                    for (var ci = 0; ci < budget.globalItems.length; ci++) {
-                        if ((budget.globalItems[ci].description || '').toLowerCase() === crName) {
-                            budget.globalItems[ci].rate = crRate;
+                    var gi, giIdMatched = false, ci;
+                    for (ci = 0; ci < budget.globalItems.length; ci++) {
+                        gi = budget.globalItems[ci];
+                        if (crId && gi.contactId && gi.contactId === crId) {
+                            gi.rate = crRate;
+                            if (crNameDisplay) gi.description = crNameDisplay;
                             crUpdated = true;
+                            giIdMatched = true;
+                        }
+                    }
+                    if (!giIdMatched) {
+                        for (ci = 0; ci < budget.globalItems.length; ci++) {
+                            gi = budget.globalItems[ci];
+                            if (crName && (gi.description || '').toLowerCase() === crName) {
+                                gi.rate = crRate;
+                                if (crId) gi.contactId = crId;
+                                crUpdated = true;
+                            }
                         }
                     }
                 }
                 if (crUpdated) {
                     _persistBudget(e.source, action, budget);
-                    console.log('[mBT] Contact rate synced:', payload.name, crRate);
+                    console.log('[mBT] Contact rate synced:', payload.name, crRate, crId || '');
                 }
             }
 
