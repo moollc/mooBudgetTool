@@ -75,27 +75,71 @@ window.mBTRouter = (function () {
         }
     }
 
-    /* --- Support Widget (Buy Me a Coffee) --- */
+    /* Fuel the Code: home pane plus BMC hosted page in the same modal.
+       Do not click #bmc-wbtn. That widget pops a side window. */
+    var BMC_PAGE = 'https://www.buymeacoffee.com/widget/page/jaysonmy';
+
+    function showCoffeeHome() {
+        var track = document.getElementById('coffeeSlideTrack');
+        if (track) track.style.transform = 'translateX(0)';
+    }
+
+    function showCoffeeDonate() {
+        var frame = document.getElementById('coffeeBmcFrame');
+        if (frame && !frame.getAttribute('src')) frame.setAttribute('src', BMC_PAGE);
+        var track = document.getElementById('coffeeSlideTrack');
+        if (track) track.style.transform = 'translateX(-50%)';
+    }
+
     function showCoffeeWidget() {
         var coffeeIcon = window.mBTAssets ? window.mBTAssets.coffee : '';
+        var flagJm = window.mBTAssets && window.mBTAssets.flagJM ? window.mBTAssets.flagJM : '';
+        var heartIcon = window.mBTAssets && window.mBTAssets.heart ? window.mBTAssets.heart : '';
+        var walletAddr = 'GCHAPDA2RYNRPEZTZ7UMZF3BVBU7RGTHA3P54F2PPRLV3Z4PZ4CQSS5R';
+        var goDonate = 'if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeDonate===\'function\')window.mBTRouter.showCoffeeDonate();';
+        var goHome = 'if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeHome===\'function\')window.mBTRouter.showCoffeeHome();';
         var content =
-            '<div class="text-center p-6 bg-yellow-50 min-h-[300px] flex flex-col items-center justify-center">' +
-            '<div class="w-20 h-20 bg-[#FFDD00] rounded-3xl flex items-center justify-center text-4xl shadow-xl mb-4 text-black border-4 border-white animate-bounce [&>svg]:w-10 [&>svg]:h-10">' +
+            '<div class="bg-yellow-50 w-full min-h-0 overflow-hidden">' +
+            '<div id="coffeeSlideTrack" style="display:flex;width:200%;transform:translateX(0);transition:transform 280ms ease;">' +
+
+            '<div class="text-center p-6 box-border" style="width:50%;flex:0 0 50%;">' +
+            '<div class="w-16 h-16 bg-[#FFDD00] rounded-3xl flex items-center justify-center shadow-xl mb-3 text-black border-4 border-white mx-auto [&>svg]:w-8 [&>svg]:h-8">' +
             coffeeIcon +
             '</div>' +
             '<h3 class="text-xl font-black uppercase tracking-tighter text-slate-900 mb-2">Fuel the Code</h3>' +
-            '<p class="text-xs font-bold text-slate-500 mb-6 max-w-xs leading-relaxed">' +
-            'mooBudget is free, offline-first, and built for the Caribbean industry. If it saves you time, consider buying a coffee for the dev team.' +
+            '<p class="text-xs font-bold text-slate-500 mb-5 max-w-xs leading-relaxed mx-auto">' +
+            'mooBudget is free and offline-first. Built from ' +
+            '<span class="inline-block align-middle mx-0.5 leading-none" title="Jamaica">' + flagJm + '</span>' +
+            ' with ' +
+            '<span class="inline-block align-middle mx-0.5 leading-none" title="love">' + heartIcon + '</span>' +
+            '. If it saves you time buy the team a coffee or send USDC on Stellar.' +
             '</p>' +
-            '<div class="space-y-3 w-full max-w-xs">' +
-            '<a href="https://buymeacoffee.com/jaysonmy" target="_blank" class="flex items-center justify-center gap-2 w-full py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-transform active:scale-95">' +
-            'Open Support Page' +
-            '</a>' +
-            '<button onclick="mBTME.close(\'coffeeModal\')" class="w-full py-3 bg-white border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">' +
+            '<div class="space-y-3 w-full max-w-xs mx-auto">' +
+            '<button type="button" onclick="' + goDonate + '" class="flex items-center justify-center gap-2 w-full py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-transform active:scale-95">' +
+            'Buy a Coffee' +
+            '</button>' +
+            '<div class="bg-white border border-slate-200 rounded-xl p-4">' +
+            '<p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Sendana wallet: USDC on Stellar</p>' +
+            '<img src="./assets/sendana-wallet-qr.png" alt="Sendana USDC wallet QR" width="180" height="180" class="mx-auto mb-3 rounded-lg bg-white" />' +
+            '<label class="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5 text-left">Wallet address</label>' +
+            '<div class="flex gap-2">' +
+            '<input type="text" value="' + walletAddr + '" readonly class="flex-grow min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[9px] font-bold text-slate-600 outline-none">' +
+            '<button type="button" onclick="var _inp=this.parentNode.querySelector(\'input\'); if(_inp) navigator.clipboard.writeText(_inp.value); this.textContent=\'Copied!\';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>' +
+            '</div></div>' +
+            '<button type="button" onclick="mBTME.close(\'coffeeModal\')" class="w-full py-3 bg-white border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">' +
             'Maybe Later' +
             '</button>' +
+            '</div></div>' +
+
+            '<div class="p-4 box-border flex flex-col" style="width:50%;flex:0 0 50%;">' +
+            '<button type="button" onclick="' + goHome + '" class="self-start mb-3 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800">' +
+            'Back' +
+            '</button>' +
+            '<iframe id="coffeeBmcFrame" title="Buy a Coffee" class="w-full bg-white rounded-xl border border-slate-200" style="height:420px;border:0;"></iframe>' +
+            '</div>' +
+
             '</div></div>';
-        if (window.mBTME) mBTME.open('coffee', '', content, 'max-w-sm', { hideHeader: true, noPadding: true });
+        if (window.mBTME) mBTME.open('coffee', '', content, 'max-w-md', { hideHeader: true, noPadding: true });
     }
 
     /* --- Distribution Share Selector (Preview Handler) --- */
@@ -1510,6 +1554,8 @@ window.mBTRouter = (function () {
         init:                      init,
         resolveConnectivityStatus: resolveConnectivityStatus,
         showCoffeeWidget:          showCoffeeWidget,
+        showCoffeeDonate:          showCoffeeDonate,
+        showCoffeeHome:            showCoffeeHome,
         openDocumentShareSelector: openDocumentShareSelector,
         handleLogin:               handleLogin,
         injectFooterIcons:         injectFooterIcons
