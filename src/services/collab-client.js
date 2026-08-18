@@ -215,6 +215,9 @@
             }).then(function (rows) {
                 var row = Array.isArray(rows) ? rows[0] : rows;
                 if (!row || !row.id) throw new Error('Create project returned no id');
+                syncBudgetLines(row.id, budgetData).catch(function (le) {
+                    console.warn('[mBTCollab] budget_lines sync after create failed:', le && le.message ? le.message : le);
+                });
                 return row;
             });
         });
@@ -303,6 +306,118 @@
         });
     }
 
+    function _numOrNull(v) {
+        if (v === undefined || v === null || v === '') return null;
+        var n = parseFloat(v);
+        return isFinite(n) ? n : null;
+    }
+
+    /* Flatten budget.sections[].items into budget_lines rows. Skip items with no id. */
+    function extractBudgetLines(projectId, budgetData) {
+        var rows = [];
+        if (!projectId || !budgetData || !budgetData.sections) return rows;
+        var currency = budgetData.displayCurrency || budgetData.currency || '';
+        var sectionKeys = Object.keys(budgetData.sections);
+        var si, items, ii, item, key, sec;
+        for (si = 0; si < sectionKeys.length; si++) {
+            sec = budgetData.sections[sectionKeys[si]];
+            items = (sec && sec.items) ? sec.items : [];
+            for (ii = 0; ii < items.length; ii++) {
+                item = items[ii];
+                if (!item) continue;
+                key = item.id != null && item.id !== '' ? String(item.id) : '';
+                if (!key) continue;
+                rows.push({
+                    project_id: projectId,
+                    line_key: key,
+                    section_key: String(sectionKeys[si] || ''),
+                    description: String(item.description || item.name || ''),
+                    unit: String(item.unit || ''),
+                    rate: _numOrNull(item.rate),
+                    quantity: _numOrNull(item.quantity),
+                    actual_rate: _numOrNull(item.actualRate),
+                    actual_quantity: _numOrNull(item.actualQuantity),
+                    actual: _numOrNull(item.actual),
+                    currency: String(item.currency || currency || ''),
+                    contact_id: String(item.contactId || item.contact_id || '')
+                });
+            }
+        }
+        return rows;
+    }
+
+    function _quoteInList(values) {
+        var out = [];
+        var i, s;
+        for (i = 0; i < values.length; i++) {
+            s = String(values[i]).replace(/"/g, '');
+            if (!s) continue;
+            out.push('"' + s + '"');
+        }
+        return out.join(',');
+    }
+
+    /* After suitcase save: upsert current lines, delete keys no longer in the budget.
+       Failures warn only. Suitcase remains source of truth. */
+    function syncBudgetLines(projectId, budgetData) {
+        if (!projectId) {
+            return Promise.resolve({ upserted: 0, deleted: 0 });
+        }
+        var rows = extractBudgetLines(projectId, budgetData);
+        var keep = {};
+        var i;
+        for (i = 0; i < rows.length; i++) keep[rows[i].line_key] = true;
+
+        var upsert = Promise.resolve();
+        if (rows.length) {
+            var headers = getRestHeaders();
+            headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
+            upsert = fetch(
+                getRestUrl('/budget_lines?on_conflict=project_id,line_key'),
+                { method: 'POST', headers: headers, body: JSON.stringify(rows) }
+            ).then(function (res) {
+                if (!res.ok) {
+                    return res.text().then(function (t) {
+                        throw new Error(t || ('HTTP ' + res.status));
+                    });
+                }
+            });
+        }
+
+        return upsert.then(function () {
+            return fetch(
+                getRestUrl('/budget_lines?project_id=eq.' + encodeURIComponent(projectId) + '&select=line_key'),
+                { method: 'GET', headers: getRestHeaders() }
+            ).then(function (res) {
+                return _jsonOrThrow(res, 'Failed to list budget_lines');
+            });
+        }).then(function (existing) {
+            var stale = [];
+            var list = Array.isArray(existing) ? existing : [];
+            var j, k;
+            for (j = 0; j < list.length; j++) {
+                k = list[j] && list[j].line_key;
+                if (k && !keep[k]) stale.push(k);
+            }
+            if (!stale.length && rows.length) {
+                return { upserted: rows.length, deleted: 0 };
+            }
+            var delQ = '/budget_lines?project_id=eq.' + encodeURIComponent(projectId);
+            if (stale.length && rows.length) {
+                delQ += '&line_key=in.(' + _quoteInList(stale) + ')';
+            }
+            /* No current lines: wipe the project's ledger rows. */
+            return fetch(delQ, { method: 'DELETE', headers: getRestHeaders() }).then(function (res) {
+                if (!res.ok) {
+                    return res.text().then(function (t) {
+                        throw new Error(t || ('HTTP ' + res.status));
+                    });
+                }
+                return { upserted: rows.length, deleted: stale.length || list.length };
+            });
+        });
+    }
+
     function saveProject(projectId, budgetData) {
         return requireSession().then(function () {
             var payload = {
@@ -334,6 +449,9 @@
                    Requires project_activity migration on mbt-collab (not live until applied). */
                 logActivity(projectId, 'save', 'Updated budget details').catch(function (ae) {
                     console.warn('[mBTCollab] logActivity after save failed:', ae && ae.message ? ae.message : ae);
+                });
+                syncBudgetLines(projectId, budgetData).catch(function (le) {
+                    console.warn('[mBTCollab] budget_lines sync failed:', le && le.message ? le.message : le);
                 });
                 return saved;
             });
@@ -496,6 +614,8 @@
         redeemInvite: redeemInvite,
         loadProject: loadProject,
         saveProject: saveProject,
+        extractBudgetLines: extractBudgetLines,
+        syncBudgetLines: syncBudgetLines,
         scheduleSaveProject: scheduleSaveProject,
         flushSaveProject: _flushScheduledSave,
         listMyProjects: listMyProjects,

@@ -99,7 +99,8 @@ var PRECACHE_ASSETS = [
     './assets/cow-192.png',
     './assets/cow-512.png',
     './assets/og-card-v2.png',
-    './assets/mBT.svg'
+    './assets/mBT.svg',
+    './assets/sendana-wallet-qr.png'
 ];
 
 self.addEventListener('install', function(event) {

@@ -32,7 +32,7 @@ This lives in the browser, primarily through **IndexedDB** via a library called 
 
 ### On the cloud (only when you opt into collab / cloud sync)
 
-When you use collaboration or cloud sync and are signed in, project payloads are also stored on **Supabase**. Project budget content is held in a `budget_data` field (JSONB) on the `projects` table. Membership (who can open or edit a project) is enforced server-side with roles such as owner, editor, and viewer.
+When you use collaboration or cloud sync and are signed in, project payloads are also stored on **Supabase**. The full shared budget is held in a `budget_data` field (JSONB) on the `projects` table. Line items from that save are also copied into a `budget_lines` table so a member can dump rows. Membership (who can open or edit a project) is enforced server-side with roles such as owner, editor and viewer.
 
 **Local-only mode:** data on the device; no project copy in the cloud for that workflow.
 
@@ -122,7 +122,7 @@ mBT does not ship a strict CSP header today. A **report-only** CSP on staging or
 
 ### Third-party scripts
 
-The Buy Me a Coffee widget loads from `cdnjs.buymeacoffee.com` in `index.html`. It runs in the app origin context. **Decision (2026-07-22):** keep for community support; documented supply-chain residual. Remove or isolate if a stricter CSP is adopted.
+Fuel the Code loads Buy Me a Coffee's hosted page in an iframe (`https://www.buymeacoffee.com/widget/page/jaysonmy`). Payment stays on BMC. The old floating widget script is not loaded. **Decision (2026-08-18):** iframe inside `coffeeModal`, not a side popup.
 
 What this **is**: properly configured **application-level access control** on a managed cloud database, with standard platform protections (including the host's normal encryption at rest for stored data).
 
