@@ -984,6 +984,46 @@
         'mbt_profile_role'
     ];
 
+    /* Supporter stamp. Server-side write only (Lead or a SQL stamp on
+       user_preferences). Pulled down and honoured, never pushed up from the
+       PWA, so a local-only 'true' can never mint an account-level unlock. */
+    var DONATE_PREF_KEY = 'mBT_partnerDonateUnlocked';
+    var PULL_ONLY_PREFS = [DONATE_PREF_KEY];
+
+    /* mbt_generic is keyed (user_id, key), so a bare key=eq.user_preferences GET
+       can return another account's row. Scope every prefs read to the signed-in
+       UUID, the same value the upsert body already sends. No UUID, no GET. */
+    function _prefsQueryUrl(select) {
+        var userId = localStorage.getItem('mbt_supabase_user_id') || '';
+        if (!userId) return '';
+        return getBaseUrl('mbt_generic') +
+            '?key=eq.user_preferences' +
+            '&user_id=eq.' + encodeURIComponent(userId) +
+            '&select=' + select;
+    }
+
+    /* The upsert replaces the whole value JSON, so a pull-only key already on
+       the server would be wiped by an ordinary prefs save. Read the remote row
+       first and carry those keys through untouched. Never source them locally. */
+    function _fetchRemotePrefs() {
+        var url = _prefsQueryUrl('value');
+        if (!url) return Promise.resolve(null);
+        return fetchWithRetry(
+            url,
+            { method: 'GET', headers: getHeaders() }
+        ).then(function (res) {
+            if (!res.ok) return null;
+            return res.json();
+        }).then(function (rows) {
+            if (!rows || !rows.length) return null;
+            var v = rows[0].value;
+            if (!v || typeof v !== 'object') return null;
+            return v;
+        }).catch(function () {
+            return null;
+        });
+    }
+
     function pushPreferences() {
         if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isSignedIn()) return Promise.resolve();
         var prefs = {};
@@ -996,18 +1036,30 @@
             if (bs) prefs._budgetSettings = bs;
         }
         var userId = localStorage.getItem('mbt_supabase_user_id') || '';
-        return sbUpsert('mbt_generic', {
-            key: 'user_preferences',
-            user_id: userId,
-            value: prefs,
-            updated_at: new Date().toISOString()
+        return _fetchRemotePrefs().then(function (remote) {
+            var j;
+            var k;
+            if (remote) {
+                for (j = 0; j < PULL_ONLY_PREFS.length; j++) {
+                    k = PULL_ONLY_PREFS[j];
+                    if (remote[k] !== undefined && remote[k] !== null) prefs[k] = remote[k];
+                }
+            }
+            return sbUpsert('mbt_generic', {
+                key: 'user_preferences',
+                user_id: userId,
+                value: prefs,
+                updated_at: new Date().toISOString()
+            });
         });
     }
 
     function pullPreferences() {
         if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isSignedIn()) return Promise.resolve();
+        var url = _prefsQueryUrl('*');
+        if (!url) return Promise.resolve();
         return fetchWithRetry(
-            getBaseUrl('mbt_generic') + '?key=eq.user_preferences&select=*',
+            url,
             { method: 'GET', headers: getHeaders() }
         ).then(function (res) {
             if (!res.ok) return null;
@@ -1016,8 +1068,9 @@
             if (!rows || !rows.length) return;
             var prefs = rows[0].value;
             if (!prefs || typeof prefs !== 'object') return;
-            for (var i = 0; i < SYNCABLE_PREFS.length; i++) {
-                var key = SYNCABLE_PREFS[i];
+            var applyKeys = SYNCABLE_PREFS.concat(PULL_ONLY_PREFS);
+            for (var i = 0; i < applyKeys.length; i++) {
+                var key = applyKeys[i];
                 if (prefs[key] !== undefined && prefs[key] !== null) {
                     localStorage.setItem(key, prefs[key]);
                 }
@@ -1025,6 +1078,41 @@
             if (prefs._budgetSettings && window.mBTSync && typeof window.mBTSync._setBudgetSettings === 'function') {
                 window.mBTSync._setBudgetSettings(prefs._budgetSettings);
             }
+            /* Supporter stamp: remote or an existing device token hides the rail.
+               Read only. Nothing here writes back to user_preferences. */
+            (function () {
+                var remote = prefs[DONATE_PREF_KEY];
+                var local;
+                try { local = localStorage.getItem(DONATE_PREF_KEY); } catch (ePref) { local = null; }
+                function on(v) { return v != null && v !== '' && v !== 'false' && v !== '0'; }
+                if (!on(remote) && !on(local)) return;
+                if (on(remote) && !on(local)) {
+                    try { localStorage.setItem(DONATE_PREF_KEY, 'true'); } catch (eSet) { /* private mode */ }
+                }
+                if (window.mBTPartnerDrawer && typeof window.mBTPartnerDrawer.hideAfterDonateSync === 'function') {
+                    window.mBTPartnerDrawer.hideAfterDonateSync();
+                }
+            })();
+        });
+    }
+
+    /* Redeem a supporter code via SECURITY DEFINER RPC. On ok, pull prefs so
+       PULL_ONLY copies the stamp. Never setItem DONATE_KEY here. Never push. */
+    function redeemSupporterCode(rawCode) {
+        if (!window.mBTSupabaseConfig || !window.mBTSupabaseConfig.isSignedIn()) {
+            return Promise.reject(new Error('Sign in to redeem a supporter code.'));
+        }
+        var base = window.mBTSupabaseConfig.API_URL || '';
+        return fetchWithRetry(base + '/rest/v1/rpc/mbt_redeem_supporter_code', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ p_code: rawCode })
+        }).then(function (res) {
+            if (!res.ok) return Promise.reject(new Error('Redeem failed.'));
+            return res.json();
+        }).then(function (data) {
+            if (!data || data.ok !== true) return Promise.reject(new Error('Redeem failed.'));
+            return pullPreferences();
         });
     }
 
@@ -1114,6 +1202,7 @@
         scheduleAutoSync:  scheduleAutoSync,
         pushPreferences:   pushPreferences,
         pullPreferences:   pullPreferences,
+        redeemSupporterCode: redeemSupporterCode,
         /* Hooks wired by index.html to bridge budget.settings across module boundary */
         _getBudgetSettings: null,
         _setBudgetSettings: null

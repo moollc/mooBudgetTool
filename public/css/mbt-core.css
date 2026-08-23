@@ -180,6 +180,21 @@ body {
     #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatHistory {
         padding: 12px !important;
     }
+
+    /* Header control row must fit 390px: seven 30px icon buttons plus
+       16px side padding overran clientWidth and pushed Close off-screen. */
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatHeader {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+        gap: 2px !important;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    #mbtAiChatRoot.mbt-ai-mode-expanded #aiChatHeader > button {
+        padding: 4px !important;
+        flex-shrink: 0;
+    }
 }
 
 /* PiP drag handle */
@@ -2031,4 +2046,321 @@ body.mbt-theme-dark {
     background-color: rgba(129, 140, 248, 0.15);
     border-color: #818cf8;
     color: #c7d2fe;
+}
+/* ========= Partner drawer (funding rail) ========= */
+/* Left column PUSHES the host and tool-window. Not an overlay. z-index stays
+   990. body.mbt-partner-open sets --mbt-partner-rail, pads the host, and
+   shifts #tool-window (mBTME.open first arg is the element id). Footer dock
+   stays full-width: rail still stops above 80px. */
+
+:root {
+    --mbt-partner-rail: 0px;
+}
+
+body.mbt-partner-open {
+    --mbt-partner-rail: 172px;
+    box-sizing: border-box;
+    padding-left: var(--mbt-partner-rail);
+}
+
+/* Modal overlay is id=tool-window, class fixed inset-0. Override left so the
+   Stages iframe sits in the remaining viewport instead of under the rail. */
+body.mbt-partner-open #tool-windowModal {
+    left: var(--mbt-partner-rail);
+}
+
+body.mbt-partner-gone #mbt-partner-rail,
+body.mbt-partner-gone #mbt-partner-chevron {
+    display: none;
+}
+
+#mbt-partner-rail,
+#mbt-partner-chevron {
+    position: fixed;
+    z-index: 990;
+    pointer-events: auto;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Footer HUD is fixed at bottom 0, ~80px with padding. Rail stops above it. */
+#mbt-partner-rail {
+    top: 0;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    width: 172px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 0 18px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #ffffff;
+    border: 0;
+    border-right: 1px solid #e2e8f0;
+    border-radius: 0;
+    box-shadow: 2px 0 12px rgba(15, 23, 42, 0.06);
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+    transition: transform 220ms ease, opacity 180ms ease, visibility 0s linear 0s;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+#mbt-partner-rail::-webkit-scrollbar {
+    display: none;
+}
+
+#mbt-partner-rail.mbt-partner-hidden {
+    transform: translateX(-100%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 220ms ease, opacity 180ms ease, visibility 0s linear 220ms;
+}
+
+.mbt-partner-header {
+    flex: none;
+    display: flex;
+    align-items: stretch;
+    margin: 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#mbt-partner-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 0;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#mbt-partner-close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.mbt-partner-tile {
+    display: block;
+    width: auto;
+    flex: none;
+    box-sizing: border-box;
+    margin: 0 12px;
+    padding: 12px 10px 11px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: inherit;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+}
+
+.mbt-partner-tile:hover {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+}
+
+.mbt-partner-tile:active {
+    transform: translateY(0);
+}
+
+.mbt-partner-logo {
+    display: block;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    max-height: 34px;
+    margin: 0 auto 8px;
+    object-fit: contain;
+}
+
+.mbt-partner-blurb {
+    display: block;
+    font-size: 10px;
+    line-height: 1.35;
+    font-weight: 600;
+    color: #475569;
+    margin: 0;
+}
+
+.mbt-partner-disclosure {
+    display: block;
+    font-size: 8px;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #94a3b8;
+    margin: 6px 0 0;
+}
+
+.mbt-partner-donate-note {
+    display: block;
+    flex: none;
+    margin: auto 12px 0;
+    padding: 8px 4px 0;
+    border: 0;
+    background: transparent;
+    font-size: 9px;
+    line-height: 1.35;
+    font-weight: 600;
+    color: #64748b;
+    text-align: center;
+    cursor: pointer;
+}
+
+.mbt-partner-donate-note:hover {
+    color: #2563eb;
+}
+
+#mbt-partner-chevron {
+    top: calc((100vh - 80px - env(safe-area-inset-bottom, 0px)) / 2);
+    left: 0;
+    right: auto;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid #e2e8f0;
+    border-left: 0;
+    border-radius: 0 10px 10px 0;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 3px 0 12px rgba(15, 23, 42, 0.1);
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+#mbt-partner-chevron:hover {
+    background: #f8fafc;
+    color: #2563eb;
+}
+
+#mbt-partner-rail:not(.mbt-partner-hidden) ~ #mbt-partner-chevron {
+    display: none;
+}
+
+#mbt-partner-chevron svg {
+    display: block;
+    width: 8px;
+    height: 16px;
+    flex: none;
+    pointer-events: none;
+}
+
+#mbt-partner-chevron::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    left: 0;
+    right: -10px;
+}
+
+@media (max-width: 767px) {
+    body.mbt-partner-open {
+        --mbt-partner-rail: 160px;
+    }
+
+    #mbt-partner-rail {
+        width: 160px;
+    }
+
+    #mbt-partner-chevron {
+        height: 44px;
+    }
+}
+
+@media print {
+    #mbt-partner-rail,
+    #mbt-partner-chevron {
+        display: none !important;
+    }
+
+    body.mbt-partner-open {
+        padding-left: 0;
+    }
+
+    body.mbt-partner-open #tool-windowModal {
+        left: 0;
+    }
+}
+
+.mbt-theme-dark #mbt-partner-rail {
+    background: #1e293b;
+    border-right-color: #334155;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+}
+
+.mbt-theme-dark .mbt-partner-header {
+    border-bottom-color: #334155;
+}
+
+.mbt-theme-dark #mbt-partner-close {
+    background: #0f172a;
+    color: #94a3b8;
+}
+
+.mbt-theme-dark #mbt-partner-close:hover {
+    background: #334155;
+    color: #e2e8f0;
+}
+
+.mbt-theme-dark .mbt-partner-tile {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+.mbt-theme-dark .mbt-partner-tile:hover {
+    background: #172033;
+    border-color: #475569;
+}
+
+.mbt-theme-dark .mbt-partner-blurb {
+    color: #cbd5e1;
+}
+
+.mbt-theme-dark .mbt-partner-disclosure {
+    color: #64748b;
+}
+
+.mbt-theme-dark .mbt-partner-donate-note {
+    color: #94a3b8;
+}
+
+.mbt-theme-dark .mbt-partner-donate-note:hover {
+    color: #93c5fd;
+}
+
+.mbt-theme-dark #mbt-partner-chevron {
+    background: #1e293b;
+    border-color: #334155;
+    color: #94a3b8;
+}
+
+.mbt-theme-dark #mbt-partner-chevron:hover {
+    background: #0f172a;
+    color: #93c5fd;
 }

@@ -92,9 +92,10 @@ window.mBTRouter = (function () {
     }
 
     function showCoffeeWidget() {
-        var coffeeIcon = window.mBTAssets ? window.mBTAssets.coffee : '';
-        var flagJm = window.mBTAssets && window.mBTAssets.flagJM ? window.mBTAssets.flagJM : '';
-        var heartIcon = window.mBTAssets && window.mBTAssets.heart ? window.mBTAssets.heart : '';
+        var assets = window.mBTAssets || (typeof mBTAssets !== 'undefined' ? mBTAssets : {});
+        var coffeeIcon = assets.coffee || '';
+        var flagJm = assets.flagJM || '';
+        var heartIcon = assets.heart || '';
         var walletAddr = 'GCHAPDA2RYNRPEZTZ7UMZF3BVBU7RGTHA3P54F2PPRLV3Z4PZ4CQSS5R';
         var goDonate = 'if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeDonate===\'function\')window.mBTRouter.showCoffeeDonate();';
         var goHome = 'if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeHome===\'function\')window.mBTRouter.showCoffeeHome();';
@@ -107,13 +108,15 @@ window.mBTRouter = (function () {
             coffeeIcon +
             '</div>' +
             '<h3 class="text-xl font-black uppercase tracking-tighter text-slate-900 mb-2">Fuel the Code</h3>' +
-            '<p class="text-xs font-bold text-slate-500 mb-5 max-w-xs leading-relaxed mx-auto">' +
-            'mooBudget is free and offline-first. Built from ' +
-            '<span class="inline-block align-middle mx-0.5 leading-none" title="Jamaica">' + flagJm + '</span>' +
+            '<div class="text-xs font-bold text-slate-500 mb-5 max-w-xs leading-relaxed mx-auto">' +
+            '<p class="mb-1">mooBudget is free and offline-first.</p>' +
+            '<p class="mb-1">Built from ' +
+            '<span class="inline-flex items-center mx-0.5 align-middle" style="width:16px;height:8px" title="Jamaica">' + flagJm + '</span>' +
             ' with ' +
-            '<span class="inline-block align-middle mx-0.5 leading-none" title="love">' + heartIcon + '</span>' +
-            '. If it saves you time buy the team a coffee or send USDC on Stellar.' +
+            '<span class="inline-flex items-center mx-0.5 align-middle" style="width:12px;height:12px" title="love">' + heartIcon + '</span>' +
             '</p>' +
+            '<p>If it saves you time buy the team a coffee or send USDC on Stellar.</p>' +
+            '</div>' +
             '<div class="space-y-3 w-full max-w-xs mx-auto">' +
             '<button type="button" onclick="' + goDonate + '" class="flex items-center justify-center gap-2 w-full py-4 bg-[#FFDD00] text-black rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-transform active:scale-95">' +
             'Buy a Coffee' +
@@ -126,6 +129,14 @@ window.mBTRouter = (function () {
             '<input type="text" value="' + walletAddr + '" readonly class="flex-grow min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[9px] font-bold text-slate-600 outline-none">' +
             '<button type="button" onclick="var _inp=this.parentNode.querySelector(\'input\'); if(_inp) navigator.clipboard.writeText(_inp.value); this.textContent=\'Copied!\';" class="px-3 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-300 transition-colors">Copy</button>' +
             '</div></div>' +
+            '<div class="bg-white border border-slate-200 rounded-xl p-4 text-left">' +
+            '<label for="mbtRedeemCode" class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Supporter code</label>' +
+            '<div class="flex gap-2">' +
+            '<input type="text" id="mbtRedeemCode" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MOO-XXXXXXXX" class="flex-grow min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-700 outline-none focus:border-slate-400">' +
+            '<button type="button" id="mbtRedeemBtn" class="px-3 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors">Redeem</button>' +
+            '</div>' +
+            '<p id="mbtRedeemMsg" class="text-[9px] font-bold text-slate-400 mt-2 leading-relaxed" role="status" aria-live="polite">A supporter code hides the partner bar. Buying a coffee here does not hide it by itself.</p>' +
+            '</div>' +
             '<button type="button" onclick="mBTME.close(\'coffeeModal\')" class="w-full py-3 bg-white border border-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">' +
             'Maybe Later' +
             '</button>' +
@@ -140,6 +151,80 @@ window.mBTRouter = (function () {
 
             '</div></div>';
         if (window.mBTME) mBTME.open('coffee', '', content, 'max-w-md', { hideHeader: true, noPadding: true });
+        wireRedeemField();
+    }
+
+    /* Supporter code redeem. The RPC does the stamp; this never writes
+       mBT_partnerDonateUnlocked. On success we only re-pull prefs and let the
+       existing pull-only path hide the rail. */
+    function wireRedeemField() {
+        var input = document.getElementById('mbtRedeemCode');
+        var btn = document.getElementById('mbtRedeemBtn');
+        var msg = document.getElementById('mbtRedeemMsg');
+        if (!input || !btn || !msg) return;
+
+        var escFn = (window.mBT && window.mBT.ui && window.mBT.ui.render && window.mBT.ui.render.esc)
+            ? window.mBT.ui.render.esc
+            : function (s) {
+                if (s == null) return '';
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            };
+
+        function say(text, tone) {
+            msg.className = 'text-[9px] font-bold mt-2 leading-relaxed ' +
+                (tone === 'bad' ? 'text-red-500' : tone === 'good' ? 'text-green-600' : 'text-slate-400');
+            msg.innerHTML = escFn(text);
+        }
+
+        function signedIn() {
+            return !!(window.mBTSupabaseConfig &&
+                typeof window.mBTSupabaseConfig.isSignedIn === 'function' &&
+                window.mBTSupabaseConfig.isSignedIn());
+        }
+
+        function submit() {
+            var raw = input.value || '';
+            var code = raw.replace(/\s+/g, '').toUpperCase();
+            if (!code) {
+                say('Enter your supporter code.', 'bad');
+                return;
+            }
+            if (!signedIn()) {
+                say('Sign in to redeem a supporter code.', 'bad');
+                return;
+            }
+            if (!window.mBTSync || typeof window.mBTSync.redeemSupporterCode !== 'function') {
+                say('Code redemption is not available yet.', 'bad');
+                return;
+            }
+            btn.disabled = true;
+            say('Checking code...', 'neutral');
+            Promise.resolve(window.mBTSync.redeemSupporterCode(code)).then(function (res) {
+                if (res === false || (res && res.ok === false)) {
+                    say('That code did not work.', 'bad');
+                    return null;
+                }
+                if (window.mBTSync && typeof window.mBTSync.pullPreferences === 'function') {
+                    return window.mBTSync.pullPreferences().then(function () {
+                        say('Supporter code applied. Thank you.', 'good');
+                    });
+                }
+                say('Supporter code applied. Thank you.', 'good');
+                return null;
+            }).catch(function () {
+                say('That code did not work.', 'bad');
+            }).then(function () {
+                btn.disabled = false;
+            });
+        }
+
+        btn.addEventListener('click', submit);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                submit();
+            }
+        });
     }
 
     /* --- Distribution Share Selector (Preview Handler) --- */
