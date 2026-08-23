@@ -215,6 +215,18 @@
         });
     }
 
+    function removeBlob(key) {
+        if (!_ready || !_blobDir) return Promise.resolve(false);
+        var filename = _safeBlobName(key);
+        return _blobDir.removeEntry(filename).then(function () {
+            return true;
+        }).catch(function (e) {
+            if (e && e.name === 'NotFoundError') return false;
+            console.warn('[mBTOPFS] removeBlob error for key:', key, e);
+            return false;
+        });
+    }
+
     /* ========= PUBLIC API ========= */
     window.mBTOPFS = {
         init:               init,
@@ -227,6 +239,7 @@
         keys:               listKeys,
         saveBlob:           saveBlob,
         loadBlob:           loadBlob,
+        removeBlob:         removeBlob,
         migrate:            migrateAllBudgets
     };
 

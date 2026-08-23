@@ -474,6 +474,21 @@ var mBTAssistant = (function () {
         return null;
     }
 
+    /* Split a data URL into mime + raw base64. Null if it is not a data URL. */
+    function _splitDataUrl(image) {
+        if (!image || !image.dataUrl) return null;
+        var raw = String(image.dataUrl);
+        var comma = raw.indexOf(',');
+        if (comma < 0) return null;
+        var header = raw.substring(0, comma);
+        var data = raw.substring(comma + 1);
+        if (!data) return null;
+        var mime = image.mime || 'image/jpeg';
+        var m = /^data:([^;]+)/.exec(header);
+        if (m && m[1]) mime = m[1];
+        return { mime: mime, data: data, dataUrl: raw };
+    }
+
     /* =========================================================================
        PUBLIC API — callChat(options) → Promise<string>
        The single entry point for all LLM text generation.
@@ -483,6 +498,7 @@ var mBTAssistant = (function () {
          systemPrompt: string   (optional base instruction)
          history:      array    (optional [{role,content},...] for multi-turn)
          projectKey:   string   (optional — if set, persists history)
+         image:        object   (optional { name, mime, dataUrl } vision part)
        }
     ========================================================================= */
 
@@ -494,6 +510,7 @@ var mBTAssistant = (function () {
         var basePrompt   = options.systemPrompt || 'You are a helpful film production assistant.';
         var history      = options.history      || [];
         var projectKey   = options.projectKey   || null;
+        var imgPart      = _splitDataUrl(options.image);
 
         var provider = getProvider();
         var apiKey   = getApiKey(provider);
@@ -509,10 +526,15 @@ var mBTAssistant = (function () {
         if (provider === 'gemini') {
             /* Build multi-turn contents array */
             var gemContents = [];
+            var gemParts;
             history.forEach(function (m) {
                 gemContents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] });
             });
-            gemContents.push({ role: 'user', parts: [{ text: userMessage }] });
+            gemParts = [{ text: userMessage }];
+            if (imgPart) {
+                gemParts.push({ inline_data: { mime_type: imgPart.mime, data: imgPart.data } });
+            }
+            gemContents.push({ role: 'user', parts: gemParts });
 
             return fetch(url + model + ':generateContent?key=' + apiKey, {
                 method: 'POST',
@@ -536,7 +558,14 @@ var mBTAssistant = (function () {
         /* ---- Anthropic ---- */
         if (provider === 'anthropic') {
             var anMsgs = history.filter(function (m) { return m.role !== 'system'; });
-            anMsgs.push({ role: 'user', content: userMessage });
+            var anContent = userMessage;
+            if (imgPart) {
+                anContent = [
+                    { type: 'image', source: { type: 'base64', media_type: imgPart.mime, data: imgPart.data } },
+                    { type: 'text', text: userMessage }
+                ];
+            }
+            anMsgs.push({ role: 'user', content: anContent });
             return fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -562,9 +591,16 @@ var mBTAssistant = (function () {
            model already comes from getChatModel(provider) (UI selection). */
 
         var oaMsgs = [];
+        var oaUser = userMessage;
+        if (imgPart) {
+            oaUser = [
+                { type: 'text', text: userMessage },
+                { type: 'image_url', image_url: { url: imgPart.dataUrl } }
+            ];
+        }
         if (sysInstr) oaMsgs.push({ role: 'system', content: sysInstr });
         history.forEach(function (m) { oaMsgs.push(m); });
-        oaMsgs.push({ role: 'user', content: userMessage });
+        oaMsgs.push({ role: 'user', content: oaUser });
 
         var oaHdrs = { 'Content-Type': 'application/json' };
         if (apiKey) oaHdrs['Authorization'] = 'Bearer ' + apiKey;

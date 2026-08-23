@@ -287,18 +287,28 @@ window.mBTAIModule = {
        The legacy (provider, apiKey) args are accepted but ignored, mBTAssistant
        reads them from its own state (which is the SAME localStorage keys, so
        behavior is identical). User constraint injection is preserved. */
-    callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg, history) {
+    callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg, history, imageAttachment) {
         var self = this;
         var userConstraints = self.getSystemPrompt();
         var baseInstruction = customSystemMsg || self.config.systemContext;
         var systemInstruction = userConstraints ? (baseInstruction + ' USER CONSTRAINTS: ' + userConstraints) : baseInstruction;
 
         if (window.mBTAssistant && typeof window.mBTAssistant.callChat === 'function') {
-            return window.mBTAssistant.callChat({
+            var chatOpts = {
                 userMessage:  prompt,
                 systemPrompt: systemInstruction,
                 history:      history || []
-            }).catch(function (error) {
+            };
+            /* Vision part for an attached image. The provider layer owns whether
+               it can send this; if it ignores the field the text turn still goes. */
+            if (imageAttachment && imageAttachment.dataUrl) {
+                chatOpts.image = {
+                    name:    imageAttachment.name || 'image',
+                    mime:    imageAttachment.mime || 'image/png',
+                    dataUrl: imageAttachment.dataUrl
+                };
+            }
+            return window.mBTAssistant.callChat(chatOpts).catch(function (error) {
                 console.error('mBT AI Failure:', error);
                 var msg = error && error.message ? error.message : 'Unknown';
                 if (msg === 'AI_RATE_LIMITED') {
@@ -313,6 +323,103 @@ window.mBTAIModule = {
             console.error('mBT AI Failure:', error);
             return 'Analysis Failed: ' + error.message;
         });
+    },
+
+    /* Pulled chat sources: extracted text + a chip summary, per budget.
+       Raw image/PDF is discarded after the first read. loaded=true means this
+       chat injects the text. Delete the source and the text goes with it. */
+    _ensureChatExtracts: function () {
+        var b = window.budget;
+        if (!b) return [];
+        if (!Array.isArray(b.chatExtracts)) b.chatExtracts = [];
+        return b.chatExtracts;
+    },
+
+    _summarizeExtract: function (att) {
+        var t;
+        var lines;
+        var n;
+        var i;
+        if (!att) return 'Source';
+        if (att.kind === 'image') return 'Photo';
+        if (att.pages) return att.pages + (att.pages === 1 ? ' page' : ' pages');
+        t = String(att.text || '');
+        lines = t.split('\n');
+        n = 0;
+        for (i = 0; i < lines.length; i++) {
+            if (String(lines[i]).replace(/\s/g, '').length) n++;
+        }
+        if (!n && t) n = 1;
+        if (!n) return 'Source';
+        return n + (n === 1 ? ' line' : ' lines');
+    },
+
+    _rememberChatExtract: function (att) {
+        var list;
+        var rec;
+        if (!att) return;
+        list = this._ensureChatExtracts();
+        rec = {
+            id: 'ce_' + Date.now() + '_' + Math.floor(Math.random() * 1e9),
+            name: att.name || 'Attachment',
+            kind: att.kind || 'text',
+            summary: this._summarizeExtract(att),
+            text: att.kind === 'image'
+                ? ('Image "' + (att.name || 'photo') + '" was read on attach. Pixels were not kept.')
+                : String(att.text || '').substring(0, 24000),
+            loaded: true,
+            added: Date.now()
+        };
+        if (att.kind === 'image' && !att.dataUrl && !rec.text) rec.text = rec.summary;
+        list.push(rec);
+        if (att) att.extractId = rec.id;
+        if (typeof window.saveBudget === 'function') window.saveBudget();
+        return rec;
+    },
+
+    _toggleChatExtract: function (id) {
+        var list = this._ensureChatExtracts();
+        var i;
+        for (i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id === id) {
+                list[i].loaded = !list[i].loaded;
+                if (typeof window.saveBudget === 'function') window.saveBudget();
+                return;
+            }
+        }
+    },
+
+    _deleteChatExtract: function (id) {
+        var list = this._ensureChatExtracts();
+        var i;
+        for (i = list.length - 1; i >= 0; i--) {
+            if (list[i] && list[i].id === id) list.splice(i, 1);
+        }
+        if (typeof window.saveBudget === 'function') window.saveBudget();
+    },
+
+    _isExtractLoaded: function (id) {
+        var list = this._ensureChatExtracts();
+        var i;
+        for (i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id === id) return !!list[i].loaded;
+        }
+        return false;
+    },
+
+    _loadedExtractContext: function (skipId) {
+        var list = this._ensureChatExtracts();
+        var parts = [];
+        var i;
+        var e;
+        for (i = 0; i < list.length; i++) {
+            e = list[i];
+            if (!e || !e.loaded || !e.text) continue;
+            if (skipId && e.id === skipId) continue;
+            parts.push('--- PULLED SOURCE: ' + String(e.name || 'Attachment').toUpperCase() +
+                ' (' + (e.summary || 'source') + ') ---\n' + e.text);
+        }
+        return parts.join('\n\n');
     },
 
     /* ── Budget snapshot for chat ────────────────────────────────────────
@@ -755,7 +862,7 @@ window.mBTAIModule = {
        section. Batches are all-or-nothing. The budget is snapshotted first,
        and any failure restores it, so a half-applied batch is impossible.
        Preview confirms inline inside the chat panel (Expanded and PiP). */
-    applySuggestion: function (diff) {
+    applySuggestion: function (diff, diffKey) {
         if (!diff || !diff.mbt_action) return;
         var self = this;
         var budget = window.budget;
@@ -771,7 +878,7 @@ window.mBTAIModule = {
             self.openChat();
         }
         if (self._chatSession) {
-            self._chatSession.pendingDiff = { diff: diff, changes: changes };
+            self._chatSession.pendingDiff = { diff: diff, changes: changes, diffKey: diffKey || '' };
             if (typeof self._chatRender === 'function') self._chatRender();
             return;
         }
@@ -789,8 +896,24 @@ window.mBTAIModule = {
         mBTME.confirm(title, body, function () { self._commitSuggestion(changes); });
     },
 
+    /* Mark the assistant bubble that offered this diff so the button becomes Reapply. */
+    _stampChatApplied: function (diffKey) {
+        var sess = this._chatSession;
+        var chat;
+        var idx;
+        var parts;
+        if (!sess || !diffKey) return;
+        chat = sess.activeChat;
+        if (!chat || !chat.length) return;
+        parts = String(diffKey).split('_');
+        idx = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(idx) && chat[idx] && chat[idx].role === 'assistant') {
+            chat[idx]._applied = true;
+        }
+    },
+
     /* Run the apply path after the user confirms (inline or fallback). */
-    _commitSuggestion: function (changes) {
+    _commitSuggestion: function (changes, diffKey) {
         var self = this;
         var budget = window.budget;
         var mBTME = window.mBTME;
@@ -860,6 +983,8 @@ window.mBTAIModule = {
                 thr.updated = Date.now();
             }
         } catch (eThr) { /* ignore thread counter errors */ }
+
+        self._stampChatApplied(diffKey);
 
         if (typeof window.saveBudget === 'function') window.saveBudget();
         if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
@@ -1728,8 +1853,12 @@ window.mBTAIModule = {
                     if (diff) {
                         diffKey = 'k_' + Math.abs((msg.content || '').length * 31 + ((diff.mbt_action || '').charCodeAt(0) || 0)) + '_' + i;
                         window._mbtAIDiffStore[diffKey] = diff;
-                        actionBtn = '<button type="button" data-chat-act="preview" data-diff-key="' + esc(diffKey) + '" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-500 active:scale-95 transition-all">' +
-                            (icon('zap', '') || '') + ' Preview &amp; Apply</button>';
+                        if (msg._applied) {
+                            actionBtn = '<button type="button" data-chat-act="preview" data-diff-key="' + esc(diffKey) + '" title="Already applied. Preview and apply again." class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-600 active:scale-95 transition-all">Reapply</button>';
+                        } else {
+                            actionBtn = '<button type="button" data-chat-act="preview" data-diff-key="' + esc(diffKey) + '" class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-500 active:scale-95 transition-all">' +
+                                (icon('zap', '') || '') + ' Preview &amp; Apply</button>';
+                        }
                     }
                 }
                 roleCls = msg.role === 'user'
@@ -1866,20 +1995,57 @@ window.mBTAIModule = {
                        micExtra + icon('mic', '') +
                    '</button>')
                 : '';
-            return '<div class="' + (isPip ? 'p-2' : 'p-4') + ' border-t border-slate-100 flex gap-2 bg-white shrink-0">' +
+            var attRow = '';
+            var pend = sess.pendingAttachment;
+            var extracts = [];
+            var ei;
+            var ex;
+            var chipCls;
+            try { extracts = self._ensureChatExtracts(); } catch (eEx) { extracts = []; }
+            if (sess.attachBusy) {
+                attRow = '<div class="px-1 pb-1.5 text-[9px] font-bold text-slate-400 truncate">Reading ' + esc(sess.attachBusy) + '..</div>';
+            } else if (sess.attachError) {
+                attRow = '<div class="px-1 pb-1.5 text-[9px] font-bold text-rose-500">' + esc(sess.attachError) + '</div>';
+            }
+            if (pend && !pend.extractId) {
+                attRow += '<div class="px-1 pb-1.5 flex items-center gap-1.5">' +
+                    '<span class="inline-flex items-center gap-1 max-w-full px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">' +
+                        '<span class="truncate">' + esc(pend.name) + '</span>' +
+                        '<button type="button" data-chat-act="attach-clear" title="Remove attachment" class="shrink-0 text-slate-400 hover:text-rose-500">&times;</button>' +
+                    '</span>' +
+                '</div>';
+            }
+            if (extracts.length) {
+                attRow += '<div class="px-1 pb-1.5 flex flex-wrap gap-1">';
+                for (ei = 0; ei < extracts.length; ei++) {
+                    ex = extracts[ei];
+                    if (!ex || !ex.id) continue;
+                    chipCls = ex.loaded
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-500';
+                    attRow += '<span class="inline-flex items-center gap-0.5 max-w-full">' +
+                        '<button type="button" data-chat-act="toggle-extract" data-extract-id="' + esc(ex.id) + '" title="' + (ex.loaded ? 'Loaded in this chat. Tap to unload.' : 'Sitting ready. Tap to load.') + '" class="inline-flex items-center gap-1 max-w-[180px] px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ' + chipCls + '">' +
+                            '<span class="truncate">' + esc(ex.summary || 'Source') + '</span>' +
+                        '</button>' +
+                        '<button type="button" data-chat-act="delete-extract" data-extract-id="' + esc(ex.id) + '" title="Remove pulled source" class="shrink-0 text-slate-300 hover:text-rose-500 text-[11px] leading-none px-0.5">&times;</button>' +
+                    '</span>';
+                }
+                attRow += '</div>';
+            }
+
+            return '<div class="' + (isPip ? 'p-2' : 'p-4') + ' border-t border-slate-100 bg-white shrink-0">' +
+                attRow +
+                '<div class="flex gap-2">' +
                 '<div class="flex-1 min-w-0 flex items-center gap-0.5 ' + (isPip ? 'p-1 pl-1.5 rounded-lg' : 'p-1.5 pl-2 rounded-xl') + ' bg-slate-50">' +
-                    '<button type="button" data-chat-act="attach" title="Attach file" class="' + sideBtn + ' shrink-0 flex items-center justify-center text-slate-400 hover:text-slate-600">' +
-                        icon('clip', '') +
-                    '</button>' +
+                    '<span class="shrink-0 relative flex items-center justify-center text-slate-400" style="position:relative;width:28px;height:28px;">' +
+                        '<input type="file" id="aiChatFileInput" accept="image/*,application/pdf,.pdf,text/*" title="Attach file" style="position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;font-size:16px;cursor:pointer;">' +
+                        '<span class="pointer-events-none flex items-center justify-center">' + icon('clip', '') + '</span>' +
+                    '</span>' +
                     micHtml +
-                    /* Never readonly while listening. Speech recognition is not
-                       reliable enough to trust blind, so the user must be able
-                       to fix a mistranscription without stopping the mic. */
                     '<input type="text" id="aiChatInput" placeholder="' + esc(placeholder) + '" class="flex-1 min-w-0 p-2 bg-transparent border-none text-[10px] font-bold outline-none ' + phCls + '">' +
-                    '<input type="file" id="aiChatFileInput" class="hidden" multiple>' +
                 '</div>' +
                 sendHtml +
-            '</div>';
+            '</div></div>';
         }
 
         function renderHeaderHtml(isPip) {
@@ -2013,6 +2179,7 @@ window.mBTAIModule = {
 
         function renderRightDrawerHtml(rightOpen) {
             var colCls = rightOpen ? 'w-[340px]' : 'mbt-chat-drawer-collapsed w-[36px]';
+            var sess = self._chatSession || {};
             var s = budgetStats();
             var secRows = [];
             var i, r;
@@ -2608,7 +2775,14 @@ window.mBTAIModule = {
             var sess = self._chatSession;
             if (!sess || sess.inflight) return;
             text = String(text || '').replace(/^\s+|\s+$/g, '');
-            if (!text) return;
+            /* An attachment on its own is a valid turn: a photo of a budget with
+               no typed question still needs a default ask. */
+            var att = sess.pendingAttachment || null;
+            /* An unloaded chip contributes nothing, so it cannot carry a bare
+               turn on its own. Only a source that will actually be sent counts. */
+            if (att && att.extractId && !self._isExtractLoaded(att.extractId)) att = null;
+            if (!text && !att) return;
+            if (!text && att) text = 'Review this attachment.';
 
             var ac = activeThreadAndChat();
             var activeChat = ac.chat;
@@ -2660,6 +2834,39 @@ window.mBTAIModule = {
                 finalPrompt = '[' + contextSummary + ']\n\nUser Query: ' + text;
             }
 
+            /* Attachment rides the same turn the user just sent. Text extracts go
+               inline in the prompt; images go as a vision part when the provider
+               layer supports one. */
+            var sendAtt = att;
+            var skipExtractId = '';
+            var exRec = null;
+            var exList;
+            var exi;
+            if (sendAtt && sendAtt.extractId) {
+                try {
+                    exList = self._ensureChatExtracts();
+                    for (exi = 0; exi < exList.length; exi++) {
+                        if (exList[exi] && exList[exi].id === sendAtt.extractId) {
+                            exRec = exList[exi];
+                            break;
+                        }
+                    }
+                } catch (eExFind) { exRec = null; }
+                if (exRec && !exRec.loaded) {
+                    sendAtt = null;
+                } else if (sendAtt && sendAtt.kind === 'image') {
+                    skipExtractId = sendAtt.extractId;
+                }
+            }
+            if (!isRetry) sess.pendingAttachment = null;
+            if (sendAtt && sendAtt.kind === 'text' && sendAtt.text && !sendAtt.extractId) {
+                finalPrompt = finalPrompt +
+                    '\n\n[Attached file: ' + sendAtt.name +
+                    (sendAtt.pages ? ' (' + sendAtt.pages + ' page' + (sendAtt.pages === 1 ? '' : 's') +
+                        (sendAtt.truncatedPages ? ', truncated' : '') + ')' : '') +
+                    ']\n' + sendAtt.text;
+            }
+
             var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
             if (self.isInjectBudgetContext()) {
                 var budgetCtx = self._buildBudgetContext();
@@ -2674,13 +2881,19 @@ window.mBTAIModule = {
                 }
             } catch (eSrc) { /* ignore */ }
             try {
+                var pulled = self._loadedExtractContext(skipExtractId);
+                if (pulled) chatSystemMsg += '\n\n' + pulled;
+            } catch (ePull) { /* ignore */ }
+            try {
                 if (window.mBTContextLedger && typeof window.mBTContextLedger.asPromptFragment === 'function') {
                     var ledFrag = window.mBTContextLedger.asPromptFragment({ maxTokens: 4000 });
                     if (ledFrag && ledFrag.text) chatSystemMsg += '\n\n' + ledFrag.text;
                 }
             } catch (eLed) { /* ignore */ }
 
-            return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg, apiHistory).then(function (response) {
+            return self.callUnifiedAI(provider, apiKey, finalPrompt, chatSystemMsg, apiHistory,
+                (sendAtt && sendAtt.kind === 'image') ? sendAtt : null
+            ).then(function (response) {
                 if (!self._chatSession || self._chatSession.genId !== myGen) {
                     /* Abandoned by stop or close. */
                     return;
@@ -2717,7 +2930,7 @@ window.mBTAIModule = {
         function handleAction(act, el, e) {
             var sess = self._chatSession;
             if (!sess) return;
-            var id, thr, changes, ma, p, val, wh, prefix;
+            var id, thr, changes, ma, p, val, wh, prefix, appliedKey, extractId;
 
             if (act === 'close' || act === 'backdrop') {
                 if (act === 'backdrop' && sess.mode === 'pip') return;
@@ -2890,12 +3103,32 @@ window.mBTAIModule = {
                 return;
             }
             if (act === 'attach') {
-                /* Paperclip opens source management (context ledger), not a dead file-only path. */
-                sess.sourceEdit = null;
-                sess.sourceModalOpen = true;
-                sess.rightOpen = true;
-                if (isMobileChatLayout()) sess.leftOpen = false;
-                persistDrawer('mbt_chat_drawer_right', true);
+                /* Clip is a native file input. Do not open the context drawer. */
+                return;
+            }
+            if (act === 'attach-clear') {
+                if (sess.pendingAttachment && sess.pendingAttachment.extractId) {
+                    self._deleteChatExtract(sess.pendingAttachment.extractId);
+                }
+                sess.pendingAttachment = null;
+                sess.attachError = '';
+                self._chatRender();
+                return;
+            }
+            if (act === 'toggle-extract') {
+                extractId = el.getAttribute('data-extract-id') || '';
+                if (extractId) self._toggleChatExtract(extractId);
+                self._chatRender();
+                return;
+            }
+            if (act === 'delete-extract') {
+                extractId = el.getAttribute('data-extract-id') || '';
+                if (extractId) {
+                    if (sess.pendingAttachment && sess.pendingAttachment.extractId === extractId) {
+                        sess.pendingAttachment = null;
+                    }
+                    self._deleteChatExtract(extractId);
+                }
                 self._chatRender();
                 return;
             }
@@ -2907,7 +3140,7 @@ window.mBTAIModule = {
             if (act === 'preview') {
                 var dk = el.getAttribute('data-diff-key');
                 var d = window._mbtAIDiffStore && window._mbtAIDiffStore[dk];
-                if (d) self.applySuggestion(d);
+                if (d) self.applySuggestion(d, dk);
                 return;
             }
             if (act === 'confirm-close' || act === 'confirm-cancel') {
@@ -2918,8 +3151,9 @@ window.mBTAIModule = {
             if (act === 'confirm-yes') {
                 if (sess.pendingDiff && sess.pendingDiff.changes) {
                     changes = sess.pendingDiff.changes;
+                    appliedKey = sess.pendingDiff.diffKey || '';
                     sess.pendingDiff = null;
-                    self._commitSuggestion(changes);
+                    self._commitSuggestion(changes, appliedKey);
                 }
                 return;
             }
@@ -3112,7 +3346,11 @@ window.mBTAIModule = {
             if (!root) return;
 
             root.onclick = function (e) {
-                var el = e.target;
+                var t = e.target;
+                /* A file input must keep its own click. preventDefault here is why
+                   phone attach did nothing (or fell through to an older drawer path). */
+                if (t && t.id === 'aiChatFileInput') return;
+                var el = t;
                 if (el && el.nodeType !== 1) el = el.parentNode;
                 while (el && el !== root && !(el.getAttribute && el.getAttribute('data-chat-act'))) {
                     el = el.parentNode;
@@ -3137,28 +3375,141 @@ window.mBTAIModule = {
                 }
             };
 
-            /* Optional: file pick still available for dumping text into a new source. */
+            /* Attach a real file to the next turn. Images go as a data URL for a
+               vision-capable model; PDFs are text-extracted locally with the
+               already-bundled PDF.js; anything else is read as text. Never forces
+               the right drawer open (that was the attach/drawer conflict). */
+            function ingestChatFile(file, persist) {
+                    if (!self._chatSession || !file) return;
+
+                    var MAX_BYTES = 8 * 1024 * 1024;
+                    if (file.size > MAX_BYTES) {
+                        self._chatSession.attachError = 'That file is too large. Keep attachments under 8MB.';
+                        if (typeof self._chatRender === 'function') self._chatRender();
+                        return;
+                    }
+
+                    var name = file.name || 'Attachment';
+                    var type = file.type || '';
+                    self._chatSession.attachError = '';
+                    self._chatSession.attachBusy = name;
+                    if (typeof self._chatRender === 'function') self._chatRender();
+
+                    function done(att) {
+                        if (persist) self._rememberChatExtract(att);
+                        if (!self._chatSession) return;
+                        self._chatSession.attachBusy = '';
+                        self._chatSession.pendingAttachment = att;
+                        if (typeof self._chatRender === 'function') self._chatRender();
+                    }
+                    /* pdf.worker.min.js does not ship in src/lib and this build
+                       ignores disableWorker, so the fake worker 404s. Name that
+                       instead of blaming the user's file. */
+                    function failPdf(err) {
+                        var m = (err && err.message) || '';
+                        if (/worker/i.test(m)) {
+                            fail('PDF reading is unavailable in this build. Attach a photo of the page instead.');
+                        } else {
+                            fail('Could not read that PDF.');
+                        }
+                    }
+                    function fail(msg) {
+                        if (!self._chatSession) return;
+                        self._chatSession.attachBusy = '';
+                        self._chatSession.pendingAttachment = null;
+                        self._chatSession.attachError = msg || 'Could not read that file.';
+                        if (typeof self._chatRender === 'function') self._chatRender();
+                    }
+
+                    if (type.indexOf('image/') === 0) {
+                        var imgReader = new FileReader();
+                        imgReader.onload = function (ev) {
+                            var url = String((ev && ev.target && ev.target.result) || '');
+                            if (!url) return fail('Could not read that image.');
+                            done({ kind: 'image', name: name, mime: type, dataUrl: url });
+                        };
+                        imgReader.onerror = function () { fail('Could not read that image.'); };
+                        imgReader.readAsDataURL(file);
+                        return;
+                    }
+
+                    if (type === 'application/pdf' || /\.pdf$/i.test(name)) {
+                        if (!window.pdfjsLib || typeof window.pdfjsLib.getDocument !== 'function') {
+                            return fail('PDF reading is unavailable.');
+                        }
+                        var pdfReader = new FileReader();
+                        pdfReader.onload = function (ev) {
+                            var buf = ev && ev.target && ev.target.result;
+                            if (!buf) return fail('Could not read that PDF.');
+                            try {
+                                /* No worker file ships with the bundle, so run inline. */
+                                if (window.pdfjsLib.GlobalWorkerOptions) {
+                                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+                                }
+                                window.pdfjsLib.getDocument({
+                                    data: new Uint8Array(buf),
+                                    disableWorker: true,
+                                    isEvalSupported: false
+                                }).promise.then(function (pdf) {
+                                    var MAX_PAGES = 20;
+                                    var total = Math.min(pdf.numPages || 0, MAX_PAGES);
+                                    var chain = Promise.resolve('');
+                                    var i;
+                                    function readPage(n) {
+                                        return function (acc) {
+                                            return pdf.getPage(n).then(function (page) {
+                                                return page.getTextContent();
+                                            }).then(function (tc) {
+                                                var items = (tc && tc.items) || [];
+                                                var line = items.map(function (it) { return (it && it.str) || ''; }).join(' ');
+                                                return acc + line + '\n';
+                                            });
+                                        };
+                                    }
+                                    for (i = 1; i <= total; i++) chain = chain.then(readPage(i));
+                                    return chain.then(function (text) {
+                                        text = String(text || '').replace(/[ \t]+/g, ' ').replace(/^\s+|\s+$/g, '');
+                                        if (!text) {
+                                            return fail('That PDF has no selectable text. Attach a photo of the page instead.');
+                                        }
+                                        done({
+                                            kind: 'text',
+                                            name: name,
+                                            mime: 'application/pdf',
+                                            text: text.substring(0, 24000),
+                                            pages: total,
+                                            truncatedPages: (pdf.numPages || 0) > MAX_PAGES
+                                        });
+                                    });
+                                }).catch(failPdf);
+                            } catch (ePdf) {
+                                failPdf(ePdf);
+                            }
+                        };
+                        pdfReader.onerror = function () { fail('Could not read that PDF.'); };
+                        pdfReader.readAsArrayBuffer(file);
+                        return;
+                    }
+
+                    var txtReader = new FileReader();
+                    txtReader.onload = function (ev) {
+                        var body = String((ev && ev.target && ev.target.result) || '').substring(0, 24000);
+                        if (!body) return fail('That file is empty.');
+                        done({ kind: 'text', name: name, mime: type || 'text/plain', text: body });
+                    };
+                    txtReader.onerror = function () { fail('Could not read that file.'); };
+                    txtReader.readAsText(file);
+            }
+            self._ingestChatFile = ingestChatFile;
+
             var fileIn = document.getElementById('aiChatFileInput');
             if (fileIn) {
                 fileIn.onchange = function () {
                     var files = fileIn.files;
                     if (!files || !files.length) return;
                     var file = files[0];
-                    var reader = new FileReader();
-                    reader.onload = function (ev) {
-                        var body = String((ev && ev.target && ev.target.result) || '').substring(0, 12000);
-                        if (window.mBTAssistant && typeof window.mBTAssistant.addSource === 'function' && body) {
-                            window.mBTAssistant.addSource(file.name || 'Attachment', body);
-                        }
-                        if (self._chatSession) {
-                            self._chatSession.rightOpen = true;
-                            if (isMobileChatLayout()) self._chatSession.leftOpen = false;
-                            persistDrawer('mbt_chat_drawer_right', true);
-                            if (typeof self._chatRender === 'function') self._chatRender();
-                        }
-                    };
-                    reader.readAsText(file);
                     fileIn.value = '';
+                    ingestChatFile(file, true);
                 };
             }
 

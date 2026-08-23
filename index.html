@@ -38,7 +38,7 @@
 
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
-    <title>mooBudgetTool v24.14</title>
+    <title>mooBudgetTool v24.15</title>
     <script>
         /* Pre-paint theme on <html> so tokens resolve before body paint */
         (function () {
@@ -284,6 +284,7 @@
     <script src="./src/services/supabase-realtime.js"></script>
     <!-- Phase 100.1: Footer Nav Component -->
     <script src="./src/core/ui/Footer.js"></script>
+    <script src="./src/core/ui/PartnerDrawer.js"></script>
     <script src="./src/core/ui/Toolbar.js"></script>
     <!-- Phase 101: Calendar Temporal Projections Component -->
     <script src="./src/core/ui/Calendar.js"></script>
@@ -731,7 +732,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.14";
+    var APP_VERSION = "24.15";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -14827,6 +14828,14 @@
                 if (!el) return;
                 _open = true;
                 el.classList.remove('hidden');
+                /* Android / PWA back: without a layer the palette is invisible to
+                   the history stack, so back left the app instead of closing it. */
+                if (window.mBTME && typeof mBTME.registerLayer === 'function') {
+                    mBTME.registerLayer('mbtCmdPalette', function () {
+                        closePalette();
+                        return false;
+                    });
+                }
                 loadBudgetCache();
                 var inp = document.getElementById('cmdInput');
                 if (inp) {
@@ -14844,6 +14853,9 @@
                 var el = document.getElementById('cmdPalette');
                 if (el) el.classList.add('hidden');
                 _open = false;
+                if (window.mBTME && typeof mBTME.unregisterLayer === 'function') {
+                    mBTME.unregisterLayer('mbtCmdPalette');
+                }
             }
 
             /* ========= renderResults: Provider Registry Loop (Phase 138) ========= */
@@ -15036,7 +15048,18 @@
             document.addEventListener('touchend', function (e) {
                 if (e.changedTouches && e.changedTouches.length > 0) {
                     var endY = e.changedTouches[0].clientY;
-                    if (_startY > window.innerHeight - 100 && (_startY - endY) > 50) openPalette();
+                    if (_startY > window.innerHeight - 100 && (_startY - endY) > 50) {
+                        /* Do not open search over the assistant, over itself, or
+                           over any open modal layer. The gesture used to fire
+                           unguarded and land the palette on top of chat. */
+                        if (_open) return;
+                        /* offsetParent is always null on a fixed element, so it
+                           cannot be used as a visibility test here. */
+                        var chatRoot = document.getElementById('mbtAiChatRoot');
+                        if (chatRoot && chatRoot.getBoundingClientRect().height > 0) return;
+                        if (window.mBTME && mBTME.stack && mBTME.stack.length) return;
+                        openPalette();
+                    }
                 }
             }, { passive: true });
 
@@ -15597,6 +15620,9 @@
                 /* clipboard-write: Clipboard API from tool iframes (Share Hub copy, etc.) */
                 var content = '<div class="w-full" style="height:85vh;"><iframe src="' + url + '" style="width:100%;height:100%;border:none;" allow="clipboard-write"></iframe></div>';
                 mBTME.open('tool-window', '', content, 'max-w-7xl', { noPadding: true, hideHeader: true });
+                if (window.mBTPartnerDrawer && typeof window.mBTPartnerDrawer.onToolOpen === 'function') {
+                    window.mBTPartnerDrawer.onToolOpen();
+                }
                 /* Phase 73B: record active tool name for undo/redo routing */
                 var _tm = url.match(/\/tools\/([^\/]+)\//);
                 mBTActiveTool = _tm ? _tm[1] : 'unknown';
@@ -15632,6 +15658,10 @@
                 else if (btn.id === 'secondaryActionBtn') openTool('./src/tools/publisher/index.html?projectKey=' + encodeURIComponent(storageKeyPrefix + (budget ? budget.projectName : '')) + '&currency=' + encodeURIComponent(displayCurrency || 'JMD') + '&embedded=true');
                 else if (btn.id === 'footerCoffeeBtn') mBT.core.actions['support-modal']();
             });
+        }
+
+        if (window.mBTPartnerDrawer && typeof window.mBTPartnerDrawer.init === 'function') {
+            window.mBTPartnerDrawer.init();
         }
 
         /* --- Phase 73: Contingency & Fringes card click -- opens Fringes tool --- */
