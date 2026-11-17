@@ -1,0 +1,21 @@
+# Normalise first-party text files to LF in the repository.
+* text=auto eol=lf
+
+# Vendor bundles keep the exact bytes and line endings they shipped with.
+src/lib/** -text
+
+# Binaries are never converted.
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.ico -text
+*.wasm -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.otf -text
+*.pdf -text
+*.zip -text
+*.tgz -text
