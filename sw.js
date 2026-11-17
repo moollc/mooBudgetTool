@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v24.15';
+var CACHE_NAME = 'mbt-monolith-cache-v24.16';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -68,14 +68,23 @@ var PRECACHE_ASSETS = [
 
     /* --- Core services (loaded by monolith) --- */
     './src/core/services/Security.js',
+    './src/core/services/mBTAssistant.js',
+    './src/core/services/Contacts.js',
+    './src/config/ai.js',
     './src/config/supabase.js',
+    './src/config/supabase-collab.js',
     './src/services/supabase-sync.js',
+    './src/services/collab-client.js',
+    './src/services/ai-pattern-recognition.js',
+    './src/services/ai-reports.js',
     './src/services/supabase-realtime.js',
 
     /* --- Core UI components (loaded by monolith) --- */
     './src/core/ui/Calendar.js',
     './src/core/ui/Footer.js',
     './src/core/ui/Toolbar.js',
+    './src/core/ui/PartnerDrawer.js',
+    './src/core/ui/CalendarBenchmark.js',
     './src/core/components/ToolBridge.js',
     './src/core/components/EmbeddedMode.js',
 
@@ -89,6 +98,7 @@ var PRECACHE_ASSETS = [
     /* --- Tool HTML files (dynamically loaded via openTool() iframes) --- */
     /* src/tools/ai/index.html intentionally omitted: retired, openChat is the surface. */
     './src/tools/tools-manifest.json',
+    './src/tools/calendar/index.html',
     './src/tools/calendar_benchmark/index.html',
     './src/tools/contacts/index.html',
     './src/tools/db/index.html',
@@ -96,6 +106,7 @@ var PRECACHE_ASSETS = [
     './src/tools/fringes/index.html',
     './src/tools/po/index.html',
     './src/tools/publisher/index.html',
+    './src/tools/publisher/SmartFill.js',
     './src/tools/rsi/index.html',
     './src/tools/rsi/DEBT.json',
     './src/tools/share/index.html',

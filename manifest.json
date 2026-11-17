@@ -1,6 +1,6 @@
 {
   "id": "./",
-  "name": "mBT Monolith - mooBudgetTool",
+  "name": "mooBudgetTool",
   "short_name": "mBT",
   "description": "Offline-first Film Production Budget & Management Tool",
   "start_url": "./index.html",
