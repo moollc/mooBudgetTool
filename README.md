@@ -108,7 +108,7 @@ mBT/
 | Category | Templates |
 |----------|-----------|
 | Financial | Top Sheet, Detail Budget, Cost Report, Purchase Order, Petty Cash |
-| Production | Call Sheet, Day Out of Days, Location Agreement, Equipment List, Crew Deal Memo |
+| Production | Call Sheet, Day Out of Days, Location Agreement, Kit Rental Agreement, Deal Memo |
 | Scheduling | Script Breakdown, Shooting Schedule, Continuity Log, Movement Order, Storyboard |
 | Legal/Admin | Release Form, NDA, Permit Request, Insurance Summary |
 | Funding | Funding Pitch Deck |

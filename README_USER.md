@@ -61,6 +61,11 @@ The document builder. Select a template from the left panel, fill in the editor,
 - **XLSX** — Excel-compatible spreadsheet
 - **Package** — batch export of all financial docs with a cover page
 
+### Budget
+New budgets start from the project picker (template or blank) through the setup wizard. You can also duplicate an existing budget.
+
+When you set shoot days on create, or duplicate a budget that already has shoot days, mBT applies that count to the PROD stage and to every Day-unit line quantity. Hour, Week and Flat lines are unchanged.
+
 ### Stages
 Model your production budget by phase.
 
@@ -91,30 +96,32 @@ Jamaica industry rate reference. Hourly, daily, and weekly rates by department.
 Use it to sanity-check quoted rates or populate crew deal memos.
 
 ### AI Assistant
-Two modes:
+One Assistant chat, opened from the budget dock **AI** button. There is no separate AI tool in the tools list.
 
-**Analytics tab** (no API key needed)
-- Type `budget`, `forecast`, `risk`, `suggest`, `patterns`, or `executive`
-- Or click the quick command buttons
-- Reads your active project data from IndexedDB
+**Before you start**
+1. Load a project (Assistant refuses an empty picker).
+2. Add a provider in **Settings → Connections** (cloud providers need an API key; LM Studio can run locally with no key).
 
-**LLM Chat tab** (requires a provider)
-- Select a provider: LM Studio, OpenAI-compatible, or Claude API
-- Click **Settings** to enter your endpoint URL and API key
-- Toggle "Inject budget context" to include your project data in the system prompt
-- Ask anything: "What's my biggest risk?", "Where can I cut costs?", "Summarise the production budget"
+**In chat**
+- **Expanded** or **picture-in-picture** layout (header toggle)
+- Provider and model in the header; free-form questions about rates, logistics or risks
+- **Context** panel: budget summary, sections, funding gap, indexed artifacts
+- Quick actions: **Analytics** (budget analysis), **Generate** (blueprint from template), rescan or purge context
+- **Settings** (gear): house rules, remember conversations, inject budget context, model picks
+- Suggested budget edits preview in chat before you apply them
 
 **LM Studio setup (free, local):**
 1. Download LM Studio from lmstudio.ai
 2. Download any GGUF model (Llama, Mistral, Phi, etc.)
 3. Start the local server (default: `http://localhost:1234`)
-4. In mBT AI → Settings, set endpoint to `http://localhost:1234/v1/chat/completions`
+4. In **Settings → Connections**, choose LM Studio and set endpoint to `http://localhost:1234/v1/chat/completions`
 5. Leave API key blank
 
 ### Settings
 - **Currency** — set display currency (JMD, USD, GBP, etc.)
 - **Dark Mode** — toggle dark/light theme
 - **Auto-Hide Nav / Navigation Visibility** — dock behavior and which buttons show
+- **Put new lines in their department's section** (Settings → General, this budget only) — on by default. A new line goes into the section for its department, such as Above The Line or Camera, and the section is created if it is missing. Off keeps a new line in the section you add it from. The department is shown where you add a line and can be changed there, or later from the line itself; fringes set for a section follow the section
 - **Cloud Sync** — connect to Supabase for cross-device backup
 - **AI Settings** — configure LLM endpoint and API key
 
@@ -156,7 +163,7 @@ Your data remains private — Row Level Security ensures each user only sees the
 | Blank white screen on open | Make sure you're opening `index.html` directly (not a subfolder). Try Chrome or Edge. |
 | Data not saving | IndexedDB must be available. Don't open from a zip archive — extract first. |
 | App shows old version after update | Go to browser Settings → Clear site data for the file path, then reopen |
-| AI tab shows "Could not reach provider" | Check your LM Studio server is running. In AI → Settings, verify the endpoint URL. |
+| Assistant cannot reach provider | If you use LM Studio, confirm the local server is running. In Settings → Connections, verify endpoint URL and API key. |
 | PDF export is blank or cut off | Make sure you're on the Preview tab before exporting. Try the PDF (Alt) button for tables. |
 | Icons not showing | Open from the repository root, not a renamed or partial copy. Relative paths must resolve. |
 | Bottom dock missing | Settings → General → Navigation Visibility → Manage, or disable Auto-Hide Nav |
@@ -189,7 +196,7 @@ Your data remains private — Row Level Security ensures each user only sees the
 - Chrome 90+, Edge 90+, Firefox 88+, or Safari 14+
 - IndexedDB API (available in all modern browsers)
 - ~50MB free browser storage for projects
-- For LLM Chat: a running LM Studio instance or API key for an external provider
+- For Assistant: LM Studio running locally, or an API key for a cloud provider in Settings → Connections
 
 ---
 
