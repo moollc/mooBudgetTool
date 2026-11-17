@@ -50,6 +50,9 @@
                             id: 'og_jamaica_' + i,
                             category: 'crew_rates',
                             label: item.description,
+                            department: item.department,
+                            itemType: item.itemType,
+                            equipmentCategory: item.category,
                             value: item.rate,
                             unit: item.unit,
                             currency: 'JMD'

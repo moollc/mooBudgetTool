@@ -17,6 +17,7 @@
     var _blobDir   = null;
     var _ready     = false;
     var _persisted = false;
+    var _initError = null;
 
     var BUDGET_PREFIX = 'prodBudget_v5_';
 
@@ -65,6 +66,7 @@
     /* Aggressive try/catch: on file:// protocol, getDirectory() throws SecurityError.
        Sets _ready = false and returns false — all subsequent calls become no-ops. */
     function init() {
+        _initError = null;
         if (!navigator.storage || typeof navigator.storage.getDirectory !== 'function') {
             return Promise.resolve(false);
         }
@@ -81,6 +83,7 @@
         }).catch(function (e) {
             console.warn('[mBTOPFS] Init failed — OPFS unavailable (file:// or unsupported browser). Cascading to localforage.', e.message || e);
             _ready = false;
+            if (typeof location === 'undefined' || location.protocol !== 'file:') _initError = e;
             return false;
         });
     }
@@ -95,7 +98,7 @@
             json = typeof data === 'string' ? data : JSON.stringify(data);
         } catch (e) {
             console.error('[mBTOPFS] Serialization failed for key:', key, e);
-            return Promise.resolve();
+            return Promise.reject(e);
         }
         if (json.length > 5 * 1024 * 1024) {
             console.warn('[mBTOPFS] Budget data exceeds 5MB (' + Math.round(json.length / 1024) + ' KB). Writing on main thread — Worker path deferred to future phase.');
@@ -108,6 +111,7 @@
             });
         }).catch(function (e) {
             console.error('[mBTOPFS] saveJSON failed for key:', key, e);
+            throw e;
         });
     }
 
@@ -119,11 +123,13 @@
         }).then(function (file) {
             return file.text();
         }).then(function (text) {
-            try { return JSON.parse(text); } catch (e) { return null; }
+            var data = JSON.parse(text);
+            if (data === null) throw new Error('The stored budget file contains null, not a missing file.');
+            return data;
         }).catch(function (e) {
             if (e && e.name === 'NotFoundError') return null;
             console.warn('[mBTOPFS] loadJSON error for key:', key, e);
-            return null;
+            throw e;
         });
     }
 
@@ -154,7 +160,7 @@
         }
         return _readNext().catch(function (e) {
             console.warn('[mBTOPFS] listKeys error', e);
-            return keys;
+            throw e;
         });
     }
 
@@ -231,6 +237,7 @@
     window.mBTOPFS = {
         init:               init,
         isReady:            function () { return _ready; },
+        initError:          function () { return _initError; },
         isPersisted:        function () { return _persisted; },
         requestPersistence: requestPersistence,
         save:               saveJSON,

@@ -678,6 +678,8 @@
                     if (haltedByConflict) return;
                     return localforage.getItem(lfKey).then(function (budgetData) {
                         if (!budgetData) return;
+                        /* Shared budgets use the canonical approval API, never legacy backup upserts. */
+                        if (budgetData.collab_project_id) return null;
                         var budgetId = budgetData.id || budgetData.projectName || lfKey.replace(budgetPrefix, '');
                         if (pushedProjectIds[budgetId]) return;
 
@@ -976,7 +978,6 @@
         'prodBudget_v5_projectNameSeparator',
         'moo_og_loc',
         'moo_og_share',
-        'mBT_openToolsInternal',
         'mbt_supabase_sync_on_reconnect',
         'mbt_supabase_sync_mode',
         'mbt_profile_display_name',
@@ -1078,6 +1079,7 @@
             if (prefs._budgetSettings && window.mBTSync && typeof window.mBTSync._setBudgetSettings === 'function') {
                 window.mBTSync._setBudgetSettings(prefs._budgetSettings);
             }
+            if (window._mBTSyncShareFromStore) window._mBTSyncShareFromStore();
             /* Supporter stamp: remote or an existing device token hides the rail.
                Read only. Nothing here writes back to user_preferences. */
             (function () {
@@ -1188,6 +1190,7 @@
         sbPatchPendingEdit: sbPatchPendingEdit,
         /* Phase 63: force-push a resolved project after diff merge, bypassing conflict check */
         forcePushProject:   function (projectId, data) {
+            if (data && data.collab_project_id) return Promise.reject(new Error('Shared budget changes require owner approval. Open Activity to review each edit.'));
             var userId = localStorage.getItem('mbt_supabase_user_id') || '';
             var payload = {
                 id: projectId,

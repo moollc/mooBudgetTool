@@ -38,7 +38,7 @@ var mBTStorage = {
           var data = JSON.parse(raw);
           if (data && !data.id) data.id = data.projectName || 'default';
           return data;
-        } catch (e) { }
+        } catch (e) { throw e; }
       }
       return null;
     };
@@ -50,7 +50,7 @@ var mBTStorage = {
           return data;
         }
         return tryFallback();
-      }).catch(tryFallback);
+      });
     } else {
       return Promise.resolve(tryFallback());
     }
@@ -667,6 +667,21 @@ var mBTStorage = {
     });
   },
 
+  updateOGRates: function (rates) {
+    return this._getDb().then(function (db) {
+      var tx = db.transaction(STORE_NAMES.OG_REF, 'readwrite'), store = tx.objectStore(STORE_NAMES.OG_REF);
+      var get = store.getAll();
+      get.onsuccess = function () {
+        (get.result || []).forEach(function (row) {
+          var match = rates.filter(function (rate) { return rate.description === row.label && (rate.region || 'Jamaica') === (row.region || 'Jamaica') && (rate.unit || 'Day') === (row.unit || 'Day'); })[0];
+          if (!match || row.source === 'override' || row.source === 'user' || match.source === 'override' || match.source === 'user') return;
+          row.value = match.rate; row.currency = match.currency; row.region = match.region; row.department = match.department; row.itemType = match.itemType; row.equipmentCategory = match.category;
+          store.put(row);
+        });
+      };
+      return new Promise(function (resolve, reject) { tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); }; });
+    });
+  },
   getAllOGItems: function () {
     var self = this;
     return this._getDb().then(function (db) {
@@ -714,10 +729,13 @@ var mBTStorage = {
       }
       if (!contact.portfolio) contact.portfolio = [];
       contact.updated_at = new Date().toISOString();
-      var store = db.transaction([STORE_NAMES.CONTACTS], 'readwrite').objectStore(STORE_NAMES.CONTACTS);
+      var tx = db.transaction([STORE_NAMES.CONTACTS], 'readwrite');
+      var store = tx.objectStore(STORE_NAMES.CONTACTS);
       return new Promise(function (resolve, reject) {
         var request = store.put(contact);
-        request.onsuccess = function () { resolve(contact); };
+        tx.oncomplete = function () { resolve(contact); };
+        tx.onabort = function () { reject(tx.error || new Error('Contact write was aborted.')); };
+        tx.onerror = function () { reject(tx.error || new Error('Contact write failed.')); };
         request.onerror = function () { reject(request.error); };
       });
     });
@@ -797,6 +815,30 @@ var mBTStorage = {
       return new Promise(function (resolve, reject) {
         tx.oncomplete = function () { resolve(); };
         tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  },
+
+  /* Restore the same contact and clear its deletion marker in one transaction. */
+  restoreContact: function (contact) {
+    return this._getDb().then(function (db) {
+      var tx = db.transaction([STORE_NAMES.CONTACTS, STORE_NAMES.TOMBSTONES], 'readwrite');
+      var store = tx.objectStore(STORE_NAMES.CONTACTS), conflict = null;
+      var current = store.get(contact.id);
+      current.onsuccess = function () {
+        if (current.result) {
+          conflict = new Error('A contact with this ID already exists. Nothing was overwritten.');
+          tx.abort();
+          return;
+        }
+        contact.updated_at = new Date().toISOString();
+        store.put(contact);
+        tx.objectStore(STORE_NAMES.TOMBSTONES).delete(contact.id);
+      };
+      return new Promise(function (resolve, reject) {
+        tx.oncomplete = function () { resolve(contact); };
+        tx.onerror = function () { reject(tx.error); };
+        tx.onabort = function () { reject(conflict || tx.error || new Error('Contact restore cancelled')); };
       });
     });
   },

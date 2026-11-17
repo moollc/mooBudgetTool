@@ -78,6 +78,10 @@
         if (doc.salesTaxPercentage != null && doc.salesTaxPercentage !== '') {
             context.salesTaxPercentage = parseFloat(doc.salesTaxPercentage);
         }
+        var fee = window.mBT_Finance.summary(JSON.parse(JSON.stringify(doc)));
+        context.productionFeePercentage = fee.productionFeePercentage;
+        context.productionFeeAmount = fee.productionFeeAmount;
+        context.duplicateFeeWarning = fee.duplicateFeeWarning;
         context.sections = extractBudgetSections(doc);
         return context;
     }

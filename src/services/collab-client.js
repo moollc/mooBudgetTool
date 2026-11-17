@@ -201,6 +201,7 @@
 
     function createProject(name, budgetData) {
         return requireSession().then(function (session) {
+            if (budgetData && typeof budgetData === 'object') budgetData.historyEnabled = true;
             var payload = {
                 owner_user_id: session.id,
                 name: name || 'Shared Budget',
@@ -419,6 +420,34 @@
     }
 
     function saveProject(projectId, budgetData) {
+        if (window.mBTHistory) {
+            var draft = JSON.parse(JSON.stringify(budgetData || {}));
+            if (typeof draft.projectName !== 'string' || !draft.projectName.trim()) {
+                return Promise.reject(new Error('History saves require a non-empty projectName.'));
+            }
+            draft.collab_project_id = projectId;
+            return mBTHistory.record(draft).then(function () { return mBTHistory.sync(); });
+        }
+        return requireSession().then(function (session) {
+            /* The server is authoritative. An editor must never fall back to
+               replacing the owner's master when the history module is absent. */
+            return fetch(getRestUrl('/projects?id=eq.' + encodeURIComponent(projectId) + '&select=id,owner_user_id'), {
+                method: 'GET', headers: getRestHeaders()
+            }).then(function (res) {
+                return _jsonOrThrow(res, 'Failed to verify shared budget owner');
+            }).then(function (projects) {
+                if (!Array.isArray(projects) || projects.length !== 1 || projects[0].id !== projectId ||
+                    projects[0].owner_user_id !== session.id) {
+                    throw new Error('This app is too old to send shared edits safely. Your local draft is kept. Refresh the app to send changes in Live or Paused mode.');
+                }
+                var current = getSession();
+                if (!current || current.id !== session.id) throw new Error('Account changed before shared budget save.');
+                return saveOwnedProject(projectId, budgetData);
+            });
+        });
+    }
+
+    function saveOwnedProject(projectId, budgetData) {
         return requireSession().then(function () {
             var payload = {
                 budget_data: budgetData && typeof budgetData === 'object' ? budgetData : {}
@@ -603,6 +632,7 @@
     }
 
     window.mBTCollab = {
+        getAuthHeaders: getAuthHeaders,
         signIn: signIn,
         signUp: signUp,
         signOut: signOut,

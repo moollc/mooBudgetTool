@@ -510,6 +510,7 @@
                     source: source,
                     itemType: itemType || 'crew',
                     category: role.category,
+                    department: window.mBTBatch2 ? mBTBatch2.classify({ description: role.description, category: role.category, itemType: itemType || 'crew' }) : null,
                     intelligence: role.intelligence || ( (source === 'default' && (!role.multipliers || !role.multipliers[region])) ? "USA Market Anchor applied. Negotiate bespoke local rate." : "" ) || (source === 'community' ? "Community-calibrated rate based on regional research." : "")
                 };
             });
@@ -630,7 +631,7 @@
                 self.loadTemplates();
                 /* Attempt cloud sync after local data is ready. Non-blocking. */
                 setTimeout(function () {
-                    self.syncFromCloud();
+                    self.syncFromCloud().catch(function (err) { console.warn('[OpenGate] Automatic update failed:', err.message); });
                     self.syncContactsFromCloud();
                 }, 1200);
             });
@@ -910,77 +911,119 @@
          */
         syncFromCloud: function () {
             var self = this;
-            if (typeof navigator !== 'undefined' && !navigator.onLine) return Promise.resolve(0);
-            var syncEnabled = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
-            if (!syncEnabled) return Promise.resolve(0);
-
+            if (!navigator.onLine) return Promise.resolve({ status: 'offline', updated: 0 });
+            if (!window.mBTBatch2 || !mBTBatch2.following()) return Promise.resolve({ status: 'disabled', updated: 0 });
             return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE + '?select=*&order=id', {
-                headers: {
-                    'apikey': OG_CLOUD_KEY,
-                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
-                }
+                headers: { apikey: OG_CLOUD_KEY, Authorization: 'Bearer ' + OG_CLOUD_KEY }
             }).then(function (res) {
-                if (!res.ok) return [];
+                if (!res.ok) throw new Error('OpenGate HTTP ' + res.status);
                 return res.json();
             }).then(function (rows) {
-                if (!rows || !rows.length) return 0;
-                var existing = {};
-                for (var i = 0; i < self.rates.length; i++) {
-                    existing[self.rates[i].description.toLowerCase()] = true;
-                }
-                var added = 0;
-                for (var j = 0; j < rows.length; j++) {
-                    var row = rows[j];
-                    if (!existing[row.description.toLowerCase()]) {
-                        self.rates.push({
-                            id: row.id,
-                            description: row.description,
-                            unit: row.unit || 'Day',
-                            rate: parseFloat(row.rate) || 0,
-                            region: row.region || 'Jamaica',
-                            source: row.source || 'community'
-                        });
-                        existing[row.description.toLowerCase()] = true;
-                        added++;
+                if (!Array.isArray(rows)) throw new Error('Invalid OpenGate response');
+                return self.fetchRateAverages(self.settings.location, false).then(function (averages) { return { rows: rows, averages: averages }; });
+            }).then(function (data) {
+                var rows = data.rows, averages = data.averages;
+                if (!mBTBatch2.following()) return { status: 'disabled', updated: 0 };
+                var updated = 0;
+                rows.forEach(function (row) {
+                    if (!row.description || !isFinite(Number(row.rate)) || Number(row.rate) < 0) return;
+                    var region = row.region || 'Jamaica', unit = row.unit || 'Day', currency = row.currency || 'JMD';
+                    var match = self.rates.filter(function (r) {
+                        return r.description.toLowerCase() === row.description.toLowerCase() && (r.region || 'Jamaica') === region && (r.unit || 'Day') === unit && (r.currency || 'JMD') === currency;
+                    })[0];
+                    /* A rate the producer added (user) stays theirs. Override stays too.
+                       Rows an earlier sync already marked community cannot be told apart, so they still update. */
+                    if (match && (match.source === 'override' || match.source === 'user')) return;
+                    if (!match) {
+                        match = { description: row.description, region: region, unit: unit, currency: currency, itemType: row.item_type || '' };
+                        self.rates.push(match);
                     }
-                }
-                if (added > 0) { self.saveRates(); }
-                localStorage.setItem(OG_SYNC_KEY, new Date().toISOString());
-                return added;
-            }).catch(function () { return 0; });
+                    var classification = { description: row.description, department: row.department || '', category: row.category || '', itemType: row.item_type || '', source: 'community', departmentEvidence: row.department ? 'cloud-department' : '' };
+                    match.department = mBTBatch2.classify(classification);
+                    match.departmentEvidence = classification.departmentEvidence;
+                    match.needsClassification = !match.department;
+                    if (match.needsClassification) console.warn('[mBT classification] Needs classification:', match.description);
+                    if (Number(match.rate) !== Number(row.rate)) updated++;
+                    match.rate = Number(row.rate); match.source = 'community'; match.id = row.id;
+                    var b = window.budget;
+                    if (b && region === self.settings.location && (b.currency || 'JMD') === currency) {
+                        Object.keys(b.sections || {}).forEach(function (key) {
+                            (b.sections[key].items || []).forEach(function (item) {
+                                if ((item.catalogDescription || item.description || '').toLowerCase() !== row.description.toLowerCase() || (item.unit || 'Day') !== unit || !mBTBatch2.eligible(item)) return;
+                                var average = averages[row.description.toLowerCase() + '|' + region.toLowerCase() + '|' + unit + '|' + currency];
+                                var price = average ? average.avg_rate : Number(row.rate);
+                                item.rate = price;
+                                Object.keys(item.stageData || {}).forEach(function (stage) {
+                                    if (!item.stageData[stage].rateOverride) item.stageData[stage].rate = price;
+                                });
+                            });
+                        });
+                    }
+                });
+                updated += self.applyRateAverages(averages, self.settings.location);
+                return self.saveRates().then(function () {
+                    if (window.mBT && mBT.storage && mBT.storage.updateOGRates) return mBT.storage.updateOGRates(self.rates);
+                }).then(function () {
+                    localStorage.setItem(OG_SYNC_KEY, new Date().toISOString());
+                    if (window.budget && typeof window.saveBudget === 'function') return window.saveBudget().then(function () { return { status: updated ? 'updated' : 'unchanged', updated: updated }; });
+                    return { status: updated ? 'updated' : 'unchanged', updated: updated };
+                });
+            });
         },
-
         /*
          * pushRate() - contribute a rate to the community database.
          * Requires a Supabase auth token stored at mbt_supabase_key.
          * Opt-in only - respects moo_og_share toggle.
          */
-        pushRate: function (description, unit, rate, region) {
+        contributeBudget: function (budget) {
             var self = this;
-            var shareEnabled = JSON.parse(localStorage.getItem('moo_og_share') || 'false');
-            if (!shareEnabled) return Promise.resolve(false);
-            /* Use the user JWT when signed in - required for RLS to record contributed_by. */
-            var authToken = localStorage.getItem('mbt_supabase_auth_token') || OG_CLOUD_KEY;
-
-            return fetch(OG_CLOUD_URL + '/rest/v1/' + OG_TABLE, {
-                method: 'POST',
-                headers: {
-                    'apikey': OG_CLOUD_KEY,
-                    'Authorization': 'Bearer ' + authToken,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({
-                    description: description,
-                    unit: unit || 'Day',
-                    rate: parseFloat(rate) || 0,
-                    region: region || self.settings.location,
-                    currency: 'JMD',
-                    source: 'community'
-                })
-            }).then(function (res) { return res.ok; }).catch(function () { return false; });
+            if (localStorage.getItem('moo_og_share') !== 'true' || !navigator.onLine) return Promise.resolve({ status: 'disabled', sent: 0 });
+            var config = window.mBTCollabConfig, session = window.mBTCollab && mBTCollab.getSession();
+            if (!config || !session || !session.id) return Promise.resolve({ status: 'sign_in_required', sent: 0 });
+            var user = session.id;
+            var used = [];
+            Object.keys(budget.sections || {}).forEach(function (section) {
+                (budget.sections[section].items || []).forEach(function (item) {
+                    function collect(price, quantity) {
+                        if (!price.userPrice || !price.userPriceId || !item.id || !(Number(quantity) > 0) || !isFinite(Number(price.rate)) || Number(price.rate) < 0) return;
+                        if (price.userPriceUserId && price.userPriceUserId !== user) return;
+                        var contact = (self.contacts || []).filter(function (c) { return c.id === item.contactId || (item.crew && c.id === item.crew.contactId); })[0];
+                        var role = item.role || (item.crew && item.crew.role) || (contact && contact.role) || item.description || '';
+                        if ((item.crew && role === item.crew.name) || (contact && role === contact.name)) return;
+                        used.push({ id: price.userPriceId, user_id: user, budget_key: String(budget.id || budget.projectName), item_id: String(item.id), description: role, department: item.department || mBTBatch2.classify(item), item_type: item.itemType || 'crew', supplier_category: item.supplierCategory || null, unit: item.unit || 'Day', rate: Number(price.rate), currency: price.rateCurrency || item.rateCurrency || budget.currency || 'JMD', region: self.settings.location || 'Jamaica' });
+                    }
+                    collect(item, item.quantity);
+                    Object.keys(item.stageData || {}).forEach(function (stage) { collect(item.stageData[stage], item.stageData[stage].days); });
+                });
+            });
+            var count = 0, chain = Promise.resolve();
+            used.forEach(function (observation) {
+                chain = chain.then(function () {
+                    /* Each edited price is one immutable observation, not ongoing item sync. */
+                    if (localStorage.getItem('moo_og_share') !== 'true' || !mBTCollab.getSession() || mBTCollab.getSession().id !== user) return;
+                    return _lfGet('moo_og_price_sent:' + user + ':' + observation.id).then(function (sent) {
+                        if (sent) return;
+                        var live = window.budget || budget;
+                        var stillUsed = Object.keys(live.sections || {}).some(function (key) { return (live.sections[key].items || []).some(function (item) {
+                            if (item.id !== observation.item_id) return false;
+                            if (item.userPriceId === observation.id && Number(item.quantity) > 0) return true;
+                            return Object.keys(item.stageData || {}).some(function (stage) { return item.stageData[stage].userPriceId === observation.id && Number(item.stageData[stage].days) > 0; });
+                        }); });
+                        if (!stillUsed || localStorage.getItem('moo_og_share') !== 'true') return;
+                        var headers = mBTCollab.getAuthHeaders(); headers.Prefer = 'resolution=ignore-duplicates,return=minimal';
+                        return fetch(config.API_URL + '/rest/v1/og_budget_prices?on_conflict=id', { method: 'POST', headers: headers, body: JSON.stringify(observation) }).then(function (res) {
+                            if (!res.ok) throw new Error('OpenGate contribution HTTP ' + res.status);
+                            count++; return _lfSet('moo_og_price_sent:' + user + ':' + observation.id, true);
+                        });
+                    });
+                });
+            });
+            return chain.then(function () { return { status: 'complete', sent: count }; });
         },
-
+        pushRate: function (description, unit, rate, region) {
+            /* Catalog edits alone are not eligible. Contributions come from used budget items. */
+            return Promise.resolve(false);
+        },
         /*
          * upsertVote() - Phase 48 voting mechanism
          * Requires auth token. Resolves to true if vote was recorded successfully.
@@ -1019,40 +1062,61 @@
          * Falls back to computing averages from the local cached community rates when offline.
          * Stores result in localStorage for offline access.
          */
-        fetchRateAverages: function (region) {
-            var AVGS_KEY = 'moo_og_rate_averages';
-            var filterRegion = region || 'Jamaica';
-            if (typeof navigator !== 'undefined' && !navigator.onLine) {
-                /* Offline: return cached averages or compute from local data. */
-                var cached = localStorage.getItem(AVGS_KEY);
-                if (cached) {
-                    try { return Promise.resolve(JSON.parse(cached)); } catch (e) {}
-                }
-                return Promise.resolve(this._computeLocalAverages());
+        fetchRateAverages: function (region, apply) {
+            var self = this, cacheKey = 'moo_og_rate_averages', filterRegion = region || 'Jamaica';
+            if (!window.mBTBatch2 || !mBTBatch2.following()) return Promise.resolve({});
+            if (!navigator.onLine) {
+                try { return Promise.resolve(JSON.parse(localStorage.getItem(cacheKey) || '{}')); } catch (err) { return Promise.resolve({}); }
             }
-            return fetch(OG_CLOUD_URL + '/rest/v1/og_rate_averages?select=*&region=eq.' + encodeURIComponent(filterRegion), {
-                headers: {
-                    'apikey': OG_CLOUD_KEY,
-                    'Authorization': 'Bearer ' + OG_CLOUD_KEY
-                }
-            }).then(function (res) {
-                if (!res.ok) return null;
-                return res.json();
-            }).then(function (rows) {
-                if (!rows || !rows.length) return {};
+            function pull(url, key, headers) {
+                return fetch(url + '&region=eq.' + encodeURIComponent(filterRegion), { headers: headers || { apikey: key, Authorization: 'Bearer ' + key } }).then(function (res) {
+                    if (headers && (res.status === 401 || res.status === 403)) return [];
+                    if (!res.ok) throw new Error('OpenGate averages HTTP ' + res.status);
+                    return res.json();
+                });
+            }
+            var sources = [pull(OG_CLOUD_URL + '/rest/v1/og_rate_averages?select=*', OG_CLOUD_KEY)];
+            var config = window.mBTCollabConfig;
+            if (config) sources.push(pull(config.API_URL + '/rest/v1/og_used_rate_averages?select=*', config.ANON_KEY));
+            return Promise.all(sources).then(function (sets) {
+                if (!mBTBatch2.following()) return {};
                 var map = {};
-                for (var i = 0; i < rows.length; i++) {
-                    var r = rows[i];
-                    map[r.description.toLowerCase() + '|' + r.region.toLowerCase()] = {
-                        avg_rate: parseFloat(r.avg_rate) || 0,
-                        contributor_count: parseInt(r.contributor_count, 10) || 0
-                    };
-                }
-                localStorage.setItem(AVGS_KEY, JSON.stringify(map));
+                sets.forEach(function (rows, source) {
+                    rows.forEach(function (r) {
+                        if (!r.description || !isFinite(Number(r.avg_rate)) || Number(r.avg_rate) < 0) return;
+                        var key = r.description.toLowerCase() + '|' + r.region.toLowerCase();
+                        var entry = { avg_rate: Number(r.avg_rate), contributor_count: Number(r.contributor_count) || 0, currency: r.currency || 'JMD', unit: r.unit || 'Day', source: source ? 'used-community' : 'community' };
+                        map[key + '|' + entry.unit + '|' + entry.currency] = entry;
+                        if (!map[key] || entry.currency === ((window.budget && window.budget.currency) || 'JMD')) map[key] = entry;
+                    });
+                });
+                localStorage.setItem(cacheKey, JSON.stringify(map));
+                if (apply === false) return map;
+                self.applyRateAverages(map, filterRegion);
                 return map;
-            }).catch(function () { return {}; });
+            });
         },
-
+        applyRateAverages: function (map, region) {
+            if (!window.mBTBatch2 || !mBTBatch2.following()) return 0;
+            var updated = 0, b = window.budget;
+            this.rates.forEach(function (row) {
+                var entry = map[(row.description || '').toLowerCase() + '|' + (row.region || 'Jamaica').toLowerCase() + '|' + (row.unit || 'Day') + '|' + (row.currency || 'JMD')];
+                if (!entry || row.source === 'override' || row.source === 'user') return;
+                if (Number(row.rate) !== entry.avg_rate) updated++;
+                row.rate = entry.avg_rate; row.source = 'community';
+            });
+            if (b && this.settings.location === region) Object.keys(b.sections || {}).forEach(function (section) {
+                (b.sections[section].items || []).forEach(function (item) {
+                    var lookup = (item.catalogDescription || item.description || '').toLowerCase() + '|' + region.toLowerCase();
+                    var entry = map[lookup + '|' + (item.unit || 'Day') + '|' + (b.currency || 'JMD')];
+                    if (!entry || !mBTBatch2.eligible(item)) return;
+                    if (Number(item.rate) !== entry.avg_rate) updated++;
+                    item.rate = entry.avg_rate; item.rateSource = 'opengate';
+                    Object.keys(item.stageData || {}).forEach(function (stage) { if (!item.stageData[stage].rateOverride) item.stageData[stage].rate = entry.avg_rate; });
+                });
+            });
+            return updated;
+        },
         /* Compute rate averages from local rates + regional defaults (Phase 172).
            Returns a lookup map keyed by 'description|region' (lowercase) so
            mBT.rates.applyRegion() can substitute the correct researched rate
@@ -1101,6 +1165,12 @@
                     };
                 }
             }
+            if (window.mBTBatch2 && mBTBatch2.following()) {
+                try {
+                    var cached = JSON.parse(localStorage.getItem('moo_og_rate_averages') || '{}');
+                    Object.keys(cached).forEach(function (k) { if (k.split('|').length === 2) map[k] = cached[k]; });
+                } catch (err) {}
+            }
             return map;
         },
 
@@ -1123,7 +1193,8 @@
                         self.rates.push({
                             description: item.description,
                             unit: item.unit || 'Day',
-                            rate: parseFloat(item.rate) || 0
+                            rate: parseFloat(item.rate) || 0,
+                            source: 'user'
                         });
                         existingRates[item.description.toLowerCase()] = true;
                         added++;
@@ -1387,6 +1458,18 @@
         },
 
         /* Phase 194.2: Single-role rate calculator, wraps master index, no double-scaling */
+        /* A catalog row as it is priced at a budget's tier. Catalog rows are expanded at the saved market tier, so crew rows from the
+           bundled rates are priced again from their base rate at the budget's tier. Community averages and equipment are left as they are. */
+        rateForTier: function (row, tier) {
+            if (!row || !tier || row.source !== 'default' || row.itemType === 'equipment' || !isFinite(Number(row.rate))) return row;
+            /* Same call and rounding a new budget uses, so the picker number and the row number are identical in every region. */
+            var calc = this.calculateRate(row.description, row.region, tier), out = {}, key;
+            if (!calc || calc.source !== 'master_index') return row;
+            for (key in row) { if (Object.prototype.hasOwnProperty.call(row, key)) out[key] = row[key]; }
+            out.rate = calc.rate;
+            return out;
+        },
+
         calculateRate: function (roleDescription, region, tier) {
             var self = this;
             var d = roleDescription.toLowerCase().trim();
@@ -1401,6 +1484,8 @@
             /* Community rates are already region-specific; tier scalar only, no multiplier/JMD conversion */
             for (var ci = 0; ci < self.rates.length; ci++) {
                 var comm = self.rates[ci];
+                /* Rows from the bundled rates are already priced at the saved market tier. Price those from the base rate below, not twice. */
+                if (comm.source === 'default') continue;
                 if (comm.description && comm.description.toLowerCase().trim() === d && comm.region === r) {
                     var commCurrency = (OG_CURRENCIES[r] || 'USD');
                     var commScalar = MARKET_TIER_SCALARS[t] || 1.0;
