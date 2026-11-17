@@ -17,6 +17,10 @@ var CURRENCY = {
   GBP: 'GBP',
   CAD: 'CAD',
   MXN: 'MXN',
+  TTD: 'TTD',
+  BBD: 'BBD',
+  GYD: 'GYD',
+  XCD: 'XCD',
 };
 
 var CURRENCY_LOCALES = {
@@ -26,6 +30,10 @@ var CURRENCY_LOCALES = {
   GBP: 'en-GB',
   CAD: 'en-CA',
   MXN: 'es-MX',
+  TTD: 'en-TT',
+  BBD: 'en-BB',
+  GYD: 'en-GY',
+  XCD: 'en-AG',
 };
 
 var CURRENCY_RATES = {
@@ -71,11 +79,20 @@ var round = function(value, precision) {
   return Math.round(value * factor) / factor;
 };
 
-var convertCurrency = function(value, from, to) {
-  if (from === to) return value;
-  var rates = CURRENCY_RATES[from];
-  if (!rates || !(to in rates)) return value;
-  return round(value * rates[to]);
+/* One conversion source: the budget being priced. Missing pairs never use a seed or legacy table. */
+var convertCurrencyOrNull = function(value, from, to, budget, unrounded) {
+  var n = Number(value);
+  if (value === null || value === undefined || !isFinite(n)) return null;
+  if (from === to) return n;
+  var snap = budget && budget.exchangeRateState && budget.exchangeRateState.rates;
+  if (!snap || !(snap[from] > 0) || !(snap[to] > 0) || !isFinite(Number(snap[from])) || !isFinite(Number(snap[to]))) return null;
+  var converted = n * (snap[to] / snap[from]);
+  if (!isFinite(converted)) return null;
+  return unrounded ? converted : round(converted);
+};
+/* Compatibility entry point shares the same contract. App callers pass their budget explicitly. */
+var convertCurrency = function(value, from, to, budget) {
+  return convertCurrencyOrNull(value, from, to, budget || (typeof window !== 'undefined' ? window.budget : null));
 };
 
 // === TEMPORAL UTILITIES (Phase 90) ===
@@ -325,6 +342,7 @@ window.mBT.le = {
   parseCurrency: parseCurrency,
   round: round,
   convertCurrency: convertCurrency,
+  convertCurrencyOrNull: convertCurrencyOrNull,
   sum: sum,
   weightedAverage: weightedAverage,
   clamp: clamp,
