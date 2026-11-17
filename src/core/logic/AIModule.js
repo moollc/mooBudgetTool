@@ -23,7 +23,7 @@ window.mBTAIModule = {
         if (window.mBT && window.mBT.ui && window.mBT.ui.render && typeof window.mBT.ui.render.esc === 'function') {
             return window.mBT.ui.render.esc(src);
         }
-        return String(src).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return String(src).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     },
 
     /* ── Configuration ─────────────────────────────────────────────────── */
@@ -39,12 +39,8 @@ window.mBTAIModule = {
         openrouterEndpoint: 'https://openrouter.ai/api/v1/chat/completions',
         systemContext:    'ROLE: Strict Budget Auditor. MO: Brutal efficiency. No intro/outro fluff. No philosophical advice. OUTPUT: Markdown bullet points only. Start immediately with facts. CONTEXT: Film Production, Jamaica 2025 rates.',
         /* Phase 60.B: action-trigger addendum appended to systemContext in chat mode */
-        chatActionPrompt: 'ACTION CAPABILITY: You can BUILD and MODIFY the budget. When the user asks for any change, output ONE JSON action block immediately before a brief explanation.\n\n' +
-            'Single change:\n\x60\x60\x60json\n{"mbt_action":"update_rate|update_quantity|add_item|update_contingency|set_workweek|set_stage_days","section":"Section Name","description":"Item Description","field":"rate","value":0}\n\x60\x60\x60\n\n' +
-            'Workweek: \x60\x60\x60json\n{"mbt_action":"set_workweek","value":5}\n\x60\x60\x60 (value must be 5, 6 or 7)\n\n' +
-            'Stage days: \x60\x60\x60json\n{"mbt_action":"set_stage_days","stage":"prod","days":6}\n\x60\x60\x60 (stage is one of dev, pre, prod, post, dist)\n\n' +
-            'Several changes at once (also use this to build a new section or a whole budget):\n\x60\x60\x60json\n{"mbt_action":"batch","changes":[{"mbt_action":"add_section","section":"Camera Department"},{"mbt_action":"add_item","section":"Camera Department","description":"Camera Operator","quantity":5,"rate":40000,"unit":"Day"}]}\n\x60\x60\x60\n\n' +
-            'RULES: Use the OPENGATE RATE CARD rates verbatim for anything listed there, never round, adjust or invent a number that is on the card. Copy section and item names EXACTLY as they appear in the CURRENT BUDGET list. Use add_section before adding items to a section that does not exist yet. Never invent a section name that is not in the list unless you are creating it with add_section. Stage days are a span, not a sum, take the longest single assignment within a stage, never add crew days together. Keep explanations brief.'
+        /* Built from the action catalog at send time, see _buildActionPrompt. */
+        chatActionPrompt: ''
     },
 
     /* ── Storage Accessors (Phase 173: thin wrappers over mBTAssistant) ──
@@ -287,6 +283,21 @@ window.mBTAIModule = {
        The legacy (provider, apiKey) args are accepted but ignored, mBTAssistant
        reads them from its own state (which is the SAME localStorage keys, so
        behavior is identical). User constraint injection is preserved. */
+    /* Plain sentence for any AI failure (raw provider text stays in the console). */
+    plainError: function (raw) {
+        if (window.mBTAssistant && typeof window.mBTAssistant.plainError === 'function') return window.mBTAssistant.plainError(raw);
+        return 'The AI request did not work. Try again in a moment.';
+    },
+
+    /* callUnifiedAI resolves with an 'Analysis Failed: ...' string instead of rejecting.
+       Returns the plain sentence when result is such a string, otherwise ''. */
+    failureOf: function (result) {
+        if (typeof result === 'string' && result.indexOf('Analysis Failed:') === 0) {
+            return result.replace('Analysis Failed: ', '') || this.plainError('');
+        }
+        return '';
+    },
+
     callUnifiedAI: function (provider, apiKey, prompt, customSystemMsg, history, imageAttachment) {
         var self = this;
         var userConstraints = self.getSystemPrompt();
@@ -310,18 +321,14 @@ window.mBTAIModule = {
             }
             return window.mBTAssistant.callChat(chatOpts).catch(function (error) {
                 console.error('mBT AI Failure:', error);
-                var msg = error && error.message ? error.message : 'Unknown';
-                if (msg === 'AI_RATE_LIMITED') {
-                    msg = 'Wait a few seconds before another AI request.';
-                }
-                return 'Analysis Failed: ' + msg;
+                return 'Analysis Failed: ' + self.plainError(error);
             });
         }
 
         /* Hard fallback if mBTAssistant ever fails to load, keeps tool from crashing */
         return Promise.reject(new Error('mBTAssistant unavailable, AI service offline.')).catch(function (error) {
             console.error('mBT AI Failure:', error);
-            return 'Analysis Failed: ' + error.message;
+            return 'Analysis Failed: ' + self.plainError(error);
         });
     },
 
@@ -370,10 +377,9 @@ window.mBTAIModule = {
             loaded: true,
             added: Date.now()
         };
-        if (att.kind === 'image' && !att.dataUrl && !rec.text) rec.text = rec.summary;
         list.push(rec);
-        if (att) att.extractId = rec.id;
-        if (typeof window.saveBudget === 'function') window.saveBudget();
+        att.extractId = rec.id;
+        if (typeof window.saveBudget === 'function') window.saveBudget(true);
         return rec;
     },
 
@@ -383,7 +389,7 @@ window.mBTAIModule = {
         for (i = 0; i < list.length; i++) {
             if (list[i] && list[i].id === id) {
                 list[i].loaded = !list[i].loaded;
-                if (typeof window.saveBudget === 'function') window.saveBudget();
+                if (typeof window.saveBudget === 'function') window.saveBudget(true);
                 return;
             }
         }
@@ -395,7 +401,7 @@ window.mBTAIModule = {
         for (i = list.length - 1; i >= 0; i--) {
             if (list[i] && list[i].id === id) list.splice(i, 1);
         }
-        if (typeof window.saveBudget === 'function') window.saveBudget();
+        if (typeof window.saveBudget === 'function') window.saveBudget(true);
     },
 
     _isExtractLoaded: function (id) {
@@ -565,13 +571,35 @@ window.mBTAIModule = {
         var MAX_PER_SECTION = 12;
         var emitted = 0;
         var lines = [];
-        var cur = window.displayCurrency || '';
+        /* Every amount below is stored in the budget's own currency, so that is the label. */
+        var cur = budget.currency || window.displayCurrency || '';
 
         lines.push('CURRENT BUDGET, use these names exactly as written:');
         lines.push('Project: ' + (budget.projectName || 'Untitled'));
+        lines.push('Budget currency: ' + cur);
         lines.push('Grand total: ' + cur + ' ' + (budget.grandTotal || 0));
+        var capNow = (budget.targetLock && parseFloat(budget.targetLock.totalCap)) || 0;
+        var grandNow = parseFloat(budget.grandTotal) || 0;
+        if (capNow > 0) {
+            lines.push('Budget cap: ' + cur + ' ' + this._money(capNow) + ' (the grand total is ' + (grandNow > capNow ? 'OVER it by ' + this._money(grandNow - capNow) : 'under it by ' + this._money(capNow - grandNow)) + ')');
+        } else {
+            lines.push('Budget cap: none set');
+        }
+        var rateText = this._rateLines(budget);
+        if (rateText) lines.push(rateText);
         if (budget.contingencyPercentage !== undefined) {
             lines.push('Contingency: ' + budget.contingencyPercentage + '%');
+        }
+        var fee = window.mBT_Finance.summary(JSON.parse(JSON.stringify(budget)));
+        lines.push('productionFeePercentage: ' + fee.productionFeePercentage);
+        lines.push('productionFeeAmount: ' + cur + ' ' + fee.productionFeeAmount);
+        lines.push('duplicateFeeWarning: ' + fee.duplicateFeeWarning);
+        lines.push('Production fee tiers: 10% small/favour, 15% standard, 20% rush/complex/heavy crew.');
+        if (fee.duplicateFeeWarning) lines.push(window.mBT_Finance.duplicateFeeWarningText);
+        if (this._lastApply && this._lastApply.text) {
+            lines.push('');
+            lines.push('LAST APPLY (what the app really did when the user pressed Apply; it is the truth, your own arithmetic is not): ' + this._lastApply.title);
+            lines.push(this._lastApply.text.length > 1500 ? this._lastApply.text.slice(0, 1500) + '...' : this._lastApply.text);
         }
 
         var names = Object.keys(budget.sections);
@@ -582,6 +610,12 @@ window.mBTAIModule = {
             lines.push('');
             lines.push('Section: ' + names[s]);
             var shown = 0;
+            var nameCount = {};
+            for (var ni = 0; ni < items.length; ni++) {
+                if (!items[ni]) continue;
+                var nk = this._normalizeName(items[ni].description);
+                nameCount[nk] = (nameCount[nk] || 0) + 1;
+            }
             for (var i = 0; i < items.length; i++) {
                 if (emitted >= MAX_ITEMS_TOTAL || shown >= MAX_PER_SECTION) break;
                 var it = items[i];
@@ -604,7 +638,7 @@ window.mBTAIModule = {
                     if (sdParts.length) stageSuffix = ', stages ' + sdParts.join(', ');
                 }
                 lines.push('  - ' + (it.description || 'Item') +
-                           ' (qty ' + qty + (it.unit ? ' ' + it.unit : '') +
+                           ' (' + (nameCount[this._normalizeName(it.description)] > 1 ? 'line ' + (i + 1) + ', the name repeats, ' : '') + 'qty ' + qty + (it.unit ? ' ' + it.unit : '') +
                            ', rate ' + cur + ' ' + rate + stageSuffix + ')');
                 shown++;
                 emitted++;
@@ -645,24 +679,54 @@ window.mBTAIModule = {
                        note);
         }
 
+        /* DETAILS the Assistant can change, so the model names real records. */
+        var q = function (v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').substring(0, 60); };
+        lines.push('');
+        lines.push('DETAILS:');
+        lines.push('Company: ' + q(budget.company) + '; Location: ' + q(budget.projectLocation) + '; Start date: ' + q(budget.startDate) +
+                   '; Shoot date: ' + q(budget.shootDate) + '; Delivery date: ' + q(budget.deliveryDate) +
+                   '; Sales tax: ' + (budget.salesTaxPercentage || 0) + '%; Discount: ' + (budget.discountPercentage || 0) + '%; Display currency: ' + cur);
+        var fs = budget.fundingSources || [], fi;
+        for (fi = 0; fi < fs.length && fi < 12; fi++) {
+            lines.push('Funding source: ' + q(fs[fi].name) + ' (' + q(fs[fi].amount) + ' ' + q(fs[fi].currency) + ', ' + q(fs[fi].status) + ')');
+        }
+        var pos = (budget.ledgers && budget.ledgers.pos) || [], pi;
+        for (pi = 0; pi < pos.length && pi < 12; pi++) {
+            lines.push('Purchase order: ' + q(pos[pi].poNumber) + ' ' + q(pos[pi].vendor) + ' (' + q(pos[pi].amount) + ', ' + q(pos[pi].status) + ', ' + (pos[pi].contactId ? 'linked to a contact' : 'no contact linked') + ')');
+        }
+        var ms = budget.calendarNotes || [], mi;
+        for (mi = 0; mi < ms.length && mi < 12; mi++) {
+            lines.push('Milestone: ' + q(ms[mi].title) + (ms[mi].date ? ' on ' + q(ms[mi].date) : ''));
+        }
+        if (budget.blackoutDays && budget.blackoutDays.length) lines.push('Days off: ' + budget.blackoutDays.slice(0, 20).join(', '));
+        var fr = budget.fringes || [], gi;
+        for (gi = 0; gi < fr.length && gi < 12; gi++) {
+            lines.push('Fringe: ' + q(fr[gi].name) + ' (' + q(fr[gi].rate) + '%' + (fr[gi].enabled === false ? ', off' : '') + ')');
+        }
+
         return lines.join('\n');
     },
 
-    /* Remove the ```json action block from text shown to the user. */
+    /* Remove every json action block from text shown to the user. */
     _stripActionBlock: function (text) {
-        var out = String(text || '').replace(/\x60\x60\x60json\s*\{[\s\S]*?"mbt_action"[\s\S]*?\}\s*\x60\x60\x60/g, '');
+        var out = String(text || '').replace(/\x60\x60\x60(?:json|JSON)?\s*\{[\s\S]*?"mbt_action"[\s\S]*?\}\s*\x60\x60\x60/g, '');
         out = out.replace(/^\s+|\s+$/g, '');
         return out || 'Proposed budget changes are ready, use Preview & Apply below.';
     },
 
-    /* ── Phase 60.B: Action Block Parser ───────────────────────────────── */
+    /* ── Phase 60.B: Action Block Parser ─────────────────────────────────
+       Every action block in the reply counts. Two or more become one batch,
+       so a model that answers with one block per change loses nothing. */
     _parseActionFromResponse: function (text) {
-        var match = text.match(/\x60\x60\x60json\s*(\{[\s\S]*?"mbt_action"[\s\S]*?\})\s*\x60\x60\x60/);
-        if (!match) return null;
-        try {
-            var obj = JSON.parse(match[1]);
-            return (obj && obj.mbt_action) ? obj : null;
-        } catch (e) { return null; }
+        var ex = this._extractActionBlocks(text);
+        var i, all = [];
+        if (!ex.blocks.length) return null;
+        if (ex.blocks.length === 1) return ex.blocks[0];
+        for (i = 0; i < ex.blocks.length; i++) {
+            if (ex.blocks[i].mbt_action === 'batch' && ex.blocks[i].changes) all = all.concat(ex.blocks[i].changes);
+            else all.push(ex.blocks[i]);
+        }
+        return { mbt_action: 'batch', changes: all };
     },
 
     /* ── Name matching helpers ───────────────────────────────────────────
@@ -678,46 +742,101 @@ window.mBTAIModule = {
             .replace(/^\s+|\s+$/g, '');
     },
 
-    _findSectionKey: function (wanted) {
+    /* Which section a name means. key is the one section, or null; hits lists every section that fits when more than one does. */
+    _sectionMatch: function (wanted) {
         var budget = window.budget;
-        if (!budget || !budget.sections) return null;
+        if (!budget || !budget.sections) return { key: null, hits: [] };
         var keys = Object.keys(budget.sections);
-        var i;
+        var i, hits = [], want, k;
 
         for (i = 0; i < keys.length; i++) {
-            if (keys[i] === wanted) return keys[i];
+            if (keys[i] === wanted) return { key: keys[i], hits: [keys[i]] };
         }
+        want = this._normalizeName(wanted);
+        if (!want) return { key: null, hits: [] };
+        for (i = 0; i < keys.length; i++) {
+            if (this._normalizeName(keys[i]) === want) hits.push(keys[i]);
+        }
+        if (!hits.length) {
+            /* Partial match, only when exactly one section contains the text. */
+            for (i = 0; i < keys.length; i++) {
+                k = this._normalizeName(keys[i]);
+                if (k.indexOf(want) !== -1 || want.indexOf(k) !== -1) hits.push(keys[i]);
+            }
+        }
+        return { key: hits.length === 1 ? hits[0] : null, hits: hits };
+    },
+
+    _findSectionKey: function (wanted) {
+        return this._sectionMatch(wanted).key;
+    },
+
+    /* The sentence for a section name that did not resolve: not there, or more than one fits. */
+    _sectionError: function (wanted) {
+        var m = this._sectionMatch(wanted);
+        if (m.hits.length > 1) return 'More than one section fits "' + wanted + '": "' + m.hits.join('", "') + '". Nothing was changed. Use the full name of the one you mean.';
+        return 'Section not found: ' + (wanted || '(none)');
+    },
+
+    _money: function (n) {
+        var v = Math.round((parseFloat(n) || 0) * 100) / 100, p = String(Math.abs(v)).split('.');
+        return (v < 0 ? '-' : '') + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (p[1] ? '.' + p[1] : '');
+    },
+
+    /* Positions (0 based) of the lines a name could mean: exact matches first, then the same ignoring case and punctuation, then a partial match. */
+    _itemMatch: function (sec, wanted) {
+        var items = (sec && sec.items) || [];
         var want = this._normalizeName(wanted);
-        if (!want) return null;
-        for (i = 0; i < keys.length; i++) {
-            if (this._normalizeName(keys[i]) === want) return keys[i];
+        var tiers = [[], [], []], i, d;
+        for (i = 0; i < items.length; i++) {
+            if (!items[i]) continue;
+            d = this._normalizeName(items[i].description);
+            if ((items[i].description || '') === wanted) tiers[0].push(i);
+            if (want && d === want) tiers[1].push(i);
+            if (want && d && (d.indexOf(want) !== -1 || want.indexOf(d) !== -1)) tiers[2].push(i);
         }
-        /* Partial match, only when exactly one section contains the text. */
-        var hits = [];
-        for (i = 0; i < keys.length; i++) {
-            var k = this._normalizeName(keys[i]);
-            if (k.indexOf(want) !== -1 || want.indexOf(k) !== -1) hits.push(keys[i]);
+        for (i = 0; i < tiers.length; i++) { if (tiers[i].length) return tiers[i]; }
+        return [];
+    },
+
+    _nameFits: function (desc, wanted) {
+        var d = this._normalizeName(desc), w = this._normalizeName(wanted);
+        return !!w && !!d && (String(desc || '') === String(wanted) || d === w || d.indexOf(w) !== -1 || w.indexOf(d) !== -1);
+    },
+
+    /* "line 1 "Director" (quantity 1, rate 85,000); line 3 ..." for the lines at these positions. */
+    _lineWords: function (items, idxs) {
+        var out = [], i, it;
+        for (i = 0; i < idxs.length; i++) {
+            it = items[idxs[i]] || {};
+            out.push('line ' + (idxs[i] + 1) + ' "' + (it.description || '') + '" (quantity ' + this._money(it.quantity) + ', rate ' + this._money(it.rate) + ')');
         }
-        return hits.length === 1 ? hits[0] : null;
+        return out.join('; ');
+    },
+
+    /* The one line a change means. Never guesses: when two or more lines fit the name, or the line number named does not
+       fit the name, there is no item and err says why, with the lines named so the model or user can pick.
+       line is the 1 based position in the section, as the budget list shows it. */
+    _pickItem: function (sec, secName, wanted, line) {
+        var items = (sec && sec.items) || [];
+        var hits, n, it;
+        if (line !== undefined && line !== null && line !== '') {
+            n = parseInt(line, 10);
+            if (isNaN(n) || n < 1 || n > items.length) return { item: null, bad: true, err: 'Line ' + line + ' is not in "' + secName + '", which has ' + items.length + ' lines. Nothing was changed.' };
+            it = items[n - 1];
+            if (!it || !this._nameFits(it.description, wanted)) return { item: null, bad: true, err: 'Line ' + n + ' in "' + secName + '" is "' + ((it && it.description) || '') + '", not "' + (wanted || '(none)') + '". Nothing was changed.' };
+            return { item: it };
+        }
+        hits = this._itemMatch(sec, wanted);
+        if (hits.length === 1) return { item: items[hits[0]] };
+        if (hits.length > 1) {
+            return { item: null, ambiguous: true, err: 'More than one line in "' + secName + '" fits "' + (wanted || '') + '": ' + this._lineWords(items, hits) + '. Nothing was changed. Say which one with its line number, for example "line":' + (hits[0] + 1) + '.' };
+        }
+        return { item: null, err: 'Item not found: ' + (wanted || '(none)') + ' in ' + secName };
     },
 
     _findItem: function (sec, wanted) {
-        var items = (sec && sec.items) || [];
-        var i;
-        for (i = 0; i < items.length; i++) {
-            if ((items[i].description || '') === wanted) return items[i];
-        }
-        var want = this._normalizeName(wanted);
-        if (!want) return null;
-        for (i = 0; i < items.length; i++) {
-            if (this._normalizeName(items[i].description) === want) return items[i];
-        }
-        var hits = [];
-        for (i = 0; i < items.length; i++) {
-            var d = this._normalizeName(items[i].description);
-            if (d.indexOf(want) !== -1 || want.indexOf(d) !== -1) hits.push(items[i]);
-        }
-        return hits.length === 1 ? hits[0] : null;
+        return this._pickItem(sec, '', wanted).item || null;
     },
 
     /* Build a line item in the shape the budget engine expects.
@@ -751,24 +870,1399 @@ window.mBTAIModule = {
         };
     },
 
-    /* One change, described in plain English for the preview. */
-    _describeChange: function (c) {
+    /* Where an added line will go. With "Put new lines in their department's section" on, a recognised line goes in its
+       department's section (the department can be changed in the preview); otherwise it goes in the section the reply names. */
+    _addItemWhere: function (c) {
+        var b = window.budget;
+        if (window.mBTBatch2 && mBTBatch2.deptSectionsOn(b)) {
+            var p = mBTBatch2.plan(b, { description: c.description }, c.department);
+            if (!p.needsChoice) return p.section + ' (' + p.label + (p.created ? ', new section' : '') + ')';
+        }
+        return c.section || '?';
+    },
+
+    /* The department an added line will get: the one chosen in the preview, else the one detected from its name.
+       Null when neither exists; such a line is not added until a department is chosen. */
+    _addItemDept: function (c) {
+        if (!window.mBTBatch2) return null;
+        if (mBTBatch2.groups[c.department]) return c.department;
+        return mBTBatch2.classify({ description: c.description }) || null;
+    },
+
+    /* ── Action catalog ───────────────────────────────────────────────────
+       One list drives the prompt the model sees, the preview text and the
+       check that an action exists. Anything not listed here is refused with
+       a plain sentence, never silently dropped and never reported as done.
+       hand = where the user does it by hand. */
+    _PRODUCTION_FEE_RULES: 'PRODUCTION FEE: Suggest a tier from job size/type for new drafts: 10% small/favour, 15% standard, 20% rush/complex/heavy crew. Use productionFeePercentage (0..100); contingency is never a substitute. Never set or add a fee retroactively to an already-agreed budget unless the user asks. Use update_production_fee for requested changes, including in batch. Never use the legacy Production Fee fringe. If duplicateFeeWarning is true, tell the user both charges are included and ask which to keep; do not add a second fee.',
+
+    _ACTION_ORDER: [
+        'update_rate', 'update_quantity', 'add_item', 'add_section', 'update_contingency', 'update_production_fee', 'set_workweek', 'set_stage_days',
+        'update_item', 'delete_item', 'move_item', 'set_crew', 'set_item_days',
+        'rename_section', 'delete_section',
+        'duplicate_budget', 'rename_budget', 'set_field', 'set_display_currency',
+        'add_funding_source', 'update_funding_source', 'delete_funding_source',
+        'add_po', 'update_po', 'delete_po',
+        'add_milestone', 'update_milestone', 'delete_milestone', 'add_blackout_day', 'remove_blackout_day',
+        'add_fringe', 'update_fringe', 'delete_fringe',
+        'set_section_cap', 'set_incentive',
+        'add_float', 'update_float', 'delete_float', 'add_receipt', 'delete_receipt',
+        'set_stage_share', 'set_stage_lock', 'set_stage_offset',
+        'save_contact', 'rename_contact'
+    ],
+
+    _ACTIONS: {
+        update_rate:           { hand: 'the Rate box on the line', ex: '{"mbt_action":"update_rate","section":"Section Name","description":"Item Description","value":0}' },
+        update_quantity:       { hand: 'the Qty box on the line', ex: '{"mbt_action":"update_quantity","section":"Section Name","description":"Item Description","value":0}' },
+        add_item:              { hand: 'ADD LINE ITEM under the section', ex: '{"mbt_action":"add_item","section":"Section Name","description":"Item Description","quantity":1,"rate":0,"unit":"Day"}' },
+        add_section:           { hand: 'ADD SECTION at the bottom of the budget', ex: '{"mbt_action":"add_section","section":"New Section"}' },
+        update_production_fee: { hand: 'the Production Fee box in the budget header', ex: '{"mbt_action":"update_production_fee","value":15}' },
+        update_contingency:    { hand: 'the Contingency box in the budget header', ex: '{"mbt_action":"update_contingency","value":10}' },
+        set_workweek:          { hand: 'the work week control in the header', ex: '{"mbt_action":"set_workweek","value":5}' },
+        set_stage_days:        { hand: 'the Stages tool', ex: '{"mbt_action":"set_stage_days","stage":"prod","days":6}' },
+        update_item:           { hand: 'the line itself', ex: '{"mbt_action":"update_item","section":"Section Name","description":"Item Description","new_description":"New name","unit":"Day","multiplier":1,"quantity":1,"rate":0,"actual":0,"actual_quantity":0,"actual_rate":0,"actual_date":"2026-01-31","qualifying":true,"rate_lock":false,"notes":"text"}' },
+        delete_item:           { hand: 'the line menu, Delete', ex: '{"mbt_action":"delete_item","section":"Section Name","description":"Item Description"}' },
+        move_item:             { hand: 'dragging the line to another section', ex: '{"mbt_action":"move_item","section":"From Section","description":"Item Description","to_section":"To Section"}' },
+        set_crew:              { hand: 'the crew name on the line', ex: '{"mbt_action":"set_crew","section":"Section Name","description":"Item Description","name":"Person Name","phone":"","email":""}' },
+        set_item_days:         { hand: 'the schedule button on the line', ex: '{"mbt_action":"set_item_days","section":"Section Name","description":"Item Description","stage":"prod","days":3,"rate":0,"multiplier":1}' },
+        rename_section:        { hand: 'the section menu, Rename', ex: '{"mbt_action":"rename_section","section":"Old Name","new_name":"New Name"}' },
+        delete_section:        { hand: 'the section menu, Delete', ex: '{"mbt_action":"delete_section","section":"Section Name"}' },
+        duplicate_budget:      { hand: 'the Duplicate button in the project menu', ex: '{"mbt_action":"duplicate_budget","name":"New Budget Name"}' },
+        rename_budget:         { hand: 'the project name at the top of the budget', ex: '{"mbt_action":"rename_budget","name":"New Budget Name"}' },
+        set_field:             { hand: 'Settings, then the budget details', ex: '{"mbt_action":"set_field","field":"company","value":"Example Films"}' },
+        set_display_currency:  { hand: 'the round currency button under the project name', ex: '{"mbt_action":"set_display_currency","value":"USD"}' },
+        add_funding_source:    { hand: 'the Funding card', ex: '{"mbt_action":"add_funding_source","name":"Source Name","amount":0,"status":"Pending","currency":"JMD","cashInBank":0,"contactName":"","contactEmail":"","contactPhone":"","contractUrl":"","notes":""}' },
+        update_funding_source: { hand: 'the Funding card', ex: '{"mbt_action":"update_funding_source","name":"Source Name","new_name":"","amount":0,"status":"Confirmed","currency":"JMD","cashInBank":0,"contactName":"","contactEmail":"","contactPhone":"","contractUrl":"","notes":""}' },
+        delete_funding_source: { hand: 'the Funding card', ex: '{"mbt_action":"delete_funding_source","name":"Source Name"}' },
+        add_po:                { hand: 'the Purchase orders tool', ex: '{"mbt_action":"add_po","vendor":"Vendor Name","amount":0,"description":"","date":"2026-01-31","status":"Draft","contact":"","section":"Section Name","item":"Item Description"}' },
+        update_po:             { hand: 'the Purchase orders tool', ex: '{"mbt_action":"update_po","po_number":"PO-001","vendor":"","amount":0,"status":"Paid","description":"","date":"","notes":"","contact":"","section":"Section Name","item":"Item Description"}' },
+        delete_po:             { hand: 'the Purchase orders tool', ex: '{"mbt_action":"delete_po","po_number":"PO-001"}' },
+        add_milestone:         { hand: 'the Calendar tool', ex: '{"mbt_action":"add_milestone","title":"Milestone","date":"2026-01-31"}  or, tied to a stage instead of a date: {"mbt_action":"add_milestone","title":"Milestone","stage":"prod","offset_days":0}' },
+        update_milestone:      { hand: 'the Calendar tool', ex: '{"mbt_action":"update_milestone","title":"Milestone","new_title":"","date":"2026-02-01"}  or: {"mbt_action":"update_milestone","title":"Milestone","stage":"post","offset_days":3}' },
+        delete_milestone:      { hand: 'the Calendar tool', ex: '{"mbt_action":"delete_milestone","title":"Milestone"}' },
+        add_blackout_day:      { hand: 'the Calendar tool', ex: '{"mbt_action":"add_blackout_day","date":"2026-01-31"}' },
+        remove_blackout_day:   { hand: 'the Calendar tool', ex: '{"mbt_action":"remove_blackout_day","date":"2026-01-31"}' },
+        add_fringe:            { hand: 'the Fringes tool', ex: '{"mbt_action":"add_fringe","name":"Fringe Name","rate":5,"sections":["Section Name"]}' },
+        update_fringe:         { hand: 'the Fringes tool', ex: '{"mbt_action":"update_fringe","name":"Fringe Name","new_name":"","rate":5,"enabled":true,"sections":["Section Name"]}' },
+        delete_fringe:         { hand: 'the Fringes tool', ex: '{"mbt_action":"delete_fringe","name":"Fringe Name"}' },
+        set_section_cap:       { hand: 'the target icon on the section header', ex: '{"mbt_action":"set_section_cap","section":"Section Name","value":0}' },
+        set_incentive:         { hand: 'the Tax Incentive button in the budget header', ex: '{"mbt_action":"set_incentive","jurisdiction":"JAMPRO","rate":20,"min_spend":0}' },
+        add_float:             { hand: 'the Purchase orders tool, Petty cash tab', ex: '{"mbt_action":"add_float","holder":"Person Name","amount":0,"date":"2026-01-31"}' },
+        update_float:          { hand: 'the Purchase orders tool, Petty cash tab', ex: '{"mbt_action":"update_float","holder":"Person Name","amount":0,"status":"Active","date":""}' },
+        delete_float:          { hand: 'the Purchase orders tool, Petty cash tab', ex: '{"mbt_action":"delete_float","holder":"Person Name"}' },
+        add_receipt:           { hand: 'the Purchase orders tool, Petty cash tab', ex: '{"mbt_action":"add_receipt","holder":"Person Name","description":"Receipt Description","amount":0,"date":"2026-01-31"}' },
+        delete_receipt:        { hand: 'the Purchase orders tool, Petty cash tab', ex: '{"mbt_action":"delete_receipt","holder":"Person Name","description":"Receipt Description"}' },
+        set_stage_share:       { hand: 'the stage sliders in the Stages tool', ex: '{"mbt_action":"set_stage_share","stage":"prod","value":40}' },
+        set_stage_lock:        { hand: 'the lock on the stage card in the Stages tool', ex: '{"mbt_action":"set_stage_lock","stage":"prod","locked":true}' },
+        set_stage_offset:      { hand: 'the Stage offset box in the Calendar tool', ex: '{"mbt_action":"set_stage_offset","stage":"pre","days":0}' },
+        save_contact:          { hand: 'the Contacts tool', ex: '{"mbt_action":"save_contact","name":"Person Name","role":"Gaffer","email":"","phone":"","department":"","category":"Crew","rate":0,"currency":"JMD","wallet_type":"","wallet_address":"","dietary_restrictions":"","allergies":"","clear":[]}' },
+        rename_contact:        { hand: 'the Contacts tool, Edit on the contact, then change the name on each crew line, purchase order and petty cash float', ex: '{"mbt_action":"rename_contact","name":"Current Contact Name","new_name":"New Contact Name"}' }
+    },
+
+    /* Things the Assistant cannot do, with where the user does them. */
+    _NOT_SUPPORTED_TEXT: 'NOT SUPPORTED (say so in one plain sentence, name what you could not do and where to do it by hand, and output no action block for it): ' +
+        'deleting a contact (Contacts tool), documents, call sheets and attachments (Docs tool), exchange rates (currency menu, Edit exchange rates), sharing and collaborators (Share tool), exports and imports (File menu), deleting a whole budget (project menu), ' +
+        'renaming a contact inside a shared budget that is not the open one (open that shared budget and ask again there), shared read only contacts.',
+
+    /* The block of the prompt that lists every action. Built from the catalog. */
+    _buildActionPrompt: function () {
+        var out = 'ACTION CAPABILITY: You can BUILD and MODIFY this budget, but only with the actions listed here. ' +
+            'To make a change, output ONE JSON action block in a json code fence, then a brief explanation. ' +
+            'The user must press Preview & Apply before anything changes, so never say a change is done, say it is ready to apply. ' +
+            'Never invent an action name or a field that is not listed. If a request needs something not listed, say in one plain sentence what you cannot do and where the user does it by hand.\n\n';
+        var i, name;
+        out += this._PRODUCTION_FEE_RULES + '\n\n';
+        out += 'ACTIONS (each is one object with "mbt_action"):\n';
+        for (i = 0; i < this._ACTION_ORDER.length; i++) {
+            name = this._ACTION_ORDER[i];
+            out += this._ACTIONS[name].ex + '\n';
+        }
+        out += '\nSeveral changes at once (also use this to build a new section or a whole budget):\n\x60\x60\x60json\n' +
+            '{"mbt_action":"batch","changes":[{"mbt_action":"add_section","section":"Camera Department"},{"mbt_action":"add_item","section":"Camera Department","description":"Camera Operator","quantity":5,"rate":40000,"unit":"Day"}]}\n\x60\x60\x60\n\n' +
+            'set_field fields: company, projectCompany, projectLocation, startDate, shootDate, deliveryDate (dates as YYYY-MM-DD), salesTaxPercentage, discountPercentage, totalCap (the overall budget cap, 0 = off), actualsMode (true or false). ' +
+            'Only the fields shown in the examples exist: an action with any other field is refused. A fringe with no "sections" applies to the whole budget subtotal. ' +
+            'Stage is one of dev, pre, prod, post, dist. Work week is 5, 6 or 7. Funding status is Pending, LOI, Confirmed or Received. PO status is Draft, Issued, Approved or Paid.\n' +
+            'When the user asks to copy, duplicate or make a version of the budget, the FIRST change must be duplicate_budget with a new name; every later change in that batch is made on the copy and the original is left alone. Without it every change goes straight into the open budget, so never edit the open budget to make a copy.\n' +
+            'A cap or limit is set with set_field totalCap. If the user gives it in another currency, send "value" as the amount they said and "currency" as its three letter code, for example {"mbt_action":"set_field","field":"totalCap","value":4000,"currency":"USD"}; the app converts it with this budget\'s own exchange rate. When a cap is asked for, send totalCap; do not only say what it would be.\n' +
+            'Two lines in a section can share a name. The CURRENT BUDGET list marks them "line N, the name repeats"; for those add "line":N to the change (update_rate, update_quantity, update_item, delete_item, move_item, set_crew, set_item_days). A change by name alone to a repeated name is refused. Do not add_item a line whose name is already in the section: change the existing line instead.\n' +
+            'Other records can share a name too: a petty cash float holder, a receipt description, a funding source, a purchase order number, a milestone title, a fringe. A change by name alone to a name two records share is refused, and the refusal lists them as "number N"; send the change again with "position":N (for delete_receipt, "receipt_position":N picks the receipt and "position":N the float).\n' +
+            'After the user presses Apply the app puts LAST APPLY and the grand total against the budget cap in the CURRENT BUDGET list. Only what LAST APPLY says happened happened; a change it lists as "Nothing changed" or refused did not work. Use those totals, not your own arithmetic. When fitting a budget to a cap, if the grand total is still over the cap say by how much and what you would change next; never say the work is done while it is over.\n' +
+            'Contacts: you cannot see the Contacts list, so never say a contact exists or is missing. When the user names a contact, propose the action with the name exactly as the user gave it; the app checks it against Contacts and tells the user plainly if it is not saved. ' +
+            'rename_contact changes the name of a saved contact, and the same name on every crew line, purchase order and petty cash float of the open budget and of every other saved budget on this device that is not shared. Shared budgets belong to the people who share them and are never changed by a rename: they are reported, and the user opens each and asks again there. ' +
+            'add_po and update_po take "contact": the name of a saved contact. It links the purchase order to that contact and sets the vendor to the contact name. Leave "contact" as "" to leave the link alone. If the user asks to add a new contact and link it, put save_contact first and the link after it in the same batch. Never save a contact the user did not ask to add.\n\n' +
+            this._NOT_SUPPORTED_TEXT + '\n\n' +
+            'RULES: Use the OPENGATE RATE CARD rates verbatim for anything listed there, never round, adjust or invent a number that is on the card. Copy section and item names EXACTLY as they appear in the CURRENT BUDGET list. Use add_section before adding items to a section that does not exist yet. Never invent a section name that is not in the list unless you are creating it with add_section. Stage days are a span, not a sum, take the longest single assignment within a stage, never add crew days together. Keep explanations brief.';
+        return out;
+    },
+
+    _isKnownAction: function (a) {
+        return a === 'batch' || Object.prototype.hasOwnProperty.call(this._ACTIONS, a);
+    },
+
+    /* Every JSON action block in a reply, in order. bad counts blocks that
+       mention mbt_action but could not be read. */
+    _extractActionBlocks: function (text) {
+        var re = /\x60\x60\x60(?:json|JSON)?\s*(\{[\s\S]*?"mbt_action"[\s\S]*?\})\s*\x60\x60\x60/g;
+        var found = [], bad = 0, m, obj;
+        text = String(text || '');
+        while ((m = re.exec(text)) !== null) {
+            try {
+                obj = JSON.parse(m[1]);
+                if (obj && obj.mbt_action) found.push(obj); else bad++;
+            } catch (e) { bad++; }
+        }
+        return { blocks: found, bad: bad };
+    },
+
+    /* Plain, honest notes under an assistant message. Returns html (escaped)
+       or ''. applied = the user already applied this message's change. */
+    _assistantNotes: function (content, diff, applied, esc) {
+        var ex = this._extractActionBlocks(content);
+        var notes = [];
+        var i, j, changes, bad = [], fieldBad = [], a, hand;
+        if (diff) {
+            changes = (diff.mbt_action === 'batch' && diff.changes && diff.changes.length) ? diff.changes : [diff];
+            for (i = 0; i < changes.length; i++) {
+                a = changes[i] && changes[i].mbt_action;
+                if (!this._isKnownAction(a)) bad.push(String(a));
+                else if (this._unsupportedField(changes[i])) fieldBad.push(this._unsupportedField(changes[i]));
+            }
+            if (fieldBad.length && !bad.length) {
+                notes.push(fieldBad[0] + ' Nothing will be applied until the request is changed.');
+            } else if (bad.length) {
+                notes.push('The Assistant cannot do this yet: ' + bad.join(', ') + '. Nothing will be applied until the request is changed. Ask for it another way, or make the change by hand.');
+            } else if (!applied) {
+                notes.push('Not applied yet. Nothing in the budget has changed until you press Preview & Apply and confirm.');
+            }
+        } else if (ex.bad || /"mbt_action"/.test(content || '')) {
+            notes.push('The change in this reply could not be read, so nothing was changed. Ask again.');
+        } else if (/\b(i['’]?ve|i have|i did|we['’]?ve|has been|have been|is now|are now|all done|done[.!]|completed|updated|applied|duplicated|renamed|changed|added|removed|deleted|set the|created)\b/i.test(content || '')) {
+            notes.push('No change was made to the budget. The Assistant only changes it through a Preview & Apply button, and none was offered here.');
+        }
+        if (!notes.length) return '';
+        j = '';
+        for (i = 0; i < notes.length; i++) {
+            j += '<div data-assistant-note="1" class="mt-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800">' + esc(notes[i]) + '</div>';
+        }
+        return j;
+    },
+
+    /* Every top level field the Assistant can change, for the undo record. */
+    _UNDO_ROOTS: ['sections', 'contingencyPercentage', 'productionFeePercentage', 'settings', 'targetLock', 'company', 'projectCompany', 'projectLocation',
+        'startDate', 'shootDate', 'deliveryDate', 'salesTaxPercentage', 'discountPercentage', 'fundingSources', 'ledgers',
+        'calendarNotes', 'blackoutDays', 'fringes', 'jurisdiction', 'actualsMode', 'globalItems'],
+
+    _SET_FIELDS: { company: 'text', projectCompany: 'text', projectLocation: 'text', startDate: 'date', shootDate: 'date', deliveryDate: 'date',
+        salesTaxPercentage: 'pct', discountPercentage: 'pct', totalCap: 'cap', actualsMode: 'bool' },
+
+    /* Fields the model may put in each action, read from the examples in the
+       catalog. Anything else is refused up front, so a field the app cannot
+       change is never reported as changed. */
+    _IGNORED_KEYS: { reason: 1, explanation: 1, comment: 1, rationale: 1 },
+    _LINE_ACTIONS: { update_rate: 1, update_quantity: 1, update_item: 1, delete_item: 1, move_item: 1, set_crew: 1, set_item_days: 1 },
+    /* Actions that change nothing in the budget's own saved fields, so "nothing changed" does not apply to them. */
+    _NOT_TRACKED: { duplicate_budget: 1, rename_budget: 1, set_display_currency: 1, save_contact: 1, rename_contact: 1 },
+    _allowedKeys: function (a) {
+        var ex, re = /"([A-Za-z_]+)":/g, m, out = {};
+        if (!this._allowedCache) this._allowedCache = {};
+        if (this._allowedCache[a]) return this._allowedCache[a];
+        ex = this._ACTIONS[a] ? this._ACTIONS[a].ex : '';
+        while ((m = re.exec(ex)) !== null) out[m[1]] = 1;
+        /* The preview's department picker sets this on an added line, so it is a field of add_item even though the example omits it. */
+        if (a === 'add_item') out.department = 1;
+        /* Two lines can share a name: "line" (the position shown in the budget list) says which one. */
+        if (this._LINE_ACTIONS[a] || a === 'add_po' || a === 'update_po') out.line = 1;
+        /* A cap can be given in another currency; the app converts it with the budget's own rate. */
+        if (a === 'set_field') out.currency = 1;
+        /* Two records can share a name (float holder, receipt, funding source, order number, milestone, fringe): "position" says which one. */
+        if (this._REC_POS[a]) out.position = 1;
+        if (a === 'delete_receipt') out.receipt_position = 1;
+        this._allowedCache[a] = out;
+        return out;
+    },
+
+    _isDate: function (s) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+        var d;
+        if (!m) return false;
+        d = new Date(Date.UTC(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)));
+        return d.getUTCFullYear() === parseInt(m[1], 10) && d.getUTCMonth() === parseInt(m[2], 10) - 1 && d.getUTCDate() === parseInt(m[3], 10);
+    },
+
+    _nameLegal: function (n) { return !!n && !/["<>\/\\]/.test(n); },
+
+    /* Records the Assistant finds by name. position is the 1 based place in the list, as the refusal below prints it. */
+    _REC_KINDS: {
+        float:     { field: 'floatHolder', pos: 'position', noun: 'petty cash float', missing: 'Petty cash float not found for: ' },
+        receipt:   { field: 'description', pos: 'receipt_position', noun: 'receipt', missing: 'Receipt not found: ' },
+        funding:   { field: 'name', pos: 'position', noun: 'funding source', missing: 'Funding source not found: ' },
+        po:        { field: 'poNumber', pos: 'position', noun: 'purchase order', missing: 'Purchase order not found: ' },
+        milestone: { field: 'title', pos: 'position', noun: 'milestone', missing: 'Milestone not found: ' },
+        fringe:    { field: 'name', pos: 'position', noun: 'fringe', missing: 'Fringe not found: ' }
+    },
+    _REC_POS: { update_float: 1, delete_float: 1, add_receipt: 1, delete_receipt: 1, update_funding_source: 1, delete_funding_source: 1,
+        update_po: 1, delete_po: 1, update_milestone: 1, delete_milestone: 1, update_fringe: 1, delete_fringe: 1 },
+
+    _recWords: function (kind, r) {
+        var cur = r.currency ? r.currency + ' ' : '';
+        if (kind === 'float') return 'amount ' + cur + this._money(r.floatAmount) + ', status ' + (r.status || '-');
+        if (kind === 'receipt') return 'amount ' + cur + this._money(r.amount) + ', date ' + (r.date || '-');
+        if (kind === 'funding') return 'amount ' + cur + this._money(r.amount) + ', status ' + (r.status || '-');
+        if (kind === 'po') return 'vendor ' + (r.vendor || '-') + ', amount ' + cur + this._money(r.amount);
+        if (kind === 'milestone') return r.type === 'relative' ? 'stage ' + (r.stageKey || '-') + ', offset ' + (r.offsetDays || 0) + ' days' : 'date ' + (r.date || '-');
+        return 'rate ' + (r.rate === undefined ? '-' : r.rate);
+    },
+
+    /* The one record a change means. Never guesses: exact name first, then the same ignoring case and punctuation, then a partial match.
+       When two or more fit, or the position named does not fit the name, there is no record and err says why, naming each match. */
+    _pickRecord: function (list, kind, wanted, position) {
+        var K = this._REC_KINDS[kind], items = list || [], tiers = [[], [], []], i, d, n, r, want, hits, out = [];
+        wanted = String(wanted == null ? '' : wanted);
+        if (position !== undefined && position !== null && position !== '') {
+            n = parseInt(position, 10);
+            if (isNaN(n) || n < 1 || n > items.length) return { rec: null, bad: true, err: 'Number ' + position + ' is not in the list of ' + K.noun + 's, which has ' + items.length + '. Nothing was changed.' };
+            r = items[n - 1];
+            if (!r || !this._nameFits(r[K.field], wanted)) return { rec: null, bad: true, err: 'Number ' + n + ' is "' + ((r && r[K.field]) || '') + '", not "' + (wanted || '(none)') + '". Nothing was changed.' };
+            return { rec: r };
+        }
+        want = this._normalizeName(wanted);
+        for (i = 0; i < items.length; i++) {
+            if (!items[i]) continue;
+            d = this._normalizeName(items[i][K.field]);
+            if (String(items[i][K.field] || '') === wanted) tiers[0].push(i);
+            if (want && d === want) tiers[1].push(i);
+            if (want && d && (d.indexOf(want) !== -1 || want.indexOf(d) !== -1)) tiers[2].push(i);
+        }
+        hits = tiers[0].length ? tiers[0] : (tiers[1].length ? tiers[1] : tiers[2]);
+        if (hits.length === 1) return { rec: items[hits[0]] };
+        if (hits.length > 1) {
+            for (i = 0; i < hits.length; i++) out.push('number ' + (hits[i] + 1) + ' "' + (items[hits[i]][K.field] || '') + '" (' + this._recWords(kind, items[hits[i]]) + ')');
+            return { rec: null, ambiguous: true, err: 'More than one ' + K.noun + ' fits "' + wanted + '": ' + out.join('; ') + '. Nothing was changed. Say which one with its number, for example "' + K.pos + '":' + (hits[0] + 1) + '.' };
+        }
+        return { rec: null, err: K.missing + (wanted || '(none)') };
+    },
+
+    /* The same lookup for the preview, from the budget as it stands. Only a refusal comes back, never "not found". */
+    _previewRecord: function (a, c, b) {
+        var led = b.ledgers || {}, p, rp;
+        if (a === 'update_float' || a === 'delete_float' || a === 'add_receipt' || a === 'delete_receipt') {
+            p = this._pickRecord(led.pettyCash, 'float', String(c.holder || '').replace(/^\s+|\s+$/g, ''), c.position);
+            if (p.rec && a === 'delete_receipt') p = this._pickRecord(p.rec.receipts, 'receipt', c.description, c.receipt_position);
+        } else if (a === 'update_funding_source' || a === 'delete_funding_source') p = this._pickRecord(b.fundingSources, 'funding', c.name, c.position);
+        else if (a === 'update_po' || a === 'delete_po') p = this._pickRecord(led.pos, 'po', c.po_number, c.position);
+        else if (a === 'update_milestone' || a === 'delete_milestone') p = this._pickRecord(b.calendarNotes, 'milestone', c.title, c.position);
+        else p = this._pickRecord(b.fringes, 'fringe', c.name, c.position);
+        return (p && (p.ambiguous || p.bad)) ? p : null;
+    },
+
+    /* Position of a record in a list. The budget is a Proxy that hands out a
+       new wrapper on every read, so identity cannot be compared: match on id. */
+    _indexOfRec: function (list, rec) {
+        var i;
+        for (i = 0; i < (list || []).length; i++) {
+            if (list[i] === rec) return i;
+            if (rec && rec.id != null && list[i] && list[i].id === rec.id) return i;
+        }
+        return -1;
+    },
+
+    _newId: function (prefix) { return prefix + '_ai_' + Date.now() + '_' + Math.floor(Math.random() * 100000); },
+
+    _num: function (v) { var n = parseFloat(v); return isNaN(n) ? null : n; },
+
+    _recalcItem: function (item) {
+        var q = parseFloat(item.quantity);   if (isNaN(q)) q = 0;
+        var r = parseFloat(item.rate);       if (isNaN(r)) r = 0;
+        var m = parseFloat(item.multiplier); if (isNaN(m) || !m) m = 1;
+        item.total = q * r * m;
+    },
+
+    /* Quantity and rate go through the same steps as typing in the line's Qty
+       or Rate box (index.html handleLineItemUpdate): a line with a schedule keeps
+       its days and stage rates in step, because the schedule is what the totals
+       are worked out from. Each records what it expects in ctx.expect, which is
+       checked after the budget is recalculated. Returns an error string or null. */
+    _expect: function (ctx, item, field, value, name) {
+        var list, i;
+        if (!ctx) return;
+        if (!ctx.expect) ctx.expect = [];
+        list = ctx.expect;
+        for (i = list.length - 1; i >= 0; i--) { if (list[i].id === item.id && list[i].field === field) list.splice(i, 1); }
+        list.push({ id: item.id, field: field, value: value, name: name || item.description });
+    },
+
+    _setLineQty: function (item, q, ctx) {
+        var keys, sum, scale, share, i, d;
+        item.quantity = q;
+        if (item.stageData && typeof item.stageData === 'object' && Object.keys(item.stageData).length > 0) {
+            keys = Object.keys(item.stageData);
+            if (keys.length === 1) {
+                item.stageData[keys[0]].days = q;
+            } else {
+                sum = 0;
+                for (i = 0; i < keys.length; i++) sum += parseFloat(item.stageData[keys[i]].days) || 0;
+                if (sum > 0) {
+                    scale = q / sum;
+                    for (i = 0; i < keys.length; i++) {
+                        d = parseFloat(item.stageData[keys[i]].days) || 0;
+                        item.stageData[keys[i]].days = Math.round(d * scale * 10000) / 10000;
+                    }
+                } else {
+                    share = q / keys.length;
+                    for (i = 0; i < keys.length; i++) item.stageData[keys[i]].days = share;
+                }
+            }
+            if (!(ctx && ctx.dry) && typeof window.followPlanOnCalendar === 'function') {
+                for (i = 0; i < keys.length; i++) window.followPlanOnCalendar(keys[i]);
+            }
+        }
+        this._expect(ctx, item, 'quantity', q);
+        return null;
+    },
+
+    _setLineRate: function (item, v, ctx) {
+        var keys, i, sd;
+        v = Math.round(v * 10000) / 10000;
+        if (item.rateType === 'fixed') {
+            return 'The rate on "' + item.description + '" is locked. Unlock it with the lock button on the line, then ask again.';
+        }
+        keys = (item.stageData && typeof item.stageData === 'object') ? Object.keys(item.stageData) : [];
+        for (i = 0; i < keys.length; i++) {
+            sd = item.stageData[keys[i]];
+            if (sd.rateOverride && Math.abs((parseFloat(sd.rate) || 0) - v) > 0.00005) {
+                return 'The rate on "' + item.description + '" is set on its own for the ' + keys[i] + ' stage, so one rate cannot be applied to the whole line. Change it in the Stages tool.';
+            }
+        }
+        item.rate = v;
+        item.rateType = 'negotiable';
+        item.rateSource = 'custom';
+        if (window.mBTBatch2 && typeof window.mBTBatch2.manual === 'function') window.mBTBatch2.manual(item);
+        if (window.mBT && window.mBT.rates && typeof window.mBT.rates.reanchorFromRate === 'function') window.mBT.rates.reanchorFromRate(item);
+        else item.baseRate = v;
+        for (i = 0; i < keys.length; i++) {
+            if (!item.stageData[keys[i]].rateOverride) item.stageData[keys[i]].rate = v;
+        }
+        this._expect(ctx, item, 'rate', v);
+        return null;
+    },
+
+    /* After the budget is recalculated: did each rate and quantity asked for
+       actually stick? Returns plain sentences for the ones that did not. */
+    _checkExpect: function (list) {
+        var out = [], i, e, item, keys, sum, got, j, bad;
+        var budget = window.budget;
+        function findById(id) {
+            var sk, k, its;
+            for (sk in budget.sections) {
+                if (!Object.prototype.hasOwnProperty.call(budget.sections, sk)) continue;
+                its = budget.sections[sk].items || [];
+                for (k = 0; k < its.length; k++) { if (its[k].id === id) return its[k]; }
+            }
+            return null;
+        }
+        for (i = 0; i < (list || []).length; i++) {
+            e = list[i];
+            item = findById(e.id);
+            if (!item) continue;
+            keys = (item.stageData && typeof item.stageData === 'object') ? Object.keys(item.stageData) : [];
+            if (e.field === 'quantity') {
+                /* The line's own quantity after recalculation (payable days for a scheduled line). */
+                got = parseFloat(item.quantity);
+                if (isNaN(got) || Math.abs(got - e.value) > 0.001) {
+                    out.push('"' + e.name + '" quantity is ' + (isNaN(got) ? 'not a number' : got) + ' after the budget was recalculated, not ' + e.value + '.' + (keys.length ? ' The stage calendar (work week, days off) decides how many days are paid, so change the days in the Stages tool.' : ''));
+                }
+            } else if (e.field === 'rate') {
+                /* The line's own rate after recalculation (a scheduled line averages its stage rates and multipliers). */
+                got = parseFloat(item.rate);
+                if (isNaN(got) || Math.abs(got - e.value) > 0.001) {
+                    out.push('"' + e.name + '" rate is ' + (isNaN(got) ? 'not a number' : Math.round(got * 100) / 100) + ' after the budget was recalculated, not ' + e.value + '.' + (keys.length ? ' A stage multiplier changes the rate the line shows, so change it in the Stages tool.' : ''));
+                }
+            }
+        }
+        return out;
+    },
+
+    _describeNew: function (c) {
         var cur = window.displayCurrency || '';
         var a = c.mbt_action;
+        var d = '"' + (c.description || 'line') + '"';
+        if (a === 'update_item') {
+            var parts = [], k, keys = ['new_description', 'unit', 'multiplier', 'quantity', 'rate', 'actual', 'actual_quantity', 'actual_rate', 'actual_date', 'qualifying', 'rate_lock', 'notes'];
+            for (k = 0; k < keys.length; k++) { if (c[keys[k]] !== undefined) parts.push(keys[k].replace('new_description', 'name') + ' ' + c[keys[k]]); }
+            return 'Change ' + d + ': ' + (parts.join(', ') || 'no fields');
+        }
+        if (a === 'delete_item')           return 'Remove line ' + d + ' from "' + (c.section || '?') + '"';
+        if (a === 'move_item')             return 'Move ' + d + ' from "' + (c.section || '?') + '" to "' + (c.to_section || '?') + '"';
+        if (a === 'set_crew')              return 'Set crew on ' + d + ' to ' + (c.name || '(none)');
+        if (a === 'set_item_days') {
+            var sp = [];
+            if (c.days !== undefined) sp.push('days ' + c.days);
+            if (c.rate !== undefined) sp.push('rate ' + c.rate);
+            if (c.multiplier !== undefined) sp.push('multiplier ' + c.multiplier);
+            return 'Set ' + d + ' ' + (c.stage || '?') + ' stage ' + (sp.join(', ') || 'nothing');
+        }
+        if (a === 'add_float')             return 'Issue a petty cash float of ' + cur + ' ' + c.amount + ' to "' + (c.holder || '?') + '"';
+        if (a === 'update_float')          return 'Change the petty cash float of "' + (c.holder || '?') + '"' + (c.status ? ' (status ' + c.status + ')' : '');
+        if (a === 'delete_float')          return 'Remove the petty cash float of "' + (c.holder || '?') + '"';
+        if (a === 'add_receipt')           return 'Add receipt "' + (c.description || '?') + '" ' + cur + ' ' + c.amount + ' to the float of "' + (c.holder || '?') + '"';
+        if (a === 'delete_receipt')        return 'Remove receipt "' + (c.description || '?') + '" from the float of "' + (c.holder || '?') + '"';
+        if (a === 'set_stage_share')       return 'Give the ' + (c.stage || '?') + ' stage ' + c.value + '% of the budget (other unlocked stages adjust)';
+        if (a === 'set_stage_lock')        return (c.locked === false || c.locked === 'false' ? 'Unlock' : 'Lock') + ' the ' + (c.stage || '?') + ' stage share';
+        if (a === 'set_stage_offset')      return 'Start the ' + (c.stage || '?') + ' stage ' + (c.days === '' || c.days === null ? 'straight after the previous stage' : c.days + ' days after the previous stage starts');
+        if (a === 'set_section_cap')       return 'Set the spending cap of section "' + (c.section || '?') + '" to ' + c.value;
+        if (a === 'set_incentive')         return 'Set the tax incentive' + (c.jurisdiction !== undefined ? ' to ' + (c.jurisdiction || 'none') : '') + (c.rate !== undefined ? ', rate ' + c.rate + '%' : '') + (c.min_spend !== undefined ? ', minimum spend ' + c.min_spend : '');
+        if (a === 'rename_section')        return 'Rename section "' + (c.section || '?') + '" to "' + (c.new_name || '?') + '"';
+        if (a === 'delete_section')        return 'Remove section "' + (c.section || '?') + '" and every line in it';
+        if (a === 'duplicate_budget')      return 'Duplicate this budget as "' + (c.name || '?') + '" (later changes go to the copy)';
+        if (a === 'rename_budget')         return 'Rename this budget to "' + (c.name || '?') + '"';
+        if (a === 'set_field')             return 'Set ' + (c.field || '?') + ' to "' + (c.value === undefined ? '' : c.value) + '"';
+        if (a === 'set_display_currency')  return 'Show amounts in ' + (c.value || '?');
+        if (a === 'add_funding_source')    return 'Add funding source "' + (c.name || '?') + '" ' + cur + ' ' + (c.amount === undefined ? 0 : c.amount) + (c.status ? ' (' + c.status + ')' : '');
+        if (a === 'update_funding_source') return 'Change funding source "' + (c.name || '?') + '"';
+        if (a === 'delete_funding_source') return 'Remove funding source "' + (c.name || '?') + '"';
+        if (a === 'add_po')                return 'Add purchase order for "' + (c.vendor || c.contact || '?') + '" ' + cur + ' ' + (c.amount === undefined ? 0 : c.amount) + (c.contact ? ', linked to contact "' + c.contact + '"' : '');
+        if (a === 'update_po')             return 'Change purchase order ' + (c.po_number || '?') + (c.contact ? ', link it to contact "' + c.contact + '"' : '');
+        if (a === 'delete_po')             return 'Remove purchase order ' + (c.po_number || '?');
+        if (a === 'add_milestone')         return 'Add calendar milestone "' + (c.title || '?') + '" ' + (c.stage !== undefined ? 'at the ' + c.stage + ' stage, offset ' + (c.offset_days || 0) + ' days' : 'on ' + (c.date || '?'));
+        if (a === 'update_milestone')      return 'Change calendar milestone "' + (c.title || '?') + '"';
+        if (a === 'delete_milestone')      return 'Remove calendar milestone "' + (c.title || '?') + '"';
+        if (a === 'add_blackout_day')      return 'Mark ' + (c.date || '?') + ' as a day off';
+        if (a === 'remove_blackout_day')   return 'Make ' + (c.date || '?') + ' a working day again';
+        if (a === 'add_fringe')            return 'Add fringe "' + (c.name || '?') + '" at ' + (c.rate === undefined ? 0 : c.rate) + '%';
+        if (a === 'update_fringe')         return 'Change fringe "' + (c.name || '?') + '"';
+        if (a === 'delete_fringe')         return 'Remove fringe "' + (c.name || '?') + '"';
+        if (a === 'save_contact')          return 'Save contact "' + (c.name || '?') + '" in Contacts';
+        if (a === 'rename_contact')        return 'Rename contact "' + (c.name || '?') + '" to "' + (c.new_name || '?') + '" in Contacts and on every crew line, purchase order and petty cash float of this budget and of the other saved budgets on this device that show it and are not shared';
+        return null;
+    },
+
+    /* ── Contacts: rename and purchase order links ───────────────────────
+       A contact is the record in the shared Contacts roster. The budget keeps
+       its name as text on crew lines, purchase orders and petty cash floats,
+       so a rename changes the roster record and that text together. */
+    _contactKey: function (s) {
+        return String(s == null ? '' : s).replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
+    },
+
+    _lookupContact: function (ctx, name) {
+        var m = ctx && ctx.lookup;
+        var key = this._contactKey(name);
+        return (m && Object.prototype.hasOwnProperty.call(m, key)) ? m[key] : null;
+    },
+
+    /* Every place the open budget shows the contact's name. A line is the
+       contact's when it carries the contact id, or has no id and shows the old
+       name. Text that is not the old name (a nickname, a company label) is left
+       alone and counted in "left". The ledger reads purchase orders and floats,
+       so it follows them. */
+    _renameInBudget: function (budget, ent) {
+        var out = { crew: 0, pos: 0, floats: 0, left: 0 };
+        var oldK = this._contactKey(ent.oldName);
+        var secs = budget.sections || {}, keys = Object.keys(secs), si, ii, items, it, cid, hit, crewName, gl, gi, list, rec, linked;
+        for (si = 0; si < keys.length; si++) {
+            items = (secs[keys[si]] && secs[keys[si]].items) || [];
+            for (ii = 0; ii < items.length; ii++) {
+                it = items[ii];
+                if (!it) continue;
+                cid = it.contactId || it.contact_id || '';
+                crewName = (it.crew && typeof it.crew === 'object') ? String(it.crew.name || '') : '';
+                linked = cid ? cid === ent.id : (!!crewName && this._contactKey(crewName) === oldK);
+                if (!linked) continue;
+                hit = false;
+                if (crewName) {
+                    if (this._contactKey(crewName) === oldK) { it.crew.name = ent.newName; hit = true; }
+                    else if (this._contactKey(crewName) !== this._contactKey(ent.newName)) out.left++;
+                }
+                if (this._contactKey(it.description) === oldK) { it.description = ent.newName; hit = true; }
+                if (hit) out.crew++;
+            }
+        }
+        gl = Array.isArray(budget.globalItems) ? budget.globalItems : [];
+        for (gi = 0; gi < gl.length; gi++) {
+            if (!gl[gi] || (gl[gi].contactId || gl[gi].contact_id) !== ent.id) continue;
+            if (this._contactKey(gl[gi].description) === oldK) gl[gi].description = ent.newName;
+            if (this._contactKey(gl[gi].contact_name) === oldK) gl[gi].contact_name = ent.newName;
+        }
+        list = (budget.ledgers && Array.isArray(budget.ledgers.pos)) ? budget.ledgers.pos : [];
+        for (gi = 0; gi < list.length; gi++) {
+            rec = list[gi];
+            if (!rec) continue;
+            linked = rec.contactId ? rec.contactId === ent.id : this._contactKey(rec.vendor) === oldK;
+            if (!linked) continue;
+            if (this._contactKey(rec.vendor) === oldK) { rec.vendor = ent.newName; out.pos++; }
+            else if (this._contactKey(rec.vendor) !== this._contactKey(ent.newName)) out.left++;
+        }
+        list = (budget.ledgers && Array.isArray(budget.ledgers.pettyCash)) ? budget.ledgers.pettyCash : [];
+        for (gi = 0; gi < list.length; gi++) {
+            rec = list[gi];
+            if (!rec) continue;
+            linked = rec.contactId ? rec.contactId === ent.id : this._contactKey(rec.floatHolder) === oldK;
+            if (!linked) continue;
+            if (this._contactKey(rec.floatHolder) === oldK) { rec.floatHolder = ent.newName; out.floats++; }
+            else if (this._contactKey(rec.floatHolder) !== this._contactKey(ent.newName)) out.left++;
+        }
+        return out;
+    },
+
+    /* Read the shared roster and settle every contact the batch names, before
+       anything is changed. Resolves to { lookup, renames, errors }. */
+    _resolveContacts: function (changes) {
+        var self = this, i, c, a, renames = [], wanted = [];
+        var res = { lookup: {}, renames: [], creates: [], errors: [] };
+        for (i = 0; i < changes.length; i++) {
+            c = changes[i];
+            a = c && c.mbt_action;
+            if (a === 'rename_contact') renames.push(c);
+            else if ((a === 'add_po' || a === 'update_po') && c.contact !== undefined && self._contactKey(c.contact) !== '') wanted.push(String(c.contact));
+        }
+        if (!renames.length && !wanted.length) return Promise.resolve(res);
+        if (typeof window.mBTFetchMergedContactRoster !== 'function') {
+            res.errors.push('• Contacts are not available right now, so a contact cannot be renamed or linked.');
+            return Promise.resolve(res);
+        }
+        return Promise.resolve(window.mBTFetchMergedContactRoster()).then(function (r) { return r || []; }, function () { return null; }).then(function (roster) {
+            if (!roster) { res.errors.push('• Contacts could not be read, so a contact cannot be renamed or linked.'); return res; }
+            function matches(name) {
+                var k = self._contactKey(name), out = [], j;
+                for (j = 0; j < roster.length; j++) { if (roster[j] && self._contactKey(roster[j].name) === k) out.push(roster[j]); }
+                return out;
+            }
+            var seen = {};
+            renames.forEach(function (rc) {
+                var oldN = String(rc.name).replace(/^\s+|\s+$/g, ''), newN = String(rc.new_name).replace(/^\s+|\s+$/g, '');
+                var ok = self._contactKey(oldN), nk = self._contactKey(newN);
+                var oldM, newM, rec;
+                if ((seen[ok] || seen[nk]) && ok !== nk) { res.errors.push('• The contact name "' + (seen[ok] ? oldN : newN) + '" appears in two renames in this batch. Ask for one at a time.'); return; }
+                if (seen[ok] && ok === nk) { res.errors.push('• The contact "' + oldN + '" is renamed twice in this batch. Ask for one at a time.'); return; }
+                seen[ok] = true; seen[nk] = true;
+                oldM = matches(oldN);
+                newM = matches(newN);
+                if (oldM.length > 1) { res.errors.push('• More than one saved contact is named "' + oldN + '", so the Assistant cannot tell which to rename. Rename the right one in the Contacts tool.'); return; }
+                if (oldM.length === 1) {
+                    rec = oldM[0];
+                    if (rec.readOnly) { res.errors.push('• "' + oldN + '" is a shared contact (read only), so it cannot be renamed here.'); return; }
+                    if (newM.length && newM[0].id !== rec.id) { res.errors.push('• A contact named "' + newN + '" already exists, so "' + oldN + '" cannot take that name.'); return; }
+                    res.renames.push({ id: rec.id, oldName: rec.name, newName: newN, rosterDone: false, before: rec });
+                    res.lookup[ok] = { id: rec.id, name: newN };
+                    res.lookup[nk] = { id: rec.id, name: newN };
+                } else if (newM.length === 1) {
+                    /* Already renamed in Contacts (for example from another budget): only this budget's text is left. */
+                    rec = newM[0];
+                    res.renames.push({ id: rec.id, oldName: oldN, newName: rec.name, rosterDone: true, before: null });
+                    res.lookup[ok] = { id: rec.id, name: rec.name };
+                    res.lookup[nk] = { id: rec.id, name: rec.name };
+                } else {
+                    res.errors.push('• No saved contact is named "' + oldN + '". Check the spelling, or add the contact in Contacts first.');
+                }
+            });
+            wanted.forEach(function (w) {
+                var k = self._contactKey(w), m;
+                if (Object.prototype.hasOwnProperty.call(res.lookup, k)) return;
+                m = matches(w);
+                if (m.length > 1) res.errors.push('• More than one saved contact is named "' + w + '", so the purchase order cannot be linked to just one. Link it in the Purchase orders tool.');
+                else if (!m.length) {
+                    /* A new contact the same batch adds is created first, so the link can use it. */
+                    var made = null, q;
+                    for (q = 0; q < changes.length; q++) { if (changes[q] && changes[q].mbt_action === 'save_contact' && self._contactKey(changes[q].name) === k) { made = changes[q]; break; } }
+                    if (made) { res.creates.push(made); res.lookup[k] = { id: '', name: String(made.name).replace(/^\s+|\s+$/g, ''), pending: true }; }
+                    else res.errors.push('• No saved contact is named "' + w + '", so the purchase order cannot be linked to it. Add the contact in Contacts first, or ask for the new contact and the link together.');
+                }
+                else res.lookup[k] = { id: m[0].id, name: m[0].name };
+            });
+            return res;
+        });
+    },
+
+    /* A contact that is renamed here cannot also be saved or put on a line in
+       the same batch: the order of the steps would decide the result. */
+    _renameClashes: function (changes, renames) {
+        var out = [], i, j, c, k, ent;
+        for (j = 0; j < renames.length; j++) {
+            ent = renames[j];
+            for (i = 0; i < changes.length; i++) {
+                c = changes[i];
+                if (!c || (c.mbt_action !== 'save_contact' && c.mbt_action !== 'set_crew')) continue;
+                k = this._contactKey(c.name);
+                if (k && (k === this._contactKey(ent.oldName) || k === this._contactKey(ent.newName))) {
+                    out.push('• "' + ent.oldName + '" is being renamed in this batch, so ' + c.mbt_action + ' cannot use the name "' + c.name + '" in the same batch. Ask for it in a second step.');
+                }
+            }
+        }
+        return out;
+    },
+
+    _contactPayload: function (c) {
+        return {
+            name: c.name, role: c.role, department: c.department, email: c.email, phone: c.phone,
+            category: c.category, rate: c.rate === '' ? undefined : c.rate, currency: c.currency,
+            walletType: c.wallet_type, walletAddress: c.wallet_address,
+            dietaryRestrictions: c.dietary_restrictions, allergies: c.allergies, overwrite: true,
+            clear: c.clear
+        };
+    },
+
+    /* Add the new contacts a link needs, before the budget changes. Each one is
+       checked against the roster again first, so an existing contact is never
+       taken for a new one. Fills in the id for the purchase order link. */
+    _createInRoster: function (creates, extra) {
+        var self = this, done = [], failed = [], changes = [];
+        var chain = Promise.resolve();
+        creates.forEach(function (c) {
+            chain = chain.then(function () {
+                var payload = self._contactPayload(c), key = self._contactKey(c.name);
+                if (typeof window.mBTSaveContactToRoster !== 'function' || typeof window.mBTFetchMergedContactRoster !== 'function') throw new Error('no store');
+                return Promise.resolve(window.mBTFetchMergedContactRoster()).then(function (roster) {
+                    var i;
+                    for (i = 0; i < (roster || []).length; i++) { if (roster[i] && self._contactKey(roster[i].name) === key) throw new Error('exists'); }
+                    return window.mBTSaveContactToRoster(payload);
+                }).then(function (saved) {
+                    if (!saved || !saved.id) throw new Error('not saved');
+                    extra.lookup[key] = { id: saved.id, name: saved.name || payload.name };
+                    extra.createdKeys[key] = true;
+                    changes.push({ id: saved.id, name: payload.name, created: true, before: null, savedAt: saved.updated_at || null });
+                    done.push(payload.name);
+                });
+            }).catch(function () { failed.push(String(c.name)); });
+        });
+        return chain.then(function () { window.__mbtCrewRosterCache = null; return { done: done, failed: failed, changes: changes }; });
+    },
+
+    /* Change the roster record's name (same id, nothing else) and remember what
+       it was, so Undo and a failed batch can put it back. */
+    _renameInRoster: function (renames) {
+        var done = [], failed = [], changes = [];
+        var chain = Promise.resolve();
+        var saveFn = null;
+        if (typeof window.mBTOG !== 'undefined' && window.mBTOG && typeof window.mBTOG.saveContact === 'function') saveFn = function (r) { return window.mBTOG.saveContact(r); };
+        else if (window.mBTStorage && typeof window.mBTStorage.saveContact === 'function') saveFn = function (r) { return window.mBTStorage.saveContact(r); };
+        renames.forEach(function (ent) {
+            if (ent.rosterDone) return;
+            chain = chain.then(function () {
+                var rec, before;
+                if (!saveFn) throw new Error('no store');
+                before = JSON.parse(JSON.stringify(ent.before));
+                rec = JSON.parse(JSON.stringify(ent.before));
+                rec.name = ent.newName;
+                return saveFn(rec).then(function (saved) {
+                    if (!saved) throw new Error('not saved');
+                    changes.push({ id: ent.id, name: ent.oldName, created: false, before: before, savedAt: saved.updated_at || rec.updated_at || null });
+                    done.push(ent.oldName);
+                });
+            }).catch(function () { failed.push(ent.oldName); });
+        });
+        return chain.then(function () {
+            window.__mbtCrewRosterCache = null;
+            return { done: done, failed: failed, changes: changes };
+        });
+    },
+
+    /* Put renamed roster records back after a batch that did not go through.
+       Resolves to a sentence for the message, or ''. */
+    _giveBackRenames: function (extra) {
+        var self = this, ch = extra && extra.rosterChanges;
+        if (!ch || !ch.length) return Promise.resolve('');
+        extra.rosterChanges = null;
+        return self._undoContacts(ch).then(function (res) {
+            var t = '';
+            if (res.restored.length) t += ' The change to Contacts was put back: ' + res.restored.join(', ') + '.';
+            if (res.kept.length) t += ' These contacts could not be put back and stay as they are now: ' + res.kept.join(', ') + '.';
+            return t;
+        });
+    },
+
+    /* Apply one of the newer actions to the live budget (synchronous part).
+       Returns an error string or null. Contact saving, duplicate, rename and
+       currency are handled by _commitSuggestion because they are asynchronous
+       or touch more than the budget. */
+    _applyNew: function (c, ctx) {
+        var budget = window.budget;
+        var a = c.mbt_action;
+        var key, sec, item, i, n, s, v, rec, list, secKey, pk;
+
+        if (a === 'duplicate_budget' || a === 'rename_budget' || a === 'set_display_currency' || a === 'save_contact') return null;
+
+        if (a === 'rename_contact') {
+            var rn = null, ri, rl = (ctx && ctx.renames) || [];
+            for (ri = 0; ri < rl.length; ri++) { if (this._contactKey(rl[ri].oldName) === this._contactKey(c.name)) { rn = rl[ri]; break; } }
+            if (!rn) return 'The contact "' + (c.name || '(none)') + '" was not found in Contacts, so it was not renamed.';
+            var counts = this._renameInBudget(budget, rn);
+            if (ctx && ctx.renamed) ctx.renamed.push({ id: rn.id, oldName: rn.oldName, newName: rn.newName, rosterDone: rn.rosterDone, crew: counts.crew, pos: counts.pos, floats: counts.floats, left: counts.left });
+            return null;
+        }
+
+        if (a === 'rename_section') {
+            key = this._findSectionKey(c.section);
+            if (!key) return this._sectionError((c.section || '(none)'));
+            n = String(c.new_name || '').replace(/^\s+|\s+$/g, '');
+            if (!n) return 'The new section name is missing.';
+            if (!this._nameLegal(n)) return 'Section names cannot contain quotes, slashes or < > characters.';
+            if (n === key) return null;
+            if (budget.sections[n]) return 'A section named "' + n + '" already exists.';
+            var rebuilt = {};
+            Object.keys(budget.sections).forEach(function (k) { rebuilt[k === key ? n : k] = budget.sections[k]; });
+            budget.sections = rebuilt;
+            (budget.sections[n].items || []).forEach(function (it) { if (it.sectionKey === key) it.sectionKey = n; });
+            if (budget.ledgers && Array.isArray(budget.ledgers.pos)) {
+                budget.ledgers.pos.forEach(function (po) { if (po.sectionKey === key) po.sectionKey = n; });
+            }
+            return null;
+        }
+        if (a === 'delete_section') {
+            key = this._findSectionKey(c.section);
+            if (!key) return this._sectionError((c.section || '(none)'));
+            if (Object.keys(budget.sections).length < 2) return 'A budget needs at least one section, so "' + key + '" was not removed.';
+            delete budget.sections[key];
+            return null;
+        }
+
+        if (a === 'update_item' || a === 'delete_item' || a === 'move_item' || a === 'set_crew' || a === 'set_item_days') {
+            key = this._findSectionKey(c.section);
+            if (!key) return this._sectionError((c.section || '(none)'));
+            sec = budget.sections[key];
+            pk = this._pickItem(sec, key, c.description, c.line);
+            if (pk.err) return pk.err;
+            item = pk.item;
+
+            if (a === 'delete_item') {
+                sec.items.splice(this._indexOfRec(sec.items, item), 1);
+                return null;
+            }
+            if (a === 'move_item') {
+                var toKey = this._findSectionKey(c.to_section);
+                if (!toKey) return this._sectionError((c.to_section || '(none)'));
+                if (toKey === key) return null;
+                sec.items.splice(this._indexOfRec(sec.items, item), 1);
+                if (!budget.sections[toKey].items) budget.sections[toKey].items = [];
+                budget.sections[toKey].items.push(item);
+                if (item.sectionKey) item.sectionKey = toKey;
+                return null;
+            }
+            if (a === 'set_crew') {
+                var nm = String(c.name === undefined ? '' : c.name).replace(/^\s+|\s+$/g, '');
+                if (!item.crew || typeof item.crew !== 'object') item.crew = {};
+                item.crew.name = nm;
+                if (c.phone !== undefined) item.crew.phone = String(c.phone);
+                if (c.email !== undefined) item.crew.email = String(c.email);
+                if (nm && ctx && ctx.contacts) ctx.contacts.push({ name: nm, phone: c.phone, email: c.email, role: item.description, undo: true });
+                return null;
+            }
+            if (a === 'set_item_days') {
+                var stages = { dev: 1, pre: 1, prod: 1, post: 1, dist: 1 };
+                var st = String(c.stage || '').toLowerCase();
+                var dd = c.days === undefined ? null : this._num(c.days);
+                var sRate = c.rate === undefined ? null : this._num(c.rate);
+                var sMult = c.multiplier === undefined ? null : this._num(c.multiplier);
+                if (!stages[st]) return 'Unknown stage: ' + (c.stage || '(none)') + '. Use one of dev, pre, prod, post, dist.';
+                if (c.days === undefined && c.rate === undefined && c.multiplier === undefined) return 'Nothing to set on the ' + st + ' stage: give days, rate or multiplier.';
+                if (c.days !== undefined && (dd === null || dd < 0)) return 'Days must be a number that is not negative, got ' + c.days + '.';
+                if (c.rate !== undefined && (sRate === null || sRate < 0)) return 'The stage rate must be a number that is not negative, got ' + c.rate + '.';
+                if (c.multiplier !== undefined && (sMult === null || sMult < 0)) return 'The stage multiplier must be a number that is not negative, got ' + c.multiplier + '.';
+                if (!item.stageData || typeof item.stageData !== 'object') item.stageData = {};
+                if (dd !== null) {
+                    if (dd > 0) {
+                        if (!item.stageData[st]) item.stageData[st] = { days: dd, rate: item.rate || 0, order: 0 };
+                        else item.stageData[st].days = dd;
+                    } else if (item.stageData[st]) {
+                        delete item.stageData[st];
+                    }
+                }
+                if (sRate !== null || sMult !== null) {
+                    if (!item.stageData[st]) return 'The ' + st + ' stage has no days on "' + item.description + '", so there is no stage rate to set. Give days as well.';
+                    if (sRate !== null) {
+                        item.stageData[st].rate = Math.round(sRate * 10000) / 10000;
+                        if (window.mBTBatch2 && typeof window.mBTBatch2.manual === 'function') window.mBTBatch2.manual(item.stageData[st]);
+                    }
+                    if (sMult !== null) item.stageData[st].multiplier = sMult;
+                }
+                if (ctx && ctx.expect) {
+                    for (var xi = ctx.expect.length - 1; xi >= 0; xi--) { if (ctx.expect[xi].id === item.id) ctx.expect.splice(xi, 1); }
+                }
+                if (window.mBTSchedule && typeof window.mBTSchedule.syncQtyFromSchedule === 'function') window.mBTSchedule.syncQtyFromSchedule(item);
+                this._recalcItem(item);
+                return null;
+            }
+            /* update_item */
+            if (c.new_description !== undefined) {
+                s = String(c.new_description).replace(/^\s+|\s+$/g, '');
+                if (!s) return 'The new line name is missing.';
+                item.description = s;
+            }
+            if (c.unit !== undefined) item.unit = String(c.unit);
+            if (c.notes !== undefined) item.notes = String(c.notes);
+            if (c.rate_lock !== undefined) item.rateType = (c.rate_lock === true || c.rate_lock === 'true') ? 'fixed' : 'negotiable';
+            var numFields = ['quantity', 'rate', 'multiplier', 'actual', 'actual_quantity', 'actual_rate'];
+            var numTarget = { actual_quantity: 'actualQuantity', actual_rate: 'actualRate' };
+            for (i = 0; i < numFields.length; i++) {
+                if (c[numFields[i]] === undefined) continue;
+                v = this._num(c[numFields[i]]);
+                if (v === null) return 'Value was not a number for ' + numFields[i] + ' on ' + (c.description || 'item');
+                if (numFields[i] === 'quantity') s = this._setLineQty(item, v, ctx);
+                else if (numFields[i] === 'rate') s = this._setLineRate(item, v, ctx);
+                else {
+                    item[numTarget[numFields[i]] || numFields[i]] = v;
+                    if (numTarget[numFields[i]] && !item.actualDate) item.actualDate = new Date().toISOString().split('T')[0];
+                    s = null;
+                }
+                if (s) return s;
+            }
+            if (c.actual_date !== undefined) {
+                if (c.actual_date !== '' && !this._isDate(c.actual_date)) return 'actual_date must be a date like 2026-12-15, got ' + c.actual_date + '.';
+                item.actualDate = c.actual_date;
+            }
+            if (c.qualifying !== undefined) item.qualifying = (c.qualifying === true || c.qualifying === 'true');
+            this._recalcItem(item);
+            return null;
+        }
+
+        if (a === 'set_field') {
+            var kind = this._SET_FIELDS[c.field];
+            if (!kind) return 'Unknown field: ' + (c.field || '(none)') + '. Use one of ' + Object.keys(this._SET_FIELDS).join(', ') + '.';
+            if (kind === 'date') {
+                if (c.value !== '' && !this._isDate(c.value)) return c.field + ' must be a date like 2026-12-15, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+                if (c.value === '') delete budget[c.field]; else budget[c.field] = c.value;
+            } else if (kind === 'pct') {
+                v = this._num(c.value);
+                if (v === null || v < 0 || v > 100) return c.field + ' must be a number from 0 to 100, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+                budget[c.field] = v;
+            } else if (kind === 'cap') {
+                v = this._num(c.value);
+                if (v === null || v < 0) return c.field + ' must be a number that is not negative, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+                v = this._capInBase(v, c);
+                if (typeof v === 'string') return v;
+                if (!budget.targetLock || typeof budget.targetLock !== 'object') budget.targetLock = { enabled: false, totalCap: 0, stages: {} };
+                budget.targetLock.totalCap = v;
+            } else if (kind === 'bool') {
+                if (c.value !== true && c.value !== false && c.value !== 'true' && c.value !== 'false') return c.field + ' must be true or false, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+                budget[c.field] = (c.value === true || c.value === 'true');
+            } else {
+                budget[c.field] = String(c.value === undefined ? '' : c.value);
+            }
+            return null;
+        }
+
+        if (a === 'add_float' || a === 'update_float' || a === 'delete_float' || a === 'add_receipt' || a === 'delete_receipt') {
+            if (!budget.ledgers || typeof budget.ledgers !== 'object') budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+            if (!Array.isArray(budget.ledgers.pettyCash)) budget.ledgers.pettyCash = [];
+            list = budget.ledgers.pettyCash;
+            s = String(c.holder || '').replace(/^\s+|\s+$/g, '');
+            if (!s) return 'The float holder name is missing.';
+            if (a === 'add_float') {
+                v = this._num(c.amount);
+                if (v === null || v <= 0) return 'A petty cash float must be more than 0, got ' + (c.amount === undefined ? '(none)' : c.amount) + '.';
+                if (c.date !== undefined && c.date !== '' && !this._isDate(c.date)) return 'The float date must look like 2026-12-15, got ' + c.date + '.';
+                list.push({ id: this._newId('pc'), floatHolder: s, floatAmount: v, currency: window.displayCurrency || budget.currency || 'JMD',
+                    issuedDate: c.date || new Date().toISOString().split('T')[0], status: 'Issued', receipts: [] });
+                return null;
+            }
+            var floatPick = this._pickRecord(list, 'float', s, c.position);
+            if (!floatPick.rec) return floatPick.err;
+            rec = floatPick.rec;
+            if (a === 'delete_float') { list.splice(this._indexOfRec(list, rec), 1); return null; }
+            if (!Array.isArray(rec.receipts)) rec.receipts = [];
+            if (a === 'add_receipt') {
+                n = String(c.description || '').replace(/^\s+|\s+$/g, '');
+                v = this._num(c.amount);
+                if (!n) return 'The receipt description is missing.';
+                if (v === null || v <= 0) return 'A receipt must be more than 0, got ' + (c.amount === undefined ? '(none)' : c.amount) + '.';
+                if (c.date !== undefined && c.date !== '' && !this._isDate(c.date)) return 'The receipt date must look like 2026-12-15, got ' + c.date + '.';
+                rec.receipts.push({ id: this._newId('rc'), description: n, amount: v, currency: rec.currency || window.displayCurrency || budget.currency || 'JMD', date: c.date || new Date().toISOString().split('T')[0] });
+                if (rec.status === 'Issued') rec.status = 'Active';
+                return null;
+            }
+            if (a === 'delete_receipt') {
+                var rcPick = this._pickRecord(rec.receipts, 'receipt', c.description, c.receipt_position);
+                if (!rcPick.rec) return rcPick.err;
+                var rr = rcPick.rec;
+                rec.receipts.splice(this._indexOfRec(rec.receipts, rr), 1);
+                return null;
+            }
+            /* update_float */
+            if (c.amount !== undefined) {
+                v = this._num(c.amount);
+                if (v === null || v <= 0) return 'A petty cash float must be more than 0, got ' + c.amount + '.';
+                rec.floatAmount = v;
+            }
+            if (c.status !== undefined) {
+                if (({ Issued: 1, Active: 1, Reconciled: 1 })[String(c.status)] !== 1) return 'Float status must be Issued, Active or Reconciled, got ' + c.status + '.';
+                rec.status = String(c.status);
+            }
+            if (c.date !== undefined && c.date !== '') {
+                if (!this._isDate(c.date)) return 'The float date must look like 2026-12-15, got ' + c.date + '.';
+                rec.issuedDate = c.date;
+            }
+            return null;
+        }
+
+        if (a === 'set_stage_share' || a === 'set_stage_lock' || a === 'set_stage_offset') {
+            var SK = { dev: 1, pre: 1, prod: 1, post: 1, dist: 1 }, ORDER = ['dev', 'pre', 'prod', 'post', 'dist'];
+            var stK = String(c.stage || '').replace(/^\s+|\s+$/g, '').toLowerCase();
+            if (!SK[stK]) return 'Unknown stage: ' + (c.stage || '(none)') + '. Use one of dev, pre, prod, post, dist.';
+            if (!budget.targetLock || typeof budget.targetLock !== 'object') budget.targetLock = { totalCap: 0, stages: {} };
+            if (!budget.targetLock.stages) budget.targetLock.stages = {};
+            for (i = 0; i < ORDER.length; i++) {
+                if (!budget.targetLock.stages[ORDER[i]]) budget.targetLock.stages[ORDER[i]] = { label: ORDER[i].toUpperCase(), ratio: 20, days: 0, locked: false };
+            }
+            var stg = budget.targetLock.stages;
+            if (a === 'set_stage_lock') {
+                if (c.locked !== true && c.locked !== false && c.locked !== 'true' && c.locked !== 'false') return 'locked must be true or false, got ' + (c.locked === undefined ? '(none)' : c.locked) + '.';
+                stg[stK].locked = (c.locked === true || c.locked === 'true');
+                return null;
+            }
+            if (a === 'set_stage_offset') {
+                if (stK === 'dev') return 'The first stage (dev) has no offset: it starts on the project start date.';
+                if (c.days === '' || c.days === null) { delete stg[stK].offsetDays; return null; }
+                v = this._num(c.days);
+                if (v === null || v < 0) return 'The stage offset must be 0 or more days, or empty to clear it, got ' + (c.days === undefined ? '(none)' : c.days) + '.';
+                stg[stK].offsetDays = v;
+                return null;
+            }
+            /* set_stage_share: same balancing as the stage sliders (index.html balanceStageSliders). */
+            v = this._num(c.value);
+            if (v === null || v < 0 || v > 100) return 'The stage share must be a number from 0 to 100, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+            var lockedTotal = 0, unl = [], unlTotal = 0, rest;
+            for (i = 0; i < ORDER.length; i++) {
+                if (ORDER[i] === stK) continue;
+                if (stg[ORDER[i]].locked) lockedTotal += (parseFloat(stg[ORDER[i]].ratio) || 0);
+                else { unl.push(ORDER[i]); unlTotal += (parseFloat(stg[ORDER[i]].ratio) || 0); }
+            }
+            if (stg[stK].locked) return 'The ' + stK + ' stage share is locked. Unlock it first (set_stage_lock).';
+            if (v > 100 - lockedTotal + 0.00005) return 'Other stages are locked at ' + Math.round(lockedTotal * 100) / 100 + '%, so the ' + stK + ' stage can have at most ' + Math.round((100 - lockedTotal) * 100) / 100 + '%.';
+            rest = Math.max(0, 100 - v - lockedTotal);
+            if (!unl.length && Math.abs(rest) > 0.01) return 'Every other stage is locked, so the ' + stK + ' stage cannot change.';
+            stg[stK].ratio = v;
+            for (i = 0; i < unl.length; i++) {
+                stg[unl[i]].ratio = unlTotal <= 0.01 ? rest / unl.length : rest * ((parseFloat(stg[unl[i]].ratio) || 0) / unlTotal);
+            }
+            return null;
+        }
+
+        if (a === 'set_section_cap') {
+            key = this._findSectionKey(c.section);
+            if (!key) return this._sectionError((c.section || '(none)'));
+            v = this._num(c.value);
+            if (v === null || v < 0) return 'The section cap must be a number that is not negative (0 turns it off), got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+            budget.sections[key].targetCap = v;
+            return null;
+        }
+
+        if (a === 'set_incentive') {
+            var JP = { 'jampro': ['JAMPRO', 20, 0], 'uk hetv': ['UK HETV', 25, 1000000], 'georgia': ['Georgia', 20, 500000], 'louisiana': ['Louisiana', 25, 300000], 'custom': ['Custom', 0, 0] };
+            var prevJ = (budget.jurisdiction && typeof budget.jurisdiction === 'object') ? budget.jurisdiction : {};
+            var jName = prevJ.name || '', jRate = prevJ.incentiveRate || 0, jMin = prevJ.minSpend || 0, pre;
+            if (c.jurisdiction === undefined && c.rate === undefined && c.min_spend === undefined) return 'Nothing to set: give jurisdiction, rate or min_spend.';
+            if (c.jurisdiction !== undefined) {
+                s = String(c.jurisdiction).replace(/^\s+|\s+$/g, '');
+                if (s === '') { jName = ''; }
+                else {
+                    pre = JP[s.toLowerCase()];
+                    if (!pre) return 'Unknown jurisdiction "' + s + '". Use JAMPRO, UK HETV, Georgia, Louisiana, Custom, or an empty name for none.';
+                    jName = pre[0];
+                    jRate = pre[1];
+                    jMin = pre[2];
+                }
+            }
+            if (c.rate !== undefined) {
+                v = this._num(c.rate);
+                if (v === null || v < 0 || v > 100) return 'The incentive rate must be a number from 0 to 100, got ' + c.rate + '.';
+                jRate = v;
+            }
+            if (c.min_spend !== undefined) {
+                v = this._num(c.min_spend);
+                if (v === null || v < 0) return 'The minimum spend must be a number that is not negative, got ' + c.min_spend + '.';
+                jMin = v;
+            }
+            budget.jurisdiction = { name: jName, incentiveRate: jRate, minSpend: jMin, atlSections: prevJ.atlSections || ['Story', 'Producer', 'Cast'] };
+            return null;
+        }
+
+        if (a === 'add_funding_source' || a === 'update_funding_source' || a === 'delete_funding_source') {
+            if (!Array.isArray(budget.fundingSources)) budget.fundingSources = [];
+            list = budget.fundingSources;
+            if (a === 'add_funding_source') {
+                s = String(c.name || '').replace(/^\s+|\s+$/g, '');
+                if (!s) return 'Funding source name missing.';
+                v = c.amount === undefined ? 0 : this._num(c.amount);
+                if (v === null) return 'Funding amount was not a number for ' + s;
+                list.push({
+                    id: 'funding_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10),
+                    name: s, amount: v, currency: c.currency || window.displayCurrency || budget.currency || 'JMD',
+                    cashInBank: this._num(c.cashInBank) || 0, status: c.status || 'Pending',
+                    contactName: c.contactName || '', contactEmail: c.contactEmail || '', contactPhone: c.contactPhone || '',
+                    contractUrl: c.contractUrl || '', notes: c.notes || '', attachments: []
+                });
+                return null;
+            }
+            var fundPick = this._pickRecord(list, 'funding', c.name, c.position);
+            if (!fundPick.rec) return fundPick.err;
+            rec = fundPick.rec;
+            if (a === 'delete_funding_source') { list.splice(this._indexOfRec(list, rec), 1); return null; }
+            if (c.new_name !== undefined && String(c.new_name).replace(/^\s+|\s+$/g, '')) rec.name = String(c.new_name).replace(/^\s+|\s+$/g, '');
+            var fk = ['amount', 'cashInBank'];
+            for (i = 0; i < fk.length; i++) {
+                if (c[fk[i]] === undefined) continue;
+                v = this._num(c[fk[i]]);
+                if (v === null) return 'Funding ' + fk[i] + ' was not a number for ' + rec.name;
+                rec[fk[i]] = v;
+            }
+            var tk = ['currency', 'status', 'contactName', 'contactEmail', 'contactPhone', 'contractUrl', 'notes'];
+            for (i = 0; i < tk.length; i++) { if (c[tk[i]] !== undefined) rec[tk[i]] = String(c[tk[i]]); }
+            return null;
+        }
+
+        if (a === 'add_po' || a === 'update_po' || a === 'delete_po') {
+            if (!budget.ledgers || typeof budget.ledgers !== 'object') budget.ledgers = { poCounter: 1, pos: [], pettyCash: [] };
+            if (!Array.isArray(budget.ledgers.pos)) budget.ledgers.pos = [];
+            list = budget.ledgers.pos;
+            if (a === 'add_po') {
+                s = String(c.vendor || '').replace(/^\s+|\s+$/g, '');
+                var poLink = null;
+                if (c.contact !== undefined && String(c.contact).replace(/^\s+|\s+$/g, '') !== '') {
+                    poLink = this._lookupContact(ctx, c.contact);
+                    if (!poLink) return 'Contact not found in Contacts: ' + c.contact + '. Save it first, then link it in a later step.';
+                    if (s && this._contactKey(s) !== this._contactKey(poLink.name)) return 'The vendor "' + s + '" and the contact "' + poLink.name + '" are different names. Give the contact alone, or the same name for both.';
+                    s = poLink.name;
+                }
+                if (!s) return 'Purchase order vendor missing.';
+                v = c.amount === undefined ? 0 : this._num(c.amount);
+                if (v === null) return 'Purchase order amount was not a number for ' + s;
+                secKey = '';
+                var itemId = '';
+                if (c.section) {
+                    secKey = this._findSectionKey(c.section);
+                    if (!secKey) return this._sectionError(c.section);
+                    if (c.item) {
+                        var poPick = this._pickItem(budget.sections[secKey], secKey, c.item, c.line);
+                        if (poPick.err) return poPick.err;
+                        itemId = poPick.item.id;
+                    }
+                }
+                var num = parseInt(budget.ledgers.poCounter, 10) || 1;
+                budget.ledgers.poCounter = num + 1;
+                var po = {
+                    id: 'po_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    poNumber: 'PO-' + (num < 10 ? '00' : (num < 100 ? '0' : '')) + num,
+                    vendor: s, contactId: poLink ? poLink.id : null, description: c.description || '', amount: v,
+                    currency: window.displayCurrency || budget.currency || 'JMD', date: c.date || '',
+                    status: c.status || 'Draft', sectionKey: secKey, itemId: itemId, notes: c.notes || ''
+                };
+                if (po.status === 'Paid') po.paidAmount = v;
+                list.push(po);
+                return null;
+            }
+            var poPick = this._pickRecord(list, 'po', c.po_number, c.position);
+            if (!poPick.rec) return poPick.err;
+            rec = poPick.rec;
+            if (a === 'delete_po') { list.splice(this._indexOfRec(list, rec), 1); return null; }
+            if (c.vendor !== undefined && String(c.vendor).replace(/^\s+|\s+$/g, '')) rec.vendor = String(c.vendor);
+            if (c.contact !== undefined && String(c.contact).replace(/^\s+|\s+$/g, '') !== '') {
+                var upLink = this._lookupContact(ctx, c.contact);
+                if (!upLink) return 'Contact not found in Contacts: ' + c.contact + '. Save it first, then link it in a later step.';
+                if (c.vendor !== undefined && String(c.vendor).replace(/^\s+|\s+$/g, '') && this._contactKey(c.vendor) !== this._contactKey(upLink.name)) return 'The vendor "' + c.vendor + '" and the contact "' + upLink.name + '" are different names. Give the contact alone, or the same name for both.';
+                rec.contactId = upLink.id;
+                rec.vendor = upLink.name;
+            }
+            if (c.description !== undefined) rec.description = String(c.description);
+            if (c.date !== undefined) rec.date = String(c.date);
+            if (c.notes !== undefined) rec.notes = String(c.notes);
+            if (c.section !== undefined || c.item !== undefined) {
+                var linkSec = c.section !== undefined ? String(c.section) : rec.sectionKey;
+                if (!linkSec) {
+                    if (c.item) return 'Give the section as well as the item to link purchase order ' + rec.poNumber + ' to a line.';
+                    rec.sectionKey = '';
+                    rec.itemId = '';
+                } else {
+                    secKey = this._findSectionKey(linkSec);
+                    if (!secKey) return this._sectionError(linkSec);
+                    rec.sectionKey = secKey;
+                    if (c.item !== undefined && String(c.item) !== '') {
+                        var linkPick = this._pickItem(budget.sections[secKey], secKey, c.item, c.line);
+                        if (linkPick.err) return linkPick.err;
+                        rec.itemId = linkPick.item.id;
+                    } else if (c.section !== undefined || c.item !== undefined) {
+                        rec.itemId = '';
+                    }
+                }
+            }
+            if (c.amount !== undefined) {
+                v = this._num(c.amount);
+                if (v === null) return 'Purchase order amount was not a number for ' + rec.poNumber;
+                rec.amount = v;
+            }
+            if (c.status !== undefined) {
+                rec.status = String(c.status);
+                if (rec.status === 'Paid') rec.paidAmount = rec.amount; else delete rec.paidAmount;
+            } else if (c.amount !== undefined && rec.status === 'Paid') {
+                rec.paidAmount = rec.amount;
+            }
+            return null;
+        }
+
+        if (a === 'add_milestone' || a === 'update_milestone' || a === 'delete_milestone') {
+            if (!Array.isArray(budget.calendarNotes)) budget.calendarNotes = [];
+            list = budget.calendarNotes;
+            if (a === 'add_milestone') {
+                s = String(c.title || '').replace(/^\s+|\s+$/g, '');
+                if (!s) return 'Milestone title missing.';
+                if (c.stage !== undefined || c.offset_days !== undefined) {
+                    if (c.date !== undefined) return 'Give a date or a stage with offset_days for a milestone, not both.';
+                    var rst = String(c.stage || '').toLowerCase(), rOff = c.offset_days === undefined ? 0 : this._num(c.offset_days);
+                    if (!({ dev: 1, pre: 1, prod: 1, post: 1, dist: 1 })[rst]) return 'Unknown stage: ' + (c.stage || '(none)') + '. Use one of dev, pre, prod, post, dist.';
+                    if (rOff === null) return 'offset_days must be a number, got ' + c.offset_days + '.';
+                    list.push({ id: this._newId('ms'), type: 'relative', stageKey: rst, offsetDays: Math.round(rOff), title: s });
+                    return null;
+                }
+                if (!this._isDate(c.date)) return 'Milestone date must look like 2026-12-15, got ' + (c.date === undefined ? '(none)' : c.date) + '.';
+                list.push({ id: this._newId('ms'), date: c.date, title: s });
+                return null;
+            }
+            var msPick = this._pickRecord(list, 'milestone', c.title, c.position);
+            if (!msPick.rec) return msPick.err;
+            rec = msPick.rec;
+            if (a === 'delete_milestone') { list.splice(this._indexOfRec(list, rec), 1); return null; }
+            if (c.new_title !== undefined && String(c.new_title).replace(/^\s+|\s+$/g, '')) rec.title = String(c.new_title).replace(/^\s+|\s+$/g, '');
+            if (c.date !== undefined && (c.stage !== undefined || c.offset_days !== undefined)) return 'Give a date or a stage with offset_days for a milestone, not both.';
+            if (c.date !== undefined) {
+                if (!this._isDate(c.date)) return 'Milestone date must look like 2026-12-15, got ' + c.date + '.';
+                rec.date = c.date;
+                if (rec.type === 'relative') { delete rec.type; delete rec.stageKey; delete rec.offsetDays; }
+            }
+            if (c.stage !== undefined || c.offset_days !== undefined) {
+                var ust = c.stage !== undefined ? String(c.stage).toLowerCase() : (rec.stageKey || 'prod');
+                var uOff = c.offset_days !== undefined ? this._num(c.offset_days) : (parseFloat(rec.offsetDays) || 0);
+                if (!({ dev: 1, pre: 1, prod: 1, post: 1, dist: 1 })[ust]) return 'Unknown stage: ' + c.stage + '. Use one of dev, pre, prod, post, dist.';
+                if (uOff === null) return 'offset_days must be a number, got ' + c.offset_days + '.';
+                rec.type = 'relative';
+                rec.stageKey = ust;
+                rec.offsetDays = Math.round(uOff);
+                delete rec.date;
+            }
+            return null;
+        }
+
+        if (a === 'add_blackout_day' || a === 'remove_blackout_day') {
+            if (!this._isDate(c.date)) return 'The date must look like 2026-12-15, got ' + (c.date === undefined ? '(none)' : c.date) + '.';
+            if (!Array.isArray(budget.blackoutDays)) budget.blackoutDays = [];
+            i = budget.blackoutDays.indexOf(c.date);
+            if (a === 'add_blackout_day') { if (i === -1) budget.blackoutDays.push(c.date); }
+            else if (i !== -1) budget.blackoutDays.splice(i, 1);
+            return null;
+        }
+
+        if (a === 'add_fringe' || a === 'update_fringe' || a === 'delete_fringe') {
+            if (!Array.isArray(budget.fringes)) budget.fringes = [];
+            list = budget.fringes;
+            if (a === 'add_fringe') {
+                s = String(c.name || '').replace(/^\s+|\s+$/g, '');
+                if (!s) return 'Fringe name missing.';
+                v = c.rate === undefined ? 0 : this._num(c.rate);
+                if (v === null) return 'Fringe rate was not a number for ' + s;
+                var newFringe = { id: this._newId('fringe'), name: s, rate: v, enabled: true };
+                if (c.sections !== undefined) {
+                    var fkeys = this._sectionKeysFrom(c.sections);
+                    if (typeof fkeys === 'string') return fkeys;
+                    if (fkeys.length) newFringe.sectionKeys = fkeys;
+                }
+                list.push(newFringe);
+                return null;
+            }
+            var frPick = this._pickRecord(list, 'fringe', c.name, c.position);
+            if (!frPick.rec) return frPick.err;
+            rec = frPick.rec;
+            if (a === 'delete_fringe') { list.splice(this._indexOfRec(list, rec), 1); return null; }
+            if (c.new_name !== undefined && String(c.new_name).replace(/^\s+|\s+$/g, '')) rec.name = String(c.new_name).replace(/^\s+|\s+$/g, '');
+            if (c.rate !== undefined) {
+                v = this._num(c.rate);
+                if (v === null) return 'Fringe rate was not a number for ' + rec.name;
+                rec.rate = v;
+            }
+            if (c.enabled !== undefined) rec.enabled = (c.enabled === true || c.enabled === 'true');
+            if (c.sections !== undefined) {
+                var ukeys = this._sectionKeysFrom(c.sections);
+                if (typeof ukeys === 'string') return ukeys;
+                if (ukeys.length) rec.sectionKeys = ukeys; else delete rec.sectionKeys;
+            }
+            return null;
+        }
+        return 'Unknown action: ' + a;
+    },
+
+    /* A cap given in another currency, in the budget's own currency (its own exchange rate). A number, or an error sentence. */
+    _capInBase: function (v, c) {
+        var budget = window.budget, base = (budget && budget.currency) || 'JMD', code, out;
+        if (c.currency === undefined || c.currency === '') return v;
+        code = String(c.currency).replace(/\s/g, '').toUpperCase();
+        if (!/^[A-Z]{3}$/.test(code)) return 'The currency of the cap must be a three letter code such as USD, got ' + c.currency + '.';
+        if (code === base) return v;
+        out = (window.mBT && window.mBT.le && typeof window.mBT.le.convertCurrencyOrNull === 'function') ? window.mBT.le.convertCurrencyOrNull(v, code, base, budget) : null;
+        if (out === null) return 'This budget has no exchange rate between ' + code + ' and ' + base + ', so the cap was not set. Add the rate in the currency menu, Edit exchange rates, then ask again.';
+        return out;
+    },
+
+    /* The plain sentence for a cap change in the preview. */
+    _describeCap: function (c) {
+        var b = window.budget, base = (b && b.currency) || 'JMD';
+        var code = c.currency ? String(c.currency).replace(/\s/g, '').toUpperCase() : base;
+        var v = this._num(c.value), t, conv;
+        if (v === null) return 'Set the budget cap to "' + (c.value === undefined ? '' : c.value) + '"';
+        t = 'Set the budget cap to ' + code + ' ' + this._money(v) + (v === 0 ? ' (cap off)' : '');
+        if (code !== base && /^[A-Z]{3}$/.test(code) && v > 0) {
+            conv = this._capInBase(v, c);
+            t += typeof conv === 'string' ? ' (this budget has no exchange rate for ' + code + ', so this will be refused)' : ' (' + base + ' ' + this._money(conv) + ' at this budget\'s rate)';
+        }
+        return t;
+    },
+
+    /* Where the budget stands against its cap, for the report after an apply. */
+    _capLine: function () {
+        var b = window.budget, cur, cap, grand;
+        if (!b) return '';
+        cur = b.currency || window.displayCurrency || '';
+        cap = (b.targetLock && parseFloat(b.targetLock.totalCap)) || 0;
+        grand = parseFloat(b.grandTotal) || 0;
+        if (cap > 0) {
+            return 'Grand total is now ' + cur + ' ' + this._money(grand) + ' against the budget cap of ' + cur + ' ' + this._money(cap) + ': ' +
+                (grand > cap ? 'OVER the cap by ' + cur + ' ' + this._money(grand - cap) + '.' : 'under the cap by ' + cur + ' ' + this._money(cap - grand) + '.');
+        }
+        return 'Grand total is now ' + cur + ' ' + this._money(grand) + '. No budget cap is set.';
+    },
+
+    _rateLines: function (budget) {
+        var snap = budget && budget.exchangeRateState && budget.exchangeRateState.rates, base = (budget && budget.currency) || 'JMD', out = [], k;
+        if (!snap || !(Number(snap[base]) > 0)) return '';
+        for (k in snap) {
+            if (!Object.prototype.hasOwnProperty.call(snap, k) || k === base || !(Number(snap[k]) > 0)) continue;
+            out.push('1 ' + k + ' = ' + (Math.round(snap[base] / snap[k] * 10000) / 10000) + ' ' + base);
+            if (out.length >= 8) break;
+        }
+        return out.length ? 'Exchange rates in this budget: ' + out.join('; ') + '.' : '';
+    },
+
+    /* Record what the app said after an apply, so the next question to the model carries the real outcome. */
+    _tell: function (title, text) {
+        this._lastApply = { title: String(title || ''), text: String(text || ''), at: Date.now() };
+        return this._alertSafe(title, text);
+    },
+
+    /* Section names (an array, or one name) to the budget's section keys. An
+       empty list means the whole budget. A string result is an error sentence. */
+    _sectionKeysFrom: function (v) {
+        var names = Array.isArray(v) ? v : (v === '' || v === null ? [] : [v]);
+        var out = [], i, k;
+        for (i = 0; i < names.length; i++) {
+            k = this._findSectionKey(names[i]);
+            if (!k) return this._sectionError(names[i]);
+            if (out.indexOf(k) === -1) out.push(k);
+        }
+        return out;
+    },
+
+    /* Checks that need no change to the budget: runs before anything is touched. */
+    /* A field the action does not have: named, with where to do it by hand. */
+    _unsupportedField: function (c) {
+        var a = c && c.mbt_action, allowed, k;
+        if (!a || a === 'batch' || !this._ACTIONS[a]) return null;
+        allowed = this._allowedKeys(a);
+        for (k in c) {
+            if (!Object.prototype.hasOwnProperty.call(c, k) || k === 'mbt_action' || allowed[k] || this._IGNORED_KEYS[k]) continue;
+            /* Models often restate the field the action already sets ("field":"quantity" on update_quantity). Harmless, so accepted. */
+            if (k === 'field' && this._impliedField(a, c.field)) continue;
+            return 'The Assistant cannot set "' + k + '" with ' + a + '. Do it by hand in ' + this._ACTIONS[a].hand + '.';
+        }
+        return null;
+    },
+
+    _impliedField: function (a, f) {
+        f = String(f || '').toLowerCase().replace(/[^a-z]/g, '');
+        if (a === 'update_quantity') return f === 'quantity' || f === 'qty';
+        if (a === 'update_rate') return f === 'rate';
+        return false;
+    },
+
+    _preflightChange: function (c) {
+        var a = c && c.mbt_action;
+        if (!this._isKnownAction(a)) {
+            return '"' + a + '" is not something the Assistant can do. Do it by hand instead.';
+        }
+        if (a === 'update_production_fee' && (typeof c.value !== 'number' || !isFinite(c.value) || c.value < 0 || c.value > 100)) return 'Production Fee must be a finite number from 0 to 100.';
+        var badField = this._unsupportedField(c);
+        if (badField) return badField;
+        if (a === 'duplicate_budget' || a === 'rename_budget') {
+            var n = String(c.name || '').replace(/^\s+|\s+$/g, '');
+            if (!n) return 'The new budget name is missing.';
+            if (n.length < 2 || n.length > 100 || !/^[a-zA-Z0-9À-ÿ '&.,!#\-()–—]+$/.test(n)) return 'The budget name "' + n + '" uses characters the app does not allow in a project name.';
+        }
+        if (a === 'set_field' && c.currency !== undefined && c.field !== 'totalCap') return 'A currency can only be given with the totalCap field.';
+        if (a === 'set_display_currency') {
+            var code = String(c.value || '').toUpperCase();
+            if (!/^[A-Z]{3}$/.test(code)) return 'The currency must be a three letter code such as USD, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+        }
+        if (a === 'rename_contact') {
+            var rcOld = String(c.name || '').replace(/^\s+|\s+$/g, ''), rcNew = String(c.new_name || '').replace(/^\s+|\s+$/g, '');
+            if (!rcOld) return 'The contact to rename is missing.';
+            if (!rcNew) return 'The new contact name is missing.';
+            if (rcNew.length > 100 || /[<>]/.test(rcNew)) return 'The new contact name "' + rcNew + '" is too long or uses < or > characters.';
+            if (rcOld === rcNew) return 'The contact "' + rcOld + '" already has that name.';
+        }
+        if ((a === 'add_po' || a === 'update_po') && c.contact !== undefined && typeof c.contact !== 'string') return 'The contact on a purchase order must be a contact name.';
+        if (a === 'save_contact') {
+            if (!String(c.name || '').replace(/^\s+|\s+$/g, '')) return 'The contact name is missing.';
+            if (c.rate !== undefined && c.rate !== null && c.rate !== '' && (this._num(c.rate) === null || this._num(c.rate) < 0)) return 'The contact rate must be a number that is not negative, got ' + c.rate + '.';
+            if (c.currency !== undefined && c.currency !== '' && !/^[A-Za-z]{3}$/.test(String(c.currency))) return 'The contact currency must be a three letter code such as USD, got ' + c.currency + '.';
+            if (c.wallet_type !== undefined && c.wallet_type !== '' && !/^[A-Za-z0-9_-]{1,30}$/.test(String(c.wallet_type))) return 'The wallet type "' + c.wallet_type + '" is not valid.';
+            if (c.clear !== undefined) {
+                var okClear = { phone: 1, email: 1, wallet_type: 1, wallet_address: 1 }, ci;
+                if (Object.prototype.toString.call(c.clear) !== '[object Array]') return 'The "clear" list on contact "' + c.name + '" must be a list of field names.';
+                for (ci = 0; ci < c.clear.length; ci++) {
+                    if (!okClear[c.clear[ci]]) return 'A contact field cannot be cleared this way: "' + c.clear[ci] + '". Only phone, email, wallet_type and wallet_address can.';
+                    var given = c[c.clear[ci]];
+                    if (given !== undefined && given !== '') return 'Contact "' + c.name + '" both sets and clears "' + c.clear[ci] + '".';
+                }
+            }
+        }
+        return null;
+    },
+
+    /* One change, described in plain English for the preview. */
+    _describeChange: function (c) {
+        var a = c && c.mbt_action, t;
+        if (a === 'set_field' && c.field === 'totalCap') t = this._describeCap(c);
+        else t = this._describeChangeBase(c);
+        if (this._LINE_ACTIONS[a] && c.line !== undefined && c.line !== null && c.line !== '') t += ' (line ' + c.line + ')';
+        if (this._REC_POS[a] && c.position !== undefined && c.position !== null && c.position !== '') t += ' (number ' + c.position + ')';
+        return t;
+    },
+
+    _describeChangeBase: function (c) {
+        var cur = window.displayCurrency || '';
+        var a = c.mbt_action;
+        var described = this._describeNew(c);
+        if (described) return described;
         if (a === 'update_rate')        return 'Set "' + (c.description || 'item') + '" rate to ' + cur + ' ' + c.value;
         if (a === 'update_quantity')    return 'Set "' + (c.description || 'item') + '" quantity to ' + c.value;
-        if (a === 'add_item')           return 'Add "' + (c.description || 'item') + '" to ' + (c.section || '?');
+        if (a === 'add_item')           return this._addItemDept(c)
+            ? 'Add "' + (c.description || 'item') + '" to ' + this._addItemWhere(c)
+            : 'Choose a department for "' + (c.description || 'item') + '"; it is not added until you do';
         if (a === 'add_section')        return 'Create section "' + (c.section || '?') + '"';
+        if (a === 'update_production_fee') return 'Set Production Fee to ' + c.value + '%';
         if (a === 'update_contingency') return 'Set contingency to ' + c.value + '%';
         if (a === 'set_workweek')       return 'Set work week to ' + c.value + ' days';
         if (a === 'set_stage_days')     return 'Set ' + (c.stage || '?') + ' stage to ' + c.days + ' days';
-        return 'Apply: ' + a;
+        return 'Cannot do: ' + a + ' (not something the Assistant can do)';
     },
 
     /* Apply a single change. Returns an error string, or null on success. */
-    _applyOne: function (c) {
+    _applyOne: function (c, ctx) {
         var budget = window.budget;
         var a = c.mbt_action;
+        var LEGACY = { update_rate: 1, update_quantity: 1, add_item: 1, add_section: 1, update_contingency: 1, set_workweek: 1, set_stage_days: 1 };
+        if (!this._isKnownAction(a) || a === 'batch') return '"' + a + '" is not something the Assistant can do. Do it by hand instead.';
+        if (a === 'update_production_fee') {
+            var feeError = this._preflightChange(c);
+            if (feeError) return feeError;
+            window.mBT_Finance.setProductionFee(budget, c.value);
+            return null;
+        }
+        if (!LEGACY[a]) return this._applyNew(c, ctx);
 
         if (a === 'add_section') {
             var wanted = String(c.section || '').replace(/^\s+|\s+$/g, '');
@@ -794,6 +2288,7 @@ window.mBTAIModule = {
         if (a === 'set_workweek') {
             var wk = parseInt(c.value, 10);
             if (wk !== 5 && wk !== 6 && wk !== 7) return 'Work week must be 5, 6 or 7 days, got ' + (c.value === undefined ? '(none)' : c.value) + '.';
+            if (ctx && ctx.dry) return null;
             /* Route through the same entry point the header control uses
                (index.html mBT.features.funding.setWorkWeek), so reconcile,
                header refresh and the mbt:workWeek postMessage to open tool
@@ -813,6 +2308,7 @@ window.mBTAIModule = {
             if (!STAGE_KEYS[stageKey]) return 'Unknown stage: ' + (c.stage || '(none)') + '. Use one of dev, pre, prod, post, dist.';
             var days = parseFloat(c.days);
             if (isNaN(days) || days < 0) return 'Stage days must be a non negative number, got ' + (c.days === undefined ? '(none)' : c.days) + '.';
+            if (ctx && ctx.dry) return null;
             /* Route through the same entry point the Stages tool uses
                (index.html window.updateStageDuration), so it scaffolds
                targetLock on a fresh budget, saves, and fires updateAllHeaders
@@ -830,28 +2326,46 @@ window.mBTAIModule = {
             return null;
         }
 
+        var addedDept = null;
+        if (a === 'add_item' && window.mBTBatch2) {
+            addedDept = this._addItemDept(c);
+            c._notAdded = false;
+            /* Nothing is guessed: with no department the line is left out and the user is told. */
+            if (!addedDept) { c._notAdded = true; (this._unplacedAdds = this._unplacedAdds || []).push(c.description || 'item'); return null; }
+            if (mBTBatch2.deptSectionsOn(budget)) {
+                var madeItem = this._makeItem(c), madeClass = { description: madeItem.description };
+                var deptSec = mBTBatch2.section(budget, madeClass, undefined, addedDept);
+                madeItem.department = madeClass.department;
+                budget.sections[deptSec].items.push(madeItem);
+                return null;
+            }
+        }
+
         var key = this._findSectionKey(c.section);
-        if (!key) return 'Section not found: ' + (c.section || '(none)');
+        if (!key) return this._sectionError((c.section || '(none)'));
         var sec = budget.sections[key];
         if (!sec.items) sec.items = [];
 
         if (a === 'add_item') {
-            sec.items.push(this._makeItem(c));
+            var plainItem = this._makeItem(c);
+            if (addedDept) plainItem.department = addedDept;
+            sec.items.push(plainItem);
             return null;
         }
 
         if (a === 'update_rate' || a === 'update_quantity') {
-            var item = this._findItem(sec, c.description);
-            if (!item) return 'Item not found: ' + (c.description || '(none)') + ' in ' + key;
+            var itemPick = this._pickItem(sec, key, c.description, c.line);
+            if (itemPick.err) return itemPick.err;
+            var item = itemPick.item;
             var val = parseFloat(c.value);
             if (isNaN(val)) return 'Value was not a number for ' + (c.description || 'item');
-            var field = c.field || (a === 'update_quantity' ? 'quantity' : 'rate');
-            item[field] = val;
-            if (field === 'rate') item.baseRate = val;
-            var q = parseFloat(item.quantity);   if (isNaN(q)) q = 0;
-            var r = parseFloat(item.rate);       if (isNaN(r)) r = 0;
-            var m = parseFloat(item.multiplier); if (isNaN(m) || !m) m = 1;
-            item.total = q * r * m;
+            var field = a === 'update_quantity' ? 'quantity' : 'rate';
+            var was = parseFloat(item[field]);
+            var lineErr = field === 'rate' ? this._setLineRate(item, val, ctx) : this._setLineQty(item, val, ctx);
+            if (lineErr) return lineErr;
+            this._recalcItem(item);
+            /* The line already had this value: the run reports it as nothing changed. */
+            if (ctx && !isNaN(was) && Math.abs(was - parseFloat(item[field])) < 0.000001) ctx.sameValue = true;
             return null;
         }
 
@@ -886,14 +2400,90 @@ window.mBTAIModule = {
         /* Fallback if chat host failed to mount. */
         var esc = (window.mBT && window.mBT.ui && window.mBT.ui.render && window.mBT.ui.render.esc)
             ? window.mBT.ui.render.esc
-            : function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+            : function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         var i, rows = [];
+        var warnAll = self._previewWarnings(changes, diffKey || '');
+        for (i = 0; i < warnAll.top.length; i++) rows.push('<li style="margin:0 0 4px 0;color:#92400e;">' + esc(warnAll.top[i]) + '</li>');
         for (i = 0; i < changes.length; i++) {
-            rows.push('<li style="margin:0 0 4px 0;">' + esc(self._describeChange(changes[i])) + '</li>');
+            rows.push('<li style="margin:0 0 4px 0;">' + esc(self._describeChange(changes[i])) + (warnAll.per[i] || []).map(function (w) { return '<br><span style="color:#92400e;">' + esc(w) + '</span>'; }).join('') + '</li>');
         }
         var title = changes.length > 1 ? ('Preview ' + changes.length + ' Changes') : 'Preview Change';
         var body = '<div style="text-align:left;max-height:260px;overflow-y:auto;margin:0 0 8px 0;"><ol style="margin:0;padding-left:18px;font-size:11px;line-height:1.5;color:#475569;">' + rows.join('') + '</ol></div><span style="font-weight:800;">Apply to the budget?</span>';
-        mBTME.confirm(title, body, function () { self._commitSuggestion(changes); });
+        mBTME.confirmHTML(title, body, function () { self._commitSuggestion(changes); });
+    },
+
+    /* Did the user's request just before this reply ask for a copy of the budget? */
+    _userAskedForCopy: function (diffKey) {
+        var sess = this._chatSession, chat = sess && sess.activeChat, idx, parts, n, i;
+        if (!chat || !chat.length) return false;
+        idx = chat.length;
+        if (diffKey) {
+            parts = String(diffKey).split('_');
+            n = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(n)) idx = n;
+        }
+        for (i = Math.min(idx, chat.length) - 1; i >= 0; i--) {
+            if (chat[i] && chat[i].role === 'user') return /\b(duplicate|duplicated|duplicating|copy|copies|clone|cloned|save as|new version|version of)\b/i.test(String(chat[i].content || ''));
+        }
+        return false;
+    },
+
+    /* Warnings for the preview, from the budget as it stands. per[i] belongs to change i; top apply to the whole reply. Nothing here changes the budget. */
+    _previewWarnings: function (changes, diffKey) {
+        var self = this, b = window.budget, per = {}, top = [], seen = {}, hasDup = false, touches = false;
+        var i, j, c, a, sk, its, hits, secName, plan, pk, nm, m, cur, nv, key;
+        function add(n, t) { (per[n] = per[n] || []).push(t); }
+        if (!b || !b.sections) return { per: per, top: top };
+        for (i = 0; i < (changes || []).length; i++) {
+            c = changes[i]; a = c && c.mbt_action;
+            if (!a) continue;
+            if (a === 'duplicate_budget') { hasDup = true; continue; }
+            if (!self._NOT_TRACKED[a] || a === 'rename_budget') touches = true;
+            if (a === 'add_item') {
+                secName = c.section;
+                try {
+                    if (window.mBTBatch2 && mBTBatch2.deptSectionsOn(b)) {
+                        plan = mBTBatch2.plan(b, { description: c.description }, c.department);
+                        if (!plan.needsChoice) secName = plan.section;
+                    }
+                } catch (eP) { /* the section named in the reply is used */ }
+                sk = self._findSectionKey(secName);
+                key = (sk || String(secName)) + '|' + self._normalizeName(c.description);
+                hits = [];
+                its = (sk && b.sections[sk] && b.sections[sk].items) || [];
+                for (j = 0; j < its.length; j++) { if (its[j] && self._normalizeName(its[j].description) === self._normalizeName(c.description)) hits.push(j); }
+                if (hits.length) add(i, 'The section "' + sk + '" already has "' + (c.description || '') + '" (' + self._lineWords(its, hits) + '). Adding it again makes a second line with the same name. Change the existing line instead.');
+                else if (seen[key]) add(i, 'This reply adds "' + (c.description || '') + '" to "' + secName + '" more than once.');
+                seen[key] = true;
+                continue;
+            }
+            if (self._REC_POS[a]) {
+                pk = self._previewRecord(a, c, b);
+                if (pk) add(i, 'This will be refused: ' + pk.err);
+            }
+            if (self._LINE_ACTIONS[a] || a === 'add_po' || a === 'update_po') {
+                nm = self._LINE_ACTIONS[a] ? c.description : c.item;
+                if (c.section && nm !== undefined && nm !== '') {
+                    sk = self._findSectionKey(c.section);
+                    if (!sk) {
+                        m = self._sectionMatch(c.section);
+                        if (m.hits.length > 1) add(i, 'This will be refused: ' + self._sectionError(c.section));
+                    } else if (b.sections[sk]) {
+                        pk = self._pickItem(b.sections[sk], sk, nm, c.line);
+                        if (pk.err && (pk.ambiguous || pk.bad)) add(i, 'This will be refused: ' + pk.err);
+                        else if (pk.item && (a === 'update_rate' || a === 'update_quantity')) {
+                            cur = parseFloat(pk.item[a === 'update_rate' ? 'rate' : 'quantity']);
+                            nv = parseFloat(c.value);
+                            if (!isNaN(cur) && !isNaN(nv) && Math.abs(cur - nv) < 0.000001) add(i, 'This line already has that value, so this would change nothing.');
+                        }
+                    }
+                }
+            }
+        }
+        if (!hasDup && touches && self._userAskedForCopy(diffKey)) {
+            top.push('You asked for a copy, but nothing here duplicates the budget first, so every change goes straight into the original "' + (b.projectName || '') + '". Cancel and ask again if you want the original left alone.');
+        }
+        return { per: per, top: top };
     },
 
     /* Mark the assistant bubble that offered this diff so the button becomes Reapply. */
@@ -912,130 +2502,954 @@ window.mBTAIModule = {
         }
     },
 
-    /* Run the apply path after the user confirms (inline or fallback). */
-    _commitSuggestion: function (changes, diffKey) {
+    /* Flatten a change list: a batch inside a batch is still one list. */
+    _flattenChanges: function (changes) {
+        var out = [], i, c;
+        for (i = 0; i < (changes || []).length; i++) {
+            c = changes[i];
+            if (c && c.mbt_action === 'batch' && c.changes && c.changes.length) out = out.concat(this._flattenChanges(c.changes));
+            else out.push(c);
+        }
+        return out;
+    },
+
+    _prefix: function () { return window.storageKeyPrefix || 'prodBudget_v5_'; },
+
+    _alertSafe: function (title, text) {
+        if (window.mBTME && typeof window.mBTME.alert === 'function') window.mBTME.alert(title, text);
+    },
+
+    /* Copy the whole budget under a new name and switch to the copy. The
+       original is saved first and is not touched again. Rejects with a plain
+       sentence when the name is taken or either save fails. */
+    _doDuplicate: function (name, extra) {
         var self = this;
-        var budget = window.budget;
-        var mBTME = window.mBTME;
+        var original = window.budget.projectName;
+        return Promise.resolve(window.getProjectList()).then(function (list) {
+            if ((list || []).indexOf(name) !== -1) throw new Error('A budget named "' + name + '" already exists. Pick another name.');
+            return window.saveBudget(true);
+        }).then(function () {
+            return window.mBT.data.duplicate(name);
+        }).then(function () {
+            if (!window.budget || window.budget.projectName !== name) throw new Error('The copy was not created.');
+            extra.dup = { originalName: original, copyName: name };
+        });
+    },
+
+    /* Rename the open budget. The record moves to the new name; the old
+       record goes to the app's Recycle Bin, so nothing is lost. */
+    _doRename: function (name, extra) {
+        var self = this;
+        var oldName = window.budget.projectName;
+        var prefix = self._prefix();
+        var oldKey = prefix + oldName;
+        var newKey = prefix + name;
+        if (name === oldName) return Promise.resolve();
+        return Promise.resolve(window.getProjectList()).then(function (list) {
+            if ((list || []).indexOf(name) !== -1) throw new Error('A budget named "' + name + '" already exists. Pick another name.');
+            return window.mBTBudgetStorage.load(oldKey);
+        }).then(function (oldRecord) {
+            extra._oldRecord = oldRecord || null;
+            window.budget.projectName = name;
+            window.currentProjectName = name;
+            return window.saveBudget(true);
+        }).then(function () {
+            return window.mBTBudgetStorage.load(newKey);
+        }).then(function (saved) {
+            if (!saved || saved.projectName !== name) throw new Error('The renamed budget could not be saved.');
+            if (extra._oldRecord) {
+                try {
+                    var trashKey = prefix + 'trash';
+                    var trashed = JSON.parse(localStorage.getItem(trashKey) || '[]');
+                    trashed.push(extra._oldRecord);
+                    localStorage.setItem(trashKey, JSON.stringify(trashed));
+                } catch (eT) { /* the old record is only removed below if it was kept */ throw new Error('The old record could not be kept in the Recycle Bin, so the rename was stopped.'); }
+            }
+            return window.mBTBudgetStorage.remove(oldKey);
+        }).then(function () {
+            try { localStorage.removeItem(oldKey); } catch (eL) { /* ignore */ }
+            extra.renamedFrom = oldName;
+            if (window.mBT && window.mBT.ui && window.mBT.ui.toolbar && typeof window.mBT.ui.toolbar.renderProjectMgmt === 'function') window.mBT.ui.toolbar.renderProjectMgmt();
+        });
+    },
+
+    /* Switch the display currency through the same click path the currency
+       menu uses, then check it took. Returns an error string or null. */
+    _doCurrency: function (code) {
+        var btn = document.createElement('button');
+        code = String(code || '').toUpperCase();
+        btn.setAttribute('data-currency-code', code);
+        btn.style.display = 'none';
+        document.body.appendChild(btn);
+        try { btn.click(); } finally { if (btn.parentNode) btn.parentNode.removeChild(btn); }
+        if (window.displayCurrency !== code) {
+            return 'Amounts stay in ' + window.displayCurrency + ' because this budget has no exchange rate for ' + code + '. Add the rate in the currency menu, Edit exchange rates, then ask again.';
+        }
+        return null;
+    },
+
+    /* Save people through the shared Contacts roster, never a second list.
+       Each save also records what the contact looked like before (or that it
+       was new), so Undo can put the shared roster back. */
+    _saveContacts: function (people) {
+        var done = [], failed = [], changes = [];
+        var chain = Promise.resolve();
+        if (typeof window.mBTSaveContactToRoster !== 'function') {
+            return Promise.resolve({ done: [], failed: people.map(function (p) { return p.name; }), changes: [] });
+        }
+        function findByName(roster, name) {
+            var key = String(name || '').toLowerCase(), i;
+            for (i = 0; i < (roster || []).length; i++) {
+                if (roster[i] && String(roster[i].name || '').toLowerCase() === key) return roster[i];
+            }
+            return null;
+        }
+        people.forEach(function (p) {
+            chain = chain.then(function () {
+                var before = null;
+                var fetch = (typeof window.mBTFetchMergedContactRoster === 'function') ? window.mBTFetchMergedContactRoster() : Promise.resolve([]);
+                return Promise.resolve(fetch).catch(function () { return []; }).then(function (roster) {
+                    var ex = findByName(roster, p.name);
+                    try { before = ex ? JSON.parse(JSON.stringify(ex)) : null; } catch (eB) { before = null; }
+                    return window.mBTSaveContactToRoster(p);
+                }).then(function (saved) {
+                    if (saved) {
+                        done.push(p.name);
+                        if (p.overwrite || p.undo) changes.push({ id: saved.id, name: p.name, created: !before, before: before, savedAt: saved.updated_at || null });
+                    } else failed.push(p.name);
+                });
+            }).catch(function () { failed.push(p.name); });
+        });
+        return chain.then(function () { return { done: done, failed: failed, changes: changes }; });
+    },
+
+    /* Put the shared roster back the way it was before the last batch. A
+       contact is only touched if nobody has saved it since the Assistant did.
+       Resolves to { restored: [names], kept: [names] }. */
+    _undoContacts: function (changes) {
+        var restored = [], kept = [];
+        var chain = Promise.resolve();
+        var storage = window.mBTStorage;
+        if (!changes || !changes.length) return Promise.resolve({ restored: restored, kept: kept });
+        if (!storage || typeof storage.saveContact !== 'function' || typeof storage.deleteContact !== 'function' || typeof window.mBTFetchMergedContactRoster !== 'function') {
+            return Promise.resolve({ restored: [], kept: changes.map(function (ch) { return ch.name; }) });
+        }
+        changes.slice().reverse().forEach(function (ch) {
+            chain = chain.then(function () {
+                return window.mBTFetchMergedContactRoster();
+            }).then(function (roster) {
+                var cur = null, i;
+                for (i = 0; i < roster.length; i++) { if (roster[i] && roster[i].id === ch.id) { cur = roster[i]; break; } }
+                if (!cur || (ch.savedAt && cur.updated_at !== ch.savedAt)) { kept.push(ch.name); return null; }
+                if (ch.created) return storage.deleteContact(ch.id).then(function () { restored.push(ch.name); });
+                return storage.saveContact(JSON.parse(JSON.stringify(ch.before))).then(function () { restored.push(ch.name); });
+            }).catch(function () { kept.push(ch.name); });
+        });
+        return chain.then(function () {
+            window.__mbtCrewRosterCache = null;
+            if (window.mBTOG && typeof window.mBTOG.refreshContacts === 'function') {
+                return Promise.resolve(window.mBTOG.refreshContacts()).catch(function () { }).then(function () { return { restored: restored, kept: kept }; });
+            }
+            return { restored: restored, kept: kept };
+        });
+    },
+
+    _backupJson: function (budget) {
+        var snap = { id: budget.id, projectName: budget.projectName, collab_project_id: budget.collab_project_id };
+        var i, k;
+        for (i = 0; i < this._UNDO_ROOTS.length; i++) {
+            k = this._UNDO_ROOTS[i];
+            if (Object.prototype.hasOwnProperty.call(budget, k)) snap[k] = budget[k];
+        }
+        return JSON.stringify(snap);
+    },
+
+    _restoreRoots: function (budget, backup) {
+        var prev = JSON.parse(backup);
+        var i, k;
+        for (i = 0; i < this._UNDO_ROOTS.length; i++) {
+            k = this._UNDO_ROOTS[i];
+            if (Object.prototype.hasOwnProperty.call(prev, k)) budget[k] = prev[k];
+            else delete budget[k];
+        }
+    },
+
+    /* Run every change in order on the open budget, with the per change
+       save, reconcile and header passes switched off. Returns the errors. */
+    _runChanges: function (changes, ctx) {
+        var self = this;
         var mBTLE = window.mBTLE;
-        if (!budget || !changes || !changes.length) return;
-
-        var backup;
-        try {
-            backup = JSON.stringify({
-                sections: budget.sections,
-                contingencyPercentage: budget.contingencyPercentage,
-                settings: budget.settings,
-                targetLock: budget.targetLock
-            });
-        } catch (e) { backup = null; }
-
-        /* Batch guard. Some verbs delegate to the same entry points the manual
-           controls use (setWorkWeek, updateStageDuration), and each of those
-           runs a full saveBudget + reconcile + updateAllHeaders on its own. In
-           a batch that repeated the whole cost per change: six changes measured
-           7 saves, 7 reconciles and 6 header rebuilds where one of each is
-           enough. Reconcile is O(items) and a save serialises the entire
-           budget, so an AI generated budget felt sluggish for the rest of the
-           session. Suppress the per change passes here, then do exactly one of
-           each below. Restored in a finally so a throw cannot strand the app
-           with saving disabled. */
         var _realSave = window.saveBudget;
         var _realReconcile = (mBTLE && mBTLE.reconcile) ? mBTLE.reconcile : null;
         var _realHeaders = window.updateAllHeaders;
         var _noop = function () { };
         var errors = [];
-        var j;
+        var j, err, track, before;
+        self._unplacedAdds = [];
         try {
             if (typeof _realSave === 'function') window.saveBudget = _noop;
             if (_realReconcile) mBTLE.reconcile = _noop;
             if (typeof _realHeaders === 'function') window.updateAllHeaders = _noop;
+            if (ctx) ctx.noops = [];
             for (j = 0; j < changes.length; j++) {
-                var err = self._applyOne(changes[j]);
-                if (err) errors.push('\u2022 ' + err);
+                track = !!ctx && !ctx.dry && !self._NOT_TRACKED[changes[j] && changes[j].mbt_action];
+                before = track ? self._backupJson(window.budget) : '';
+                if (ctx) ctx.sameValue = false;
+                err = self._applyOne(changes[j], ctx);
+                if (err) errors.push('• ' + err);
+                else if (track && !changes[j]._notAdded && (ctx.sameValue || self._backupJson(window.budget) === before)) ctx.noops.push(changes[j]);
             }
         } finally {
             if (typeof _realSave === 'function') window.saveBudget = _realSave;
             if (_realReconcile) mBTLE.reconcile = _realReconcile;
             if (typeof _realHeaders === 'function') window.updateAllHeaders = _realHeaders;
         }
+        return errors;
+    },
 
+    /* Run the apply path after the user confirms (inline or fallback).
+       Checks first, applies as one batch, saves, reads the saved copy back,
+       and only then says what happened. */
+    _commitSuggestion: function (changes, diffKey) {
+        var self = this;
+        var budget = window.budget;
+        var mBTME = window.mBTME;
+        if (!budget || !changes || !changes.length) return;
+        changes = self._flattenChanges(changes);
+
+        var errors = [], i, c, a, pre;
+        var dupC = null, renameC = null, curC = null, rest = [], contactChanges = [];
+        for (i = 0; i < changes.length; i++) {
+            c = changes[i];
+            pre = self._preflightChange(c);
+            if (pre) { errors.push('• ' + pre); continue; }
+            a = c.mbt_action;
+            if (a === 'duplicate_budget') { if (dupC) errors.push('• Only one duplicate_budget fits in one batch.'); else dupC = c; }
+            else if (a === 'rename_budget') { if (renameC) errors.push('• Only one rename_budget fits in one batch.'); else renameC = c; }
+            else if (a === 'set_display_currency') curC = c;
+            else if (a === 'save_contact') contactChanges.push(c);
+            else rest.push(c);
+        }
+        if (dupC && renameC) errors.push('• duplicate_budget and rename_budget cannot be in the same batch, the copy already has its own name.');
         if (errors.length) {
-            if (backup) {
-                var undoState = JSON.parse(backup);
-                budget.sections = undoState.sections;
-                budget.contingencyPercentage = undoState.contingencyPercentage;
-                budget.settings = undoState.settings;
-                budget.targetLock = undoState.targetLock;
-            }
-            return mBTME.alert('Nothing Applied',
-                'The budget was left unchanged because ' +
-                (errors.length === 1 ? 'this failed:' : 'these failed:') +
-                '\n\n' + errors.join('\n'));
+            return self._tell('Nothing Applied', 'The budget was left unchanged because ' + (errors.length === 1 ? 'this failed:' : 'these failed:') + '\n\n' + errors.join('\n'));
         }
 
-        if (backup) window._mbtAILastBackup = backup;
+        var extra = { dup: null, renamedFrom: null, currencyBefore: null, contactsSaved: [], contactsFailed: [], lookup: {}, renames: [], creates: [], createdKeys: {}, rosterChanges: null, budgetCommitted: false };
+
+        var proceed = function () {
+        /* A copy or a rename touches storage, so prove the other changes will
+           work on a throwaway clone first. Nothing is created if any would fail. */
+        if ((dupC || renameC) && rest.length) {
+            var live = window.budget;
+            var dry = null, dryErrors = [];
+            try { dry = JSON.parse(JSON.stringify(live)); } catch (eDry) { dry = null; }
+            if (!dry) return self._tell('Nothing Applied', 'Could not check the changes safely, so nothing was applied.');
+            try {
+                window.budget = dry;
+                dryErrors = self._runChanges(rest, { dry: true, contacts: [], lookup: extra.lookup, renames: extra.renames, renamed: [] });
+            } finally { window.budget = live; }
+            if (dryErrors.length) {
+                return self._tell('Nothing Applied', 'No copy was made and the budget was left unchanged because ' + (dryErrors.length === 1 ? 'this failed:' : 'these failed:') + '\n\n' + dryErrors.join('\n'));
+            }
+        }
+
+        var pipeline = Promise.resolve();
+        if (dupC) pipeline = pipeline.then(function () { return self._doDuplicate(String(dupC.name).replace(/^\s+|\s+$/g, ''), extra); });
+        if (renameC) pipeline = pipeline.then(function () { return self._doRename(String(renameC.name).replace(/^\s+|\s+$/g, ''), extra); });
+        pipeline.then(function () {
+            return self._commitOnActive(rest, changes, curC, contactChanges, diffKey, extra);
+        }).catch(function (err) {
+            var msg = (err && err.message) ? err.message : 'Something went wrong.';
+            if (extra.dup) {
+                msg = 'The copy "' + extra.dup.copyName + '" was made, but it was not finished: ' + msg;
+            }
+            var back = extra.budgetCommitted ? Promise.resolve('') : self._giveBackRenames(extra);
+            back.then(function (note) {
+                self._tell('Not Fully Applied', msg + note + '\n\nWhat the app did not confirm was not applied.');
+                if (typeof window.render === 'function') window.render();
+            });
+        });
+        };
+
+        return self._resolveContacts(changes).then(function (res) {
+            var cerr = res.errors.slice();
+            if (!cerr.length) cerr = self._renameClashes(changes, res.renames);
+            if (cerr.length) {
+                return self._tell('Nothing Applied', 'The budget and Contacts were left unchanged because ' + (cerr.length === 1 ? 'this failed:' : 'these failed:') + '\n\n' + cerr.join('\n'));
+            }
+            extra.lookup = res.lookup;
+            extra.renames = res.renames;
+            extra.creates = res.creates;
+            return proceed();
+        });
+    },
+
+    /* The part of an apply that runs on the open budget (the copy, after a duplicate). */
+    _commitOnActive: function (rest, allChanges, curC, contactChanges, diffKey, extra) {
+        var self = this;
+        var todo = (extra.renames || []).filter(function (r) { return !r.rosterDone; });
+        var creates = extra.creates || [];
+        if (!todo.length && !creates.length) return self._commitBody(rest, allChanges, curC, contactChanges, diffKey, extra);
+        /* Contacts first: if the roster cannot be changed the budget is not touched,
+           and if the budget then fails the roster is put back. */
+        return self._renameInRoster(todo).then(function (r) {
+            extra.rosterChanges = r.changes;
+            if (r.failed.length) return { failed: r.failed };
+            return self._createInRoster(creates, extra).then(function (c) {
+                extra.rosterChanges = extra.rosterChanges.concat(c.changes);
+                return { failed: c.failed };
+            });
+        }).then(function (r) {
+            if (r.failed.length) {
+                return self._giveBackRenames(extra).then(function (note) {
+                    self._tell('Nothing Applied', 'Contacts could not change: ' + r.failed.join(', ') + '. The budget was left unchanged.' + note);
+                });
+            }
+            return self._commitBody(rest, allChanges, curC, contactChanges, diffKey, extra);
+        });
+    },
+
+    /* An error thrown while applying: put every budget field and the shared
+       Contacts back, then say plainly what state the app is in. */
+    _failApply: function (budget, backup, extra, err) {
+        var self = this;
+        var mBTLE = window.mBTLE;
+        var budgetBack = true;
+        try {
+            self._restoreRoots(budget, backup);
+            if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+        } catch (eBack) { budgetBack = false; }
+        try { if (typeof window.render === 'function') window.render(); } catch (eRen) { /* screen refresh is best effort */ }
+        return self._giveBackRenames(extra).then(function (note) {
+            var why = (err && err.message) ? err.message : 'Something went wrong.';
+            if (budgetBack) {
+                self._tell('Nothing Applied', 'Something went wrong while applying, so the budget was put back as it was: ' + why + note);
+            } else {
+                self._tell('Not Fully Applied', 'Something went wrong while applying (' + why + ') and the budget could not be fully put back. Check it before you continue, and use the app history if a change is still there.' + note);
+            }
+        });
+    },
+
+    _commitBody: function (rest, allChanges, curC, contactChanges, diffKey, extra) {
+        var self = this;
+        var budget = window.budget;
+        var mBTLE = window.mBTLE;
+        var ctx = { contacts: [], expect: [], lookup: extra.lookup || {}, renames: extra.renames || [], renamed: [] };
+        var backup, errors = [], j;
+
+        try { backup = self._backupJson(budget); } catch (e) { backup = null; }
+        try { extra.sectionOrder = Object.keys(budget.sections); } catch (eOrd) { extra.sectionOrder = null; }
+        if (!backup) {
+            return self._giveBackRenames(extra).then(function (note) {
+                self._tell('Nothing Applied', 'Could not create a safe undo record. No AI changes were applied.' + note);
+            });
+        }
+
+        try {
+            errors = self._runChanges(rest, ctx);
+        } catch (eRun) {
+            return self._failApply(budget, backup, extra, eRun);
+        }
+        var unplaced = (self._unplacedAdds || []).slice();
+        var noops = (ctx.noops || []).slice();
+        self._unplacedAdds = [];
+        if (errors.length) {
+            self._restoreRoots(budget, backup);
+            return self._giveBackRenames(extra).then(function (note) {
+                self._tell('Nothing Applied', 'The budget was left unchanged because ' + (errors.length === 1 ? 'this failed:' : 'these failed:') + '\n\n' + errors.join('\n') + note);
+            });
+        }
+
+        /* Recalculate first, then check that every rate and quantity asked for
+           is really what the budget now says. If not, nothing is kept. */
+        var stuck;
+        try {
+            if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+            stuck = self._checkExpect(ctx.expect);
+        } catch (eRec) {
+            return self._failApply(budget, backup, extra, eRec);
+        }
+        if (stuck.length) {
+            self._restoreRoots(budget, backup);
+            if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+            if (typeof window.render === 'function') window.render();
+            return self._giveBackRenames(extra).then(function (note) {
+                self._tell('Nothing Applied', 'The budget was left unchanged because the app did not keep these:\n\n' + stuck.map(function (t) { return '• ' + t; }).join('\n') + note);
+            });
+        }
+        extra.budgetCommitted = true;
 
         try {
             var thr = self._activeThread();
             if (thr) {
-                thr.changeCount = (parseInt(thr.changeCount, 10) || 0) + changes.length;
+                thr.changeCount = (parseInt(thr.changeCount, 10) || 0) + allChanges.length;
                 thr.updated = Date.now();
             }
         } catch (eThr) { /* ignore thread counter errors */ }
-
         self._stampChatApplied(diffKey);
 
-        if (typeof window.saveBudget === 'function') window.saveBudget();
-        if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
-        /* Suppressed during the apply loop above, so run it once here. Without
-           this a workweek or stage days change would leave the header showing
-           the old value until the next unrelated repaint. */
+        var savePromise = (typeof window.saveBudget === 'function') ? window.saveBudget() : Promise.resolve();
+
+        var record = null;
+        try {
+            record = mBTBudgetSafety.capture(JSON.parse(backup), budget, self._UNDO_ROOTS);
+        } catch (eCap) { record = null; }
+        window._mbtAILastBackup = record ? JSON.stringify(record) : null;
+        window._mbtAILastExtra = extra;
+        if (!record && !extra.dup) {
+            self._tell('Applied, but no undo', 'The changes were applied, but a safe undo record could not be made. Use the app history to reverse them.');
+        }
+
+        if (curC) {
+            extra.currencyBefore = window.displayCurrency;
+            var curErr = self._doCurrency(curC.value);
+            if (curErr) { extra.currencyError = curErr; extra.currencyBefore = null; }
+        }
         if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
         if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
         if (typeof window.render === 'function') window.render();
-
+        if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.updateCard === 'function') {
+            try { window.mBT.features.funding.updateCard(); } catch (eFund) { /* card not on screen */ }
+        }
         if (typeof self.refreshUndoButton === 'function') self.refreshUndoButton();
 
-        if (self._chatSession) {
-            self._chatSession.pendingDiff = null;
-            if (typeof self._chatRender === 'function') self._chatRender();
+        var people = ctx.contacts.slice();
+        for (j = 0; j < contactChanges.length; j++) {
+            if (extra.createdKeys && extra.createdKeys[self._contactKey(contactChanges[j].name)]) continue;
+            people.push(self._contactPayload(contactChanges[j]));
         }
 
-        mBTME.alert('Applied', changes.length === 1
-            ? 'Budget updated.'
-            : (changes.length + ' changes applied. Use the undo arrow in chat to reverse.'));
+        return Promise.resolve(savePromise).then(function () {
+            return self._verifySaved(budget);
+        }).then(function (verify) {
+            return self._renameInOtherBudgets(ctx.renamed, extra).then(function (ob) {
+            return self._saveContacts(people).then(function (cres) {
+                var lines = [];
+                var total = allChanges.length;
+                var ok = [], k, cc, a2;
+                extra.contactChanges = (extra.rosterChanges || []).concat(cres.changes);
+                /* Only changes the app confirmed are counted as applied. */
+                for (k = 0; k < allChanges.length; k++) {
+                    cc = allChanges[k];
+                    a2 = cc.mbt_action;
+                    if (a2 === 'set_display_currency' && extra.currencyError) continue;
+                    if (a2 === 'save_contact' && cres.failed.indexOf(cc.name) !== -1) continue;
+                    if (a2 === 'add_item' && cc._notAdded) continue;
+                    if (noops.indexOf(cc) !== -1) continue;
+                    ok.push(cc);
+                }
+                var n = ok.length;
+                if (extra.dup) lines.push('Made a copy named "' + extra.dup.copyName + '". The original "' + extra.dup.originalName + '" was not changed.');
+                for (k = 0; k < ok.length; k++) {
+                    if (k >= 8) { lines.push('and ' + (n - 8) + ' more'); break; }
+                    lines.push('• ' + self._describeChange(ok[k]));
+                }
+                for (k = 0; k < noops.length; k++) {
+                    if (k >= 8) { lines.push('and ' + (noops.length - 8) + ' more that changed nothing'); break; }
+                    lines.push('Nothing changed: ' + self._describeChange(noops[k]) + ' (the budget already had it that way).');
+                }
+                if (extra.currencyError) lines.push('Not done: ' + extra.currencyError);
+                if (unplaced.length) lines.push('Not added, because no department was chosen: ' + unplaced.join(', ') + '. Ask again and choose a department in the preview.');
+                for (k = 0; k < ctx.renamed.length; k++) lines.push(self._renameLine(ctx.renamed[k]));
+                if (ctx.renamed.length) {
+                    if (ob.changed.length) lines.push('Other saved budgets updated: ' + ob.changed.map(function (b) { return b.name + ' (' + b.lines + (b.lines === 1 ? ' line' : ' lines') + ')'; }).join(', ') + '.');
+                    else if (!ob.skipped.length && !ob.failed.length) lines.push('No other saved budget shows ' + (ctx.renamed.length === 1 ? 'this contact' : 'these contacts') + '.');
+                    if (ob.left) lines.push(ob.left + (ob.left === 1 ? ' linked line in another budget shows' : ' linked lines in other budgets show') + ' a different label and ' + (ob.left === 1 ? 'was' : 'were') + ' left alone.');
+                    if (ob.skipped.length) lines.push('Shared budgets not changed: ' + ob.skipped.join(', ') + '. Open each shared budget and ask again to update its lines.');
+                    if (ob.failed.length) lines.push('Could not update: ' + ob.failed.join(', ') + '. Check ' + (ob.failed.length === 1 ? 'it' : 'them') + ', or open each and ask again.');
+                }
+                var madeNames = [], mk2;
+                for (mk2 in extra.createdKeys) { if (Object.prototype.hasOwnProperty.call(extra.createdKeys, mk2)) madeNames.push(extra.lookup[mk2] ? extra.lookup[mk2].name : mk2); }
+                if (cres.done.length || madeNames.length) lines.push('Saved in Contacts: ' + madeNames.concat(cres.done).join(', ') + '.');
+                if (cres.failed.length) lines.push('Not saved in Contacts: ' + cres.failed.join(', ') + '. Add them in the Contacts tool.');
+                var title = 'Applied';
+                if (n === 0) {
+                    title = noops.length ? 'Nothing Changed' : 'Nothing Applied';
+                    lines.unshift(noops.length ? 'Nothing in the budget changed.' : 'None of the changes could be confirmed, so nothing was applied.');
+                    if (!extra.dup) { window._mbtAILastBackup = null; window._mbtAILastExtra = null; }
+                } else if (!verify.ok) {
+                    title = 'Applied on screen, not confirmed saved';
+                    lines.unshift('The changes show on screen, but the saved copy could not be confirmed (' + verify.why + '). Save again before closing the app.');
+                } else if (n < total) {
+                    title = 'Partly Applied';
+                    lines.unshift('Applied ' + n + ' of ' + total + ' changes and saved. Use the undo arrow in chat to reverse.');
+                } else {
+                    lines.unshift('Applied ' + (n === 1 ? '1 change' : n + ' changes') + ' and saved. Use the undo arrow in chat to reverse.');
+                }
+                if (ob.failed.length && title === 'Applied') title = 'Partly Applied';
+                if (typeof self.refreshUndoButton === 'function') self.refreshUndoButton();
+                if (self._chatSession) {
+                    self._chatSession.pendingDiff = null;
+                    if (typeof self._chatRender === 'function') self._chatRender();
+                }
+                lines.push(self._capLine());
+                self._tell(title, lines.join('\n'));
+            });
+            });
+        });
+    },
+
+    /* The same rename in every other saved budget on this device. The open
+       budget (and the original of a duplicate) is not touched here. A shared
+       budget is left alone, because saving it here would not reach the people
+       it is shared with. Each budget that changes is kept in extra so Undo can
+       put its record back. Never rejects; resolves to { changed, skipped, failed, left }. */
+    _renameInOtherBudgets: function (renamed, extra) {
+        var self = this, out = { changed: [], skipped: [], failed: [], left: 0 };
+        var storage = window.mBTBudgetStorage;
+        var open = window.budget ? window.budget.projectName : '';
+        var original = extra && extra.dup ? extra.dup.originalName : '';
+        var prefix = self._prefix();
+        if (!renamed || !renamed.length) return Promise.resolve(out);
+        if (!storage || typeof storage.load !== 'function' || typeof storage.save !== 'function' || typeof window.getProjectList !== 'function') {
+            return Promise.resolve(out);
+        }
+        extra.otherBudgets = extra.otherBudgets || [];
+        return Promise.resolve(window.getProjectList()).then(function (list) {
+            var chain = Promise.resolve();
+            (list || []).forEach(function (name) {
+                if (name === open || name === original) return;
+                chain = chain.then(function () {
+                    var key = prefix + name, before = null;
+                    return storage.load(key).then(function (rec) {
+                        var cnt = 0, ri, c, after, saveAt;
+                        if (!rec || typeof rec !== 'object' || !rec.sections || typeof rec.sections !== 'object') return null;
+                        if (rec.collab_project_id) { out.skipped.push(name); return null; }
+                        before = JSON.stringify(rec);
+                        for (ri = 0; ri < renamed.length; ri++) {
+                            c = self._renameInBudget(rec, { id: renamed[ri].id, oldName: renamed[ri].oldName, newName: renamed[ri].newName });
+                            cnt += c.crew + c.pos + c.floats;
+                            out.left += c.left;
+                        }
+                        after = JSON.stringify(rec);
+                        if (after === before) return null;
+                        saveAt = new Date().toISOString();
+                        rec.updated_at = saveAt;
+                        return storage.save(key, rec).then(function () {
+                            return storage.load(key);
+                        }).then(function (check) {
+                            if (!check || check.updated_at !== saveAt) throw new Error('not confirmed');
+                            extra.otherBudgets.push({ key: key, name: name, before: before, savedAt: saveAt });
+                            out.changed.push({ name: name, lines: cnt });
+                            try { if (window.mBTSync && window.mBTSync.scheduleAutoSync) window.mBTSync.scheduleAutoSync(); } catch (eSy) { /* cloud sync is best effort */ }
+                        });
+                    }).catch(function () {
+                        out.failed.push(name);
+                        if (!before) return null;
+                        return Promise.resolve().then(function () { return storage.save(key, JSON.parse(before)); }).catch(function () { /* the message tells the user to check it */ });
+                    });
+                });
+            });
+            return chain;
+        }).catch(function () {
+            out.failed.push('the list of saved budgets');
+        }).then(function () { return out; });
+    },
+
+    /* Put other saved budgets back the way they were before the last batch. A
+       budget is only touched if nobody has saved it since the Assistant did, and
+       not while it is the open budget (the screen would overwrite it).
+       Resolves to { restored: [names], kept: [names] }. */
+    _undoOtherBudgets: function (list) {
+        var restored = [], kept = [], chain = Promise.resolve();
+        var storage = window.mBTBudgetStorage;
+        var open = window.budget ? window.budget.projectName : '';
+        if (!list || !list.length) return Promise.resolve({ restored: restored, kept: kept });
+        if (!storage || typeof storage.load !== 'function' || typeof storage.save !== 'function') {
+            return Promise.resolve({ restored: [], kept: list.map(function (b) { return b.name; }) });
+        }
+        list.slice().reverse().forEach(function (b) {
+            chain = chain.then(function () {
+                if (b.name === open) { kept.push(b.name); return null; }
+                return storage.load(b.key).then(function (cur) {
+                    if (!cur || cur.updated_at !== b.savedAt) { kept.push(b.name); return null; }
+                    return storage.save(b.key, JSON.parse(b.before)).then(function () { restored.push(b.name); });
+                });
+            }).catch(function () { kept.push(b.name); });
+        });
+        return chain.then(function () { return { restored: restored, kept: kept }; });
+    },
+
+    /* The Contacts tool's own Edit calls this after it has saved the contact
+       under its new name. It makes the same change the Assistant's
+       rename_contact makes: the open budget, and every other saved budget on
+       this device that is not shared. A shared budget is only reported. One
+       undo, kept apart from the Assistant's, puts all of it back.
+       ent: { id, oldName, newName }. Undo puts back the old name only, not the other details of the edit.
+       Never rejects; resolves to { title, lines: [sentences], undo: true or false }. */
+    renameFromContacts: function (ent) {
+        var self = this, budget = window.budget, mBTLE = window.mBTLE;
+        var rn, extra = { otherBudgets: [] }, backup = null, counts = null, changed = false, rec = null, verify = { ok: true }, mine = null;
+        function plural(k, one, many) { return k + ' ' + (k === 1 ? one : many); }
+        function stop(title, text) { return { title: title, lines: [text], undo: false }; }
+        if (!ent || !ent.id || !self._contactKey(ent.oldName) || !self._contactKey(ent.newName) || String(ent.oldName) === String(ent.newName)) {
+            return Promise.resolve(stop('Not changed', 'There was no new name to carry into the budgets.'));
+        }
+        rn = { id: ent.id, oldName: String(ent.oldName), newName: String(ent.newName) };
+        if (typeof window.mBTFetchMergedContactRoster !== 'function') {
+            return Promise.resolve(stop('Contact saved', 'Budget lines were not changed because Contacts could not be read to check the name.'));
+        }
+        return Promise.resolve(window.mBTFetchMergedContactRoster()).then(function (r) { return r || []; }, function () { return null; }).then(function (roster) {
+            var i, k;
+            if (!roster) return stop('Contact saved', 'Budget lines were not changed because Contacts could not be read to check the name.');
+            for (i = 0; i < roster.length; i++) { if (roster[i] && roster[i].id === rn.id) { mine = roster[i]; break; } }
+            if (!mine) return stop('Contact saved', 'Budget lines were not changed because the saved contact could not be found in Contacts.');
+            for (i = 0; i < roster.length; i++) {
+                if (!roster[i] || roster[i].id === rn.id) continue;
+                k = self._contactKey(roster[i].name);
+                if (k === self._contactKey(rn.newName)) return stop('Contact saved', 'Budget lines were not changed because another contact is already named "' + rn.newName + '". Change the lines by hand, or give one of the two contacts another name.');
+                if (k === self._contactKey(rn.oldName)) return stop('Contact saved', 'Budget lines were not changed because another contact is also named "' + rn.oldName + '", so the lines cannot be told apart. Change the lines by hand.');
+            }
+            var open = !!(budget && budget.sections && typeof budget.sections === 'object');
+            if (open) {
+                try { backup = self._backupJson(budget); } catch (eB) { backup = null; }
+                if (!backup) return stop('Contact saved', 'Budget lines were not changed because a safe undo record could not be made.');
+                try {
+                    counts = self._renameInBudget(budget, rn);
+                    changed = self._backupJson(budget) !== backup;
+                    if (changed && mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+                } catch (eRen) {
+                    try { self._restoreRoots(budget, backup); if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile(); } catch (eBack) { /* the message says what state it is in */ }
+                    try { if (typeof window.render === 'function') window.render(); } catch (eR) { /* screen refresh is best effort */ }
+                    return stop('Contact saved', 'The budget lines could not be changed (' + ((eRen && eRen.message) || 'something went wrong') + '), so the budget was put back as it was. Change the lines by hand.');
+                }
+            }
+            return Promise.resolve(changed && typeof window.saveBudget === 'function' ? window.saveBudget() : null).then(function () {
+                return changed ? self._verifySaved(budget) : { ok: true };
+            }).then(function (v) {
+                verify = v;
+                if (changed) { try { rec = mBTBudgetSafety.capture(JSON.parse(backup), budget, self._UNDO_ROOTS); } catch (eCap) { rec = null; } }
+                return self._renameInOtherBudgets([rn], extra);
+            }).then(function (ob) {
+                var lines = [], title = 'Renamed';
+                window.__mbtCrewRosterCache = null;
+                if (changed || ob.changed.length) {
+                    window._mbtContactRenameUndo = {
+                        projectName: open ? budget.projectName : '',
+                        record: rec ? JSON.stringify(rec) : null,
+                        change: { id: rn.id, name: rn.oldName, created: false, before: (function () { var b = JSON.parse(JSON.stringify(mine)); b.name = rn.oldName; return b; })(), savedAt: mine.updated_at || null },
+                        otherBudgets: extra.otherBudgets
+                    };
+                } else {
+                    window._mbtContactRenameUndo = null;
+                }
+                if (changed) {
+                    if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+                    if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+                    if (typeof window.render === 'function') window.render();
+                    if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.updateCard === 'function') {
+                        try { window.mBT.features.funding.updateCard(); } catch (eFund) { /* card not on screen */ }
+                    }
+                }
+                if (open) {
+                    lines.push('Renamed "' + rn.oldName + '" to "' + rn.newName + '" in Contacts. In this budget: ' + plural(counts.crew, 'crew line', 'crew lines') + ', ' + plural(counts.pos, 'purchase order', 'purchase orders') + ', ' + plural(counts.floats, 'petty cash float', 'petty cash floats') + ' updated; the ledger follows them.');
+                    if (counts.left) lines.push(plural(counts.left, 'linked line shows', 'linked lines show') + ' a different label and ' + (counts.left === 1 ? 'was' : 'were') + ' left alone.');
+                } else {
+                    lines.push('Renamed "' + rn.oldName + '" to "' + rn.newName + '" in Contacts. No budget is open.');
+                }
+                if (ob.changed.length) lines.push('Other saved budgets updated: ' + ob.changed.map(function (b) { return b.name + ' (' + b.lines + (b.lines === 1 ? ' line' : ' lines') + ')'; }).join(', ') + '.');
+                else if (!ob.skipped.length && !ob.failed.length) lines.push('No other saved budget shows this contact.');
+                if (ob.left) lines.push(plural(ob.left, 'linked line in another budget shows', 'linked lines in other budgets show') + ' a different label and ' + (ob.left === 1 ? 'was' : 'were') + ' left alone.');
+                if (ob.skipped.length) lines.push('Shared budgets not changed: ' + ob.skipped.join(', ') + '. Open each shared budget and ask the Assistant to rename "' + rn.oldName + '" to "' + rn.newName + '" there.');
+                if (ob.failed.length) { lines.push('Could not update: ' + ob.failed.join(', ') + '. Check ' + (ob.failed.length === 1 ? 'it' : 'them') + ', or open each and ask the Assistant to rename the contact there.'); title = 'Partly renamed'; }
+                if (!verify.ok) { lines.push('The change shows on screen, but the saved copy could not be confirmed (' + verify.why + '). Save again before closing the app.'); title = 'Renamed, not confirmed saved'; }
+                if (window._mbtContactRenameUndo) lines.push('Undo puts back the old name here and in the budgets.');
+                return { title: title, lines: lines, undo: !!window._mbtContactRenameUndo };
+            });
+        }).catch(function (err) {
+            return stop('Contact saved', 'The budget lines could not be checked (' + ((err && err.message) || 'something went wrong') + '). Change them by hand.');
+        });
+    },
+
+    /* Undo the last rename made from the Contacts tool: the open budget, the
+       other saved budgets and the contact. Each part is only touched if nobody
+       has changed it since. Resolves to { ok, text }. */
+    undoContactRename: function () {
+        var self = this, u = window._mbtContactRenameUndo, budget = window.budget, mBTLE = window.mBTLE;
+        var notes = [], gotContacts = null;
+        if (!u) return Promise.resolve({ ok: false, text: 'There is no contact rename to undo.' });
+        if (u.projectName && (!budget || budget.projectName !== u.projectName)) {
+            return Promise.resolve({ ok: false, text: 'Undo belongs to the budget "' + u.projectName + '". Open that budget first.' });
+        }
+        if (u.record) {
+            var res = mBTBudgetSafety.restore(JSON.parse(u.record), budget);
+            if (!res.ok) return Promise.resolve({ ok: false, text: res.message });
+            try { if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile(); } catch (eRec) { /* the screen refresh below shows the result */ }
+        }
+        return Promise.resolve(u.record && typeof window.saveBudget === 'function' ? window.saveBudget() : null).then(function () {
+            return self._undoContacts([u.change]);
+        }).then(function (cres) {
+            gotContacts = cres;
+            return self._undoOtherBudgets(u.otherBudgets);
+        }).then(function (ores) {
+            window._mbtContactRenameUndo = null;
+            window.__mbtCrewRosterCache = null;
+            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+            if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+            if (typeof window.render === 'function') window.render();
+            if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.updateCard === 'function') {
+                try { window.mBT.features.funding.updateCard(); } catch (eFund) { /* card not on screen */ }
+            }
+            if (gotContacts.restored.length) notes.push(u.change && u.change.rateBack ? 'The contact has its old name and rate again.' : 'The contact has its old name again.');
+            if (gotContacts.kept.length) notes.push('The contact was left as it is because it was changed or removed since.');
+            if (ores.restored.length) notes.push('Other budgets put back: ' + ores.restored.join(', ') + '.');
+            if (ores.kept.length) notes.push('Other budgets left as they are because they were changed since or are open now: ' + ores.kept.join(', ') + '.');
+            return { ok: true, text: 'The rename was reversed' + (u.record ? ' in this budget.' : '.') + (notes.length ? ' ' + notes.join(' ') : '') };
+        }).catch(function (err) {
+            return { ok: false, text: (err && err.message) ? err.message : 'Undo could not finish.' };
+        });
+    },
+
+    /* The Contacts tool's Edit calls this once per save, after the contact is saved.
+       ent: { rename: { id, oldName, newName } or null,
+              rate: { contactId, name, rate, currency, userPrice, userPriceId, userPriceAt, userPriceUserId } or null }.
+       rename is sent only when the name changed, rate only when the user changed the rate
+       field in this edit, so a rename or a phone edit never touches the rates on budget lines.
+       The rename runs first; the rate follows. Undo (undoContactEdit) reverses them in the
+       opposite order. Never rejects; resolves to { title, lines: [sentences], undo } or null. */
+    contactEdit: function (ent) {
+        var self = this, first;
+        window._mbtContactRateUndo = null;
+        window._mbtContactRenameUndo = null;   /* each edit has its own Undo; an older one is never carried along */
+        /* The contact as it was before this edit saved it, with the updated_at the save gave it. Undo writes
+           this copy back, so the contact's own rate returns with the rest (only if nobody saved it since). */
+        function contactBack() {
+            if (!ent || !ent.rate || !ent.before || !ent.before.id || typeof window.mBTFetchMergedContactRoster !== 'function') return Promise.resolve(null);
+            return Promise.resolve(window.mBTFetchMergedContactRoster()).then(function (roster) {
+                var i, cur = null;
+                for (i = 0; i < (roster || []).length; i++) { if (roster[i] && roster[i].id === ent.before.id) { cur = roster[i]; break; } }
+                if (!cur || !cur.updated_at) return null;
+                return { id: ent.before.id, name: ent.before.name, created: false, before: JSON.parse(JSON.stringify(ent.before)), savedAt: cur.updated_at, rateBack: true };
+            }, function () { return null; });
+        }
+        return contactBack().then(function (back) {
+            first = (ent && ent.rename) ? self.renameFromContacts(ent.rename) : Promise.resolve(null);
+            return first.then(function (r) {
+                if (!ent || !ent.rate) return r;
+                return self._applyContactRate(ent.rate).then(function (rr) {
+                    var out = r ? { title: r.title, lines: r.lines.concat(rr.lines), undo: !!(r.undo || rr.undo) } : rr;
+                    if (back) {
+                        if (window._mbtContactRenameUndo) window._mbtContactRenameUndo.change = back;   /* replaces the post-save copy, which still has the new rate */
+                        else if (window._mbtContactRateUndo) window._mbtContactRateUndo.contactChange = back;
+                        if (window._mbtContactRenameUndo || window._mbtContactRateUndo) out.lines = out.lines.concat(['Undo puts back the contact\'s old rate as well.']);
+                    }
+                    return out;
+                });
+            });
+        });
+    },
+
+    /* Sets the new rate on the contact's linked lines in the open budget. */
+    _applyContactRate: function (rt) {
+        var self = this, budget = window.budget, mBTLE = window.mBTLE, router = window.mBTRouter;
+        var label = String(rt.rate) + (rt.currency ? ' ' + rt.currency : '');
+        var backup = null, res = null, rec = null;
+        function plural(k, one, many) { return k + ' ' + (k === 1 ? one : many); }
+        function done(title, lines, undo) { return { title: title, lines: lines, undo: !!undo }; }
+        function reconcile() { try { if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile(); } catch (eRec) { /* the screen refresh shows the result */ } }
+        function repaint() {
+            try { if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders(); } catch (eH) { /* best effort */ }
+            try { if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild(); } catch (eS) { /* best effort */ }
+            try { if (window.mBT && window.mBT.ui && typeof window.mBT.ui.paint === 'function') window.mBT.ui.paint(); else if (typeof window.render === 'function') window.render(); } catch (eP) { /* best effort */ }
+            if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.updateCard === 'function') {
+                try { window.mBT.features.funding.updateCard(); } catch (eFund) { /* card not on screen */ }
+            }
+        }
+        if (!budget || !budget.sections || typeof budget.sections !== 'object') {
+            return Promise.resolve(done('Contact saved', ['No budget is open, so no budget line got the new rate. The contact keeps it.'], false));
+        }
+        if (!router || typeof router.applyContactRate !== 'function') {
+            return Promise.resolve(done('Contact saved', ['Budget lines did not get the new rate because the rate sync is not available. The contact keeps it.'], false));
+        }
+        try { backup = self._backupJson(budget); } catch (eB) { backup = null; }
+        if (!backup) return Promise.resolve(done('Contact saved', ['Budget lines did not get the new rate because a safe undo record could not be made. The contact keeps it.'], false));
+        try {
+            res = router.applyContactRate(budget, { contactId: rt.contactId, name: rt.name, rate: rt.rate, userPrice: rt.userPrice, userPriceId: rt.userPriceId, userPriceAt: rt.userPriceAt, userPriceUserId: rt.userPriceUserId });
+        } catch (eApply) {
+            try { self._restoreRoots(budget, backup); reconcile(); repaint(); } catch (eBack) { /* the message says what state it is in */ }
+            return Promise.resolve(done('Contact saved', ['The new rate could not be put on the budget lines (' + ((eApply && eApply.message) || 'something went wrong') + '), so the budget was put back as it was.'], false));
+        }
+        var changed = self._backupJson(budget) !== backup;
+        var keptText = res.kept ? ' ' + plural(res.kept, 'linked line keeps', 'linked lines keep') + ' its own price and was left alone.' : '';
+        if (!changed) {
+            if (res.set) return Promise.resolve(done('Contact saved', [plural(res.set, 'linked budget line already had', 'linked budget lines already had') + ' the rate ' + label + '. Nothing changed in the budget.' + keptText], false));
+            if (res.kept) return Promise.resolve(done('Contact saved', ['No budget line got the new rate.' + keptText], false));
+            return Promise.resolve(done('Contact saved', ['No budget line is linked to this contact, so no rate was changed in the budget.'], false));
+        }
+        reconcile();
+        return Promise.resolve(typeof window.saveBudget === 'function' ? window.saveBudget() : null).then(function () {
+            return self._verifySaved(budget);
+        }).then(function (v) {
+            var lines = [];
+            try { rec = mBTBudgetSafety.capture(JSON.parse(backup), budget, self._UNDO_ROOTS); } catch (eCap) { rec = null; }
+            window._mbtContactRateUndo = rec ? { projectName: budget.projectName, record: JSON.stringify(rec) } : null;
+            repaint();
+            lines.push(res.set ? 'Rate ' + label + ' set on ' + plural(res.set, 'linked budget line', 'linked budget lines') + ' in this budget.' + keptText : 'Rate ' + label + ' saved on the contact\'s entry in this budget. No crew line is linked to it.' + keptText);
+            if (!v.ok) lines.push('The change shows on screen, but the saved copy could not be confirmed (' + v.why + '). Save again before closing the app.');
+            if (window._mbtContactRateUndo) lines.push('Undo puts the old rates back on those lines.');
+            return done(v.ok ? 'Rate updated in the budget' : 'Rate updated, not confirmed saved', lines, !!window._mbtContactRateUndo);
+        }).catch(function (err) {
+            return done('Contact saved', ['The new rate was put on the budget lines, but the save could not be checked (' + ((err && err.message) || 'something went wrong') + '). Save again before closing the app.'], false);
+        });
+    },
+
+    /* Undo for the Contacts tool's Edit: the rates first, then the rename. Each part is only
+       touched if nobody changed it since. Resolves to { ok, text }. */
+    undoContactEdit: function () {
+        var self = this, u = window._mbtContactRateUndo, budget = window.budget, mBTLE = window.mBTLE;
+        var rateNote = '', step = Promise.resolve(null);
+        if (u) {
+            if (u.projectName && (!budget || budget.projectName !== u.projectName)) {
+                return Promise.resolve({ ok: false, text: 'Undo belongs to the budget "' + u.projectName + '". Open that budget first.' });
+            }
+            var res = mBTBudgetSafety.restore(JSON.parse(u.record), budget);
+            if (!res.ok) return Promise.resolve({ ok: false, text: res.message });
+            try { if (mBTLE && typeof mBTLE.reconcile === 'function') mBTLE.reconcile(); } catch (eRec) { /* the screen refresh shows the result */ }
+            rateNote = 'The old rates are back on the budget lines.';
+            window._mbtContactRateUndo = null;
+            step = Promise.resolve(typeof window.saveBudget === 'function' ? window.saveBudget() : null);
+            if (u.contactChange) {
+                step = step.then(function () { return self._undoContacts([u.contactChange]); }).then(function (c) {
+                    rateNote += c.restored.length ? ' The contact\'s old rate is back as well.' : ' The contact was left as it is because it was changed or removed since.';
+                });
+            }
+        }
+        return step.then(function () {
+            if (window._mbtContactRenameUndo) {
+                return self.undoContactRename().then(function (r) { return { ok: r.ok, text: (rateNote ? rateNote + ' ' : '') + r.text }; });
+            }
+            if (!u) return { ok: false, text: 'There is nothing to undo.' };
+            try { if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders(); } catch (eH) { /* best effort */ }
+            try { if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild(); } catch (eS) { /* best effort */ }
+            try { if (window.mBT && window.mBT.ui && typeof window.mBT.ui.paint === 'function') window.mBT.ui.paint(); else if (typeof window.render === 'function') window.render(); } catch (eP) { /* best effort */ }
+            return { ok: true, text: rateNote };
+        }).catch(function (err) {
+            return { ok: false, text: (err && err.message) ? err.message : 'Undo could not finish.' };
+        });
+    },
+
+    _renameLine: function (r) {
+        function n(k, one, many) { return k + ' ' + (k === 1 ? one : many); }
+        var t = 'Renamed contact "' + r.oldName + '" to "' + r.newName + '"' + (r.rosterDone ? ' (it already had the new name in Contacts)' : ' in Contacts') + '. In this budget: ' +
+            n(r.crew, 'crew line', 'crew lines') + ', ' + n(r.pos, 'purchase order', 'purchase orders') + ', ' + n(r.floats, 'petty cash float', 'petty cash floats') + ' updated; the ledger follows them.';
+        if (r.left) t += ' ' + n(r.left, 'linked line shows', 'linked lines show') + ' a different label and ' + (r.left === 1 ? 'was' : 'were') + ' left alone.';
+        return t;
+    },
+
+    /* Read the saved record back and compare it with the open budget. */
+    _verifySaved: function (budget) {
+        var self = this;
+        var key = self._prefix() + budget.projectName;
+        return Promise.resolve(window.mBTBudgetStorage.load(key)).then(function (stored) {
+            if (!stored) return { ok: false, why: 'no saved copy was found' };
+            try {
+                var live = JSON.parse(JSON.stringify(budget));
+                var rec = mBTBudgetSafety.capture(stored, live, self._UNDO_ROOTS);
+                return rec.fields.length ? { ok: false, why: rec.fields.length + ' saved field' + (rec.fields.length === 1 ? '' : 's') + ' differ' } : { ok: true };
+            } catch (e) { return { ok: false, why: 'the saved copy belongs to a different budget' }; }
+        }).catch(function () { return { ok: false, why: 'the saved copy could not be read' }; });
     },
 
     /* Show or hide the chat's undo button to match whether an undo exists. */
     refreshUndoButton: function () {
         var btn = document.getElementById('aiUndoBtn');
         if (!btn) return;
-        if (window._mbtAILastBackup) btn.classList.remove('hidden');
+        if (window._mbtAILastBackup || (window._mbtAILastExtra && window._mbtAILastExtra.dup)) btn.classList.remove('hidden');
         else btn.classList.add('hidden');
     },
 
-    /* Roll the budget back to the state before the last applied AI change. */
+    /* Roll the budget back to the state before the last applied AI change.
+       One step undoes the whole batch. */
     undoLastSuggestion: function () {
+        var self = this;
         var mBTME = window.mBTME;
-        if (!window._mbtAILastBackup) return mBTME.alert('Undo', 'No AI change to undo.');
+        var extra = window._mbtAILastExtra || {};
+        if (!window._mbtAILastBackup && !extra.dup) return mBTME.alert('Undo', 'No AI change to undo.');
         var budget = window.budget;
+
+        function contactNote(res) {
+            var t = '';
+            if (res && res.restored.length) t += ' Contacts put back: ' + res.restored.join(', ') + '.';
+            if (res && res.kept.length) t += ' Contacts left as they are because they were changed or removed since: ' + res.kept.join(', ') + '.';
+            return t;
+        }
+
+        function otherNote(res) {
+            var t = '';
+            if (res && res.restored.length) t += ' Other budgets put back: ' + res.restored.join(', ') + '.';
+            if (res && res.kept.length) t += ' Other budgets left as they are because they were changed since or are open now: ' + res.kept.join(', ') + '.';
+            return t;
+        }
+
+        function finish(text) {
+            window._mbtAILastBackup = null;
+            window._mbtAILastExtra = null;
+            if (typeof self.refreshUndoButton === 'function') self.refreshUndoButton();
+            if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
+            if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
+            if (typeof window.render === 'function') window.render();
+            if (window.mBT && window.mBT.features && window.mBT.features.funding && typeof window.mBT.features.funding.updateCard === 'function') {
+                try { window.mBT.features.funding.updateCard(); } catch (eF) { /* card not on screen */ }
+            }
+            if (self._chatSession && typeof self._chatRender === 'function') self._chatRender();
+            self._tell('Undone', text);
+        }
+
+        /* A duplicate is undone by going back to the original. The copy stays in
+           the project list, nothing is deleted. */
+        if (extra.dup) {
+            if (budget.projectName !== extra.dup.copyName) return mBTME.alert('Undo Not Applied', 'Undo belongs to the copy "' + extra.dup.copyName + '". Open that budget first.');
+            var dupContacts = null;
+            Promise.resolve(window.saveBudget(true)).then(function () {
+                return window.loadBudget(extra.dup.originalName);
+            }).then(function () {
+                return self._undoContacts(extra.contactChanges);
+            }).then(function (cres) {
+                dupContacts = cres;
+                return self._undoOtherBudgets(extra.otherBudgets);
+            }).then(function (ores) {
+                finish('Back on "' + extra.dup.originalName + '". The copy "' + extra.dup.copyName + '" is still in your project list; remove it from the project menu if you do not want it.' + contactNote(dupContacts) + otherNote(ores));
+            }).catch(function () {
+                mBTME.alert('Undo Not Applied', 'Could not switch back to "' + extra.dup.originalName + '". Open it from the project list.');
+            });
+            return;
+        }
+
         var prev = JSON.parse(window._mbtAILastBackup);
-        budget.sections = prev.sections;
-        budget.contingencyPercentage = prev.contingencyPercentage;
-        budget.settings = prev.settings;
-        budget.targetLock = prev.targetLock;
-        window._mbtAILastBackup = null;
-        if (typeof this.refreshUndoButton === 'function') this.refreshUndoButton();
-        if (typeof window.saveBudget === 'function') window.saveBudget();
-        if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
-        if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
-        if (typeof window.updateAllHeaders === 'function') window.updateAllHeaders();
-        if (typeof window.render === 'function') window.render();
-        if (this._chatSession && typeof this._chatRender === 'function') this._chatRender();
-        mBTME.alert('Undone', 'The last AI change was reversed.');
+        var restored = mBTBudgetSafety.restore(prev, budget);
+        if (!restored.ok) return mBTME.alert('Undo Not Applied', restored.message);
+        /* Sections are keyed by name; put them back in the order they had. */
+        if (extra.sectionOrder && budget.sections) {
+            var ordered = {}, oi;
+            for (oi = 0; oi < extra.sectionOrder.length; oi++) {
+                if (Object.prototype.hasOwnProperty.call(budget.sections, extra.sectionOrder[oi])) ordered[extra.sectionOrder[oi]] = budget.sections[extra.sectionOrder[oi]];
+            }
+            Object.keys(budget.sections).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(ordered, k)) ordered[k] = budget.sections[k]; });
+            budget.sections = ordered;
+        }
+        var steps = Promise.resolve();
+        if (extra.renamedFrom) {
+            steps = steps.then(function () { return self._doRename(extra.renamedFrom, {}); });
+        }
+        var undoneContacts = null;
+        steps.then(function () {
+            if (extra.currencyBefore && extra.currencyBefore !== window.displayCurrency) self._doCurrency(extra.currencyBefore);
+            if (typeof window.saveBudget === 'function') return window.saveBudget();
+        }).then(function () {
+            return self._undoContacts(extra.contactChanges);
+        }).then(function (cres) {
+            undoneContacts = cres;
+            return self._undoOtherBudgets(extra.otherBudgets);
+        }).then(function (ores) {
+            if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+            finish('The last AI change was reversed.' + (extra.renamedFrom ? ' The budget has its old name again.' : '') + contactNote(undoneContacts) + otherNote(ores));
+        }).catch(function (err) {
+            mBTME.alert('Undo Not Applied', (err && err.message) ? err.message : 'Undo could not finish.');
+        });
     },
 
+    /* Inject budget context into chat prompts (default on). Stored in localStorage. */
     /* Inject budget context into chat prompts (default on). Stored in localStorage. */
     isInjectBudgetContext: function () {
         try {
@@ -1109,6 +3523,8 @@ window.mBTAIModule = {
         lbSanitized.contingencyPercentage = Number(lbSanitized.contingencyPercentage) || 10;
         lbSanitized.salesTaxPercentage = Number(lbSanitized.salesTaxPercentage) || 0;
         lbSanitized.discountPercentage = Number(lbSanitized.discountPercentage) || 0;
+        if (Object.prototype.hasOwnProperty.call(lbSanitized, 'productionFeePercentage')) lbSanitized.productionFeePercentage = window.mBT_Finance.normalizeProductionFee(lbSanitized.productionFeePercentage);
+        window.mBT_Finance.reconcile(lbSanitized);
         lbSanitized.documents = Array.isArray(lbSanitized.documents) ? lbSanitized.documents : [];
         lbSanitized.attachments = Array.isArray(lbSanitized.attachments) ? lbSanitized.attachments : [];
         lbSanitized.globalItems = Array.isArray(lbSanitized.globalItems) ? lbSanitized.globalItems : [];
@@ -1155,7 +3571,7 @@ window.mBTAIModule = {
         var schemaGuide = [
             'Return ONLY a valid JSON object - no markdown fences, no explanation, no comments.',
             'Schema: { "projectName": string, "company": string, "startDate": "YYYY-MM-DD",',
-            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number,',
+            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number, "productionFeePercentage": number,',
             '"sections": { "Section Name": { "id": "snake_id", "isOpen": true, "items": [',
             '{ "id": "item_001", "description": string, "quantity": number,',
             '"unit": "Day|Week|Flat|Hour", "rate": number, "multiplier": 1, "actual": 0, "rateType": "negotiable" }',
@@ -1165,6 +3581,7 @@ window.mBTAIModule = {
             'For any role or item that appears on the OPENGATE RATE CARD below, copy its rate exactly, do not estimate it.',
             templateHint ? ('Use a ' + templateHint + ' budget structure.') : ''
         ].join(' ');
+        schemaGuide += '\n' + self._PRODUCTION_FEE_RULES;
         var genRateCtx = self._buildRateContext(userPrompt + ' ' + (templateHint || ''));
         if (genRateCtx) {
             schemaGuide += '\n\n' + genRateCtx;
@@ -1296,13 +3713,9 @@ window.mBTAIModule = {
         if (!sess) return;
         /* Release the microphone. Closing the panel with dictation running would
            otherwise leave the browser recording with no visible indicator. */
-        if (this._recognition) {
-            var rec = this._recognition;
-            rec.onend = null;
-            rec.onresult = null;
-            rec.onerror = null;
-            try { rec.stop(); } catch (eMic) { /* already stopped */ }
-            this._recognition = null;
+        if (this._voiceSession) {
+            try { this._voiceSession.stop(); } catch (eMic) { /* already stopped */ }
+            this._voiceSession = null;
         }
         sess.micOn = false;
         sess.inflight = false;
@@ -1329,95 +3742,75 @@ window.mBTAIModule = {
     },
 
     /*
-     * Voice input via the Web Speech API. Was a visual stub: the button turned
-     * red and the composer went readonly, so it looked frozen and nothing was
-     * ever transcribed.
+     * Voice input. The engines (browser speech, AI provider, on device model)
+     * live in VoiceInput.js; this function only wires one into the chat box.
+     * Dictation keeps listening through pauses until the user taps the mic
+     * again or presses Enter. Either one stops it and leaves the spoken text in
+     * the box, without sending it. Text typed before the mic stays.
      *
-     * Interim results are written straight into the live input element rather
-     * than through _chatRender, because a re-render on every syllable would
-     * fight the user's own typing and lose the caret. The committed text is
-     * kept separately from the interim tail so a correction is never doubled.
+     * Words are written straight into the live input element rather than
+     * through _chatRender, because a re-render on every syllable would fight
+     * the user's own typing and lose the caret.
      */
+    _voicePlaceholder: function (state) {
+        return state === 'transcribing' ? 'Transcribing..' : 'Listening, Enter or the mic stops';
+    },
+
     _startDictation: function () {
         var self = this;
         var sess = self._chatSession;
+        var voice = window.mBTVoice;
+        var started;
+        var typed;
         if (!sess || sess.micOn) return;
-
-        var Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!Ctor) {
-            if (window.mBTME) window.mBTME.alert('Voice Input', 'This browser cannot do speech recognition. Try Chrome, or type your request.');
+        if (!voice) {
+            if (window.mBTME) window.mBTME.alert('Voice Input', 'Voice input did not load, so reload the page or type your request.');
             return;
         }
 
-        var rec;
-        try { rec = new Ctor(); } catch (eNew) {
-            if (window.mBTME) window.mBTME.alert('Voice Input', 'Speech recognition could not start on this device.');
-            return;
-        }
-
-        rec.continuous = true;
-        rec.interimResults = true;
-        try { rec.lang = navigator.language || 'en-US'; } catch (eLang) { /* default */ }
-
-        /* Whatever is already typed stays put, dictation appends to it. */
-        var inputEl = document.getElementById('aiChatInput');
-        var committed = inputEl ? String(inputEl.value || '') : '';
-
-        rec.onresult = function (ev) {
-            var el = document.getElementById('aiChatInput');
-            if (!el) return;
-            var interim = '';
-            for (var i = ev.resultIndex; i < ev.results.length; i++) {
-                var chunk = ev.results[i][0].transcript;
-                if (ev.results[i].isFinal) {
-                    committed = (committed ? committed + ' ' : '') + String(chunk).replace(/^\s+|\s+$/g, '');
-                } else {
-                    interim += chunk;
-                }
-            }
-            el.value = committed + (interim ? (committed ? ' ' : '') + interim : '');
-        };
-
-        rec.onerror = function (ev) {
-            var code = ev && ev.error ? String(ev.error) : 'unknown';
-            self._stopDictation();
-            if (code === 'not-allowed' || code === 'service-not-allowed') {
-                if (window.mBTME) window.mBTME.alert('Microphone Blocked', 'Allow microphone access for this site, then tap the mic again.');
-            } else if (code !== 'aborted' && code !== 'no-speech') {
-                if (window.mBTME) window.mBTME.alert('Voice Input', 'Speech recognition stopped: ' + code);
-            }
-        };
-
-        /* Fires when the engine stops on its own, e.g. a long silence. Keep the
-           UI honest rather than leaving a red mic that is no longer listening. */
-        rec.onend = function () {
-            if (self._chatSession && self._chatSession.micOn) self._stopDictation();
-        };
-
-        try { rec.start(); } catch (eStart) {
-            if (window.mBTME) window.mBTME.alert('Voice Input', 'Could not start the microphone.');
-            return;
-        }
-
-        self._recognition = rec;
+        /* Text already typed stays; the re-render below would clear the box. */
+        typed = document.getElementById('aiChatInput');
+        typed = typed ? String(typed.value || '') : '';
         sess.micOn = true;
+        sess.micState = 'listening';
+        started = voice.start({
+            read: function () {
+                var el = document.getElementById('aiChatInput');
+                return el ? String(el.value || '') : '';
+            },
+            write: function (text) {
+                var el = document.getElementById('aiChatInput');
+                if (el) el.value = text;
+            },
+            notify: function (title, msg) {
+                if (window.mBTME) window.mBTME.alert(title, msg);
+            },
+            state: function (st) {
+                var el = document.getElementById('aiChatInput');
+                if (self._chatSession) self._chatSession.micState = st;
+                if (el) el.placeholder = self._voicePlaceholder(st);
+            },
+            ended: function () {
+                if (self._chatSession && self._chatSession.micOn) self._stopDictation();
+            }
+        });
+        /* An engine that fails at once has already reset the button. */
+        if (!sess.micOn) return;
+        self._voiceSession = started;
         self._chatRender();
         var focusEl = document.getElementById('aiChatInput');
         if (focusEl) {
-            focusEl.value = committed;
+            if (!focusEl.value) focusEl.value = typed;
             focusEl.focus();
         }
     },
 
     _stopDictation: function () {
         var sess = this._chatSession;
-        var rec = this._recognition;
-        if (rec) {
-            rec.onend = null;   /* prevent the stop handler recursing */
-            rec.onresult = null;
-            rec.onerror = null;
-            try { rec.stop(); } catch (eStop) { /* already stopped */ }
-            this._recognition = null;
+        var vs = this._voiceSession;
+        this._voiceSession = null;
+        if (vs) {
+            try { vs.stop(); } catch (eStop) { /* already stopped */ }
         }
         if (!sess) return;
         /* Keep the dictated text across the re-render. */
@@ -1567,15 +3960,6 @@ window.mBTAIModule = {
             if (self._chatSession) self._chatSession.mode = m;
         }
 
-        function readDrawer(key, fallback) {
-            try {
-                var v = localStorage.getItem(key);
-                if (v === '0' || v === 'false') return false;
-                if (v === '1' || v === 'true') return true;
-            } catch (e) {}
-            return fallback;
-        }
-
         function writeDrawer(key, open) {
             try { localStorage.setItem(key, open ? '1' : '0'); } catch (e) {}
         }
@@ -1666,6 +4050,70 @@ window.mBTAIModule = {
             try {
                 return localStorage.getItem('mbt_ai_chat_model_' + provider) || provider;
             } catch (e) { return provider; }
+        }
+
+        /* Header engine picker. Provider ids come from mBTAssistant ENDPOINTS so
+           the header can never offer a provider the send path cannot call.
+           Models come from the cache the Settings / Connections fetch already
+           wrote; the header never fetches. Change is applied on 'change' at the
+           root, never on click: bindRootEvents preventDefaults every
+           data-chat-act, which would kill a native dropdown. */
+        function providerIds() {
+            var ma = window.mBTAssistant;
+            var ids = [];
+            var k;
+            if (ma && ma.ENDPOINTS) {
+                for (k in ma.ENDPOINTS) {
+                    if (Object.prototype.hasOwnProperty.call(ma.ENDPOINTS, k)) ids.push(k);
+                }
+            }
+            if (!ids.length) {
+                ids = ['gemini', 'openai', 'deepseek', 'grok', 'anthropic', 'openrouter', 'lmstudio'];
+            }
+            return ids;
+        }
+
+        function providerLabel(p) {
+            var ma = window.mBTAssistant;
+            if (ma && typeof ma.getProviderLabel === 'function') return ma.getProviderLabel(p);
+            return p;
+        }
+
+        function cachedChatModels(provider) {
+            var list = [];
+            try { list = JSON.parse(localStorage.getItem('mbt_cached_chat_models_' + provider) || '[]'); } catch (e) {}
+            if (!Array.isArray(list)) list = [];
+            return list;
+        }
+
+        function providerOptionsHtml(selected) {
+            var ids = providerIds();
+            var out = '';
+            var i, p;
+            for (i = 0; i < ids.length; i++) {
+                p = ids[i];
+                out += '<option value="' + esc(p) + '"' + (p === selected ? ' selected' : '') + '>' + esc(providerLabel(p)) + '</option>';
+            }
+            return out;
+        }
+
+        /* Header selects, provider then model for that provider. If the cache for
+           the provider is empty, the stored model is the only option so the pick
+           in view still matches what the next turn will call. */
+        function engineSelectsHtml(isPip) {
+            var provider = self.getSelectedProvider();
+            var current = modelName();
+            var models = cachedChatModels(provider);
+            var cls = isPip
+                ? 'max-w-[110px] bg-transparent border-none text-[9px] font-black text-slate-600 outline-none cursor-pointer'
+                : 'max-w-[140px] bg-transparent border-none text-[10px] font-black text-slate-600 outline-none cursor-pointer';
+            if (!models.length && current) models = [{ id: current, name: current }];
+            return '<select id="aiEngineProvider' + (isPip ? 'Pip' : '') + '" data-chat-change="engine-provider" title="AI provider" class="' + cls + '">' +
+                    providerOptionsHtml(provider) +
+                '</select>' +
+                '<select id="aiEngineModel' + (isPip ? 'Pip' : '') + '" data-chat-change="engine-model" title="Chat model" class="' + cls + ' truncate">' +
+                    modelOptionsHtml(models, current) +
+                '</select>';
         }
 
         function liveDotClass() {
@@ -1861,6 +4309,7 @@ window.mBTAIModule = {
                         }
                     }
                 }
+                if (msg.role === 'assistant') actionBtn += self._assistantNotes(msg.content, diff, !!msg._applied, esc);
                 roleCls = msg.role === 'user'
                     ? (padL + ' ' + bubblePad + ' rounded-xl bg-blue-50 text-right')
                     : (padR + ' ' + bubblePad + ' rounded-xl bg-white border border-slate-100');
@@ -1935,12 +4384,22 @@ window.mBTAIModule = {
                 ? ('Preview ' + changes.length + ' changes')
                 : 'Preview change';
             var list = [];
-            var i, maxShow, more;
+            var i, maxShow, more, wi;
+            var warnCls = 'mt-1 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-800';
+            var warn = self._previewWarnings(changes, self._chatSession && self._chatSession.pendingDiff ? self._chatSession.pendingDiff.diffKey : '');
             maxShow = isPip ? 10 : 20;
+            for (wi = 0; wi < warn.top.length; wi++) list.push('<div data-assistant-warning="1" class="' + warnCls + '">' + esc(warn.top[wi]) + '</div>');
             for (i = 0; i < changes.length && i < maxShow; i++) {
+                var deptPick = '';
+                if (changes[i].mbt_action === 'add_item' && window.mBTBatch2) {
+                    var curDept = mBTBatch2.groups[changes[i].department] ? changes[i].department : mBTBatch2.classify({ description: changes[i].description });
+                    deptPick = '<div class="mt-1.5"><select data-chat-change="dept-change" data-idx="' + i + '" aria-label="Department for ' + esc(changes[i].description || 'this line') + '" class="w-full p-1.5 border border-slate-200 rounded-lg text-[10px] font-bold bg-white">' +
+                        mBTBatch2.pickerOptions(esc, curDept || false) + '</select></div>';
+                }
                 list.push(
                     '<div class="' + (isPip ? 'px-2 py-1.5 rounded-lg' : 'px-3.5 py-2.5 rounded-xl') + ' bg-white border border-slate-100 text-[10px] font-bold text-slate-700">' +
-                        esc((i + 1) + '. ' + self._describeChange(changes[i])) +
+                        esc((i + 1) + '. ' + self._describeChange(changes[i])) + deptPick +
+                        (warn.per[i] || []).map(function (w) { return '<div data-assistant-warning="1" class="' + warnCls + '">' + esc(w) + '</div>'; }).join('') +
                     '</div>'
                 );
             }
@@ -1984,17 +4443,14 @@ window.mBTAIModule = {
                 ? (sideBtn + ' shrink-0 relative flex items-center justify-center text-rose-600 bg-rose-50')
                 : (sideBtn + ' shrink-0 flex items-center justify-center text-slate-400 hover:text-slate-600');
             var micExtra = micOn ? '<span class="absolute inset-0 rounded-lg ring-2 ring-rose-400/50 animate-pulse"></span>' : '';
-            var placeholder = micOn ? 'Listening, speak now' : 'Ask about rates, logistics, or risks..';
+            var placeholder = micOn ? self._voicePlaceholder(sess.micState) : 'Ask about rates, logistics, or risks..';
             var phCls = micOn ? 'placeholder:text-rose-400' : 'placeholder:text-slate-300';
-            /* Hide the mic entirely where the browser cannot do speech input,
-               rather than offering a control that can never work. */
-            var micSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+            /* Always shown. Where the browser has no speech engine the tap says
+               what to do instead of leaving a missing button. */
             var micTitle = micOn ? 'Stop listening' : 'Voice input';
-            var micHtml = micSupported
-                ? ('<button type="button" data-chat-act="mic" title="' + micTitle + '" class="' + micCls + '">' +
+            var micHtml = '<button type="button" data-chat-act="mic" title="' + micTitle + '" class="' + micCls + '">' +
                        micExtra + icon('mic', '') +
-                   '</button>')
-                : '';
+                   '</button>';
             var attRow = '';
             var pend = sess.pendingAttachment;
             var extracts = [];
@@ -2049,7 +4505,6 @@ window.mBTAIModule = {
         }
 
         function renderHeaderHtml(isPip) {
-            var m = modelName();
             var undoHidden = window._mbtAILastBackup ? '' : ' hidden';
             /* Uniform hit area and icon size. Gear differs by colour only (slate-600). */
             var hdrBtn = 'p-1.5 rounded';
@@ -2067,7 +4522,7 @@ window.mBTAIModule = {
                 grip +
                 '<h3 class="text-[11px] font-black uppercase tracking-widest text-slate-800">Assistant</h3>' +
                 '<span class="w-2 h-2 rounded-full ' + liveDotClass() + ' shrink-0" title="Connection status"></span>' +
-                (isPip ? '' : ('<span class="text-slate-400 shrink-0">' + headerIcon('chat', '', isPip) + '</span><span class="text-[10px] font-black text-slate-600 truncate max-w-[140px]">' + esc(m) + '</span>')) +
+                (isPip ? '' : ('<span class="text-slate-400 shrink-0">' + headerIcon('chat', '', isPip) + '</span>' + engineSelectsHtml(isPip))) +
                 '<div class="flex-1"></div>' +
                 (isPip ? '' : '<span class="text-[8px] font-black uppercase tracking-widest text-slate-400 mr-1 hidden lg:inline">Sees your budget &amp; OpenGate rates</span>') +
                 drawerBtns +
@@ -2085,7 +4540,7 @@ window.mBTAIModule = {
             if (!isPip) return '';
             return '<div class="px-2.5 py-1.5 bg-slate-50/70 border-b border-slate-100 flex items-center gap-2 shrink-0">' +
                 '<span class="text-slate-400 shrink-0">' + icon('chat', '') + '</span>' +
-                '<span class="text-[9px] font-black text-slate-600 truncate">' + esc(modelName()) + '</span>' +
+                engineSelectsHtml(isPip) +
                 '<div class="flex-1"></div>' +
                 '<span class="text-[8px] font-bold text-slate-400">Sees your budget</span>' +
             '</div>';
@@ -2399,6 +4854,50 @@ window.mBTAIModule = {
             return out;
         }
 
+        function voiceNoteText(mode) {
+            var v = window.mBTVoice;
+            var pi;
+            if (!v) return 'Voice input did not load.';
+            if (mode === 'provider') {
+                pi = v.providerInfo();
+                if (!pi.supported) return pi.reason + '.';
+                if (!pi.ok) return pi.reason + '.';
+                return 'Sends each spoken sentence to ' + pi.label + ' as a short audio clip, ' + pi.price + '. Words appear after each pause.';
+            }
+            if (mode === 'device') {
+                if (v.deviceReady()) return 'Ready. Speech is turned into text on this device and never leaves it. Words appear after each pause.';
+                return 'Not downloaded yet. Tap Download voice model (about ' + v.DEVICE_MB + ' MB, once).';
+            }
+            return 'Uses the speech service built into this browser. If this browser has none, or it stops working, the mic uses the downloaded voice model or your AI provider instead when one is ready.';
+        }
+
+        function renderVoiceBoxHtml() {
+            var v = window.mBTVoice;
+            var mode;
+            var ready;
+            var provInfo;
+            var provLabel;
+            if (!v) return '';
+            mode = v.getMode();
+            ready = v.deviceReady();
+            provInfo = v.providerInfo();
+            provLabel = provInfo.supported ? 'AI provider (' + provInfo.label + ')' : 'AI provider (not available for ' + provInfo.label + ')';
+            return '<div class="p-3 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2">' +
+                '<label class="block text-[8px] font-black uppercase tracking-widest text-slate-400" for="aiVoiceMode">Voice input</label>' +
+                '<select id="aiVoiceMode" data-chat-change="voice-mode" class="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100">' +
+                    '<option value="browser"' + (mode === 'browser' ? ' selected' : '') + '>Browser speech (default)</option>' +
+                    '<option value="provider"' + (mode === 'provider' ? ' selected' : '') + '>' + esc(provLabel) + '</option>' +
+                    '<option value="device"' + (mode === 'device' ? ' selected' : '') + '>On this device (' + v.DEVICE_MB + ' MB download)</option>' +
+                '</select>' +
+                '<p id="aiVoiceNote" class="text-[8px] font-bold text-slate-400">' + esc(voiceNoteText(mode)) + '</p>' +
+                '<div class="flex gap-2">' +
+                    (ready
+                        ? '<button type="button" data-chat-act="voice-remove" class="flex-1 py-2 rounded-lg bg-white border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50">Remove voice model</button>'
+                        : '<button type="button" data-chat-act="voice-download" class="flex-1 py-2 rounded-lg bg-white border border-blue-200 text-[9px] font-black uppercase tracking-widest text-blue-700 hover:bg-blue-50">Download voice model</button>') +
+                '</div>' +
+            '</div>';
+        }
+
         function renderSettingsSheetHtml() {
             var provider = self.getSelectedProvider();
             var chatModels = [];
@@ -2419,6 +4918,7 @@ window.mBTAIModule = {
             var webhook = '';
             try { webhook = localStorage.getItem((window.storageKeyPrefix || '') + 'cloudWebhook') || ''; } catch (e5) {}
             var prefix = window.storageKeyPrefix || '';
+            var voiceHtml = renderVoiceBoxHtml();
 
             return '<div id="aiChatSettings" class="absolute inset-0 z-20 bg-white flex flex-col">' +
                 '<div class="px-4 py-3 border-b border-slate-100 flex items-center gap-2 shrink-0">' +
@@ -2459,6 +4959,7 @@ window.mBTAIModule = {
                         '<input type="checkbox" id="aiChatInjectBudget" ' + (injectOn ? 'checked' : '') + ' class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" title="When off, chat is a bare conversation without the budget snapshot">' +
                     '</label>' +
                     '<p class="text-[8px] font-bold text-slate-400 -mt-2">Default is on. Turn off for a bare conversation with no budget snapshot in the prompt.</p>' +
+                    voiceHtml +
                     '<div class="p-3 rounded-xl border border-violet-100 bg-violet-50/40 space-y-2">' +
                         '<div class="text-[9px] font-black uppercase tracking-widest text-violet-700">Actions</div>' +
                         '<button type="button" data-chat-act="run-analytics" class="w-full py-2.5 rounded-lg bg-white border border-indigo-100 text-[9px] font-black uppercase tracking-widest text-indigo-700 hover:bg-indigo-50">Run budget analytics</button>' +
@@ -2838,26 +5339,7 @@ window.mBTAIModule = {
                inline in the prompt; images go as a vision part when the provider
                layer supports one. */
             var sendAtt = att;
-            var skipExtractId = '';
-            var exRec = null;
-            var exList;
-            var exi;
-            if (sendAtt && sendAtt.extractId) {
-                try {
-                    exList = self._ensureChatExtracts();
-                    for (exi = 0; exi < exList.length; exi++) {
-                        if (exList[exi] && exList[exi].id === sendAtt.extractId) {
-                            exRec = exList[exi];
-                            break;
-                        }
-                    }
-                } catch (eExFind) { exRec = null; }
-                if (exRec && !exRec.loaded) {
-                    sendAtt = null;
-                } else if (sendAtt && sendAtt.kind === 'image') {
-                    skipExtractId = sendAtt.extractId;
-                }
-            }
+            var skipExtractId = (sendAtt && sendAtt.kind === 'image' && sendAtt.extractId) ? sendAtt.extractId : '';
             if (!isRetry) sess.pendingAttachment = null;
             if (sendAtt && sendAtt.kind === 'text' && sendAtt.text && !sendAtt.extractId) {
                 finalPrompt = finalPrompt +
@@ -2867,7 +5349,7 @@ window.mBTAIModule = {
                     ']\n' + sendAtt.text;
             }
 
-            var chatSystemMsg = self.config.systemContext + '\n\n' + self.config.chatActionPrompt;
+            var chatSystemMsg = self.config.systemContext + '\n\n' + self._buildActionPrompt();
             if (self.isInjectBudgetContext()) {
                 var budgetCtx = self._buildBudgetContext();
                 var rateCtx = self._buildRateContext(text);
@@ -2906,6 +5388,17 @@ window.mBTAIModule = {
                     self._chatRender();
                     return;
                 }
+                if (sendAtt && sendAtt.kind === 'image' && sendAtt.extractId) {
+                    var _visionExList = self._ensureChatExtracts();
+                    var _vexi;
+                    for (_vexi = 0; _vexi < _visionExList.length; _vexi++) {
+                        if (_visionExList[_vexi] && _visionExList[_vexi].id === sendAtt.extractId) {
+                            _visionExList[_vexi].text = String(response).substring(0, 24000);
+                            break;
+                        }
+                    }
+                    if (typeof window.saveBudget === 'function') window.saveBudget(true);
+                }
                 activeChat.push({ role: 'assistant', content: response });
                 if (persist && activeThread) {
                     self._touchThread(activeThread);
@@ -2922,7 +5415,8 @@ window.mBTAIModule = {
                 if (!self._chatSession || self._chatSession.genId !== myGen) return;
                 self._chatSession.inflight = false;
                 self._chatSession.lastFailedText = text;
-                self._chatSession.lastFailedMsg = (err && err.message) || 'Request failed.';
+                console.error('mBT chat send failed:', err);
+                self._chatSession.lastFailedMsg = self.plainError(err);
                 self._chatRender();
             });
         }
@@ -2931,6 +5425,57 @@ window.mBTAIModule = {
             var sess = self._chatSession;
             if (!sess) return;
             var id, thr, changes, ma, p, val, wh, prefix, appliedKey, extractId;
+
+            /* Header engine picker. Applied on change, not on the Settings Save
+               button; both writes go down the same path Settings already uses so
+               nothing new owns the stored model. */
+            if (act === 'voice-mode') {
+                if (window.mBTVoice && el) window.mBTVoice.setMode(el.value);
+                self._chatRender();
+                return;
+            }
+            if (act === 'voice-download') {
+                if (!window.mBTVoice) return;
+                el.disabled = true;
+                var vNote = document.getElementById('aiVoiceNote');
+                if (vNote) vNote.textContent = 'Downloading the voice model, 0%..';
+                window.mBTVoice.downloadDevice(function (pct) {
+                    var n2 = document.getElementById('aiVoiceNote');
+                    if (n2) n2.textContent = 'Downloading the voice model, ' + pct + '%..';
+                }).then(function () {
+                    if (self._chatSession) self._chatRender();
+                }, function () {
+                    var n3 = document.getElementById('aiVoiceNote');
+                    if (n3) n3.textContent = 'The voice model did not download, so check the internet connection and tap Download voice model again.';
+                    el.disabled = false;
+                });
+                return;
+            }
+            if (act === 'voice-remove') {
+                if (!window.mBTVoice) return;
+                window.mBTVoice.removeDevice().then(function () {
+                    if (self._chatSession) self._chatRender();
+                });
+                return;
+            }
+            if (act === 'engine-provider') {
+                val = el && el.value;
+                if (!val) return;
+                self.saveSelectedProvider(val);
+                self._chatRender();
+                return;
+            }
+            if (act === 'engine-model') {
+                val = el && el.value;
+                if (!val) return;
+                p = self.getSelectedProvider();
+                ma = window.mBTAssistant;
+                /* setChatModel also dual-writes the legacy OpenRouter key. */
+                if (ma && typeof ma.setChatModel === 'function') ma.setChatModel(p, val);
+                else try { localStorage.setItem('mbt_ai_chat_model_' + p, val); } catch (eEng) {}
+                self._chatRender();
+                return;
+            }
 
             if (act === 'close' || act === 'backdrop') {
                 if (act === 'backdrop' && sess.mode === 'pip') return;
@@ -3066,11 +5611,16 @@ window.mBTAIModule = {
                 return;
             }
             if (act === 'send') {
-                var inp = document.getElementById('aiChatInput');
-                var toSend = inp ? inp.value : '';
-                /* Read the text first, then release the mic. Sending ends the
-                   utterance, so leaving it live would dictate into an empty box. */
+                /* Release the mic first (the typed and spoken words stay in the box),
+                   so nothing is dictated into the box after it is cleared. */
                 if (sess.micOn) self._stopDictation();
+                var inp = document.getElementById('aiChatInput');
+                /* Spoken words still being turned into text would be left behind. */
+                if (window.mBTVoice && window.mBTVoice.pending() > 0) {
+                    if (inp) inp.placeholder = 'Transcribing, then press Enter again';
+                    return;
+                }
+                var toSend = inp ? inp.value : '';
                 doSend(toSend);
                 return;
             }
@@ -3141,6 +5691,16 @@ window.mBTAIModule = {
                 var dk = el.getAttribute('data-diff-key');
                 var d = window._mbtAIDiffStore && window._mbtAIDiffStore[dk];
                 if (d) self.applySuggestion(d, dk);
+                return;
+            }
+            if (act === 'dept-change') {
+                if (sess.pendingDiff && sess.pendingDiff.changes) {
+                    var changeAt = sess.pendingDiff.changes[parseInt(el.getAttribute('data-idx'), 10)];
+                    if (changeAt) {
+                        if (el.value) changeAt.department = el.value; else delete changeAt.department;
+                        self._chatRender();
+                    }
+                }
                 return;
             }
             if (act === 'confirm-close' || act === 'confirm-cancel') {
@@ -3363,9 +5923,24 @@ window.mBTAIModule = {
                 handleAction(act, el, e);
             };
 
+            /* Native dropdowns are driven here, not through root.onclick: that
+               handler preventDefaults every data-chat-act and would stop the
+               select from opening. No preventDefault on change. */
+            root.onchange = function (e) {
+                var t = e.target;
+                if (!t || t.nodeType !== 1) return;
+                var cAct = t.getAttribute && t.getAttribute('data-chat-change');
+                if (!cAct) return;
+                handleAction(cAct, t, e);
+            };
+
             root.onkeydown = function (e) {
                 if (e.key === 'Enter' && e.target && e.target.id === 'aiChatInput') {
                     e.preventDefault();
+                    if (e.isComposing) return;
+                    /* While listening, Enter ends the dictation and keeps the words
+                       in the box. The next Enter sends. */
+                    if (self._chatSession && self._chatSession.micOn) { self._stopDictation(); return; }
                     handleAction('send', e.target, e);
                 }
                 if (e.key === 'Escape') {
@@ -3402,9 +5977,8 @@ window.mBTAIModule = {
                         self._chatSession.pendingAttachment = att;
                         if (typeof self._chatRender === 'function') self._chatRender();
                     }
-                    /* pdf.worker.min.js does not ship in src/lib and this build
-                       ignores disableWorker, so the fake worker 404s. Name that
-                       instead of blaming the user's file. */
+                    /* Worker is src/lib/pdf.worker.min.js. If it 404s or
+                       rejects, say the build cannot read PDFs, not the file. */
                     function failPdf(err) {
                         var m = (err && err.message) || '';
                         if (/worker/i.test(m)) {
@@ -3442,13 +6016,11 @@ window.mBTAIModule = {
                             var buf = ev && ev.target && ev.target.result;
                             if (!buf) return fail('Could not read that PDF.');
                             try {
-                                /* No worker file ships with the bundle, so run inline. */
                                 if (window.pdfjsLib.GlobalWorkerOptions) {
-                                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+                                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = './src/lib/pdf.worker.min.js';
                                 }
                                 window.pdfjsLib.getDocument({
                                     data: new Uint8Array(buf),
-                                    disableWorker: true,
                                     isEvalSupported: false
                                 }).promise.then(function (pdf) {
                                     var MAX_PAGES = 20;
@@ -3579,13 +6151,10 @@ window.mBTAIModule = {
         }
 
         var mode = readMode();
-        var leftOpen = readDrawer('mbt_chat_drawer_left', true);
-        var rightOpen = readDrawer('mbt_chat_drawer_right', true);
-        /* Mobile always opens to chat only; do not overwrite stored desktop drawer prefs. */
-        if (isMobileChatLayout()) {
-            leftOpen = false;
-            rightOpen = false;
-        }
+        /* Chat always opens with both side drawers closed; stored prefs are kept
+           for other uses but never restore an open drawer on mount. */
+        var leftOpen = false;
+        var rightOpen = false;
         var acInit = activeThreadAndChat();
 
         self._chatSession = {
@@ -3714,9 +6283,8 @@ window.mBTAIModule = {
                 }
             }, 1500);
         }).catch(function (err) {
-            var em = (err && err.message) || 'AI request failed. Check your API key and connection.';
-            if (em === 'AI_RATE_LIMITED') em = 'Wait a few seconds before another AI request.';
-            mBTME.alert('Analysis Failed', em);
+            console.error('mBT sourcing analysis failed:', err);
+            mBTME.alert('Analysis Failed', self.plainError(err));
         });
     },
 

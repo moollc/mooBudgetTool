@@ -67,12 +67,14 @@
             return Promise.resolve(_cache);
         }
         return window.localforage.getItem(key).then(function (data) {
+            if (key !== _activeKey) return _cache;
             _cache = (data && data.entries) ? data : { entries: [], projectName: projectName };
             _cache.projectName = projectName;
             _gcRetention();
             _emit();
             return _cache;
         }).catch(function () {
+            if (key !== _activeKey) return _cache;
             _cache = { entries: [], projectName: projectName };
             return _cache;
         });
@@ -204,8 +206,12 @@
         var wantTypes = opts.types || null; /* null = all */
         var entries = (_cache && _cache.entries) || [];
 
-        /* Priority order: treatment > script > budget-snapshot > template-fill > attachment > receipt (newest first inside type) */
-        var PRIORITY = { 'treatment': 0, 'script': 1, 'budget-snapshot': 2, 'template-fill': 3, 'attachment': 4, 'receipt': 5 };
+        /* Priority order: treatment > script > source > budget-snapshot > template-fill > attachment > receipt (newest first inside type).
+           'source' is Source-modal paste (mBTAssistant.addSource records carry no type).
+           It sits with treatment/script, not at the default 99: the caller clips the
+           rendered fragment, and a fat budget snapshot would otherwise sort pasted
+           text past the cut so it reached the model as nothing at all. */
+        var PRIORITY = { 'treatment': 0, 'script': 1, 'source': 2, 'budget-snapshot': 3, 'template-fill': 4, 'attachment': 5, 'receipt': 6 };
 
         var filtered = entries.filter(function (e) { return !wantTypes || wantTypes.indexOf(e.type) > -1; });
         filtered.sort(function (a, b) {
@@ -250,12 +256,15 @@
         var headings = {
             'treatment':       'TREATMENT',
             'script':          'SCRIPT',
+            'source':          'SOURCE',
             'budget-snapshot': 'BUDGET SNAPSHOT',
             'template-fill':   'RECENT DOCUMENT FILLS',
             'attachment':      'ATTACHMENTS',
             'receipt':         'RECEIPTS / LEDGER ENTRIES'
         };
-        var order = ['treatment', 'script', 'budget-snapshot', 'template-fill', 'attachment', 'receipt'];
+        /* A type missing from this list is selected by query() and then dropped here,
+           so 'source' must be listed or the PRIORITY above buys nothing. */
+        var order = ['treatment', 'script', 'source', 'budget-snapshot', 'template-fill', 'attachment', 'receipt'];
         for (var i = 0; i < order.length; i++) {
             var t = order[i];
             if (r.slices[t] && r.slices[t].length) {
@@ -309,7 +318,7 @@
             var po = pos[i] || {};
             if (!po.id && !po.poNumber) continue;
             var poText = 'PO #' + (po.poNumber || po.id) + ' | vendor: ' + (po.vendor || '—') +
-                         ' | amount: ' + (po.amount || 0) + ' ' + (budget.currency || 'JMD') +
+                         ' | amount: ' + (po.amount || 0) + ' ' + (po.currency || budget.currency || 'JMD') +
                          ' | date: ' + (po.date || po.createdAt || '') +
                          ' | status: ' + (po.status || 'pending') +
                          ' | desc: ' + (po.description || '');
@@ -328,7 +337,7 @@
             var e = pc[j] || {};
             if (!e.id) continue;
             var pcText = 'PettyCash | ' + (e.date || '') + ' | ' + (e.description || '—') +
-                         ' | ' + (e.amount || 0) + ' ' + (budget.currency || 'JMD') +
+                         ' | ' + (e.amount || 0) + ' ' + (e.currency || budget.currency || 'JMD') +
                          ' | payee: ' + (e.payee || '');
             items.push({
                 type: 'receipt',
@@ -345,29 +354,44 @@
        Phase 175: reads from mBTAssistant.getSources() first (unified source store),
        falls back to legacy localStorage keys for users upgrading from older builds. */
     function ingestSidebar() {
-        var items = [];
+        var items = [], active = _activeKey;
         try {
-            if (window.mBTAssistant && typeof mBTAssistant.getSources === 'function') {
-                var srcs = mBTAssistant.getSources();
-                for (var si = 0; si < srcs.length; si++) {
-                    var s = srcs[si];
-                    if (s && (s.text || '').trim()) {
-                        items.push({ type: s.type || 'source', id: s.id || ('src_' + si), name: s.title || s.name || 'Source', text: s.text });
-                    }
-                }
+            var unified = window.mBTAssistant && typeof mBTAssistant.getSources === 'function';
+            if (unified) {
+                (mBTAssistant.getSources() || []).forEach(function (s, i) {
+                    if (s && String(s.text || '').trim()) items.push({ type: s.type || 'source', id: s.id || ('src_' + i), name: s.title || s.name || 'Source', text: s.text });
+                });
+            } else {
+                var treatment = localStorage.getItem('mbt_ai_treatment') || '';
+                var script = localStorage.getItem('mbt_ai_script') || '';
+                if (treatment.trim()) items.push({ type: 'treatment', id: 'treatment_active', name: 'Treatment', text: treatment });
+                if (script.trim()) items.push({ type: 'script', id: 'script_active', name: 'Script', text: script });
             }
-            /* Legacy fallback — covers builds before mBTAssistant migration */
-            if (!items.length) {
-                var tr = localStorage.getItem('mbt_ai_treatment') || '';
-                if (tr.trim()) items.push({ type: 'treatment', id: 'treatment_active', name: 'Treatment', text: tr });
-                var sc = localStorage.getItem('mbt_ai_script') || '';
-                if (sc.trim()) items.push({ type: 'script', id: 'script_active', name: 'Script', text: sc });
-            }
-            var att = JSON.parse(localStorage.getItem('mbt_ai_attachments') || '{}');
-            if (att.treatment && att.treatment.text) items.push({ type: 'attachment', id: 'att_treatment', name: att.treatment.name || 'treatment file', text: att.treatment.text, meta: { field: 'treatment' } });
-            if (att.script && att.script.text) items.push({ type: 'attachment', id: 'att_script', name: att.script.name || 'script file', text: att.script.text, meta: { field: 'script' } });
-        } catch (e) { /* storage unavailable */ }
-        return addBatch(items).then(function (added) { return added.length; });
+            /* Attachments still have their own existing store. Do not resurrect legacy
+               treatment or script text, but keep attachments that still exist there. */
+            var attachments = JSON.parse(localStorage.getItem('mbt_ai_attachments') || '{}');
+            ['treatment', 'script'].forEach(function (key) {
+                var a = attachments[key];
+                if (a && a.text) items.push({ type: 'attachment', id: 'att_' + key, name: a.name || key, text: a.text });
+            });
+        } catch (err) { return Promise.reject(new Error('Project sources could not be read: ' + err.message)); }
+        var mirrored = ['source', 'treatment', 'script', 'attachment'];
+        if (_cache && _cache.entries) {
+            _cache.entries = _cache.entries.filter(function (entry) {
+                /* These are derived mirrors, not historical master records. Rebuild
+                   from the current stores so edited text cannot survive under an old hash. */
+                return mirrored.indexOf(entry.type) < 0;
+            });
+            _emit();
+        }
+        var chain = _persist(active, _cache);
+        items.forEach(function (item) {
+            chain = chain.then(function () {
+                if (active !== _activeKey) throw new Error('Project changed while refreshing sources.');
+                return add(item);
+            });
+        });
+        return chain.then(function () { return items.length; });
     }
 
     /* --- Broadcast changes to all tool iframes (Assistant listens for 'ledger-sync') --- */

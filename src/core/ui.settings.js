@@ -22,7 +22,7 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /* Row actions for a rate list entry. Add is always available; Edit and
@@ -56,7 +56,7 @@
 
     /* Dense 56px list row for Database panels (replaces tall RenderEngine.listRow p-4) */
     function _mBTDbDenseRow(opts) {
-        var esc = opts.esc || function (s) { return String(s || ''); };
+        var esc = opts.esc || function (s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); };
         var title = opts.title || '';
         var subtitle = opts.subtitle || '';
         var icon = opts.icon || '';
@@ -82,15 +82,132 @@
         return '<div class="settings-row flex items-center gap-3 px-3 ' + rowExtra + '">' +
             (icon ? ('<div class="' + iconCls + '">' + icon + '</div>') : '') +
             '<div class="min-w-0 flex-1">' +
-                '<div class="' + titleCls + '">' + esc(title) + '</div>' +
+                '<div class="flex items-center gap-1 min-w-0"><div class="' + titleCls + '">' + esc(title) + '</div>' +
+                (opts.badge ? '<span class="shrink-0 text-[8px] leading-4 font-black uppercase tracking-widest px-1.5 rounded bg-amber-50 text-amber-700">' + esc(opts.badge) + '</span>' : '') +
+                '</div>' +
                 (subtitle ? ('<div class="' + subCls + '">' + esc(subtitle) + '</div>') : '') +
             '</div>' +
             (actionHtml ? ('<div class="flex items-center gap-1 shrink-0">' + actionHtml + '</div>') : '') +
             '</div>';
     }
 
+    var _mBTDeletedContacts = [];
+    function _mBTContactRows(contacts, query) {
+        query = String(query || '').toLowerCase();
+        var dark = localStorage.getItem('mbt_active_theme') === 'dark';
+        return (contacts || []).filter(function (c) {
+            return [c.name, c.role, c.department, c.email].join(' ').toLowerCase().indexOf(query) !== -1;
+        }).map(function (c) {
+            var actions = [{ title: 'View', label: 'View', act: 'contact-view', arg1: c.id }];
+            if (!c.readOnly) {
+                actions.push({ title: 'Edit', label: 'Edit', act: 'contact-edit', arg1: c.id });
+                actions.push({ title: 'Delete', label: 'Delete', color: 'rose', act: 'contact-delete', arg1: c.id });
+            }
+            return _mBTDbDenseRow({ esc: esc, icon: mBTAssets.user || '', title: c.name || 'Unnamed contact', subtitle: c.role || c.department || '', actions: actions, titleCls: 'text-[10px] leading-4 font-black uppercase truncate ' + (dark ? 'text-slate-100' : 'text-slate-700') });
+        }).join('') || '<p class="p-4 text-xs text-slate-500">No matching contacts.</p>';
+    }
+    function _mBTContactUndoHtml() {
+        return _mBTDeletedContacts.map(function (c) {
+            return '<div class="flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 text-amber-800 text-xs"><span>' + esc(c.name) + ' deleted. Undo is available until you reload.</span><button type="button" data-mbt-act="contact-undo" data-mbt-a1="' + esc(c.id) + '" class="shrink-0 h-8 px-2 rounded-lg bg-amber-100 font-bold">Undo</button></div>';
+        }).join('');
+    }
+    window.mBT_UI_Settings_refreshContacts = function () {
+        return mBTStorage.getAllContacts().then(function (all) {
+            if (!Array.isArray(mBTOG.contacts)) mBTOG.contacts = [];
+            mBTOG.contacts.length = 0;
+            all.forEach(function (c) { mBTOG.contacts.push(c); });
+            /* Keep the existing legacy projection in step with the canonical pool. */
+            return mBTOG.saveContacts().then(function () {
+                var list = document.getElementById('contactsListBody'), search = document.getElementById('contactsSearchInput');
+                if (list) list.innerHTML = _mBTContactRows(all, search && search.value);
+                var undo = document.getElementById('dbContactUndo');
+                if (undo) undo.innerHTML = _mBTContactUndoHtml();
+                return all;
+            });
+        });
+    };
+    window.mBT_UI_Settings_bindContactSearch = function () {
+        var input = document.getElementById('contactsSearchInput');
+        if (input) input.oninput = function () { document.getElementById('contactsListBody').innerHTML = _mBTContactRows(mBTOG.contacts, input.value); };
+        window.mBT_UI_Settings_refreshContacts().catch(function () { mBTME.alert('Contacts', 'Could not load contacts. Try again.'); });
+    };
+    window.mBT_UI_Settings_openContactTool = function (id, action) {
+        mBTME.close('dbContactModal');
+        mBTME.close('settingsModal');
+        setTimeout(function () {
+            var b = window.budget || {};
+            openTool('./src/tools/contacts/index.html?projectKey=' + encodeURIComponent('prodBudget_v5_' + (b.projectName || '')) + '&currency=' + encodeURIComponent(b.displayCurrency || b.currency || 'JMD') + '&highlightId=' + encodeURIComponent(id || '') + '&contactAction=' + encodeURIComponent(action));
+        }, 400);
+    };
+    window.mBT_UI_Settings_deleteContact = function (id) {
+        mBTStorage.getContactById(id).then(function (c) {
+            if (!c || c.readOnly) throw new Error('This contact is unavailable or read-only.');
+            mBTME.confirm('Delete contact', 'Delete ' + c.name + ' from the Contacts pool? Existing budget items and payment records will remain.', function () {
+                mBTStorage.deleteContact(id).then(function () {
+                    _mBTDeletedContacts.push(c);
+                    mBTME.close('dbContactModal');
+                    return window.mBT_UI_Settings_refreshContacts();
+                }).catch(function () { mBTME.alert('Contacts', 'Could not delete the contact or refresh the list. Reopen Contacts to check the saved state.'); });
+            });
+        }).catch(function (err) { mBTME.alert('Contacts', err.message); });
+    };
+    function _mBTContactView(id) {
+        mBTStorage.getContactById(id).then(function (c) {
+            if (!c) throw new Error('This contact is no longer in the Contacts pool.');
+            var fields = [['Name', c.name], ['Role', c.role], ['Department', c.department], ['Email', c.email], ['Phone', c.phone], ['Rate', c.rate == null ? '' : c.rate + ' ' + (c.currency || '')], ['Diet', c.dietaryRestrictions], ['Allergies', c.allergies], ['Wallet', c.walletType], ['Wallet address', c.walletAddress]];
+            var html = '<div class="p-4 space-y-3 overflow-y-auto min-h-0"><dl class="space-y-2">' + fields.filter(function (f) { return f[1] != null && f[1] !== ''; }).map(function (f) { return '<div><dt class="text-[9px] font-black uppercase text-slate-400">' + esc(f[0]) + '</dt><dd class="text-xs break-words">' + esc(f[1]) + '</dd></div>'; }).join('') + '</dl>';
+            if (c.portfolio && c.portfolio.length) html += '<p class="text-xs">Portfolio: ' + c.portfolio.length + ' saved ' + (c.portfolio.length === 1 ? 'item.' : 'items.') + '</p>';
+            if (!c.readOnly) html += '<div class="flex gap-2"><button type="button" data-mbt-act="contact-edit" data-mbt-a1="' + esc(id) + '" class="h-8 px-3 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold">Edit</button><button type="button" data-mbt-act="contact-delete" data-mbt-a1="' + esc(id) + '" class="h-8 px-3 rounded-lg bg-rose-50 text-rose-600 text-xs font-bold">Delete</button></div>';
+            mBTME.open('dbContact', 'Contact', html + '</div>', 'max-w-md');
+        }).catch(function (err) { mBTME.alert('Contacts', err.message); });
+    }
+
+    function _mBTTierShort(name) {
+        if (name === 'Standard') return 'STD';
+        if (name === 'Indie') return 'Indie';
+        if (name === 'Studio') return 'Studio';
+        return name || '';
+    }
+    function _mBTRegionShort(name) {
+        var codes = {
+            Jamaica: 'JM', USA: 'US', UK: 'UK', Canada: 'CA', Australia: 'AU',
+            Trinidad: 'TT', Barbados: 'BB', Guyana: 'GY', India: 'IN', Thailand: 'TH',
+            Philippines: 'PH', Vietnam: 'VN', Poland: 'PL', Mexico: 'MX', Brazil: 'BR',
+            Colombia: 'CO', 'South Africa': 'ZA'
+        };
+        if (codes[name]) return codes[name];
+        var raw = String(name || '');
+        if (!raw) return '';
+        return raw.length <= 3 ? raw.toUpperCase() : raw.slice(0, 2).toUpperCase();
+    }
+    /* Short closeable notes. Every sentence is what contributeBudget or syncFromCloud does. */
+    window._mBTDbExplain = function (which) {
+        var title = which === 'share' ? 'Share' : 'Sync';
+        var message = which === 'share'
+            ? 'While Share is on, you are signed in, and online, saving a budget or syncing a shared budget can send each price you typed. That send happens once, and only for a line that is still in use.\n\nThe send is the price id, your user id, the budget id or project name, and the line id. It also sends the role, department, item type, supplier category, unit, rate, currency, and the Database region.\n\nThere is no name, email, or phone field. A line whose role is exactly the crew or contact name is skipped. A name typed into the role, the description, or the project name is sent as typed.'
+            : 'While Sync is on and online, this Database reads OpenGate community rates and the averages for the selected region, and leaves prices unchanged when offline.\n\nA matching catalog row is given the OpenGate rate unless you added it or its source is override, missing rows are added, and a rate you added is never changed by Sync.\n\nYour budget lines only take OpenGate rates for the Database region, in your budget\'s currency, matched by description and unit. Prices you typed, locked, fixed or set in Stages are never changed.';
+        if (window.mBTME) mBTME.alert(title, message);
+    };
+    /* Share follows the stored key contributeBudget reads, not a stale cache. */
+    window._mBTSyncShareFromStore = function () {
+        var on = localStorage.getItem('moo_og_share') === 'true';
+        if (window.mBTOG && mBTOG.settings) mBTOG.settings.optInSharing = on;
+        var btn = document.querySelector('.db-bar-share');
+        if (!btn) return;
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        var pair = btn.parentNode;
+        if (pair && pair.classList) {
+            if (on) pair.classList.add('is-on');
+            else pair.classList.remove('is-on');
+        }
+    };
+    window._mBTToggleShare = function () {
+        var on = localStorage.getItem('moo_og_share') === 'true';
+        localStorage.setItem('moo_og_share', on ? 'false' : 'true');
+        window._mBTSyncShareFromStore();
+    };
     function renderDbView(subTab) {
-        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
         var og = window.mBTOG || { rates: [], contacts: [], templates: [], settings: { location: 'Jamaica', optInSharing: false } };
         var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
         var _shell = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
@@ -109,19 +226,7 @@
 
         if (subTab === 'contacts') {
             var contacts = og.contacts || [];
-            var listContent = contacts.length ? contacts.map(function (c) {
-                return _mBTDbDenseRow({
-                    esc: esc,
-                    icon: mBTAssets.user || '',
-                    title: c.name || 'Unknown',
-                    subtitle: c.role || 'No Role',
-                    titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
-                    subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
-                    iconCls: isDark
-                        ? 'w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300 shrink-0'
-                        : 'w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0'
-                });
-            }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Contacts Found</div>';
+            var listContent = _mBTContactRows(contacts, '');
 
             return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
                 '<input type="file" id="csvImportInput" accept=".csv" class="hidden" onchange="importContactsCSV(this)">' +
@@ -132,14 +237,16 @@
                         '<button type="button" onclick="document.getElementById(\'csvImportInput\').click()" class="h-8 px-2 rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest ' + _btnIndigo + ' flex items-center gap-1">' + (mBTAssets.plus || '') + ' Import CSV</button>' +
                     '</div>' +
                 '</div>' +
+                '<div id="dbContactUndo" class="shrink-0 overflow-y-auto" style="max-height:128px">' + _mBTContactUndoHtml() + '</div>' +
                 '<div id="contactsListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0">' + listContent + '</div>' +
             '</div>';
         }
 
         if (subTab === 'lineItems') {
             var region = (og.settings && og.settings.location) || 'Jamaica';
-            var isSharing = og.settings && og.settings.optInSharing;
-            var cloudSyncOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            var isSharing = localStorage.getItem('moo_og_share') === 'true';
+            if (og.settings) og.settings.optInSharing = isSharing;
+            var cloudSyncOn = localStorage.getItem('moo_og_cloud_sync') === 'true';
             var lastSyncRaw = localStorage.getItem('moo_og_last_sync');
             var lastSyncLabel = lastSyncRaw ? new Date(lastSyncRaw).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
 
@@ -155,14 +262,15 @@
             try { avgs = avgsRaw ? JSON.parse(avgsRaw) : {}; } catch (e) { }
 
             var rateRows = rates.length ? rates.map(function (r) {
+                var custom = r.source === 'user';
                 var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
                 var avg = avgs[key];
                 var dispRate = r.rate;
-                var dispCurr = r.currency || 'USD';
+                var dispCurr = r.currency || ((window.budget && window.budget.currency) || 'JMD');
 
-                if (avg && avg.avg_rate > 0) {
+                if (!custom && avg && avg.avg_rate > 0) {
                     dispRate = avg.avg_rate;
-                    dispCurr = avg.currency || 'USD';
+                    dispCurr = avg.currency || r.currency || ((window.budget && window.budget.currency) || 'JMD');
                 }
 
                 var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
@@ -186,6 +294,7 @@
                     esc: esc,
                     icon: '$',
                     title: r.description,
+                    badge: custom ? 'Custom' : '',
                     subtitle: sub,
                     titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txt + ' truncate',
                     subCls: 'text-[9px] leading-4 ' + _muted + ' font-bold truncate',
@@ -196,44 +305,54 @@
                 });
             }).join('') : '<div class="p-8 text-center ' + _empty + ' text-[9px] leading-4 font-black uppercase tracking-widest">No Rates Loaded</div>';
 
-            /* Data-driven selects — RATE_REGIONS + MARKET_TIERS from OpenGate */
+            /* Short labels in this bar only. The option value stays the real tier or region name. */
             var regionOpts = (og.RATE_REGIONS ? Object.keys(og.RATE_REGIONS) : [])
-                .map(function (r) { return '<option value="' + r + '"' + (region === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+                .map(function (r) { return '<option value="' + esc(r) + '"' + (region === r ? ' selected' : '') + '>' + esc(_mBTRegionShort(r)) + '</option>'; }).join('');
             var currentTier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
             var tierList = (og.MARKET_TIERS && og.MARKET_TIERS.length) ? og.MARKET_TIERS : ['Standard', 'Indie', 'Studio'];
             var tierOpts = tierList.map(function (t) {
-                return '<option value="' + t + '"' + (currentTier === t ? ' selected' : '') + '>' + t + '</option>';
+                return '<option value="' + esc(t) + '"' + (currentTier === t ? ' selected' : '') + '>' + esc(_mBTTierShort(t)) + '</option>';
             }).join('');
 
             var citation = (typeof og._getRegionIntelligence === 'function') ? og._getRegionIntelligence(region) : '';
-            var cloudBtnCls = cloudSyncOn
-                ? (isDark ? 'bg-blue-900/40 border-blue-700 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-600')
-                : _btnMuted;
-            var shareBtnCls = isSharing
-                ? (isDark ? 'bg-emerald-900/40 border-emerald-700 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
-                : _btnMuted;
+            var syncPair = cloudSyncOn ? ' db-bar-pair is-on' : ' db-bar-pair';
+            var sharePair = isSharing ? ' db-bar-pair is-on' : ' db-bar-pair';
 
             return '<div class="flex flex-col h-full overflow-hidden rounded-xl border ' + _shell + ' settings-db-panel">' +
-                /* Row 1: actions left + tier/region/Apply right — real <select> dropdowns */
-                '<div class="db-actions-row ' + _toolbarBg + ' shrink-0 z-10">' +
-                    '<div class="db-actions-left">' +
-                        '<button type="button" onclick="mBT.features.settings.openAddRateModal()" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + _btnMuted + '">' + mBTAssets.plus + ' Add Rate</button>' +
-                        '<button type="button" onclick="if(window.mBTOG&&mBTOG.syncFromCloud)mBTOG.syncFromCloud().then(function(){_mBTRefreshDbRates();});" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + cloudBtnCls + '">' + mBTAssets.cloud + ' ' + (cloudSyncOn ? 'Cloud On' : 'Cloud Off') + '</button>' +
-                        '<button type="button" onclick="if(window.mBTOG&&mBTOG.settings){mBTOG.settings.optInSharing=!mBTOG.settings.optInSharing;localStorage.setItem(\'moo_og_share\',mBTOG.settings.optInSharing);_mBTRefreshDbRates();}" class="h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest shadow-sm flex items-center gap-1 ' + shareBtnCls + '">' + (mBTAssets.upload || mBTAssets.cloud) + ' ' + (isSharing ? 'Contributing' : 'Contribute') + '</button>' +
+                '<div class="db-bar' + (isDark ? ' db-bar-dark' : '') + ' shrink-0 z-10">' +
+                    '<button type="button" class="db-bar-plus" aria-label="Add rate" onclick="mBT.features.settings.openAddRateFromSearch()">' + mBTAssets.plus + '</button>' +
+                    '<label class="db-bar-search">' + mBTAssets.search +
+                        '<input type="text" id="dbSearchInput" placeholder="Search global rates..." aria-label="Search global rates">' +
+                    '</label>' +
+                    '<div class="db-bar-tools">' +
+                    '<div class="db-bar-syncshare">' +
+                    '<span class="db-bar-divider" aria-hidden="true"></span>' +
+                    '<div class="' + syncPair + '">' +
+                        '<button type="button" class="db-bar-toggle" aria-pressed="' + (cloudSyncOn ? 'true' : 'false') + '" onclick="mBT.features.settings.toggleCloudSync()">' + mBTAssets.sync + ' Sync</button>' +
+                        '<button type="button" class="db-bar-bang" aria-label="How Sync works" onclick="window._mBTDbExplain(\'sync\')">!</button>' +
                     '</div>' +
-                    '<div class="db-actions-right">' +
-                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="db-select h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest outline-none cursor-pointer ' + _select + '">' +
+                    '<div class="' + sharePair + '">' +
+                        '<button type="button" class="db-bar-toggle db-bar-share" aria-pressed="' + (isSharing ? 'true' : 'false') + '" onclick="window._mBTToggleShare()">' + mBTAssets.cloud + ' Share</button>' +
+                        '<button type="button" class="db-bar-bang" aria-label="How Share works" onclick="window._mBTDbExplain(\'share\')">!</button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="db-bar-tierapply">' +
+                    '<span class="db-bar-divider" aria-hidden="true"></span>' +
+                    '<label class="db-bar-choice">' + (mBTAssets.layers || '') +
+                        '<select aria-label="Tier" title="' + esc(currentTier) + '" onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setMarketTier(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });">' +
                             tierOpts +
                         '</select>' +
-                        '<select onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });" class="db-select h-8 px-2 border rounded-lg text-[9px] leading-4 font-black uppercase tracking-widest outline-none cursor-pointer ' + _select + '">' +
+                        '<span class="db-bar-chevron" aria-hidden="true">' + mBTAssets.chevronDown + '</span>' +
+                    '</label>' +
+                    '<label class="db-bar-choice">' + mBTAssets.mapPin +
+                        '<select aria-label="Region" title="' + esc(region) + '" onchange="if(window.mBTOG&&mBTOG.settings)mBTOG.settings.setLocation(this.value).then(function(){ _mBTRefreshDbRates(); if(window._mBTRefreshApplyRatesBar)window._mBTRefreshApplyRatesBar(); });">' +
                             regionOpts +
                         '</select>' +
-                        '<button type="button" onclick="window._mBTOpenApplyRatesConfirm()" class="h-8 px-2 rounded-lg bg-blue-600 border border-blue-600 text-[9px] leading-4 font-black uppercase tracking-widest text-white hover:bg-blue-500 shadow-sm flex items-center gap-1 transition-all">Apply Rates</button>' +
+                        '<span class="db-bar-chevron" aria-hidden="true">' + mBTAssets.chevronDown + '</span>' +
+                    '</label>' +
+                    '<button type="button" class="db-bar-apply" onclick="window._mBTOpenApplyRatesConfirm()">Apply</button>' +
                     '</div>' +
-                '</div>' +
-                /* Row 2: search alone full width */
-                '<div class="db-toolbar db-toolbar--solo ' + _toolbarBg + ' shrink-0 z-10">' +
-                    '<input type="text" id="dbSearchInput" placeholder="SEARCH GLOBAL RATES.." class="db-toolbar-search ' + _search + ' rounded-lg px-2 text-[10px] leading-4 font-black uppercase tracking-widest outline-none">' +
+                    '</div>' +
                 '</div>' +
                 _mBTApplyRatesBarHtml() +
                 '<div id="dbListBody" class="flex-grow overflow-y-auto no-scrollbar relative min-h-0">' + rateRows + '</div>' +
@@ -297,7 +416,7 @@
         var body = document.getElementById('dbListBody');
         if (!body) return;
         var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
-        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
         var region = (og.settings && og.settings.location) || 'Jamaica';
         var rates = (og.rates || []).slice().sort(function (a, b) {
             var da = (a.description || '').toLowerCase();
@@ -314,11 +433,12 @@
         var _mutedR = isDarkR ? 'text-slate-400' : 'text-slate-400';
         var _emptyR = isDarkR ? 'text-slate-500' : 'text-slate-300';
         var rateRows = rates.length ? rates.map(function (r) {
+            var custom = r.source === 'user';
             var key = (r.description || '').toLowerCase() + '|' + region.toLowerCase();
             var avg = avgs[key];
             var dispRate = r.rate;
-            var dispCurr = r.currency || 'USD';
-            if (avg && avg.avg_rate > 0) { dispRate = avg.avg_rate; dispCurr = avg.currency || 'USD'; }
+            var dispCurr = r.currency || ((window.budget && window.budget.currency) || 'JMD');
+            if (!custom && avg && avg.avg_rate > 0) { dispRate = avg.avg_rate; dispCurr = avg.currency || r.currency || ((window.budget && window.budget.currency) || 'JMD'); }
             var sub = dispRate.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + dispCurr + ' / ' + r.unit;
             if (avg && avg.contributor_count > 0) sub += ' [Research: ' + avg.contributor_count + ']';
             var actions = _mBTRateRowActions(r, esc, dispRate, dispCurr).map(function (a) {
@@ -338,6 +458,7 @@
                 esc: esc,
                 icon: '$',
                 title: r.description,
+                badge: custom ? 'Custom' : '',
                 subtitle: sub,
                 titleCls: 'text-[10px] leading-4 font-black uppercase ' + _txtR + ' truncate',
                 subCls: 'text-[9px] leading-4 ' + _mutedR + ' font-bold truncate',
@@ -361,7 +482,7 @@
        used by _commitSuggestion / undoLastSuggestion. Totals are always
        recomputed through mBTLE.reconcile(), never written by hand. */
 
-    function _mBTEsc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function _mBTEsc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
     /* Mirrors AIModule._normalizeName so matching behaves the same way. */
     function _mBTNormalizeName(s) {
@@ -413,7 +534,7 @@
        instead of inventing a new one. */
     function _mBTItemIsEdited(item) {
         if (!item) return false;
-        return item.rateSource === 'custom' || item.rateType === 'fixed';
+        return window.mBTBatch2 ? mBTBatch2.protectedPrice(item) : (item.rateSource === 'custom' || item.rateType === 'fixed');
     }
 
     /* Convert a card rate (in its own currency) into the budget's currency,
@@ -421,11 +542,7 @@
     function _mBTConvertToBudgetCurrency(rate, fromCurrency) {
         var budget = window.budget;
         var budgetCurr = (budget && budget.currency) || window.displayCurrency || 'JMD';
-        if (fromCurrency && fromCurrency !== budgetCurr && window.mBT && mBT.le && typeof mBT.le.convertCurrency === 'function') {
-            var converted = mBT.le.convertCurrency(rate, fromCurrency, budgetCurr);
-            return (typeof converted === 'number' && !isNaN(converted)) ? converted : rate;
-        }
-        return rate;
+        return mBT.le.convertCurrencyOrNull(Number(rate) || 0, fromCurrency || budgetCurr, budgetCurr, budget);
     }
 
     /* Build the diff between every scoped card rate and any budget item
@@ -448,14 +565,21 @@
             if (!desc) continue;
             var card = _mBTFindCardForItem(rates, desc);
             if (!card) continue;
-            var newRate = _mBTConvertToBudgetCurrency(card.rate, card.currency);
+            /* Write the price at the open budget's own tier, the same number the picker and a new budget row use. */
+            var priced = card;
+            if (window.budget && budget.productionTier && og.rateForTier) priced = og.rateForTier(card, budget.productionTier);
+            var newRate = _mBTConvertToBudgetCurrency(priced.rate, priced.currency);
             var curRate = parseFloat(item.rate) || 0;
             rows.push({
                 itemId: item.id,
                 description: item.description,
                 current: curRate,
                 proposed: newRate,
-                edited: _mBTItemIsEdited(item)
+                sourceRate: priced.rate,
+                sourceCurrency: priced.currency || ((window.budget && budget.currency) || 'JMD'),
+                edited: _mBTItemIsEdited(item),
+                /* The same rule the write uses (following on, price not typed or locked). */
+                eligible: !!(window.mBTBatch2 && mBTBatch2.eligible(item))
             });
         }
         return rows;
@@ -502,8 +626,10 @@
         var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
         var region = (og.settings && og.settings.location) || 'Jamaica';
         var tier = (og.settings && typeof og.settings.getMarketTier === 'function') ? og.settings.getMarketTier() : (localStorage.getItem('moo_og_market_tier') || 'Standard');
+        /* Apply Rates writes the open budget's tier, so say that one. */
+        if (window.budget && budget.productionTier) tier = budget.productionTier;
         var rates = og.rates || [];
-        var cur = (rates[0] && rates[0].currency) || window.displayCurrency || 'JMD';
+        var cur = (window.budget && budget.currency) || 'JMD';
         var diff = _mBTBuildRateDiff();
 
         var isDarkBar = localStorage.getItem('mbt_active_theme') === 'dark';
@@ -550,12 +676,47 @@
 
     /* Render the confirm pane's diff rows. keepEdited = true excludes rows
        tagged EDITED (the default, protecting hand set rates). */
+    /* The lines a replace will really change: eligible by the write's own rule, and with a different price. */
+    function _mBTDiffVisible(diff, keepEdited) {
+        return diff.filter(function (d) { return d.proposed !== null && d.eligible && d.proposed !== d.current && !(keepEdited && d.edited); });
+    }
+    /* Why nothing qualifies, in plain words. */
+    function _mBTNoneReason(diff) {
+        if (!diff.length) return 'No line in this budget matches a rate in this list.';
+        var following = !!(window.mBTBatch2 && mBTBatch2.following());
+        if (!following) return 'Sync is off, so no line prices are replaced. Turn it on in the Database tab, then try again.';
+        /* Say every reason that applies: typed or locked lines are named even when other lines already match. */
+        var lockedCount = diff.filter(function (d) { return d.edited; }).length;
+        var sameCount = diff.filter(function (d) { return !d.edited && d.eligible && d.proposed === d.current; }).length;
+        var parts = [];
+        var missingCount = diff.filter(function (d) { return d.proposed === null; }).length;
+        if (missingCount) parts.push(missingCount + ' matching prices have no exchange rate. No rate was added; sources keep their own currencies.');
+        if (lockedCount) parts.push((lockedCount === 1 ? '1 matching line has a price you typed or locked and is left alone' : lockedCount + ' matching lines have a price you typed or locked and are left alone') + '.');
+        if (sameCount) parts.push((sameCount === 1 ? '1 other matching line already has' : sameCount + ' other matching lines already have') + ' this price.');
+        return parts.length ? parts.join(' ') : 'No matching line can be replaced.';
+    }
+    /* Keeps the confirm pane open and says why nothing was written. */
+    function _mBTPaneNotice(reason, rebuild) {
+        var pane = document.getElementById('applyRatesConfirmPane');
+        if (!pane) return;
+        var html = '';
+        if (rebuild) {
+            var fresh = _mBTBuildRateDiff();
+            window._mBTApplyRatesState = { diff: fresh, keepEdited: true };
+            html = _mBTRenderDiffRows(fresh, true).html;
+            if (!_mBTDiffVisible(fresh, true).length) reason = _mBTNoneReason(fresh);
+        }
+        var note = '<div role="alert" class="mb-2 px-2 py-1.5 rounded-lg bg-amber-50 text-[9px] font-bold text-amber-700 leading-relaxed">' + _mBTEsc(reason) + '</div>';
+        if (rebuild) pane.innerHTML = note + html;
+        else { var old = pane.querySelector('[role="alert"]'); if (old && old.parentNode) old.parentNode.removeChild(old); pane.insertAdjacentHTML('afterbegin', note); }
+        pane.classList.remove('hidden');
+    }
     function _mBTRenderDiffRows(diff, keepEdited) {
         var og = window.mBTOG || { rates: [], settings: { location: 'Jamaica' } };
         var region = (og.settings && og.settings.location) || 'Jamaica';
         var rates = og.rates || [];
-        var cur = (rates[0] && rates[0].currency) || window.displayCurrency || 'JMD';
-        var visible = diff.filter(function (d) { return !(keepEdited && d.edited); });
+        var cur = (window.budget && budget.currency) || 'JMD';
+        var visible = _mBTDiffVisible(diff, keepEdited);
 
         var rowsHtml = visible.map(function (d, idx) {
             var delta = d.proposed - d.current;
@@ -575,7 +736,8 @@
 
         return {
             html:
-                '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 mb-1">Replace rates on ' + visible.length + ' line items?</div>' +
+                (diff.some(function (d) { return d.proposed === null; }) ? '<p class="text-amber-700 text-[10px]">No exchange rate; these source prices are left out and no rate was added: ' + diff.filter(function (d) { return d.proposed === null; }).map(function (d) { return _mBTEsc(d.description) + ' ' + _mBTEsc(_mBTFormatMoney(d.sourceRate, d.sourceCurrency)); }).join('; ') + '.</p>' : '') +
+                '<div class="text-[10px] font-black uppercase tracking-widest text-slate-700 mb-1">' + (visible.length ? 'Replace rates on ' + visible.length + ' line items?' : 'No rates to replace') + '</div>' +
                 '<p class="text-[10px] font-bold text-slate-500 mb-3 leading-relaxed">' +
                     'Only items whose description matches a rate in this list change. Quantities, units and ' +
                     'actuals are untouched. Items you have edited by hand are listed below, uncheck any you want to keep.' +
@@ -591,16 +753,15 @@
                                 '<th class="text-right p-1.5 pr-2 text-[9px] font-black uppercase tracking-widest">Change</th>' +
                             '</tr>' +
                         '</thead>' +
-                        '<tbody id="applyRatesDiffBody">' + (rowsHtml || '<tr><td colspan="5" class="p-3 text-center text-[9px] font-black uppercase tracking-widest text-slate-300">Nothing to change</td></tr>') + '</tbody>' +
+                        '<tbody id="applyRatesDiffBody">' + (rowsHtml || '<tr><td colspan="5" class="p-3 text-center text-[9px] font-black uppercase tracking-widest text-slate-400">' + _mBTEsc(_mBTNoneReason(diff)) + '</td></tr>') + '</tbody>' +
                     '</table>' +
                 '</div>' +
                 '<div class="flex items-center gap-2 mb-3 px-1">' +
-                    '<input type="checkbox" id="applyRatesKeepEdited" ' + (keepEdited ? 'checked' : '') + ' onchange="window._mBTToggleKeepEdited(this.checked)" class="w-3.5 h-3.5 accent-blue-600">' +
-                    '<label for="applyRatesKeepEdited" class="text-[9px] font-bold text-slate-600">Keep manually edited rates (' + editedCount + ' items)</label>' +
+                    '<p class="text-[9px] font-bold text-slate-600">User-entered and locked prices stay unchanged (' + editedCount + ' items).</p>' +
                 '</div>' +
                 '<div class="flex gap-2">' +
                     '<button onclick="window._mBTCancelApplyRates()" class="flex-1 py-2 rounded-xl bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-600">Cancel</button>' +
-                    '<button onclick="window._mBTCommitApplyRates()" class="flex-1 py-2 rounded-xl bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all">Replace ' + visible.length + ' rates</button>' +
+                    '<button' + (visible.length ? '' : ' disabled') + ' onclick="window._mBTCommitApplyRates()" class="flex-1 py-2 rounded-xl bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all' + (visible.length ? '' : ' opacity-40 cursor-not-allowed') + '">' + (visible.length ? 'Replace ' + visible.length + (visible.length === 1 ? ' rate' : ' rates') : 'Nothing to replace') + '</button>' +
                 '</div>',
             count: visible.length
         };
@@ -624,7 +785,7 @@
 
     window._mBTToggleKeepEdited = function (checked) {
         if (!window._mBTApplyRatesState) return;
-        window._mBTApplyRatesState.keepEdited = !!checked;
+        window._mBTApplyRatesState.keepEdited = true;
         var pane = document.getElementById('applyRatesConfirmPane');
         if (!pane) return;
         var built = _mBTRenderDiffRows(window._mBTApplyRatesState.diff, window._mBTApplyRatesState.keepEdited);
@@ -648,7 +809,7 @@
 
         var pane = document.getElementById('applyRatesConfirmPane');
         var checks = pane ? pane.querySelectorAll('.applyRatesRowCheck') : [];
-        var visible = state.diff.filter(function (d) { return !(state.keepEdited && d.edited); });
+        var visible = _mBTDiffVisible(state.diff, state.keepEdited);
         var checkedIds = {};
         var i;
         for (i = 0; i < checks.length; i++) {
@@ -660,14 +821,16 @@
 
         var toApply = visible.filter(function (d) { return checkedIds[d.itemId]; });
         if (!toApply.length) {
-            window._mBTCancelApplyRates();
+            _mBTPaneNotice(visible.length ? 'No line is ticked, so nothing was replaced. Tick the lines you want, then press Replace.' : _mBTNoneReason(state.diff), false);
             return;
         }
 
         var backup;
         try {
-            backup = JSON.stringify({ sections: window.budget.sections, contingencyPercentage: window.budget.contingencyPercentage });
+            backup = JSON.stringify({ id: window.budget.id, projectName: window.budget.projectName,
+                collab_project_id: window.budget.collab_project_id, sections: window.budget.sections });
         } catch (e) { backup = null; }
+        if (!backup) return mBTME.alert('Rates Not Applied', 'Could not create a safe undo record. No rates were changed.');
 
         var allItems = _mBTAllBudgetItems();
         var beforeTotal = (typeof window.budget.grandTotal === 'number') ? window.budget.grandTotal : null;
@@ -678,21 +841,21 @@
             for (k = 0; k < allItems.length; k++) {
                 if (allItems[k].id === toApply[j].itemId) { target = allItems[k]; break; }
             }
-            if (!target) continue;
+            if (!target || !window.mBTBatch2 || !mBTBatch2.eligible(target)) continue;
             target.rate = toApply[j].proposed;
             target.baseRate = toApply[j].proposed;
             applied++;
         }
 
         if (!applied) {
-            window._mBTCancelApplyRates();
+            /* The write checks the rule again just now (for example Follow OpenGate was turned off while this pane was open). */
+            _mBTPaneNotice('Nothing was replaced. Follow OpenGate may have been turned off, or the lines changed, so the list below is updated.', true);
             return;
         }
 
-        if (backup) window._mBTApplyRatesLastBackup = backup;
-
         if (typeof window.saveBudget === 'function') window.saveBudget();
         if (window.mBTLE && typeof window.mBTLE.reconcile === 'function') window.mBTLE.reconcile();
+        window._mBTApplyRatesLastBackup = JSON.stringify(mBTBudgetSafety.capture(JSON.parse(backup), window.budget, ['sections']));
         if (typeof window.forceSectionRebuild === 'function') window.forceSectionRebuild();
         if (typeof window.render === 'function') window.render();
 
@@ -726,8 +889,8 @@
         var mBTME = window.mBTME;
         if (!window._mBTApplyRatesLastBackup || !window.budget) return;
         var prev = JSON.parse(window._mBTApplyRatesLastBackup);
-        window.budget.sections = prev.sections;
-        window.budget.contingencyPercentage = prev.contingencyPercentage;
+        var restored = mBTBudgetSafety.restore(prev, window.budget);
+        if (!restored.ok) return mBTME.alert('Undo Not Applied', restored.message);
         window._mBTApplyRatesLastBackup = null;
 
         if (typeof window.saveBudget === 'function') window.saveBudget();
@@ -801,7 +964,7 @@
 
     window.mBT_UI_Settings_getTabContent = function (tabName, subTab) {
         subTab = subTab || 'lineItems';
-        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
         var budget = window.budget || { settings: {}, aiContext: {} };
         if (tabName === 'general') {
             var isDark = localStorage.getItem('mbt_active_theme') === 'dark';
@@ -814,7 +977,8 @@
             var isCompact = (budget.settings && budget.settings.compactMode) || false;
             var isClassic = (budget.settings && budget.settings.classicTheme) || false;
             var allowZoom = (budget.settings && budget.settings.allowZoom) || false;
-            var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') !== 'false';
+            /* Off unless switched on: a new budget starts locked (batch 3). */
+            var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') === 'true';
             var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
             var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
 
@@ -852,7 +1016,7 @@
                                     '</label>' +
                                     '<label class="settings-format-cell">' +
                                         '<span class="text-[8px] leading-4 font-black uppercase tracking-widest settings-text-muted">Decimals</span>' +
-                                        '<select id="decimalPlacesSelect" onchange="if(!budget.settings) budget.settings={}; budget.settings.decimalPlaces=parseInt(this.value); saveBudget(); if(typeof mBTLE!==\'undefined\') mBTLE.reconcile(); render();" class="' + _fieldCls + ' cursor-pointer">' +
+                                        '<select id="decimalPlacesSelect" class="' + _fieldCls + ' cursor-pointer">' +
                                             '<option value="0" ' + (decimalPlaces === 0 ? 'selected' : '') + '>0 \u2014 1,500</option>' +
                                             '<option value="1" ' + (decimalPlaces === 1 ? 'selected' : '') + '>1 \u2014 1,500.0</option>' +
                                             '<option value="2" ' + (decimalPlaces === 2 ? 'selected' : '') + '>2 \u2014 1,500.00</option>' +
@@ -864,7 +1028,7 @@
                         '<section>' +
                             '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Appearance</h3>' +
                             '<div class="settings-card settings-card-group">' +
-                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                '<div class="settings-row settings-theme-row flex items-center justify-between gap-4 px-2">' +
                                     '<div class="min-w-0">' +
                                         '<div class="text-[11px] leading-4 font-black settings-text-primary">Theme</div>' +
                                         '<div class="text-[9px] leading-4 font-bold settings-text-muted">Premium, Light, or Classic</div>' +
@@ -902,16 +1066,6 @@
                         '<section>' +
                             '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Navigation</h3>' +
                             '<div class="settings-card settings-card-group">' +
-                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
-                                    '<div class="min-w-0">' +
-                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Open tools in-app</div>' +
-                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Stages, Publish etc. open inside the main window</div>' +
-                                    '</div>' +
-                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
-                                        '<input type="checkbox" id="navPrefToggle" ' + (JSON.parse(localStorage.getItem('mBT_openToolsInternal') !== null ? localStorage.getItem('mBT_openToolsInternal') : 'true') ? 'checked' : '') + ' onchange="localStorage.setItem(\'mBT_openToolsInternal\', this.checked);" class="sr-only peer">' +
-                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
-                                    '</label>' +
-                                '</div>' +
                                 '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
                                     '<div class="min-w-0">' +
                                         '<div class="text-[11px] leading-4 font-black settings-text-primary">Auto-hide nav</div>' +
@@ -952,12 +1106,27 @@
                             '</div>' +
                         '</section>' +
                         '<section>' +
+                            '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Budget lines</h3>' +
+                            '<div class="settings-card settings-card-group">' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Put new lines in their department\'s section</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">This budget only. On: a new line goes into the section for its department (Above The Line, Camera, Sound and so on), and the section is created if it is missing. Off: a new line stays in the section you add it from. You can always change a line\'s department.</div>' +
+                                    '</div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="deptSectionsToggle" ' + ((budget.settings && budget.settings.deptSections === false) ? '' : 'checked') + ' onchange="if(!budget.settings) budget.settings={}; budget.settings.deptSections = this.checked; saveBudget();" class="sr-only peer">' +
+                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                            '</div>' +
+                        '</section>' +
+                        '<section>' +
                             '<h3 class="settings-section-heading font-black uppercase tracking-widest settings-text-muted px-0.5">Data</h3>' +
                             '<div class="settings-card settings-card-group">' +
                                 '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
                                     '<div class="min-w-0">' +
-                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Auto-fetch rates</div>' +
-                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Refresh exchange rates on startup</div>' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">New budgets start with live rates</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">Off: a new budget starts locked at its creation rates and nothing is pulled automatically. On: a new budget starts with live rates on. Each budget can still switch its own live option from the currency menu, and existing budgets keep their own setting.</div>' +
                                     '</div>' +
                                     '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' class="sr-only peer">' +
@@ -966,8 +1135,7 @@
                                 '</div>' +
                             '</div>' +
                         '</section>' +
-                        '<div class="grid grid-cols-3 gap-2 mt-4">' +
-                             '<a href="https://raw.githubusercontent.com/moollc/mooBudgetTool/refs/heads/mBT/index.html" target="_blank" download="moobudget-beta.html" class="flex items-center justify-center gap-2 px-3 py-2 ' + _btnBg + ' rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors">' + mBTAssets.cloud + ' Get Beta</a>' +
+                        '<div class="settings-actions">' +
                              '<button onclick="hardResetApp()" class="flex items-center justify-center gap-2 px-3 h-8 ' + _btnRose + ' rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest transition-colors">' + mBTAssets.zap + ' Fix Bugs</button>' +
                              '<button onclick="mBTME.close(\'settingsModal\'); if(window.mBTRouter&&typeof window.mBTRouter.showCoffeeWidget===\'function\')window.mBTRouter.showCoffeeWidget();" class="flex items-center justify-center gap-2 px-3 h-8 bg-[#FFDD00] text-black rounded-xl font-black text-[9px] leading-4 uppercase tracking-widest hover:opacity-90 transition-opacity">' + mBTAssets.coffee + ' Support</button>' +
                         '</div>' +
@@ -1118,7 +1286,7 @@
             var _avatar = isDark
                 ? 'w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center text-emerald-400 text-[10px] leading-4 font-black border border-emerald-800 shrink-0 uppercase'
                 : 'w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 text-[10px] leading-4 font-black border border-emerald-100 shrink-0 uppercase';
-            var ogCloudOn = JSON.parse(localStorage.getItem('moo_og_cloud_sync') || 'true');
+            var ogCloudOn = localStorage.getItem('moo_og_cloud_sync') === 'true';
             var isSignedIn = !!(localStorage.getItem('mbt_supabase_auth_token'));
             var signedInEmail = localStorage.getItem('mbt_supabase_user_email') || '';
             var profileName = localStorage.getItem('mbt_profile_display_name') || '';
@@ -1207,14 +1375,14 @@
                                     '<p class="text-[9px] leading-4 ' + _muted + ' font-bold truncate">Pull updated industry rates from the shared community database. No account required.</p>' +
                                 '</div>' +
                                 '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
-                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Auto-sync on start</span>' +
+                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Keep OpenGate rates online</span>' +
                                     '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="ogCloudSyncToggle" ' + (ogCloudOn ? 'checked' : '') + ' onchange="mBT.features.settings.toggleCloudSync(this.checked);" class="sr-only peer">' +
                                         '<div class="' + toggleTrack + ' peer-checked:bg-emerald-600"></div>' +
                                     '</label>' +
                                 '</div>' +
                                 '<div class="settings-row settings-row--button flex items-center px-2">' +
-                                    '<button type="button" onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert(\'DATABASE\', n + \' rate(s) pulled from community.\'); mBT.features.settings.open(\'cloud\'); }).catch(function(e){ console.error(\'Sync Failed:\', e); mBTME.alert(\'Sync Error\', \'Failed to sync rates from community.\'); }); } else { mBTME.alert(\'DATABASE\', \'Engine not available.\'); }" class="w-full h-8 bg-emerald-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>' +
+                                    '<button type="button" onclick="if(window.mBTOG && mBTOG.syncFromCloud){ mBTOG.syncFromCloud().then(function(n){ mBTME.alert(\'DATABASE\', (n.status === \'disabled\' ? \'Rate following is off.\' : n.status === \'offline\' ? \'Offline. No update was made.\' : n.updated + \' rate values refreshed.\')); mBT.features.settings.open(\'cloud\'); }).catch(function(e){ console.error(\'Sync Failed:\', e); mBTME.alert(\'Sync Error\', \'Failed to sync rates from community.\'); }); } else { mBTME.alert(\'DATABASE\', \'Engine not available.\'); }" class="w-full h-8 bg-emerald-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-emerald-500 transition-all">Sync Rates Now</button>' +
                                 '</div>' +
                             '</div>' +
                         '</section>' +
@@ -1320,22 +1488,10 @@
                 statusInner = '<p class="text-[9px] leading-4 font-bold text-center">You are on the latest version (' + esc(currentVersion) + ')</p>';
             }
 
-            var applyBtn = updateAvailable
-                ? '<div class="settings-row settings-row--button flex items-center px-2 ' + _divider + '">' +
-                    '<button type="button" onclick="if(navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({action: \"SKIP_WAITING\"}); window.location.reload(); } else { mBTME.alert(\"Update\", \"Offline or SW not active.\"); }" class="w-full h-8 bg-emerald-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95">Apply Update Now</button>' +
-                  '</div>'
-                : '';
-
             return '<div class="h-full overflow-y-auto no-scrollbar p-4 settings-updates-panel animate-in fade-in duration-300">' +
                         '<section>' +
                             '<h3 class="settings-section-heading font-black uppercase tracking-widest px-0.5 ' + _headingMuted + '">Updates</h3>' +
                             '<div class="settings-card settings-card-group overflow-hidden ' + _card + '">' +
-                                '<div class="settings-row settings-row--button flex items-center px-2">' +
-                                    '<button type="button" onclick="mBT.features.settings.checkForUpdates()" ' + (isChecking ? 'disabled' : '') + ' class="w-full h-8 bg-blue-600 text-white rounded-lg font-black text-[9px] leading-4 uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 ' + (isChecking ? 'opacity-50 cursor-not-allowed' : '') + '">' +
-                                        (isChecking ? '\u23f3 Checking..' : 'Check for Updates') +
-                                    '</button>' +
-                                '</div>' +
-                                applyBtn +
                                 '<div class="settings-row settings-row--single flex items-center justify-center px-2 ' + statusRowCls + '">' +
                                     statusInner +
                                 '</div>' +
@@ -1543,7 +1699,7 @@
             return window.mBT.ui.render.esc(str);
         }
         return String(str == null ? '' : str)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function _mBTConnJsEsc(str) {
@@ -2784,6 +2940,22 @@
         var a4 = el.getAttribute('data-mbt-a4');
         var settings = (window.mBT && mBT.features && mBT.features.settings) || null;
 
+        if (act === 'contact-view') { _mBTContactView(a1); return; }
+        if (act === 'contact-edit') { window.mBT_UI_Settings_openContactTool(a1, 'edit'); return; }
+        if (act === 'contact-delete') { window.mBT_UI_Settings_deleteContact(a1); return; }
+        if (act === 'contact-undo') {
+            var contact = _mBTDeletedContacts.filter(function (c) { return c.id === a1; })[0];
+            if (!contact) return;
+            mBTStorage.getContactById(a1).then(function (current) {
+                if (current) throw new Error('A contact with this ID already exists. Nothing was overwritten.');
+                return mBTStorage.restoreContact(contact);
+            }).then(function () {
+                _mBTDeletedContacts = _mBTDeletedContacts.filter(function (c) { return c.id !== a1; });
+                return window.mBT_UI_Settings_refreshContacts();
+            }).catch(function (err) { mBTME.alert('Contacts', err.message); });
+            return;
+        }
+
         if (act === 'rate-add') {
             /* rate arrived as attribute text; the onclick built it as a number literal */
             var rateNum = parseFloat(a2);
@@ -2797,10 +2969,6 @@
         }
         if (act === 'rate-delete') {
             if (settings && settings.deleteRate) settings.deleteRate(a1);
-            return;
-        }
-        if (act === 'crew-add') {
-            if (window.mBT && mBT.data && mBT.data.addCrewToBudget) mBT.data.addCrewToBudget(a1, a2);
             return;
         }
         if (act === 'trash-remove') {
@@ -2855,6 +3023,7 @@
             }
             if (target.id === 'dateFormatSelect') {
                 if (window.projectDateFormatKey) localStorage.setItem(window.projectDateFormatKey, target.value);
+                if (window.mBTME && mBTME.alert) mBTME.alert('Date format', 'Saved. The date in new budget names will be written ' + (target.value === 'MMDDYYYY' ? 'month, day, year' : 'year, month, day') + '.');
                 return;
             }
             if (target.id === 'separatorInput') {
@@ -2863,6 +3032,16 @@
             }
             if (target.id === 'autoFetchRatesToggle') {
                 localStorage.setItem((window.storageKeyPrefix || '') + 'auto_fetch_rates', target.checked);
+                return;
+            }
+            if (target.id === 'decimalPlacesSelect') {
+                var b = window.budget;
+                if (!b) return;
+                if (!b.settings) b.settings = {};
+                b.settings.decimalPlaces = parseInt(target.value, 10);
+                if (typeof window.saveBudget === 'function') window.saveBudget();
+                if (typeof window.mBTLE !== 'undefined' && window.mBTLE.reconcile) window.mBTLE.reconcile();
+                if (typeof window.render === 'function') window.render();
             }
         });
         /* The cap toggles render as role="button" spans, so keyboard activation

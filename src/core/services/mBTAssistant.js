@@ -489,6 +489,25 @@ var mBTAssistant = (function () {
         return { mime: mime, data: data, dataUrl: raw };
     }
 
+    /* One plain sentence for any AI failure, so no notice shows raw provider text,
+       a status code or an internal code. The raw text stays in the console.
+       An Error marked plain = true was written by the app and is passed through. */
+    function plainError(raw) {
+        if (raw && raw.plain === true && raw.message) return String(raw.message);
+        var t = (raw && raw.message !== undefined) ? String(raw.message) : (raw == null ? '' : String(raw));
+        var low = t.toLowerCase();
+        var where = 'open Settings, then Connections, and check the AI provider and key.';
+        if (low === 'no-api-key') return 'AI is not set up yet, so open Settings, then Connections, and add an API key for your AI provider.';
+        if (low.indexOf('ai_rate_limited') > -1) return 'Wait a few seconds before another AI request.';
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'There is no internet connection, so the AI could not be reached. Reconnect and try again.';
+        if (low.indexOf('assistant unavailable') > -1) return 'The AI service did not load. Reload the page and try again.';
+        if (/\b(401|403)\b|api key|api_key|unauthori[sz]ed|invalid.*key|key.*invalid/.test(low)) return 'The AI provider did not accept the API key. Please ' + where;
+        if (/\b429\b|quota|rate limit|too many|exhausted|billing|credit/.test(low)) return 'The AI provider says its usage limit was reached. Wait a while, or check your plan with the provider.';
+        if (/\b(500|502|503|504)\b|overload|high demand|unavailable|busy/.test(low)) return 'The AI provider is busy right now. Try again in a minute.';
+        if (/failed to fetch|networkerror|network request|load failed|err_|could not reach|econnrefused|timed out|timeout|abort/.test(low)) return 'The AI could not be reached. Check your internet connection, and that the provider is running if it is on this computer, then try again.';
+        return 'The AI request did not work. Try again, or ' + where;
+    }
+
     /* =========================================================================
        PUBLIC API — callChat(options) → Promise<string>
        The single entry point for all LLM text generation.
@@ -823,6 +842,7 @@ var mBTAssistant = (function () {
         /* API callers */
         callChat:            callChat,
         callImageGen:        callImageGen,
+        plainError:          plainError,
         /* Slice (stub) */
         openSlice:           openSlice,
         /* Init */

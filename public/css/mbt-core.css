@@ -9,6 +9,186 @@
     --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.4);
 }
 
+/* Main budget summary. Keep calculation and action IDs in their existing owners. */
+.mbt-summary-totals, .mbt-summary-adjustments, .mbt-summary-extras {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+.mbt-summary-card {
+    position: relative;
+    min-width: 0;
+    padding: 12px 16px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 6px rgba(15,23,42,.07);
+    background: #fff;
+    color: #0f172a;
+    container-type: inline-size;
+}
+.mbt-summary-label {
+    display: block;
+    position: relative;
+    font-size: 11px;
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: #68768f;
+    margin: 0 0 4px;
+}
+#summary .mbt-summary-number {
+    position: relative;
+    min-width: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-weight: 800;
+    font-size: 25px;
+    line-height: 1.15;
+    letter-spacing: normal !important;
+    white-space: nowrap;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+/* Three totals: equal sleek pills, about 92 px tall. */
+.mbt-total-estimate, .mbt-total-actual, .mbt-total-delta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 92px;
+    padding: 14px 22px;
+}
+.mbt-total-estimate .mbt-summary-label, .mbt-total-actual .mbt-summary-label, .mbt-total-delta .mbt-summary-label { font-size: 12px; margin-bottom: 3px; }
+/* Totals: about 10 px above and below the text, 2 px between label and number. */
+.mbt-total-estimate, .mbt-total-actual, .mbt-total-delta { min-height: 0; padding: 10px 22px; overflow: hidden; }
+.mbt-total-estimate .mbt-summary-label, .mbt-total-actual .mbt-summary-label, .mbt-total-delta .mbt-summary-label { margin-bottom: 2px; line-height: 1.1; }
+#summary .mbt-total-estimate .mbt-summary-number, #summary .mbt-total-actual .mbt-summary-number, #summary .mbt-total-delta .mbt-summary-number { line-height: 1.1; }
+/* The faint icon is large as in the design, at the right, and cut off by the pill's top and bottom edges. It is positioned absolutely and the pill clips it, so it never makes the pill taller. The dollar shape has built in margin, so it is drawn larger (its circle is about 1.4 times the pill height). */
+.mbt-total-estimate .mbt-summary-watermark, .mbt-total-actual .mbt-summary-watermark, .mbt-total-delta .mbt-summary-watermark { right: 6px; display: flex; align-items: center; justify-content: center; }
+.mbt-total-estimate .mbt-summary-watermark { width: 118px; height: 118px; font-size: 118px; }
+.mbt-total-estimate .mbt-summary-watermark svg { width: 118px; height: 118px; }
+.mbt-total-actual .mbt-summary-watermark, .mbt-total-delta .mbt-summary-watermark { width: 104px; height: 104px; }
+.mbt-total-actual .mbt-summary-watermark svg, .mbt-total-delta .mbt-summary-watermark svg { width: 104px; height: 104px; }
+#summary .mbt-total-estimate .mbt-summary-number, #summary .mbt-total-actual .mbt-summary-number, #summary .mbt-total-delta .mbt-summary-number { font-size: clamp(16px, 11cqw, 32px); line-height: 1.1; }
+#summary .mbt-subtotal .mbt-summary-number { font-size: clamp(16px, 11cqw, 25px); }
+.mbt-total-estimate, .mbt-total-actual, .mbt-total-delta, .mbt-subtotal {
+    border: 0;
+    color: white;
+    overflow: hidden;
+}
+.mbt-total-estimate { background: linear-gradient(110deg,#0750ec,#2464f7); }
+.mbt-total-actual { background: linear-gradient(110deg,#009b72,#008767); }
+.mbt-total-delta { grid-column: 1 / -1; background: linear-gradient(110deg,#e58000,#d57400); }
+.mbt-total-delta.bg-rose-600 { background: #e11d48; }
+.mbt-subtotal { background: linear-gradient(110deg,#192537,#0d1728); display: flex; flex-direction: column; justify-content: center; padding: 7px 16px; }
+.mbt-total-estimate .mbt-summary-label { color: #bfdbfe; }
+.mbt-total-actual .mbt-summary-label { color: #a7f3d0; }
+.mbt-total-delta .mbt-summary-label { color: #ffdfae; }
+.mbt-subtotal .mbt-summary-label { color: #b4bdcc; }
+.mbt-summary-watermark {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: .15;
+    pointer-events: none;
+    font-size: 56px;
+    line-height: 1;
+}
+.mbt-summary-watermark svg { width: 56px; height: 56px; }
+/* Adjustment cards: label, then stepper left and amount right on one row, fringes under the amount, one line explanation. */
+.mbt-adjustment-values { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.mbt-adjustment-values > .mbt-summary-number, .mbt-adjustment-amount { flex: 1 1 auto; min-width: 0; text-align: right; }
+.mbt-adjustment-amount { position: static; }
+#summary .mbt-adjustment .mbt-summary-number { font-size: clamp(16px, 9.2cqw, 25px); }
+.mbt-percent {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    background: #f8fafc;
+    border: 1px solid #dbe2ee;
+    border-radius: 9px;
+    overflow: hidden;
+    color: #0f172a;
+    font-weight: 800;
+}
+.mbt-percent input {
+    width: 38px;
+    padding: 6px 0 6px 6px;
+    background: transparent;
+    font: inherit;
+    font-size: 17px;
+    text-align: right;
+    border: 0;
+    -moz-appearance: textfield;
+}
+.mbt-percent input::-webkit-inner-spin-button,
+.mbt-percent input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.mbt-percent > span { padding: 0 5px 0 1px; font-size: 15px; }
+.mbt-percent-arrows { display: flex; flex-direction: column; border-left: 1px solid #dbe2ee; }
+.mbt-percent-arrows button { width: 24px; min-height: 19px; font-size: 10px; line-height: 1; background: #eef2f8; }
+.mbt-percent-arrows button:hover { background: #dbeafe; }
+.mbt-percent :focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.mbt-summary-note { font-size: 11px; line-height: 1.35; color: #68768f; margin-top: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mbt-summary-fringes { position: absolute; right: 16px; bottom: 7px; white-space: nowrap; color: #d86600; font-size: 12px; line-height: 13.2px; margin: 0; }
+.mbt-adjustment { display: flex; flex-direction: column; justify-content: flex-start; }
+.mbt-adjustment .mbt-summary-label { margin-bottom: 6px; }
+.mbt-extra { padding: 6px 14px; }
+.mbt-extra-heading { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; }
+.mbt-extra-icon { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0; background: #ccf6e7; }
+.mbt-extra-icon svg { width: 18px; height: 18px; }
+.mbt-extra .mbt-summary-label { margin: 0; letter-spacing: .03em; font-size: 11.5px; line-height: 1.1; }
+.mbt-extra .mbt-summary-note { margin-top: 3px; line-height: 1.2; }
+#summary .mbt-extra .mbt-summary-number { flex: 0 1 auto; min-width: max-content; line-height: 1.1; font-size: clamp(15px, 8.2cqw, 28px) !important; }
+.mbt-rebate { background: #f0fdf8; border-color: #c7f4e3; text-align: left; }
+.mbt-rebate .mbt-summary-label, .mbt-rebate .mbt-summary-number, .mbt-rebate .mbt-extra-icon { color: #00865d; }
+.mbt-burn { background: #fff3f5; border-color: #ffd1dc; }
+.mbt-burn .mbt-summary-label, .mbt-burn .mbt-summary-number, .mbt-burn .mbt-extra-icon { color: #e60041; }
+.mbt-burn .mbt-extra-icon { background: #ffdce5; }
+.mbt-action-tile { width: 36px !important; height: 36px !important; min-width: 36px !important; padding: 0 !important; border-radius: 12px !important; flex-shrink: 0; }
+#currencyBtnCode { font-size: 25px !important; letter-spacing: normal; }
+/* The three tiles are square and as tall as the REC bar beside them (36 px). */
+#currencyBtn #currencyBtnCode { font-size: 20px !important; display: inline-block; transform: scaleX(.82); letter-spacing: -0.02em; }
+#openAiToolsBtn.mbt-action-tile { background: #4e32ed; color: white; }
+#openAiToolsBtn.mbt-action-offline { background: #64748b; }
+#openAiToolsBtn svg { width: 26px; height: 26px; }
+#shareHubBtn.mbt-action-tile { background: #00976f; }
+#shareHubBtn svg { width: 26px; height: 26px; }
+.mbt-theme-dark .mbt-adjustment { background: #172337; border-color: #334155; color: #f1f5f9; }
+.mbt-theme-dark .mbt-summary-note, .mbt-theme-dark .mbt-adjustment .mbt-summary-label { color: #b7c5da; }
+.mbt-theme-dark .mbt-percent { background: #0f172a; border-color: #475569; color: #f1f5f9; }
+.mbt-theme-dark .mbt-percent-arrows button { background: #334155; }
+.mbt-theme-dark .mbt-percent-arrows button:hover { background: #475569; }
+.mbt-theme-dark .mbt-summary-fringes { color: #ffb464; }
+.mbt-theme-dark .mbt-rebate { background: #092d27; border-color: #146b50; }
+.mbt-theme-dark .mbt-rebate .mbt-summary-label, .mbt-theme-dark .mbt-rebate .mbt-summary-number { color: #6ee7b7; }
+.mbt-theme-dark .mbt-burn { background: #351423; border-color: #77334c; }
+.mbt-theme-dark .mbt-burn .mbt-summary-label, .mbt-theme-dark .mbt-burn .mbt-summary-number { color: #ff83a4; }
+/* Row of four: about 7 px above and below the content, the % box centred between the label and the subtitle (4 px each side), box edge aligned with the words. */
+.mbt-summary-adjustments > .mbt-adjustment { padding: 7px 16px; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-summary-label { margin-bottom: 4px; line-height: 1.1; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-adjustment-values { min-height: 38px; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-percent input { padding: 5px 0 5px 6px; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-percent { margin-left: -0.75px; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-percent-arrows button { min-height: 18px; }
+.mbt-summary-adjustments > .mbt-adjustment .mbt-summary-note { margin-top: 4px; line-height: 1.2; }
+/* A card too narrow for stepper and amount side by side stacks them the same way in all three. */
+@container (max-width: 205px) {
+    .mbt-adjustment-values { flex-direction: column; align-items: flex-start; }
+    .mbt-adjustment-values > .mbt-summary-number, .mbt-adjustment-amount { text-align: left; }
+    .mbt-summary-fringes { position: static; }
+    .mbt-adjustment .mbt-summary-note { padding-right: 0 !important; }
+}
+@media (min-width: 1280px) {
+    .mbt-summary-totals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mbt-total-delta { grid-column: auto; }
+    .mbt-summary-adjustments { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (max-width: 599px) {
+    .mbt-summary-totals, .mbt-summary-adjustments, .mbt-summary-extras { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .mbt-total-estimate, .mbt-total-actual, .mbt-total-delta { min-height: 64px; }
+}
+
 /* Sprint 1: Typography Baseline Enforcement */
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -670,8 +850,8 @@ body {
     -webkit-appearance: none;
     appearance: none;
     line-height: 16px !important;
-    padding-right: 24px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    padding-right: 8px;
+    background-image: none;
     background-repeat: no-repeat;
     background-position: right 8px center;
     background-size: 12px 12px;
@@ -2068,6 +2248,11 @@ body.mbt-partner-open {
 body.mbt-partner-open #tool-windowModal {
     left: var(--mbt-partner-rail);
 }
+/* Phone tools use the same full-width modal surface as Settings.
+   The funding rail remains in place and returns when the modal closes. */
+@media (max-width: 640px) {
+    body.mbt-partner-open #tool-windowModal { left: 0; }
+}
 
 body.mbt-partner-gone #mbt-partner-rail,
 body.mbt-partner-gone #mbt-partner-chevron {
@@ -2083,10 +2268,13 @@ body.mbt-partner-gone #mbt-partner-chevron {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Footer HUD is fixed at bottom 0, ~80px with padding. Rail stops above it. */
+/* Footer HUD (#footer-hud) is a full-width TRANSPARENT container with
+   pointer-events:none; the only painted dock is #footer-nav, a ~374px pill
+   centred by mx-auto. At every desktop width the pill starts well right of
+   the 172px rail, so the rail has nothing to clear and runs full height. */
 #mbt-partner-rail {
     top: 0;
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    bottom: 0;
     left: 0;
     width: 172px;
     box-sizing: border-box;
@@ -2231,7 +2419,7 @@ body.mbt-partner-gone #mbt-partner-chevron {
 }
 
 #mbt-partner-chevron {
-    top: calc((100vh - 80px - env(safe-area-inset-bottom, 0px)) / 2);
+    top: 50vh;
     left: 0;
     right: auto;
     transform: translateY(-50%);

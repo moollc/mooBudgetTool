@@ -8,7 +8,11 @@
         var state = {
             projectKey: null,
             budget: null,
-            milestones: []  /* [{ id, date, title, note }] */
+            milestones: [], /* [{ id, date, title, note }] */
+            baseUpdatedAt: '', /* updated_at of the stored copy this window last read or wrote */
+            saveSeq: 0,
+            saveChain: Promise.resolve(),
+            ackTimer: null
         };
 
         var STAGE_CONFIG = [
@@ -19,7 +23,7 @@
             { key: 'dist', label: 'Distribution',      color: '#ec4899', text: '#fff' }
         ];
 
-        function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
         function fmtDate(d) {
             if (!d) return '—';
@@ -398,7 +402,7 @@
                     var stageLabel = stage ? '<span class="text-[6px] font-black uppercase tracking-widest truncate block mt-0.5" style="color:' + stage.color + ';">' + esc(stage.label.split('-')[0].trim()) + '</span>' : '';
                     var blackoutLabel = isBlackout ? '<span class="text-[6px] font-black text-violet-500 uppercase">OFF</span>' : '';
 
-                    html += '<div onclick="mBTCalendar.toggleBlackout(\'' + dateStr + '\')" class="' + cellBg + ' ' + todayRing + ' min-h-[48px] p-1 cursor-pointer hover:brightness-95 transition-all flex flex-col items-center" style="' + cellStyle + '">' +
+                    html += '<div onclick="mBTCalendar.toggleBlackout(' + esc(JSON.stringify(String(dateStr))) + ')" class="' + cellBg + ' ' + todayRing + ' min-h-[48px] p-1 cursor-pointer hover:brightness-95 transition-all flex flex-col items-center" style="' + cellStyle + '">' +
                         dayNum +
                         msDot +
                         stageLabel +
@@ -521,15 +525,114 @@
             updateScrollAffordance();
         }
 
+        /* What the calendar owns inside a budget: milestones, blackout days, work week and the stage days and offsets.
+           Nothing else is sent or written, so a save cannot put an old copy of the rest of the budget back. */
+        function calendarPayload() {
+            var b = state.budget || {}, stages = {}, tl = b.targetLock && b.targetLock.stages, i, c, s;
+            if (tl) {
+                for (i = 0; i < STAGE_CONFIG.length; i++) {
+                    c = STAGE_CONFIG[i].key; s = tl[c];
+                    if (!s) continue;
+                    stages[c] = { days: s.days };
+                    if (s.offsetDays !== undefined) stages[c].offsetDays = s.offsetDays;
+                }
+            }
+            return {
+                projectName: b.projectName || '',
+                milestones: JSON.parse(JSON.stringify(state.milestones)),
+                blackoutDays: (b.blackoutDays || []).slice(),
+                workWeek: b.settings && b.settings.workWeek,
+                stages: stages
+            };
+        }
+
+        function applyCalendarFields(target, cal) {
+            var k, st;
+            target.calendarNotes = cal.milestones;
+            target.blackoutDays = cal.blackoutDays;
+            if (cal.workWeek) {
+                if (!target.settings) target.settings = {};
+                target.settings.workWeek = cal.workWeek;
+            }
+            if (target.targetLock && target.targetLock.stages) {
+                for (k in cal.stages) {
+                    if (!Object.prototype.hasOwnProperty.call(cal.stages, k)) continue;
+                    st = target.targetLock.stages[k];
+                    if (!st) continue;
+                    st.days = cal.stages[k].days;
+                    if (cal.stages[k].offsetDays === undefined) delete st.offsetDays; else st.offsetDays = cal.stages[k].offsetDays;
+                }
+            }
+        }
+
+        /* A save that did not land is said out loud and the draft stays on screen. Text only, no markup. */
+        function showSaveNotice(message) {
+            var el = dom.getElementById('cal-save-notice');
+            if (!el) {
+                el = dom.createElement('div');
+                el.id = 'cal-save-notice';
+                el.setAttribute('role', 'alert');
+                el.style.cssText = 'position:sticky;top:0;z-index:50;background:#fef3c7;color:#92400e;border-bottom:1px solid #fcd34d;padding:8px 12px;font-size:12px;font-weight:700;';
+                dom.body.insertBefore(el, dom.body.firstChild);
+            }
+            el.textContent = message;
+        }
+        function clearSaveNotice() {
+            var el = dom.getElementById('cal-save-notice');
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+
+        /* The next time stamp is always later than the one it replaces. */
+        function nextStamp(previous) {
+            var now = new Date().toISOString();
+            if (previous && now <= previous) now = new Date(new Date(previous).getTime() + 1).toISOString();
+            return now;
+        }
+
+        /* Inside the app: send the calendar's fields to the budget window, which applies them to its open budget and saves
+           through its normal save. This window does not write the budget and the app does not reload it. */
+        function saveThroughParent() {
+            var seq = state.saveSeq += 1;
+            window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones, calendar: calendarPayload(), requestId: seq } }, window.location.origin);
+            if (state.ackTimer) clearTimeout(state.ackTimer);
+            state.ackTimer = setTimeout(function () {
+                if (seq === state.saveSeq) showSaveNotice('The budget did not confirm this calendar save. Your changes are kept in this window. Check that the budget is still open.');
+            }, 8000);
+        }
+
+        /* On its own: write only the calendar fields onto the freshly read stored copy, advance updated_at, and refuse to write
+           over a copy that was saved by someone else after this window read it. The draft stays on screen. */
+        function saveStandalone() {
+            state.saveChain = state.saveChain.then(function () {
+                return localforage.getItem(state.projectKey).then(function (stored) {
+                    var stale;
+                    if (!stored) throw new Error('The saved budget could not be found.');
+                    if ((stored.updated_at || '') > (state.baseUpdatedAt || '')) {
+                        stale = new Error('stale');
+                        stale.stale = true;
+                        throw stale;
+                    }
+                    applyCalendarFields(stored, calendarPayload());
+                    stored.updated_at = nextStamp(stored.updated_at);
+                    return localforage.setItem(state.projectKey, stored).then(function () {
+                        state.baseUpdatedAt = stored.updated_at;
+                        state.budget.updated_at = stored.updated_at;
+                        clearSaveNotice();
+                    });
+                });
+            }).catch(function (e) {
+                console.error('[CAL] save failed', e);
+                showSaveNotice(e && e.stale
+                    ? 'A newer copy of this budget was saved somewhere else. Your calendar changes are kept in this window but were not saved. Reopen the budget to see the newer copy.'
+                    : 'Calendar changes were not saved: ' + ((e && e.message) || 'storage error') + '. They are kept in this window.');
+            });
+        }
+
         function save() {
             if (!state.projectKey || !state.budget) return;
             state.budget.calendarNotes = state.milestones;
-            localforage.setItem(state.projectKey, state.budget).then(function () {
-                /* --- Notify parent to reload calendar data --- */
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-updated', payload: { milestones: state.milestones } }, window.location.origin);
-                }
-            }).catch(function (e) { console.error('[CAL] save failed', e); });
+            if (window.parent && window.parent !== window) saveThroughParent();
+            else saveStandalone();
         }
 
         function load() {
@@ -553,6 +656,7 @@
                     return;
                 }
                 state.budget = budget;
+                state.baseUpdatedAt = budget.updated_at || '';
                 state.milestones = budget.calendarNotes || [];
 
                 /* --- Initialize work week selector --- */
@@ -622,6 +726,19 @@
             if (currentView === 'calendar') renderCalendarGrid();
             updateScrollAffordance();
         }
+        /* The budget window answers every calendar save. Only the newest save's answer matters. */
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'calendar-updated') return;
+            if (e.data.requestId && e.data.requestId !== state.saveSeq) return;
+            if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
+            if (e.data.status === 'success') clearSaveNotice();
+            else showSaveNotice('Calendar changes were not saved: ' + (e.data.message || 'the budget could not save them') + '. They are kept in this window.');
+        });
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.action !== 'owner-budget-update') return;
+            state.budget = JSON.parse(JSON.stringify(e.data.payload)); state.projectKey = 'prodBudget_v5_' + state.budget.projectName;
+            state.milestones = state.budget.calendarNotes || []; refreshAll();
+        });
 
         /* --- ICS export: stages, delivery date, and user milestones --- */
         function exportICS() {
@@ -638,6 +755,10 @@
             ];
 
             var projectName = budget.projectName || 'Production';
+            function text(v) {
+                return String(v || '').replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,');
+            }
+            function nextDay(d) { var end = new Date(d); end.setDate(end.getDate() + 1); return end; }
 
             /* Stage milestone events */
             if (timeline) {
@@ -647,8 +768,8 @@
                         'BEGIN:VEVENT',
                         'DTSTART;VALUE=DATE:' + dateToICS(t.start),
                         'DTEND;VALUE=DATE:' + dateToICS(t.end),
-                        'SUMMARY:' + projectName + ' — ' + t.label + ' (' + t.days + 'd)',
-                        'DESCRIPTION:Stage: ' + t.label + '\\nDays: ' + t.days,
+                        'SUMMARY:' + text(projectName + ' - ' + t.label + ' (' + t.days + 'd)'),
+                        'DESCRIPTION:' + text('Stage: ' + t.label + '\nDays: ' + t.days),
                         'END:VEVENT'
                     );
                 });
@@ -660,27 +781,40 @@
                 lines.push(
                     'BEGIN:VEVENT',
                     'DTSTART;VALUE=DATE:' + dateToICS(del),
-                    'DTEND;VALUE=DATE:' + dateToICS(del),
-                    'SUMMARY:' + projectName + ' — Delivery Target',
+                    'DTEND;VALUE=DATE:' + dateToICS(nextDay(del)),
+                    'SUMMARY:' + text(projectName + ' - Delivery Target'),
                     'DESCRIPTION:Delivery/distribution target date.',
                     'END:VEVENT'
                 );
             }
 
             /* User milestones */
-            state.milestones.forEach(function (m) {
-                if (!m.date) return;
+            var unresolved = [];
+            (budget.blackoutDays || []).forEach(function (date) {
+                var d = parseDate(date);
+                if (isNaN(d.getTime())) { unresolved.push('Blackout: ' + date); return; }
+                lines.push('BEGIN:VEVENT', 'DTSTART;VALUE=DATE:' + dateToICS(d),
+                    'DTEND;VALUE=DATE:' + dateToICS(nextDay(d)),
+                    'SUMMARY:' + text(projectName + ' - Blackout'), 'END:VEVENT');
+            });
+            resolveMilestones(timeline).forEach(function (m) {
+                if (!m.date || isNaN(parseDate(m.date).getTime())) { unresolved.push(m.title || 'Milestone'); return; }
                 var d = parseDate(m.date);
                 lines.push(
                     'BEGIN:VEVENT',
                     'DTSTART;VALUE=DATE:' + dateToICS(d),
-                    'DTEND;VALUE=DATE:' + dateToICS(d),
-                    'SUMMARY:' + (m.title || 'Milestone'),
+                    'DTEND;VALUE=DATE:' + dateToICS(nextDay(d)),
+                    'SUMMARY:' + text(m.title || 'Milestone'),
                     'END:VEVENT'
                 );
             });
 
             lines.push('END:VCALENDAR');
+            if (unresolved.length) {
+                var message = 'These milestones have no resolved date and were not exported: ' + unresolved.join(', ');
+                if (window.mBTME) mBTME.alert('Calendar export', message);
+                else if (window.parent !== window) window.parent.postMessage({ type: 'mbt:tool-action', action: 'calendar-notice', payload: { message: message } }, window.location.origin);
+            }
 
             var blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
             var a = document.createElement('a');

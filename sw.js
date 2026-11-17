@@ -29,6 +29,7 @@ var PRECACHE_ASSETS = [
     './src/lib/marked.min.js',
     './src/lib/dompurify.min.js',
     './src/lib/pdf.min.js',
+    './src/lib/pdf.worker.min.js',
     './src/lib/localforage.min.js',
     './src/lib/jszip.min.js',
     './src/lib/supabase.min.js',
@@ -42,10 +43,13 @@ var PRECACHE_ASSETS = [
     './src/scripts/engine/opengate-api.js',
     './src/scripts/engine/opfs.js',
     './src/scripts/engine/publisher.js',
+    './src/core/logic/DocumentProjection.js',
+    './src/data/document-field-map.json',
 
     /* --- Event routing & AI bridge --- */
     './src/core/logic/EventRouter.js',
     './src/core/logic/AIModule.js',
+    './src/core/logic/VoiceInput.js',
     './src/core/logic/ContextLedger.js',
 
     /* --- App CSS --- */
@@ -55,7 +59,11 @@ var PRECACHE_ASSETS = [
     /* --- Core UI modules (loaded by monolith) --- */
     './src/core/mBT.assets.js',
     './src/core/mBT.templates.js',
+    './src/core/mBT.batch2.js',
+    './src/services/budget-history.js',
+    './src/services/budget-exchange.js',
     './src/core/ui.settings.js',
+    './src/core/logic/BudgetSafety.js',
     './src/core/finance.engine.js',
 
     /* --- Core services (loaded by monolith) --- */

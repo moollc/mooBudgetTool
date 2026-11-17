@@ -29,8 +29,8 @@ function helpOverlayTemplate(activeTool) {
             { keys: 'Search', desc: 'Filter by name/dept' }
         ],
         'po': [
-            { keys: 'Click PO', desc: 'Edit purchase order' },
-            { keys: 'Status Dropdown', desc: 'Change PO lifecycle' }
+            { keys: 'Edit button', desc: 'Edit a purchase order' },
+            { keys: 'Status Dropdown', desc: 'Change purchase order status' }
         ],
         'publisher': [
             { keys: 'Click Template', desc: 'Open document editor' },
