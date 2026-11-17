@@ -20,12 +20,18 @@
   <script src="../../lib/jspdf.umd.min.js"></script>
   <script src="../../lib/jspdf.plugin.autotable.min.js"></script>
   <script src="../../lib/html2pdf.bundle.min.js"></script>
+  <script src="../../lib/html2canvas.min.js"></script>
+  <script src="../../core/mBT.batch2.js"></script>
   <script src="../../lib/xlsx.full.min.js"></script>
 
   <!-- Tier 4: Publisher Engine (templates live here) -->
+  <script src="../../core/finance.engine.js"></script>
   <script src="../../scripts/engine/publisher.js"></script>
+  <script src="../../core/logic/DocumentProjection.js"></script>
 
   <style>
+    /* Batch 6 menu rule: no down arrow on choice boxes. They stay native selects, so keyboard use and phone pickers are unchanged. */
+    select { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: none; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; --text: #1e293b;
@@ -65,6 +71,8 @@
     /* ---- Toolbar ---- */
     #preview-toolbar { min-height: 28px; height: auto; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 3px; padding: 3px 8px; flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; }
     #preview-toolbar-title { font-weight: 700; font-size: 11px; margin-right: 6px; }
+    #export-progress { padding: 4px 10px; font-size: 11px; color: var(--primary); background: var(--surface); flex-shrink: 0; }
+    #export-progress:empty { display: none; }
     .tab-bar { display: inline-flex; background: #f1f5f9; border-radius: 4px; padding: 2px; margin-right: 4px; flex-shrink: 0; }
     .tab-btn { padding: 2px 8px; font-size: 10px; font-weight: 700; border: none; background: transparent; cursor: pointer; border-radius: 3px; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
     .tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
@@ -329,10 +337,6 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
             <span class="lbl">All Financial</span>
           </button>
-          <button class="toolbar-btn" id="btn-pdf-jspdf" title="Export PDF via jsPDF (table-based layout)">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
-            <span class="lbl">PDF (Alt)</span>
-          </button>
           <button class="toolbar-btn" id="btn-html" title="Download HTML">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             <span class="lbl">HTML</span>
@@ -345,6 +349,8 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             <span class="lbl">Share</span>
           </button>
+          <button class="toolbar-btn" id="btn-storyboard-jpeg" style="display:none">Export storyboard JPEG</button>
+          <button class="toolbar-btn" id="btn-storyboard-share-jpeg" style="display:none">Share storyboard JPEG</button>
           <button class="toolbar-btn" id="btn-xlsx" title="Export XLSX spreadsheet">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
             <span class="lbl">XLSX</span>
@@ -363,10 +369,13 @@
           <span class="lbl">PDF</span>
         </button>
       </div>
+      <div id="export-progress" role="status" aria-live="polite"></div>
       <div id="options-bar">
+        <label id="storyboard-choice" style="display:none">Export <select id="storyboard-frame" aria-label="Storyboard frame"><option value="all">Whole storyboard</option></select></label>
+        <label id="share-format-choice" style="display:none">Share as <select id="share-format" aria-label="Share format"><option value="pdf">PDF</option><option value="jpeg">JPEG images</option></select></label>
         <label for="opt-currency">Currency</label>
         <select id="opt-currency">
-          <option value="JMD">JMD</option><option value="USD">USD</option><option value="GBP">GBP</option><option value="CAD">CAD</option><option value="EUR">EUR</option>
+          <option value="JMD">JMD</option><option value="USD">USD</option><option value="GBP">GBP</option><option value="CAD">CAD</option><option value="EUR">EUR</option><option value="TTD">TTD</option><option value="BBD">BBD</option><option value="GYD">GYD</option><option value="XCD">XCD</option>
         </select>
         <div id="watermark-wrap">
           <label for="watermark-select">Watermark</label>
@@ -420,6 +429,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== State ======== */
   var budget = null;
   var currency = 'JMD';
+  var afCurrencyChosen = false;
   var conversionRate = 1;
   var _syncedRates = null;     /* live rate table from parent mbt:displayCurrency (USD-pivot) */
   var weatherFetchController = null; /* AbortController — cancelled on new fetch to prevent race conditions */
@@ -428,7 +438,113 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var editorData = null;       /* current editable template data */
   var pub = null;
   var saveTimer = null;
+  var pendingDocumentSaves = {};
   var hasUnsaved = false;      /* true when editorData changed but not yet persisted */
+  var fundingBase = [];
+  var fundingDeletes = [];
+  var fundingQueue = Promise.resolve();
+  var fundingRequests = {};
+  var fundingRequestNumber = 0;
+  var fundingSaveError = null;
+  var editorSaveNumber = 0;
+
+  function requestFunding(operations) {
+    return new Promise(function (resolve, reject) {
+      if (window.parent === window) { reject(new Error('Open Docs inside the budget app to edit funding sources.')); return; }
+      var id = 'db_funding_' + (++fundingRequestNumber);
+      var timer = setTimeout(function () { delete fundingRequests[id]; reject(new Error('Funding save did not respond. Reopen Docs before retrying.')); }, 5000);
+      fundingRequests[id] = { resolve: resolve, reject: reject, timer: timer };
+      window.parent.postMessage({ type: 'mbt:tool-action', action: 'funding-sources', requestId: id,
+        payload: { projectKey: projectKey, operations: operations || [] } }, window.location.origin);
+    });
+  }
+  window.addEventListener('message', function (e) {
+    if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.type !== 'mbt:funding-reply') return;
+    var request = fundingRequests[e.data.requestId];
+    if (!request) return;
+    clearTimeout(request.timer);
+    delete fundingRequests[e.data.requestId];
+    if (e.data.status === 'success') request.resolve(e.data.sources || []);
+    else request.reject(new Error(e.data.message || 'Funding sources could not be saved.'));
+  });
+  function fundingError(err) {
+    var validation = err.code === 'funding_name_required';
+    if (activeTemplateId === 'fundingPackage') {
+      fundingSaveError = validation ? null : err;
+      if (validation) {
+        var saved = fundingBase.filter(function (row) { return row.id === err.sourceId; })[0];
+        (editorData.sources || []).forEach(function (source) {
+          if (saved && source.id === saved.id && !String(source.name || '').trim()) source.name = saved.name;
+        });
+        buildEditor(activeTemplateId);
+      }
+    }
+    markUnsaved();
+    var ind = dom.getElementById('save-indicator');
+    if (ind) {
+      ind.textContent = err.message;
+      ind.title = err.message;
+      ind.style.color = '#b91c1c';
+      if (activeTemplateId === 'fundingPackage' && !validation) {
+        var retry = document.createElement('button');
+        retry.type = 'button';
+        retry.id = 'mBT-funding-retry';
+        retry.textContent = 'Retry Save';
+        retry.addEventListener('click', saveEditorData);
+        ind.appendChild(retry);
+      }
+    }
+  }
+  function syncFundingEdits() {
+    var next = JSON.parse(JSON.stringify(editorData.sources || []));
+    next.forEach(function (source) {
+      if (!source.id) source.id = 'funding_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    });
+    editorData.sources = JSON.parse(JSON.stringify(next));
+    next = next.filter(function (source) {
+      if (String(source.name || '').trim()) return true;
+      if (fundingBase.some(function (row) { return row.id === source.id; })) {
+        var error = new Error('A saved funding source needs a name. The saved name has been kept.');
+        error.code = 'funding_name_required'; error.sourceId = source.id;
+        throw error;
+      }
+      return false;
+    });
+    /* A row returns to the editor (undo or reload) before this save runs. Drop that delete. */
+    var deleteIds = fundingDeletes.filter(function (id) {
+      return !next.some(function (row) { return row.id === id; });
+    });
+    fundingDeletes = deleteIds.slice();
+    var saving = fundingQueue.then(function () {
+      var operations = [];
+      next.forEach(function (source) {
+        var previous = fundingBase.filter(function (row) { return row.id === source.id; })[0];
+        var fields = {};
+        ['name', 'amount', 'currency', 'status'].forEach(function (field) {
+          if (!previous || source[field] !== previous[field]) fields[field] = source[field];
+        });
+        if (Object.keys(fields).length) operations.push({ type: previous ? 'update' : 'add', id: source.id, fields: fields });
+      });
+      /* Absent rows are not deletes. Only the funding-row delete control records an id. */
+      deleteIds.forEach(function (id) {
+        if (fundingBase.some(function (source) { return source.id === id; }) && !next.some(function (row) { return row.id === id; })) {
+          operations.push({ type: 'delete', id: id });
+        }
+      });
+      return requestFunding(operations);
+    }).then(function (sources) {
+      /* Compare the next edit with what this editor sent, not unseen parent edits. */
+      fundingDeletes = fundingDeletes.filter(function (id) {
+        return (sources || []).some(function (row) { return row.id === id; });
+      });
+      fundingBase = JSON.parse(JSON.stringify(next));
+      if (budget) budget.fundingSources = sources;
+      fundingSaveError = null;
+    });
+    /* A failed save remains retryable. Keep the last accepted comparison base. */
+    fundingQueue = saving.catch(function () {});
+    return saving;
+  }
   var watermark = '';          /* '' | 'DRAFT' | 'CONFIDENTIAL' | 'APPROVED' | 'FOR REVIEW' */
   var brandSettings = { name: '', address: '' };
 
@@ -484,17 +600,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Keys MUST match real editor fld() keys — orphan keys make AI Fill a silent no-op
      (v23.57 audit: callSheet used weather/notes/safetyNote, none rendered; fundingPackage
      listed synopsis, which only exists on pitchDeck). */
-  var AI_FILL_TEMPLATES = {
-    fundingPackage:    ['logline', 'genre', 'format', 'director', 'producer', 'writer'],
-    callSheet:         ['weatherConditions', 'safetyNotes'],
-    crewList:          ['notes'],
-    pitchDeck:         ['logline', 'synopsis', 'targetMarket', 'comparables', 'directorStatement', 'directorBio', 'useOfFunds'],
-    crewDealMemo:      ['role', 'department', 'terms', 'creditName', 'creditBilling'],
-    talentAgreement:   ['roleDescription', 'territory', 'media', 'rightsDuration', 'exclusivityPeriod', 'terms'],
-    locationAgreement: ['propertyDescription', 'accessInstructions', 'terms'],
-    appearanceRelease: ['sceneDescription', 'terms'],
-    nda:               ['projectDescription', 'governingLaw', 'terms']
-  };
+  var AI_FILL_TEMPLATES = mBTDocumentProjection.prose;
 
   /* Templates that support XLSX export */
   var XLSX_TEMPLATES = ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash'];
@@ -503,8 +609,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var logoData = null;
   var docTheme = '';
 
-  /* Default exchange rates FROM JMD. Stored/overridden in localStorage. */
-  var DEFAULT_RATES = { JMD: 1, USD: 0.0065, GBP: 0.0051, CAD: 0.0089, EUR: 0.0060 };
+  /* Currency choices only; conversion always uses the loaded budget snapshot. */
+  var DEFAULT_CURRENCIES = ['JMD', 'USD', 'GBP', 'CAD', 'EUR'];
   var BASE_CURRENCY = 'JMD'; /* Budget values are stored in this currency */
 
   /* WMO weather code descriptions */
@@ -518,33 +624,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     95:'Thunderstorm', 96:'Thunderstorm/hail', 99:'Thunderstorm/heavy hail'
   };
 
-  function getRate(cur) {
-    var stored = localStorage.getItem('mbtdb_rate_' + cur);
-    return stored !== null ? parseFloat(stored) : (DEFAULT_RATES[cur] || 1);
-  }
-  function saveRate(cur, val) {
-    localStorage.setItem('mbtdb_rate_' + cur, val);
-  }
-
-  /* Parent / live rate table (same USD-pivot shape as Budget Editor). */
+  /* Documents price the loaded budget only; saved tool rates and parent budgets are not rate sources. */
   function getRateTable() {
-    if (_syncedRates) return _syncedRates;
-    try {
-      if (window.parent && window.parent !== window && window.parent.mBT &&
-          window.parent.mBT.logic && window.parent.mBT.logic.currency &&
-          typeof window.parent.mBT.logic.currency._getRates === 'function') {
-        return window.parent.mBT.logic.currency._getRates();
-      }
-    } catch (e) { /* cross-origin or unavailable */ }
-    try {
-      if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
-        var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
-        if (snap) return JSON.parse(snap);
-      }
-      var live = localStorage.getItem('prodBudget_v5_rates');
-      if (live) return JSON.parse(live);
-    } catch (e2) { /* ignore */ }
-    return null;
+    return budget && budget.exchangeRateState ? budget.exchangeRateState.rates : null;
   }
 
   /* Multiplier: 1 base unit -> display units. Matches stages/parent convert math. */
@@ -552,18 +634,28 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
     var code = displayCode || currency || 'JMD';
     if (base === code) return 1;
-    var rates = getRateTable();
-    if (rates && rates[base] && rates[code]) {
-      return rates[code] / rates[base];
+    var engine = window.mBT && window.mBT.le;
+    return engine && engine.convertCurrencyOrNull ? engine.convertCurrencyOrNull(1, base, code, budget, true) : null;
+  }
+
+  var noRateFor = '';
+  function refreshConversion() {
+    var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
+    var r = computeConversionRate(currency);
+    noRateFor = '';
+    if (r === null) {
+      noRateFor = currency;
+      currency = base;
+      var chosen = dom.getElementById('opt-currency');
+      if (chosen) chosen.value = base;
+      r = 1;
     }
-    /* Legacy mBTDB JMD-from rates only valid when budget base is JMD */
-    if (base === 'JMD') return getRate(code);
-    return 1;
+    conversionRate = r;
+    updateRateUI();
   }
 
   function syncConversionFromUI() {
-    conversionRate = computeConversionRate(currency);
-    updateRateUI();
+    refreshConversion();
   }
 
   /* ======== URL Params ======== */
@@ -572,15 +664,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var projectId  = params.get('projectId')  || null;
   var urlCurrency = params.get('currency');
   if (urlCurrency) {
+    afCurrencyChosen = true;
     currency = urlCurrency;
     var sel = dom.getElementById('opt-currency');
     if (sel) sel.value = urlCurrency;
   }
-  conversionRate = getRate(currency);
-  updateRateUI();
+  refreshConversion();
 
   /* ======== Helpers ======== */
-  function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
   var _dbDialogEl = null;
   function _dbRemoveDialog() {
@@ -658,7 +750,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var dbUndoDebounceTimer = null;
 
   function dbCaptureSnapshot() {
-    return JSON.parse(JSON.stringify(editorData));
+    return { projectKey: projectKey || projectId || 'default', templateId: activeTemplateId,
+      data: JSON.parse(JSON.stringify(editorData)) };
   }
 
   function dbPushUndo() {
@@ -682,11 +775,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function dbUndo() {
     if (!dbUndoStack.length) return;
+    var candidate = dbUndoStack[dbUndoStack.length - 1];
+    if (!candidate || candidate.projectKey !== (projectKey || projectId || 'default') || candidate.templateId !== activeTemplateId) {
+      showToast('Undo belongs to a different budget or document. Open the original document first.', 'error');
+      return;
+    }
     clearTimeout(dbUndoDebounceTimer);
     dbUndoDebounceTimer = null;
     dbRedoStack.push(dbCaptureSnapshot());
     var prev = dbUndoStack.pop();
-    editorData = prev;
+    editorData = prev.data;
     saveEditorData();
     buildEditor(activeTemplateId);
     dbUpdateUndoUI();
@@ -694,11 +792,21 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function dbRedo() {
     if (!dbRedoStack.length) return;
+    var candidate = dbRedoStack[dbRedoStack.length - 1];
+    if (!candidate || candidate.projectKey !== (projectKey || projectId || 'default') || candidate.templateId !== activeTemplateId) {
+      showToast('Redo belongs to a different budget or document. Open the original document first.', 'error');
+      return;
+    }
     clearTimeout(dbUndoDebounceTimer);
     dbUndoDebounceTimer = null;
     dbUndoStack.push(dbCaptureSnapshot());
     var next = dbRedoStack.pop();
-    editorData = next;
+    if (activeTemplateId === 'fundingPackage') {
+      (editorData.sources || []).forEach(function (source) {
+        if (source.id && !(next.data.sources || []).some(function (row) { return row.id === source.id; }) && fundingDeletes.indexOf(source.id) < 0) fundingDeletes.push(source.id);
+      });
+    }
+    editorData = next.data;
     saveEditorData();
     buildEditor(activeTemplateId);
     dbUpdateUndoUI();
@@ -745,9 +853,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (has) sel.value = code;
     }
     if (e.data.rates) _syncedRates = e.data.rates;
+    afCurrencyChosen = true;
     currency = code;
-    conversionRate = computeConversionRate(currency);
-    updateRateUI();
+    refreshConversion();
     if (activeTab === 'preview' && activeTemplateId) renderPreview();
   });
 
@@ -762,12 +870,33 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
+    var backEpoch = _afEpoch;
+    if (activeTemplateId === 'fundingPackage') {
+      clearTimeout(saveTimer);
+      var backKey = storageKey('fundingPackage');
+      var data = JSON.parse(JSON.stringify(editorData));
+      delete data.sources;
+      fundingQueue.then(function () {
+        if (fundingSaveError) throw fundingSaveError;
+        return flushDocumentSaves();
+      }).then(function () {
+        return localforage.setItem(backKey, data);
+      }).then(function () {
+        if (backEpoch !== _afEpoch) return;
+        hasUnsaved = false;
+        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
+      }).catch(fundingError);
+      return;
+    }
+    flushDocumentSaves().then(function () {
+    if (backEpoch !== _afEpoch) return;
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
     } else {
       /* Fallback for standalone direct-launch */
       window.location.href = '/index.html';
     }
+    }).catch(function (err) { afNotice('Document changes could not be saved. Back kept this tool open. Retry the save before leaving: ' + (err.message || err)); });
   });
 
   /* ======== Rate UI ======== */
@@ -776,30 +905,29 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var rateInput = dom.getElementById('opt-rate');
     var hint = dom.getElementById('rate-hint');
     var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
-    if (currency === base) {
+    if (noRateFor) {
+      wrap.style.display = 'inline-flex';
+      rateInput.style.display = 'none';
+      hint.textContent = 'No exchange rate for ' + noRateFor + ' in this budget, so documents stay in ' + base + '. Add one on the main page: currency menu, Edit exchange rates.';
+    } else if (currency === base) {
+      rateInput.style.display = '';
       wrap.style.display = 'none';
     } else {
+      rateInput.style.display = '';
       wrap.style.display = 'inline-flex';
       rateInput.value = conversionRate;
       hint.textContent = '1 ' + base + ' = ' + conversionRate + ' ' + currency;
     }
   }
 
-  dom.getElementById('opt-rate').addEventListener('input', function () {
-    var v = parseFloat(this.value);
-    if (!v || v <= 0) return;
-    conversionRate = v;
-    saveRate(currency, v);
-    var base = (budget && budget.currency) || BASE_CURRENCY || 'JMD';
-    dom.getElementById('rate-hint').textContent = '1 ' + base + ' = ' + v + ' ' + currency;
-    if (activeTab === 'preview' && activeTemplateId) paintPreview();
-  });
+  /* A document uses the budget snapshot; rates are edited on the main page. */
+  dom.getElementById('opt-rate').readOnly = true;
 
   /* ======== Currency ======== */
   dom.getElementById('opt-currency').addEventListener('change', function () {
+    afCurrencyChosen = true;
     currency = this.value;
-    conversionRate = computeConversionRate(currency);
-    updateRateUI();
+    refreshConversion();
     if (activeTab === 'preview' && activeTemplateId) paintPreview();
   });
 
@@ -963,6 +1091,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       date: new Date().toISOString(),
       editorData: editorData ? JSON.parse(JSON.stringify(editorData)) : null
     };
+    if (activeTemplateId === 'fundingPackage' && doc.editorData) delete doc.editorData.sources;
     var docs = getSavedDocs();
     docs.unshift(doc);
     if (docs.length > 50) docs.length = 50;
@@ -999,6 +1128,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         activeTemplateId = d.templateId;
         dbPushUndoImmediate();
         editorData = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
+        if (activeTemplateId === 'fundingPackage') {
+          if (editorData.sources && !editorData.legacyFundingSources) editorData.legacyFundingSources = JSON.parse(JSON.stringify(editorData.sources));
+          editorData.sources = JSON.parse(JSON.stringify((budget && budget.fundingSources) || []));
+          fundingBase = JSON.parse(JSON.stringify(editorData.sources));
+          fundingDeletes = [];
+        }
         dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
         var matchCard = dom.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
         if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
@@ -1253,29 +1388,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }, done);
   });
 
-  /* ======== PDF (Alt) — jsPDF autoTable ======== */
-  dom.getElementById('btn-pdf-jspdf').addEventListener('click', function () {
-    var btn = this;
-    var origHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
-    var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
-    withFreshBudget(function () {
-      if (!pub || !pub.format || typeof pub.format.professionalPdf !== 'function') {
-        dbAlert('jsPDF export not available.', 'Error');
-        return done();
-      }
-      try {
-        pub.format.professionalPdf(budget, currency);
-        setTimeout(done, 1000);
-      } catch (e) {
-        console.error('jsPDF export error:', e);
-        dbAlert('jsPDF export failed: ' + e.message, 'Error');
-        done();
-      }
-    }, done);
-  });
-
   /* ======== Template Picker ======== */
   function buildTemplatePicker() {
     pub = window.mBTPublisher;
@@ -1499,20 +1611,37 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function applyLoadedBudget(data) {
     if (!data) return false;
     budget = data;
+    if (!afCurrencyChosen && data.currency) {
+      currency = data.currency;
+      var currencySelect = dom.getElementById('opt-currency');
+      if (currencySelect) currencySelect.value = currency;
+    }
     var nameEl = dom.getElementById('topbar-project');
     if (nameEl) nameEl.textContent = data.projectName || 'Untitled';
-    conversionRate = computeConversionRate(currency);
-    updateRateUI();
+    refreshConversion();
     applyCompactMode();
+    refreshAiFillButton();
     return true;
   }
 
   function projectKeyMatches(live) {
     if (!live || !live.projectName) return false;
     if (!projectKey) return true;
-    return projectKey === ('prodBudget_v5_' + live.projectName) ||
-      projectKey.indexOf(live.projectName) !== -1;
+    /* The whole key, never part of it: "Commercial" is not "TV Commercial". */
+    return projectKey === ('prodBudget_v5_' + live.projectName);
   }
+  window.addEventListener('message', function (e) {
+    if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.action !== 'owner-budget-update') return;
+    applyLoadedBudget(JSON.parse(JSON.stringify(e.data.payload)));
+    projectKey = 'prodBudget_v5_' + budget.projectName;
+    if (activeTemplateId === 'fundingPackage' && editorData) {
+      editorData.sources = JSON.parse(JSON.stringify(budget.fundingSources || []));
+      fundingBase = JSON.parse(JSON.stringify(editorData.sources));
+      fundingDeletes = [];
+      buildEditor(activeTemplateId);
+    }
+    paintPreview();
+  });
 
   function refreshBudget(cb) {
     /* 1) Live in-memory budget from parent Budget Editor (embedded iframe) */
@@ -1560,12 +1689,24 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function loadBudget() {
     refreshBudget(function () {
+      refreshAiFillButton();
       if (activeTemplateId && activeTab === 'preview') paintPreview();
     });
   }
 
+  function refreshAiFillButton() {
+    var btnAiFill = dom.getElementById('btn-ai-fill');
+    if (!btnAiFill) return;
+    var aiFillSupported = activeTemplateId && AI_FILL_TEMPLATES.hasOwnProperty(activeTemplateId);
+    btnAiFill.style.display = (aiFillSupported && budget) ? 'inline-flex' : 'none';
+  }
+
   /* ======== Select Template ======== */
   function selectTemplate(tmplMeta) {
+    _afEpoch++;
+    _afProjection = null;
+    _afBusy = false;
+    var fillButton = dom.getElementById('btn-ai-fill'); if (fillButton) fillButton.disabled = false;
     activeTemplateId = tmplMeta.id;
     /* Clear unsaved state on template switch */
     hasUnsaved = false;
@@ -1600,11 +1741,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (btnXlsx)     btnXlsx.style.display     = (XLSX_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
     if (btnSnapshot) btnSnapshot.style.display = budget ? 'inline-flex' : 'none';
     if (btnPackage)  btnPackage.style.display  = budget ? 'inline-flex' : 'none';
+    dom.getElementById('btn-storyboard-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+    dom.getElementById('btn-storyboard-share-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+    dom.getElementById('storyboard-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+    dom.getElementById('share-format-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+    if (tmplMeta.id !== 'storyboard') dom.getElementById('share-format').value = 'pdf';
+    refreshStoryboardChoices();
 
     /* Phase 149.2: AI Fill button — visible whenever the template is in the autofill registry */
-    var btnAiFill = dom.getElementById('btn-ai-fill');
-    var aiFillSupported = AI_FILL_TEMPLATES.hasOwnProperty(tmplMeta.id);
-    if (btnAiFill) btnAiFill.style.display = (aiFillSupported && budget) ? 'inline-flex' : 'none';
+    refreshAiFillButton();
 
     var tabBar = dom.getElementById('tab-bar');
     var editor = dom.getElementById('editor-panel');
@@ -1635,8 +1780,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       showEmpty('Open a project from the budget view to generate documents.');
       return;
     }
-    conversionRate = computeConversionRate(currency);
-    var html = pub.templates.render(activeTemplateId, budget, getExportOpts());
+    refreshConversion();
+    var html;
+    try { html = pub.templates.render(activeTemplateId, budget, getExportOpts()); }
+    catch (err) { showEmpty('Preview unavailable: ' + (err.message || err)); return; }
     var frame = dom.getElementById('preview-frame');
     var empty = dom.getElementById('empty-state');
     if (empty) empty.style.display = 'none';
@@ -1658,22 +1805,59 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* ======== Export Actions ======== */
+  function refreshStoryboardChoices() {
+    var select = dom.getElementById('storyboard-frame'), current = select.value;
+    select.innerHTML = '<option value="all">Whole storyboard (one JPEG per page)</option>';
+    var data = editorData || (pub && pub.templates.storyboard.getDefaultData(budget)) || {};
+    (data.frames || []).forEach(function (frame, index) {
+      var option = dom.createElement('option'); option.value = String(index);
+      option.textContent = 'Frame ' + (frame.num || (index + 1)); select.appendChild(option);
+    });
+    if (select.querySelector('option[value="' + current + '"]')) select.value = current;
+  }
+  /* Yield before synchronous generation so progress paints for every export format. */
+  dom.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !/^btn-(pdf|pdf-jspdf|share|storyboard-jpeg|storyboard-share-jpeg|xlsx|csv|html|print|package|all-financial)$/.test(btn.id) || btn._exportDispatch) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    var status = dom.getElementById('export-progress');
+    status.textContent = 'Preparing ' + btn.textContent.trim() + '...';
+    requestAnimationFrame(function () { setTimeout(function () {
+      btn._exportDispatch = true;
+      try { btn.click(); } finally { btn._exportDispatch = false; }
+      function ended() {
+        if (btn.disabled) { setTimeout(ended, 100); return; }
+        status.textContent = 'Export processing ended. Check the result or any error message.';
+      }
+      setTimeout(ended, 300);
+    }, 0); });
+  }, true);
   function getExportOpts() {
     var brand = { name: brandSettings.name, address: brandSettings.address, logo: logoData };
     var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme };
     if (editorData) { o.callSheetData = editorData; o.editorData = editorData; }
+    if (activeTemplateId === 'storyboard') o.storyboardFrame = dom.getElementById('storyboard-frame').value;
+    o.fundingRates = {};
+    ((budget && budget.fundingSources) || []).forEach(function (source) {
+      var code = source.currency || ((budget && budget.currency) || BASE_CURRENCY);
+      var fundingRate = computeConversionRate(code);
+      if (fundingRate !== null) o.fundingRates[code] = fundingRate;
+    });
     return o;
   }
 
   function withFreshBudget(fn, onEmpty) {
-    refreshBudget(function () {
+    function fresh() { refreshBudget(function () {
       if (!budget || !activeTemplateId) {
         if (typeof onEmpty === 'function') onEmpty();
         return;
       }
-      conversionRate = computeConversionRate(currency);
-      fn();
-    });
+      refreshConversion();
+      try { fn(); }
+      catch (err) { if (typeof onEmpty === 'function') onEmpty(); afNotice('Document action failed: ' + (err.message || err)); }
+    }); }
+    if (activeTemplateId === 'fundingPackage') fundingQueue.then(fresh).catch(function (err) { fundingError(err); if (onEmpty) onEmpty(); });
+    else fresh();
   }
 
   dom.getElementById('btn-pdf').addEventListener('click', function () {
@@ -1685,64 +1869,93 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
     withFreshBudget(function () {
       var p = pub.templates.toPdf(activeTemplateId, budget, getExportOpts());
-      if (p && typeof p.then === 'function') { p.then(done, done); }
+      if (p && typeof p.then === 'function') { p.then(done, function (err) { done(); dbAlert(err.message || 'PDF export failed. Use Print instead.', 'Export PDF'); }); }
       else { setTimeout(done, 4000); }
     }, done);
   });
 
+  function storyboardJpeg(share, btn) {
+    btn.disabled = true;
+    function done() { btn.disabled = false; }
+    withFreshBudget(function () {
+      var snapshot = JSON.stringify({ budget: budget, editor: editorData });
+      var opts = getExportOpts();
+      opts.onProgress = function (page, count) { dom.getElementById('export-progress').textContent = 'Making JPEG ' + page + ' of ' + count + '...'; };
+      pub.templates.toJpegBlobs(activeTemplateId, budget, opts).then(function (blobs) {
+        var stem = String(budget.projectName || 'budget').replace(/[^a-z0-9_-]/gi, '_') + '_storyboard';
+        var files = blobs.map(function (blob, index) { return new File([blob], stem + (opts.storyboardFrame !== 'all' ? '_frame_' + (Number(opts.storyboardFrame) + 1) : '_page_' + (index + 1)) + '.jpg', { type: 'image/jpeg' }); });
+        if (share) return mBTBatch2.shareFile(files, budget.projectName, function () { return JSON.stringify({ budget: budget, editor: editorData }) === snapshot; });
+        files.forEach(function (file) { pub.io.forceDownload(file, file.name); });
+      }).then(done, function (err) { done(); var notice = dom.getElementById('save-indicator'); notice.textContent = err.message + ' PDF remains available.'; notice.style.color = '#b91c1c'; });
+    }, done);
+  }
+  dom.getElementById('btn-storyboard-jpeg').onclick = function () { storyboardJpeg(false, this); };
+  dom.getElementById('btn-storyboard-share-jpeg').onclick = function () { storyboardJpeg(true, this); };
+
   /* Phase 72: Web Share Pipeline */
   dom.getElementById('btn-share').addEventListener('click', function () {
     if (!activeTemplateId) return;
+    if (activeTemplateId === 'storyboard' && dom.getElementById('share-format').value === 'jpeg') { storyboardJpeg(true, this); return; }
     var btn = this;
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Sharing\u2026';
     var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
 
-    function mailtoFallback() {
-      var title = (editorData && editorData.productionTitle) || (budget && budget.projectName) || 'Document';
-      window.location.href = 'mailto:?subject=' + encodeURIComponent(title) + '&body=' + encodeURIComponent('Please find the attached document: ' + title);
+    function shareRecovery() {
       done();
+      var panel = dom.getElementById('share-recovery');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'share-recovery';
+        panel.setAttribute('role', 'alert');
+        panel.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;z-index:100;background:var(--surface,#fff);color:var(--text,#334155);padding:20px;border:1px solid var(--border,#cbd5e1);border-radius:16px;box-shadow:0 12px 32px #0002;';
+        panel.innerHTML = '<p style="margin:0 0 12px">The device could not share this document. Nothing was sent. Retry or choose Export.</p>' +
+          '<button class="toolbar-btn" type="button" data-recovery="retry">Retry Share</button> ' +
+          '<button class="toolbar-btn" type="button" data-recovery="pdf">Export PDF</button> ' +
+          '<button class="toolbar-btn" type="button" data-recovery="html">Export HTML</button> ' +
+          '<button class="toolbar-btn" type="button" data-recovery="print">Print</button> ' +
+          '<button class="toolbar-btn" type="button" data-recovery="close">Close</button>';
+        panel.addEventListener('click', function (e) {
+          var action = e.target.getAttribute('data-recovery');
+          if (!action) return;
+          panel.parentNode.removeChild(panel);
+          if (action === 'retry') dom.getElementById('btn-share').click();
+          if (action === 'pdf') dom.getElementById('btn-pdf').click();
+          if (action === 'html') dom.getElementById('btn-html').click();
+          if (action === 'print') dom.getElementById('btn-print').click();
+        });
+        document.body.appendChild(panel);
+      }
     }
 
     withFreshBudget(function () {
     if (!pub || !pub.templates || typeof pub.templates.toPdfBlob !== 'function') {
-      mailtoFallback();
+      shareRecovery();
       return;
     }
 
     /* Same capture path as primary PDF (publisher.toPdfBlob) so Share cannot drift blank */
     var fname = ((budget.projectName || 'document').replace(/[^a-z0-9_\-]/gi, '_')) + '_' + activeTemplateId + '.pdf';
-    pub.templates.toPdfBlob(activeTemplateId, budget, getExportOpts()).then(function (blob) {
+    var snapshot = JSON.stringify({ budget: budget, editor: editorData });
+    Promise.resolve().then(function () { return pub.templates.toPdfBlob(activeTemplateId, budget, getExportOpts()); }).then(function (blob) {
       if (!blob || !blob.size || blob.size < 5000) {
         console.error('[mBTDB share] blank or tiny PDF blob', blob && blob.size);
-        mailtoFallback();
+        shareRecovery();
         return;
       }
       var file = new File([blob], fname, { type: 'application/pdf' });
       var shareData = { files: [file], title: (editorData && editorData.productionTitle) || budget.projectName || 'Document' };
-      if (navigator.canShare && navigator.canShare(shareData)) {
-        navigator.share(shareData).then(done).catch(function (err) {
-          if (err.name !== 'AbortError') mailtoFallback(); else done();
+      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        mBTBatch2.shareFile(file, shareData.title, function () { return JSON.stringify({ budget: budget, editor: editorData }) === snapshot; }).then(done).catch(function (err) {
+          if (err.name !== 'AbortError') shareRecovery(); else done();
         });
       } else {
-        /* Desktop without Web Share: download the PDF so Share still delivers a real file */
-        try {
-          var a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = fname;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
-          done();
-        } catch (e) {
-          mailtoFallback();
-        }
+        shareRecovery();
       }
     }).catch(function (err) {
       console.error('[mBTDB share]', err);
-      mailtoFallback();
+      shareRecovery();
     });
     }, done); /* withFreshBudget */
   });
@@ -1804,6 +2017,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return 0;
   }
 
+  /* DOOD cast: true when cast is missing or only the blank starter row */
+  function isDoodCastPlaceholderOnly(castArr) {
+    if (!castArr || !castArr.length) return true;
+    if (castArr.length > 1) return false;
+    var row = castArr[0] || {};
+    var name = String(row.name || '').trim();
+    var role = String(row.role || '').trim();
+    var days = row.days || {};
+    var hasDay = false;
+    Object.keys(days).forEach(function (k) { if (days[k]) hasDay = true; });
+    return !name && !role && !hasDay;
+  }
+
   /* DOOD day count: explicit editor shootDays, then budget, then 10 */
   function resolveDoodShootDays(d) {
     var explicit = parseInt(d && d.shootDays, 10);
@@ -1822,137 +2048,329 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return parts.join(', ');
   }
 
-  /* Universal budget-pull: silently fills standard fields from budget on every template load.
-     Only fills blank fields — never overwrites user-entered data. */
-  function applyBudgetDefaults(templateId) {
-    if (!budget || !editorData) return;
-    var d = editorData;
-    var changed = false;
-    function _set(k, v) { if (v && (!d[k] || d[k] === '')) { d[k] = v; changed = true; } }
 
-    /* Universal fields present on almost every template */
-    _set('productionTitle',   budget.projectName);
-    _set('productionCompany', budget.projectCompany || budget.company);
-    _set('production',        budget.projectName);   /* alias used by some templates */
-    _set('projectTitle',      budget.projectName);   /* pitchDeck */
-    _set('currency',          budget.displayCurrency || 'JMD');
+  function loadDealMemoFromBudget() { afRefresh(true); }
 
-    /* ATL crew scan */
-    var _crew = { director: '', producer: '', writer: '', dp: '', firstAd: '', upm: '' };
-    Object.keys(budget.sections || {}).forEach(function(sk) {
-      (budget.sections[sk].items || []).forEach(function(item) {
-        var desc = (item.description || '').toLowerCase();
-        var name = (item.crew && item.crew.name) || '';
-        if (!name) return;
-        if (!_crew.director  && desc.indexOf('director') > -1 && desc.indexOf('art') < 0 && desc.indexOf('photography') < 0) _crew.director = name;
-        else if (!_crew.producer && desc.indexOf('producer') > -1 && desc.indexOf('line') < 0) _crew.producer = name;
-        else if (!_crew.writer   && (desc.indexOf('writer') > -1 || desc.indexOf('screenplay') > -1)) _crew.writer = name;
-        else if (!_crew.dp       && (desc.indexOf('dp') === 0 || desc.indexOf('director of photography') > -1 || desc.indexOf('cinematograph') > -1)) _crew.dp = name;
-        else if (!_crew.firstAd  && (desc.indexOf('1st ad') > -1 || desc.indexOf('first ad') > -1)) _crew.firstAd = name;
-        else if (!_crew.upm      && (desc.indexOf('upm') > -1 || desc.indexOf('unit production') > -1 || desc.indexOf('line producer') > -1)) _crew.upm = name;
-      });
+  /* One projection for initial load, refresh, Load from Budget and AI Fill. */
+  var _afEpoch = 0, _afProjection = null, _afBusy = false;
+  function afTarget() { return { template: activeTemplateId, key: storageKey(activeTemplateId), data: editorData, epoch: _afEpoch }; }
+  function afCurrent(t) { return t.template === activeTemplateId && t.key === storageKey(activeTemplateId) && t.data === editorData && t.epoch === _afEpoch; }
+  var _afRateNoticeKey = '';
+  function afNotice(message, title) { dbAlert(message, title || 'Autofill'); }
+  function afMeta() { return editorData._autofill || (editorData._autofill = { sources: {}, overrides: {}, selections: {} }); }
+  function afBlank(v) { return v == null || v === '' || Array.isArray(v) && !v.length; }
+  function afEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function afTyped(key) {
+    if (!editorData) return;
+    var m = afMeta(); m.overrides[key] = (Number(m.overrides[key]) || 0) + 1;
+    if (activeTemplateId === 'pitchDeck' && key === 'askAmount') {
+      var ask = dom.querySelector('[data-key="askAmount"]');
+      if (ask && ask.previousElementSibling) ask.previousElementSibling.textContent = 'Seeking (recipient amount entered in this document)';
+    }
+  }
+  function afApply(p, keys) {
+    var m = afMeta();
+    keys.forEach(function (key) {
+      /* Funding is already a live parent-owned view, not an editor snapshot.
+         Only its existing row-operation bridge may write the master list. */
+      if (key === 'sources' && activeTemplateId === 'fundingPackage') return;
+      editorData[key] = JSON.parse(JSON.stringify(p.values[key]));
+      if (key === 'lineItems' && activeTemplateId === 'weeklyCostReport') editorData.committedNote = p.committedNote || '';
+      m.sources[key] = { ref: p.refs[key], value: JSON.parse(JSON.stringify(p.values[key])) };
+      delete m.overrides[key];
     });
-    var _placeholders = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'copywriter', '1st ad', 'upm'];
-    function _crewSet(k, v) {
-      if (!v) return;
-      var cur = (d[k] || '').trim().toLowerCase();
-      if (!cur || _placeholders.indexOf(cur) > -1) { d[k] = v; changed = true; }
+    if (keys.length) saveEditorData();
+  }
+  function afProject(target, selections) {
+    return new Promise(function (resolve) { refreshBudget(function () { resolve(); }); }).then(function () {
+      if (!afCurrent(target)) throw new Error('The document changed. Autofill was not applied.');
+      return Promise.all([mBTDocumentProjection.loadMap(), mBTStorage.getAllContacts()]);
+    }).then(function (results) {
+      if (!afCurrent(target)) throw new Error('The document changed. Autofill was not applied.');
+      var m = afMeta();
+      return mBTDocumentProjection.project(target.template, budget, results[1], { document: editorData, selections: selections || m.selections || {} });
+    });
+  }
+  function afRowKey(row, root) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return '';
+    /* Identity belongs to a source contract, not the spelling of a property.
+       In particular, a cast id is only a printed cast number. */
+    if (root === 'entries' && row.floatId && row.id) return 'receipt:' + JSON.stringify([String(row.floatId), String(row.id)]);
+    if (['cast', 'crew', 'movementRows'].indexOf(root) > -1 && row.itemId && row.contactId) return 'assignment:' + String(row.itemId) + ':' + String(row.contactId);
+    if (root === 'lineItems' && row.itemId) return 'item:' + String(row.itemId);
+    if (root === 'sources' && row.id != null && String(row.id) !== '') return 'source:' + String(row.id);
+    return '';
+  }
+  /* Write one accepted leaf onto the row with the same item, contact or ledger id. */
+  function afPlaceLeaf(leaf) {
+    if (!leaf) return;
+    var list = editorData[leaf.root];
+    if (leaf.wholeRow) {
+      if (!Array.isArray(list)) list = editorData[leaf.root] = [];
+      if (leaf.legacyOnly && afRowKey(list[leaf.rowIndex], leaf.root)) return;
+      list[leaf.rowIndex] = JSON.parse(JSON.stringify(leaf.value));
+      return;
     }
-    _crewSet('director',  _crew.director);
-    _crewSet('producer',  _crew.producer);
-    _crewSet('producers', _crew.producer);  /* callSheet uses 'producers' */
-    _crewSet('writer',    _crew.writer);
-    _crewSet('dp',        _crew.dp);
-    _crewSet('firstAd',   _crew.firstAd);
-    _crewSet('upm',       _crew.upm);
-    /* Producer name for signature fields */
-    _crewSet('producerName', _crew.producer);
-
-    /* Financial totals */
-    var grandTotal = budget.grandTotal || 0;
-    var grandActual = budget.grandTotalActual || 0;
-    _set('totalBudget',   grandTotal  ? String(grandTotal)  : '');
-    _set('budgetedTotal', grandTotal  ? String(grandTotal)  : '');
-    _set('actualTotal',   grandActual ? String(grandActual) : '');
-    _set('fundingToDate', grandActual ? String(grandActual) : '');
-
-    /* Petty cash float from ledger */
-    if (budget.ledgers && budget.ledgers.pettyCash) _set('floatAmount', String(budget.ledgers.pettyCash));
-
-    /* Wrap report: section breakdown */
-    if (templateId === 'wrapReport' && grandTotal && (!d.sections || !d.sections.length)) {
-      d.sections = Object.keys(budget.sections || {}).map(function(k) {
-        var sec = budget.sections[k];
-        return { section: k, budgeted: String(sec.total || 0), actual: '0', variance: String(-(sec.total || 0)) };
-      });
-      if (d.sections.length) changed = true;
+    if (leaf.rowKey) {
+      if (!Array.isArray(list)) list = editorData[leaf.root] = [];
+      var target = null, i;
+      for (i = 0; i < list.length; i++) {
+        if (afRowKey(list[i], leaf.root) === leaf.rowKey) { target = list[i]; break; }
+      }
+      if (!target) {
+        /* An unidentified saved counterpart needs an explicit replacement,
+           never an appended copy of the expense or assignment. */
+        if (list.some(function (row) { return !afRowKey(row, leaf.root); })) return;
+        editorData[leaf.root].push(JSON.parse(JSON.stringify(leaf.row || {})));
+        return;
+      }
+      target[leaf.field] = JSON.parse(JSON.stringify(leaf.value));
+      return;
     }
-
-    /* DOOD: shoot days from budget when editor field is blank */
-    if (templateId === 'dood') {
-      var budgetDays = getBudgetShootDays(budget);
-      if (budgetDays > 0) _set('shootDays', String(budgetDays));
+    /* Without stable identity, individual positional leaves are not safe. */
+  }
+  function afHiddenField(key) {
+    return ['id', 'itemId', 'contactId', 'floatId', 'ledgerId', '_autofill', '__proto__', 'constructor', 'prototype'].indexOf(key) > -1;
+  }
+  function afWords(key) {
+    var names = { entries: 'Receipts', sources: 'Funding sources', lineItems: 'Cost report rows', receiptNum: 'Receipt', pctUsed: 'Percentage used', etc: 'Estimate to complete', firstAd: 'First assistant director', secondAd: 'Second assistant director', dp: 'Director of photography', upm: 'Unit production manager' };
+    return names[key] || String(key || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').replace(/^./, function (letter) { return letter.toUpperCase(); });
+  }
+  function afFieldLabel(path) {
+    var f = null;
+    try { f = window.mBTDocumentProjection.fields(activeTemplateId)[path]; } catch (err) { /* readable fallback for saved custom fields */ }
+    return f && (f.label || f.meaning) ? String(f.label || f.meaning).replace(/\.$/, '') : afWords(String(path).split('.').pop());
+  }
+  function afSourceName(ref, root) {
+    ref = String(ref || '');
+    if (root === 'entries' || /receipts/.test(ref)) return 'Petty cash receipts';
+    if (root === 'sources' || /fundingSources/.test(ref)) return 'Funding sources';
+    if (/Contacts|contactId|Contact IDs/.test(ref)) return ['crew', 'cast', 'movementRows'].indexOf(root) > -1 && /budget/.test(ref) ? 'Budget and Contacts' : 'Contacts';
+    if (/pettyCash|selected float|floatAmount/.test(ref)) return 'Petty cash';
+    if (/\bPO\b|\.pos|selected PO/.test(ref)) return /budget items/.test(ref) ? 'Budget and purchase orders' : 'Purchase orders';
+    if (/document/.test(ref)) return 'This document';
+    return 'Budget';
+  }
+  function afSourceHtml(ref, root, path) {
+    var source = ref;
+    try { var field = window.mBTDocumentProjection.fields(activeTemplateId)[path || root]; if (field && field.source) source = field.source; } catch (err) { /* use the projection reference */ }
+    return '<p title="' + esc(ref || '') + '">Source: ' + esc(afSourceName(source, root)) + '</p>';
+  }
+  function afValueText(field, value, code) {
+    if (value == null || typeof value === 'string' && !value.trim()) return ['committed', 'etc', 'pctUsed'].indexOf(field) > -1 ? 'Unknown' : 'Not provided';
+    var text = String(value), date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (date && /date|periodStart|periodEnd/i.test(field) && Number(date[2]) >= 1 && Number(date[2]) <= 12 && Number(date[3]) >= 1 && Number(date[3]) <= 31) text = Number(date[3]) + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(date[2]) - 1] + ' ' + date[1];
+    if (['amount', 'rate', 'unitPrice', 'budget', 'committed', 'actual', 'etc', 'variance', 'floatAmount', 'totalBudget', 'fundingToDate', 'askAmount', 'cashInBank'].indexOf(field) > -1 && isFinite(Number(value)) && code) text = Number(value).toFixed(2) + ' ' + code;
+    if (field === 'pctUsed') text += '%';
+    if (typeof value === 'boolean') text = value ? 'Yes' : 'No';
+    return text;
+  }
+  function afReadable(path, value, code) {
+    var field = String(path).split('.').pop();
+    if (Array.isArray(value)) return value.length ? value.map(function (row, index) { return '<div style="margin:6px 0;"><b>Row ' + (index + 1) + '</b>' + afReadable(path + '[]', row, code) + '</div>'; }).join('') : 'No rows';
+    if (value && typeof value === 'object') {
+      var rowCode = value.currency || code;
+      var keys = Object.keys(value).filter(function (key) { return !afHiddenField(key) && value[key] != null && value[key] !== ''; });
+      return keys.length ? keys.map(function (key) {
+        return '<div style="margin:3px 0;"><b>' + esc(afWords(key)) + ':</b> ' + afReadable(path + '.' + key, value[key], rowCode) + '</div>';
+      }).join('') : 'Not provided';
     }
-
-    /* Crew list: populate from budget if empty */
-    if (templateId === 'crewList' && (!d.crew || !d.crew.length)) {
-      var crewRows = [];
-      Object.keys(budget.sections || {}).forEach(function(sk) {
-        (budget.sections[sk].items || []).forEach(function(item) {
-          var name = (item.crew && item.crew.name) || '';
-          if (!name) return;
-          crewRows.push({
-            department: sk, name: name, role: item.description || '',
-            rate: String(item.rate || ''), rateUnit: item.unit || 'Day',
-            phone: (item.crew && item.crew.phone) || '',
-            email: (item.crew && item.crew.email) || '',
-            union: '', emergencyContact: '', emergencyPhone: '',
-            phases: formatItemPhases(item)
-          });
+    return '<span style="white-space:pre-wrap;">' + esc(afValueText(field, value, code)) + '</span>';
+  }
+  function afReview(p, target, selections) {
+    return new Promise(function (resolve) {
+      if (!afCurrent(target)) { afNotice('The document changed. Autofill was not applied.'); resolve(false); return; }
+      var old = dom.getElementById('af-review'); if (old && old._afCancel) old._afCancel();
+      var stagedSelections = JSON.parse(JSON.stringify(selections || afMeta().selections || {}));
+      var el = document.createElement('div');
+      el.id = 'af-review';
+      el.style.cssText = 'position:fixed;inset:0;z-index:10040;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:12px;';
+      var leaves = [];
+      var currentCurrency = editorData.currency || (budget && budget.currency) || '';
+      var proposedCurrency = p.values.currency || (budget && budget.currency) || currentCurrency;
+      function alignedLeafRows(root, proposed, current) {
+        return proposed.map(function (row, rowIndex) {
+          var key = afRowKey(row, root), match = null, i;
+          var legacyIndexes = [];
+          if (Array.isArray(current)) {
+            for (i = 0; i < current.length; i++) {
+              if (key && afRowKey(current[i], root) === key) match = current[i];
+              if (!afRowKey(current[i], root)) legacyIndexes.push(i);
+            }
+          }
+          if (!key || !match && legacyIndexes.length) {
+            var replaceIndex = !key || legacyIndexes.indexOf(rowIndex) > -1 ? rowIndex : legacyIndexes[0];
+            var oldRow = Array.isArray(current) ? current[replaceIndex] : undefined;
+            var rowDifferent = !afEqual(oldRow, row) && !(root === 'sources' && activeTemplateId === 'fundingPackage');
+            var rowLeaf = leaves.length;
+            leaves.push({ root: root, path: [String(rowIndex)], value: row, wholeRow: true, rowIndex: replaceIndex, legacyOnly: !!key });
+            var picker = key && legacyIndexes.length > 1 ? '<label>Saved row to replace<select style="display:block;width:100%;max-width:100%;min-width:0;" data-af-replace="' + rowLeaf + '" aria-label="Saved row to replace for proposal ' + (rowIndex + 1) + '">' + legacyIndexes.map(function (n) {
+              var saved = current[n] || {};
+              return '<option value="' + n + '"' + (n === replaceIndex ? ' selected' : '') + '>' + esc('Saved row ' + (n + 1) + ': ' + (saved.description || saved.name || saved.actor || saved.account || saved.receiptNum || 'unidentified')) + '</option>';
+            }).join('') + '</select></label>' : '';
+            return '<tr><td><input type="checkbox" data-af-leaf="' + rowLeaf + '" data-af-root="' + esc(root) + '"' + (rowDifferent ? '' : ' disabled') + '></td><td><b>Replace one saved row</b><p>Accept the complete row together. No values are changed unless you select it.</p>' + afSourceHtml(p.refs[root], root) + picker + '<div style="display:flex;gap:12px;flex-wrap:wrap;"><div style="flex:1;min-width:180px;"><b>Current saved row</b><div data-af-old="' + rowLeaf + '">' + afReadable(root + '[]', oldRow, currentCurrency) + '</div></div><div style="flex:1;min-width:180px;"><b>Proposed row</b>' + afReadable(root + '[]', row, proposedCurrency) + '</div></div></td></tr>';
+          }
+          if (!row || typeof row !== 'object') return '';
+          return Object.keys(row).map(function (field) {
+            if (afHiddenField(field)) return '';
+            var value = row[field], currentValue = match ? match[field] : undefined, index = leaves.length;
+            var different = !afEqual(currentValue, value) && !(root === 'sources' && activeTemplateId === 'fundingPackage');
+            leaves.push({ root: root, path: [key, field], value: value, rowKey: key, field: field, row: row });
+            return '<tr><td><input type="checkbox" data-af-leaf="' + index + '" data-af-root="' + esc(root) + '"' + (different && afBlank(currentValue) ? ' checked' : '') + (different ? '' : ' disabled') + '></td><td><b>' + esc(afFieldLabel(root + '[].' + field)) + '</b><p>' + esc(row.name || row.actor || row.description || 'Row ' + (rowIndex + 1)) + '</p>' + afSourceHtml(p.refs[root], root, root + '[].' + field) + '<div>Current: ' + afReadable(root + '[].' + field, currentValue, match && match.currency || currentCurrency) + '</div><div>Proposed: ' + afReadable(root + '[].' + field, value, row.currency || proposedCurrency) + '</div></td></tr>';
+          }).join('');
+        }).join('');
+      }
+      var rows = Object.keys(p.values).map(function (key) {
+        var liveFunding = key === 'sources' && activeTemplateId === 'fundingPackage';
+        var different = !afEqual(editorData[key], p.values[key]) && !liveFunding;
+        var details = Array.isArray(p.values[key]) ? alignedLeafRows(key, p.values[key], editorData[key]) : '';
+        return '<tr><td><input type="checkbox" data-af-key="' + esc(key) + '"' + (different && afBlank(editorData[key]) ? ' checked' : '') + (different ? '' : ' disabled') + '></td><td><b>' + esc(afFieldLabel(key)) + '</b><p>' + (liveFunding ? 'This is the live funding list. Edit its table, not this review.' : details ? 'Select all rows, or review individual changes below.' : '') + '</p>' + afSourceHtml(p.refs[key], key) + '<div><b>Current</b><div>' + afReadable(key, editorData[key], currentCurrency) + '</div></div><div><b>Proposed</b><div>' + afReadable(key, p.values[key], proposedCurrency) + '</div></div></td></tr>' + details;
+      }).join('');
+      var selectors = p.choices.map(function (choice) {
+        return '<label style="display:block;margin:8px 0;">' + esc(String(choice.label).replace(/([a-z])([A-Z])/g, '$1 $2')) + '<select data-af-choice="' + esc(choice.key) + '"><option value="">Choose an assignment</option>' + choice.options.map(function (o, index) { return '<option value="' + esc(o.id) + '"' + (String(o.id) === String(choice.selected) ? ' selected' : '') + '>' + esc(o.label === String(o.id) ? 'Option ' + (index + 1) : o.label) + '</option>'; }).join('') + '</select></label>';
+      }).join('');
+      el.innerHTML = '<div role="dialog" aria-modal="true" aria-label="Autofill review" style="background:#fff;color:#334155;border:1px solid #e2e8f0;border-radius:8px;padding:16px;max-width:700px;width:100%;max-height:85vh;overflow:auto;font-size:12px;">' +
+        '<h2>Sources and proposed changes</h2><p>Select each value to accept. Unselected values stay unchanged.</p>' + selectors +
+        p.warnings.map(function (w) { return '<p style="color:#b45309;">' + esc(w) + '</p>'; }).join('') +
+        '<table style="width:100%;table-layout:fixed;overflow-wrap:anywhere;"><colgroup><col style="width:24px;"><col></colgroup>' + rows + '</table><button id="af-accept" type="button" class="ed-add-btn">Accept selected</button> <button id="af-cancel" type="button" class="ed-add-btn">Close without changes</button></div>';
+      document.body.appendChild(el);
+      function detach() { if (el.parentNode) el.parentNode.removeChild(el); document.removeEventListener('keydown', escape); }
+      function close(result) { detach(); resolve(result); }
+      el._afCancel = function () { close(false); };
+      function escape(e) { if (e.key === 'Escape') close(false); }
+      document.addEventListener('keydown', escape);
+      el.querySelector('#af-cancel').onclick = function () { close(false); };
+      el.addEventListener('click', function (e) { if (e.target === el) close(false); });
+      el.querySelector('#af-accept').onclick = function () {
+        if (!afCurrent(target)) { close(false); afNotice('The document changed. Autofill was not applied.'); return; }
+        var keys = [];
+        Array.prototype.forEach.call(el.querySelectorAll('[data-af-key]:checked'), function (input) { keys.push(input.getAttribute('data-af-key')); });
+        dbPushUndoImmediate(); afMeta().selections = stagedSelections; afApply(p, keys);
+        Array.prototype.forEach.call(el.querySelectorAll('[data-af-leaf]:checked'), function (input) {
+          var leaf = leaves[Number(input.getAttribute('data-af-leaf'))];
+          if (!leaf || keys.indexOf(leaf.root) > -1) return;
+          if (leaf.root === 'sources' && activeTemplateId === 'fundingPackage') return;
+          afPlaceLeaf(leaf);
+          if (leaf.root === 'lineItems' && activeTemplateId === 'weeklyCostReport') editorData.committedNote = p.committedNote || '';
+          afMeta().sources[leaf.root + '.' + leaf.path.join('.')] = { ref: p.refs[leaf.root], value: leaf.value };
         });
+        saveEditorData(); close(true); buildEditor(activeTemplateId);
+      };
+      Array.prototype.forEach.call(el.querySelectorAll('[data-af-leaf]'), function (input) {
+        input.onchange = function () {
+          var chosen = leaves[Number(input.getAttribute('data-af-leaf'))];
+          if (input.checked && chosen && chosen.wholeRow) {
+            Array.prototype.forEach.call(el.querySelectorAll('[data-af-leaf]'), function (other) {
+              var leaf = leaves[Number(other.getAttribute('data-af-leaf'))];
+              if (other !== input && leaf && leaf.wholeRow && leaf.root === chosen.root && leaf.rowIndex === chosen.rowIndex) other.checked = false;
+            });
+          }
+          var root = input.getAttribute('data-af-root');
+          Array.prototype.forEach.call(el.querySelectorAll('[data-af-key]'), function (bulk) { if (bulk.getAttribute('data-af-key') === root) bulk.checked = false; });
+        };
       });
-      if (crewRows.length) { d.crew = crewRows; changed = true; }
-    }
+      Array.prototype.forEach.call(el.querySelectorAll('[data-af-replace]'), function (select) {
+        select.onchange = function () {
+          var index = Number(select.getAttribute('data-af-replace')), leaf = leaves[index];
+          var rowIndex = Number(select.value), list = editorData[leaf.root] || [];
+          if (!isFinite(rowIndex) || rowIndex < 0 || Math.floor(rowIndex) !== rowIndex || rowIndex >= list.length || afRowKey(list[rowIndex], leaf.root)) return;
+          leaf.rowIndex = rowIndex;
+          el.querySelector('[data-af-old="' + index + '"]').innerHTML = afReadable(leaf.root + '[]', list[rowIndex], currentCurrency);
+          el.querySelector('[data-af-leaf="' + index + '"]').checked = false;
+          el.querySelector('[data-af-key="' + leaf.root + '"]').checked = false;
+        };
+      });
+      Array.prototype.forEach.call(el.querySelectorAll('[data-af-key]'), function (bulk) {
+        bulk.onchange = function () {
+          Array.prototype.forEach.call(el.querySelectorAll('[data-af-leaf]'), function (input) { if (input.getAttribute('data-af-root') === bulk.getAttribute('data-af-key') && !input.disabled) input.checked = bulk.checked; });
+        };
+      });
+      Array.prototype.forEach.call(el.querySelectorAll('[data-af-choice]'), function (select) {
+        select.onchange = function () {
+          if (!afCurrent(target)) { close(false); return; }
+          stagedSelections[select.getAttribute('data-af-choice')] = select.value;
+          detach();
+          afProject(target, stagedSelections).then(function (next) { _afProjection = next; return afReview(next, target, stagedSelections); }).then(resolve).catch(function (err) { afNotice(err.message || 'The selected source could not be loaded.'); resolve(false); });
+        };
+      });
+      el.querySelector('#af-cancel').focus();
+    });
+  }
+  function afRefresh(review) {
+    if (!budget || !editorData) return Promise.resolve(false);
+    var target = afTarget();
+    return afProject(target).then(function (p) {
+      _afProjection = p;
+      if (review) return afReview(p, target);
+      var blank = Object.keys(p.values).filter(function (key) { return key !== 'sources' && afBlank(editorData[key]); });
+      afApply(p, blank);
+      /* An amount with no exchange rate is filled in its own currency. Say so once per document, in the same sentence the projection built. */
+      var rateWarnings = (p.warnings || []).filter(function (w) { return /^Missing exchange rate for [A-Z]{3} to /.test(w); });
+      var rateKey = activeTemplateId + '|' + rateWarnings.join('|');
+      if (rateWarnings.length && _afRateNoticeKey !== rateKey) { _afRateNoticeKey = rateKey; afNotice(rateWarnings.join('\n')); }
+      return true;
+    }).catch(function (err) { afNotice(err.message || 'Autofill could not load its sources.'); return false; });
+  }
+  function applyBudgetDefaults(templateId, callback) {
+    return afRefresh(false).then(function () { if (activeTemplateId === templateId && callback) callback(); });
+  }
+  function afNewDocument(templateId) {
+    if (templateId === 'purchaseOrder') return { productionTitle: '', poNumber: '', date: '', vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '', vendorTaxId: '', budgetCategory: '', paymentTerms: '', requestedBy: '', approvedBy: '', taxRate: '', notes: '', items: [] };
+    var tmpl = pub.templates[templateId];
+    var d = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData({}) : {};
+    /* New documents do not present template examples as negotiated or observed facts. */
+    Object.keys(d).forEach(function (key) {
+      if (typeof d[key] === 'string' && ['framesPerPage', 'columns', 'compTitle', 'snapshotALabel', 'snapshotBLabel'].indexOf(key) < 0) d[key] = '';
+    });
+    if (templateId === 'purchaseOrder') d.poNumber = '';
+    ['crew', 'cast', 'entries', 'lineItems', 'sources', 'sections', 'movementRows'].forEach(function (key) {
+      if (Array.isArray(d[key])) d[key] = [];
+    });
+    return d;
+  }
 
-    /* Crew list: fill blank phase labels from budget line items */
-    if (templateId === 'crewList' && d.crew && d.crew.length) {
-      var phaseByName = {};
-      Object.keys(budget.sections || {}).forEach(function (sk) {
-        (budget.sections[sk].items || []).forEach(function (item) {
-          var nm = (item.crew && item.crew.name) || item.description || '';
-          if (!nm) return;
-          var ph = formatItemPhases(item);
-          if (ph) phaseByName[nm.toLowerCase()] = ph;
-        });
-      });
-      d.crew.forEach(function (row) {
-        if (!row.phases || String(row.phases).trim() === '') {
-          var hit = phaseByName[(row.name || '').toLowerCase()];
-          if (hit) { row.phases = hit; changed = true; }
-        }
-      });
+  /* Document reset reloads the live funding list. It never sends master deletes. */
+  function resetActiveDocument() {
+    dbPushUndoImmediate();
+    var liveSources = null;
+    if (activeTemplateId === 'fundingPackage') {
+      var master = (budget && Array.isArray(budget.fundingSources)) ? budget.fundingSources : (fundingBase || []);
+      liveSources = JSON.parse(JSON.stringify(master));
+      fundingDeletes = [];
     }
-
-    if (changed) saveEditorData();
+    editorData = afNewDocument(activeTemplateId);
+    if (liveSources) {
+      editorData.sources = JSON.parse(JSON.stringify(liveSources));
+      fundingBase = JSON.parse(JSON.stringify(liveSources));
+    }
+    saveEditorData();
+    applyBudgetDefaults(activeTemplateId, function () { buildEditor(activeTemplateId); });
   }
 
   function loadEditorData(templateId, cb) {
-    var key = storageKey(templateId);
+    var key = storageKey(templateId), epoch = _afEpoch;
+    function current() { return epoch === _afEpoch && templateId === activeTemplateId && key === storageKey(templateId); }
     localforage.getItem(key).then(function (saved) {
-      if (saved) {
-        editorData = saved;
-      } else {
-        var tmpl = pub.templates[templateId];
-        editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
+      if (!current()) return;
+      var pending = pendingDocumentSaves[key];
+      editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
+      var ready = Promise.resolve();
+      if (templateId === 'fundingPackage') {
+        if (saved && saved.sources && !editorData.legacyFundingSources) editorData.legacyFundingSources = JSON.parse(JSON.stringify(saved.sources));
+        ready = requestFunding().then(function (sources) {
+          if (!current()) return;
+          editorData.sources = sources;
+          fundingBase = JSON.parse(JSON.stringify(sources));
+          fundingDeletes = [];
+          fundingQueue = Promise.resolve(); fundingSaveError = null;
+          if (budget) budget.fundingSources = sources;
+        });
       }
-      applyBudgetDefaults(templateId);
-      cb();
-    }).catch(function () {
-      var tmpl = pub.templates[templateId];
-      editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
-      applyBudgetDefaults(templateId);
-      cb();
-    });
+      ready.then(function () { if (current()) applyBudgetDefaults(templateId, function () { if (current()) cb(); }); }).catch(function (err) {
+        if (!current()) return;
+        cb(); fundingError(err);
+      });
+    }).catch(function (err) { if (current()) afNotice('Saved document could not be loaded: ' + (err.message || err)); });
   }
 
   function markUnsaved() {
@@ -1960,17 +2378,42 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var dot = dom.getElementById('unsaved-dot');
     var ind = dom.getElementById('save-indicator');
     if (dot) dot.style.display = 'inline-block';
-    if (ind) { ind.style.display = 'inline-flex'; ind.title = 'Unsaved changes'; }
+    if (ind) { ind.innerHTML = '<span id="unsaved-dot"></span>Saving'; ind.style.display = 'inline-flex'; ind.style.color = '#22c55e'; ind.title = 'Unsaved changes'; }
   }
 
   function saveEditorData() {
     dbPushUndo();
     markUnsaved();
     updatePreflight();
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      var key = storageKey(activeTemplateId);
-      localforage.setItem(key, editorData).then(function () {
+    var saveNumber = ++editorSaveNumber;
+    var templateId = activeTemplateId;
+    var documentStorageKey = storageKey(templateId);
+    var data = JSON.parse(JSON.stringify(editorData));
+    var saving = Promise.resolve();
+    var validationMessage = '';
+    if (templateId === 'fundingPackage') {
+      delete data.sources;
+      saving = Promise.resolve().then(syncFundingEdits);
+      saving.catch(fundingError);
+      saving = saving.catch(function (err) {
+        /* A refused blank name restores the accepted live name. It is not a
+           failed master write, so the independent document snapshot may save. */
+        if (err && err.code === 'funding_name_required') { validationMessage = err.message; return; }
+        throw err;
+      });
+      /* Observe failures immediately while the debounce waits. Keep the
+         original rejection for the save timer and Back to handle. */
+      saving.catch(function () {});
+    }
+    var previous = pendingDocumentSaves[documentStorageKey];
+    if (previous) clearTimeout(previous.timer);
+    var pending = { data: data, saving: saving, timer: null };
+    pendingDocumentSaves[documentStorageKey] = pending;
+    pending.timer = saveTimer = setTimeout(function () {
+      var key = documentStorageKey;
+      saving.then(function () { return localforage.setItem(key, data); }).then(function () {
+        if (pendingDocumentSaves[key] === pending) delete pendingDocumentSaves[key];
+        if (saveNumber !== editorSaveNumber || templateId !== activeTemplateId) return;
         hasUnsaved = false;
         if (activeTemplateId === 'crewDealMemo' && editorData.status === 'Sent') {
           injectGhostItem();
@@ -1978,10 +2421,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var dot = dom.getElementById('unsaved-dot');
         var ind = dom.getElementById('save-indicator');
         if (dot) dot.style.display = 'none';
-        if (ind) { ind.style.display = 'inline-flex'; ind.title = ''; }
+        if (validationMessage) {
+          if (ind) { ind.textContent = validationMessage; ind.title = validationMessage; ind.style.display = 'inline-flex'; ind.style.color = '#b91c1c'; }
+          return;
+        }
+        if (ind) { ind.innerHTML = '<span id="unsaved-dot"></span>Saved'; ind.style.display = 'inline-flex'; ind.style.color = '#22c55e'; ind.title = ''; }
         setTimeout(function () { if (!hasUnsaved && ind) ind.style.display = 'none'; }, 1200);
-      });
+      }).catch(fundingError);
     }, 400);
+  }
+  function flushDocumentSaves() {
+    return Promise.all(Object.keys(pendingDocumentSaves).map(function (key) {
+      var pending = pendingDocumentSaves[key];
+      clearTimeout(pending.timer);
+      return pending.saving.then(function () { return localforage.setItem(key, pending.data); }).then(function () {
+        if (pendingDocumentSaves[key] === pending) delete pendingDocumentSaves[key];
+      });
+    }));
   }
 
   /* ======== Form Field Helpers ======== */
@@ -1993,7 +2449,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else {
       v = editorData[key] || '';
     }
-    var cls = wide ? ' style="grid-column:1/-1;"' : '';
+    var source = editorData._autofill && editorData._autofill.sources && editorData._autofill.sources[key];
+    var sourceText = source ? source.ref + (editorData._autofill.overrides[key] ? '; edited in this document' : '') : 'Document value. Use Sources and refresh to review mapped facts.';
+    var cls = (wide ? ' style="grid-column:1/-1;"' : '') + ' title="' + esc(sourceText) + '"';
     if (type === 'textarea') {
       return '<div class="ed-field"' + cls + '><label>' + esc(label) + '</label><textarea data-key="' + key + '">' + esc(v) + '</textarea></div>';
     }
@@ -2002,6 +2460,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Build Editor (dispatcher) ======== */
   function buildEditor(templateId) {
+    if (templateId === 'storyboard') refreshStoryboardChoices();
     var panel = dom.getElementById('editor-panel');
     var d = editorData;
     var html;
@@ -2030,6 +2489,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       html = buildDoodHtml(d);
     } else if (templateId === 'fundingPackage') {
       html = buildFundingPackageHtml(d);
+    } else if (templateId === 'fundingStrategy') {
+      html = '<div class="ed-section"><div class="ed-section-hdr">Funding Strategy</div>' +
+        fld('productionTitle', 'Production Title') + fld('contactName', 'Contact Name') + fld('contactEmail', 'Email');
+      ['execSummary', 'sourcingApproach', 'investorProfile', 'fundingTimeline', 'askDetails', 'riskMitigation'].forEach(function (key) {
+        html += fld(key, key.replace(/([A-Z])/g, ' $1'), 'textarea', true);
+      });
+      html += '</div>';
     } else if (templateId === 'budgetComparison') {
       html = buildBudgetComparisonHtml(d);
     } else if (templateId === 'scriptBreakdown') {
@@ -2063,6 +2529,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return;
     }
 
+    html = '<button id="af-refresh" type="button" class="ed-add-btn">Sources and refresh</button>' + html;
     html += '<button id="reset-btn" type="button">Reset to Defaults</button>';
 
     /* Replace panel node to strip accumulated event listeners from previous buildEditor calls */
@@ -2072,17 +2539,30 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     panel.parentNode.replaceChild(fresh, panel);
     fresh.scrollTop = lastScroll;
     wireEditor(fresh);
+    Array.prototype.forEach.call(fresh.querySelectorAll('[data-arr][data-f]'), function (input) {
+      var root = input.getAttribute('data-arr'), path = root + '.' + input.getAttribute('data-i') + '.' + input.getAttribute('data-f');
+      var sources = editorData._autofill && editorData._autofill.sources || {}, source = sources[path] || sources[root];
+      input.title = source ? source.ref : 'Document value. Use Sources and refresh to review mapped facts.';
+      if (editorData._autofill && editorData._autofill.overrides[root]) input.title += '; this row group includes document edits';
+    });
+    fresh.querySelector('#af-refresh').onclick = function () { afRefresh(true); };
+    if (templateId === 'pitchDeck' && editorData._autofill && editorData._autofill.overrides.askAmount) {
+      var ask = fresh.querySelector('[data-key="askAmount"]');
+      if (ask) ask.previousElementSibling.textContent = 'Seeking (recipient amount entered in this document)';
+    }
 
     /* Wire callSheet-specific smart buttons */
     var loadBtn = fresh.querySelector('#btn-load-budget');
     if (loadBtn) loadBtn.addEventListener('click', autoPopulateFromBudget);
+    var dmLoadBtn = fresh.querySelector('#btn-dm-load-budget');
+    if (dmLoadBtn) dmLoadBtn.addEventListener('click', loadDealMemoFromBudget);
     var weatherBtn = fresh.querySelector('#btn-fetch-weather');
     if (weatherBtn) weatherBtn.addEventListener('click', fetchWeatherAndHospitals);
     var weatherLocBtn = fresh.querySelector('#btn-fetch-weather-loc');
     if (weatherLocBtn) weatherLocBtn.addEventListener('click', fetchWeatherAndHospitals);
     /* Wire fundingPackage Autofill (budget -> AI cascade) */
     var fpAutofillBtn = fresh.querySelector('#btn-fp-autofill');
-    if (fpAutofillBtn) fpAutofillBtn.addEventListener('click', autoPopulateFundingPackage);
+    if (fpAutofillBtn) fpAutofillBtn.addEventListener('click', function () { autoPopulateFromBudget(); });
     
     /* Phase 160: Storyboard Image Paste Handler */
     if (templateId === 'storyboard') {
@@ -2184,13 +2664,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     var resetBtn = fresh.querySelector('#reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function () {
-      dbConfirm('Reset all fields to defaults? This cannot be undone.', function () {
-        dbPushUndoImmediate();
-        var tmpl = pub.templates[activeTemplateId];
-        editorData = (tmpl && tmpl.getDefaultData) ? tmpl.getDefaultData(budget) : {};
-        saveEditorData();
-        buildEditor(activeTemplateId);
-      });
+      var resetMessage = activeTemplateId === 'fundingPackage'
+        ? 'Reset all fields to defaults? The budget funding list stays. This cannot be undone.'
+        : 'Reset all fields to defaults? This cannot be undone.';
+      dbConfirm(resetMessage, function () { resetActiveDocument(); });
     });
   }
 
@@ -2402,7 +2879,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-row ed-3">' + statusHtml + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row ed-3">' + fld('startDate', 'Start Date', 'date') + fld('endDate', 'End Date', 'date') + fld('guaranteedDays', 'Guaranteed Days') + '</div>' +
       '</div>';
-    html += '<div class="ed-section"><div class="ed-section-hdr">Employee</div>' +
+    html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Employee' +
+      '<button class="smart-btn" id="btn-dm-load-budget" type="button">' +
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>' +
+      ' Load from budget</button></div>' +
       '<div class="ed-row">' + fld('employeeName', 'Full Name', null, true) + '</div>' +
       '<div class="ed-row">' + fld('employeeAddress', 'Address', null, true) + '</div>' +
       '<div class="ed-row ed-2">' + fld('employeePhone', 'Phone') + fld('employeeEmail', 'Email') + '</div>' +
@@ -2662,17 +3142,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
     }).join('');
     var sourcesRows = (d.sources || []).map(function (r, i) {
+      var sourceCurrencies = Object.keys(getRateTable() || {});
+      if (!sourceCurrencies.length) sourceCurrencies = DEFAULT_CURRENCIES.slice();
+      var sourceCurrency = r.currency || currency;
+      if (sourceCurrencies.indexOf(sourceCurrency) < 0) sourceCurrencies.push(sourceCurrency);
       return '<tr>' +
         '<td><input type="text" data-arr="sources" data-i="' + i + '" data-f="name" value="' + esc(r.name || '') + '" placeholder="Funder name"></td>' +
-        '<td><input type="number" data-arr="sources" data-i="' + i + '" data-f="committed" value="' + esc(r.committed || '') + '" placeholder="0"></td>' +
-        '<td><input type="number" data-arr="sources" data-i="' + i + '" data-f="pending" value="' + esc(r.pending || '') + '" placeholder="0"></td>' +
+        '<td><input type="number" data-arr="sources" data-i="' + i + '" data-f="amount" value="' + esc(r.amount == null ? '' : r.amount) + '" placeholder="0"></td>' +
+        '<td><select data-arr="sources" data-i="' + i + '" data-f="currency">' + sourceCurrencies.map(function (code) {
+          return '<option value="' + esc(code) + '"' + (code === sourceCurrency ? ' selected' : '') + '>' + esc(code) + '</option>';
+        }).join('') + '</select></td>' +
         '<td><select data-arr="sources" data-i="' + i + '" data-f="status">' +
           ['Confirmed', 'LOI', 'Pending'].map(function (s) { return '<option' + (r.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
         '</select></td>' +
         '<td><button class="ed-del" data-arr="sources" data-del="' + i + '">&times;</button></td></tr>';
     }).join('');
     return '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Project Info' +
-      '<button class="smart-btn" id="btn-fp-autofill" type="button" title="Pull from budget, then AI-fill remaining blanks">' +
+      '<button class="smart-btn" id="btn-fp-autofill" type="button" title="Fill blanks from the budget. Use AI Fill in the toolbar for the written parts.">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>' +
       ' Autofill</button></div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title', 'text', true) + fld('logline', 'Logline', 'text', true) + '</div>' +
@@ -2684,9 +3170,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-2">' + fld('productionCompany', 'Production Company') + fld('contactName', 'Contact Name') + fld('contactEmail', 'Email') + fld('contactPhone', 'Phone') + '</div>' +
       '<div class="ed-section">Funding Sources</div>' +
       '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr>' +
-        '<th>Source</th><th>Committed</th><th>Pending</th><th>Status</th><th></th>' +
+        '<th>Source</th><th>Amount</th><th>Currency</th><th>Status</th><th></th>' +
       '</tr></thead><tbody id="sources-body">' + sourcesRows + '</tbody></table></div>' +
-      '<button class="ed-add-btn" data-arr="sources">+ Add Source</button>';
+      '<button class="ed-add-btn" data-add="sources">+ Add Source</button>';
   }
 
   /* ======== Budget Comparison Editor ======== */
@@ -2873,8 +3359,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     function onError(msg) {
       if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate'; }
-      if (msg === 'AI_RATE_LIMITED') msg = 'Wait a few seconds before another AI request.';
-      if (genStatus) genStatus.textContent = 'Error: ' + (msg || 'generation failed');
+      var _pa = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
+      if (genStatus) genStatus.textContent = (_pa && _pa.plainError) ? _pa.plainError(msg) : 'The image could not be made. Try again.';
     }
 
     /* Delegate to mBTAssistant (loaded in parent monolith) — single source of truth for all image gen.
@@ -2924,7 +3410,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* Compact aspect ratio tabs — label only, no sub-desc */
     var ffTabsHtml = FORM_FACTORS.map(function(ff) {
       var isActive = ff.id === activeFactor;
-      return '<button onclick="_sbSetFormFactor(' + index + ',\'' + ff.id + '\')" ' +
+      return '<button onclick="_sbSetFormFactor(' + index + ',' + esc(JSON.stringify(String(ff.id))) + ')" ' +
         'style="padding:3px 8px;border-radius:5px;border:none;cursor:pointer;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;' +
         (isActive ? 'background:#2563eb;color:#fff;' : 'background:#334155;color:#64748b;') + '">' +
         ff.label + '</button>';
@@ -2932,7 +3418,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     var previewHtml = '<div id="sb-frame-preview-wrap" style="position:relative;background:#0f172a;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:' + activeFF.css + ';max-height:46vh;">' +
       (f.image
-        ? '<img id="sb-frame-preview-img" src="' + f.image + '" style="width:100%;height:100%;object-fit:contain;cursor:grab;">'
+        ? '<img id="sb-frame-preview-img" src="' + esc(f.image) + '" style="width:100%;height:100%;object-fit:contain;cursor:grab;">'
         : '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;color:#334155;">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;"><rect x="3" y="3" width="18" height="14" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
           '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">No Image</span></div>'
@@ -3006,7 +3492,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       _sbModelOpts +
       '</select>' +
       /* Attach */
-      '<button onclick="document.getElementById(\'sb-file-input-' + index + '\').click()" style="' + _btnBase + 'background:#1e293b;color:#cbd5e1;">' +
+      '<button onclick="document.getElementById(' + esc(JSON.stringify("sb-file-input-" + String(index))) + ').click()" style="' + _btnBase + 'background:#1e293b;color:#cbd5e1;">' +
       _icoAttach + '<span class="sb-btn-lbl">Attach</span></button>' +
       '<input type="file" id="sb-file-input-' + index + '" accept="image/*" style="display:none;" onchange="_sbApplyImageFile(this.files[0],' + index + ')">' +
       /* Paste */
@@ -3163,9 +3649,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var CAM_MOVES = ['', 'Static', 'Pan L', 'Pan R', 'Tilt Up', 'Tilt Down', 'Zoom In', 'Zoom Out', 'Dolly In', 'Dolly Out', 'Tracking', 'Handheld', 'Crane Up', 'Crane Down'];
     var html = '<div class="ed-section"><div class="ed-section-hdr">Storyboard Info</div>' +
       '<div class="ed-row ed-2">' + fld('projectTitle', 'Project Title', null, true) + fld('director', 'Director') + '</div>' +
-      '<div class="ed-row"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;">Grid Columns</label>' +
-      '<select data-key="columns" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;">' +
-      ['2','3'].map(function(v) { return '<option value="' + v + '"' + (String(d.columns || '3') === v ? ' selected' : '') + '>' + v + ' columns</option>'; }).join('') +
+      '<div class="ed-row"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;">Frames per page</label>' +
+      '<select data-key="framesPerPage" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;">' +
+      ['2','4','6'].map(function(v) { return '<option value="' + v + '"' + (String(d.framesPerPage || '4') === v ? ' selected' : '') + '>' + v + ' frames per page</option>'; }).join('') +
       '</select></div></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;align-items:center;justify-content:space-between;">Frames <button class="ed-add-btn" data-add="frames" style="margin:0;">+ Add Frame</button></div>';
     var IE_OPTS = ['INT', 'EXT', 'INT/EXT'];
@@ -3371,6 +3857,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* Phase 79: Weekly Cost Report editor */
+  function weeklyDisplay(value) {
+    return value == null || typeof value === 'string' && !value.trim() ? 'Unknown' : String(value);
+  }
   function buildWeeklyCostReportHtml(d) {
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Report Details</div>' +
@@ -3378,8 +3867,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-row ed-3">' + fld('periodStart', 'Period Start', 'date') + fld('periodEnd', 'Period End', 'date') + fld('reportDate', 'Report Date', 'date') + '</div>' +
       '<div class="ed-row ed-2">' + fld('preparedBy', 'Prepared By') + fld('approvedBy', 'Approved By') + '</div></div>';
     var items = d.lineItems || [];
+    if (d.committedNote) html += '<p style="color:#b45309;font-size:10px;">' + esc(d.committedNote) + '</p>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Line Items</div>' +
-      '<p style="font-size:10px;color:var(--muted);margin:0 10px 10px;line-height:1.5;">Auto-populated from budget actuals. Set the period above and use Preview to generate the filtered report.</p>';
+      '<p style="font-size:10px;color:var(--muted);margin:0 10px 10px;line-height:1.5;">Budget-linked rows use cumulative recorded actuals. Set the report period, then use Preview. Unknown amounts need source data. Sources and refresh lets you review changed facts.</p>';
     if (items.length > 0) {
       html += '<div class="ed-tbl-wrap"><table class="ed-tbl" style="font-size:10px;"><thead><tr>' +
         '<th>Account</th><th>Description</th><th style="width:65px;">Budget</th>' +
@@ -3388,17 +3878,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '</tr></thead><tbody>';
       items.forEach(function (item, i) {
         var pct = parseFloat(item.pctUsed) || 0;
-        var pctColor = pct > 100 ? '#dc2626' : pct > 85 ? '#d97706' : '#16a34a';
+        var pctColor = weeklyDisplay(item.pctUsed) === 'Unknown' ? '#94a3b8' : pct > 100 ? '#dc2626' : pct > 85 ? '#d97706' : '#16a34a';
         var varColor = parseFloat(item.variance) >= 0 ? '#16a34a' : '#dc2626';
         html += '<tr>' +
           '<td><input data-arr="lineItems" data-i="' + i + '" data-f="account" value="' + esc(item.account || '') + '" readonly style="color:#94a3b8;"></td>' +
           '<td><input data-arr="lineItems" data-i="' + i + '" data-f="description" value="' + esc(item.description || '') + '" readonly></td>' +
           '<td><input data-arr="lineItems" data-i="' + i + '" data-f="budget" value="' + esc(item.budget || '0') + '" readonly style="text-align:right;"></td>' +
-          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="committed" value="' + esc(item.committed || '0') + '" readonly style="text-align:right;color:#d97706;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="committed" value="' + esc(weeklyDisplay(item.committed)) + '" readonly style="text-align:right;color:#d97706;"></td>' +
           '<td><input data-arr="lineItems" data-i="' + i + '" data-f="actual" value="' + esc(item.actual || '0') + '" readonly style="text-align:right;"></td>' +
-          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="etc" value="' + esc(item.etc || '0') + '" readonly style="text-align:right;"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="etc" value="' + esc(weeklyDisplay(item.etc)) + '" readonly style="text-align:right;"></td>' +
           '<td><input data-arr="lineItems" data-i="' + i + '" data-f="variance" value="' + esc(item.variance || '0') + '" readonly style="text-align:right;color:' + varColor + ';"></td>' +
-          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="pctUsed" value="' + esc(item.pctUsed || '0') + '" readonly style="text-align:right;color:' + pctColor + ';"></td>' +
+          '<td><input data-arr="lineItems" data-i="' + i + '" data-f="pctUsed" value="' + esc(weeklyDisplay(item.pctUsed)) + '" readonly style="text-align:right;color:' + pctColor + ';"></td>' +
           '</tr>';
       });
       html += '</tbody></table></div>';
@@ -3452,6 +3942,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var arr = el.getAttribute('data-arr');
 
       if (key) {
+        afTyped(key.split('.')[0]);
         if (key.indexOf('.') > -1) {
           var parts = key.split('.');
           if (!editorData[parts[0]]) editorData[parts[0]] = {};
@@ -3465,6 +3956,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
       /* Array field inputs (data-arr, data-i, data-f) */
       if (arr) {
+        afTyped(arr);
         var idx = parseInt(el.getAttribute('data-i'), 10);
         var field = el.getAttribute('data-f');
         if (editorData[arr] && editorData[arr][idx] !== undefined) {
@@ -3487,9 +3979,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var arr = el.getAttribute('data-arr');
       var key = el.getAttribute('data-key');
       if (key) {
+        afTyped(key);
         editorData[key] = el.value;
         saveEditorData();
       } else if (arr) {
+        afTyped(arr);
         var idx = parseInt(el.getAttribute('data-i'), 10);
         var field = el.getAttribute('data-f');
         if (editorData[arr] && editorData[arr][idx] !== undefined) {
@@ -3529,6 +4023,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var delIdx = parseInt(delBtn.getAttribute('data-del'), 10);
         if (editorData[arrN]) {
           dbPushUndoImmediate();
+          if (arrN === 'sources' && activeTemplateId === 'fundingPackage') {
+            var removedSource = editorData.sources[delIdx];
+            if (removedSource && removedSource.id && fundingDeletes.indexOf(removedSource.id) < 0) fundingDeletes.push(removedSource.id);
+          }
           editorData[arrN].splice(delIdx, 1);
           saveEditorData();
           var scrollYDel = panel.scrollTop;
@@ -3555,7 +4053,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       vehicles: { driver: '', type: 'Van', passengers: '', pickupLocation: '', pickupTime: '', destination: '', eta: '' },
       delays: { duration: '', reason: '' },
       equipment: { description: '', serialNum: '', replacementValue: '', rentalRate: '', rateType: 'Daily' },
-      sources: { name: '', committed: '', pending: '', status: 'Pending' },
+      sources: { name: '', amount: 0, currency: currency, status: 'Pending' },
       scriptScenes: { num: '', intExt: 'INT', location: '', timeOfDay: 'DAY', description: '', cast: '', props: '', wardrobe: '', vehicles: '', fx: '', notes: '' },
       shootDays: { date: '', dayNum: '', location: '', crewCall: '', wrap: '', scenes: '', cast: '', pages: '', notes: '' },
       shots: { scene: '', shot: '', take: '', tc: '', description: '', costume: '', hair: '', makeup: '', props: '', timeOfDay: '', notes: '' },
@@ -3583,143 +4081,109 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Call Sheet Smart Features ======== */
 
+  /* Phase 71: a "Sent" deal memo puts a ghost line in the budget; Draft or Executed takes it out.
+     Set D0: this tool never writes the budget. Inside the app it sends the line to the budget window, which applies it to
+     its open budget (with unsaved edits), saves, and answers. On its own it writes only that line onto the freshly read
+     stored copy, advances updated_at, and refuses to write over a copy saved somewhere else after this one was read.
+     The deal memo document itself is saved under its own key either way. */
+  var memoAckSeq = 0, memoAcks = {}, memoChain = Promise.resolve();
+
+  window.addEventListener('message', function (e) {
+    var a;
+    if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'docs-memo-line') return;
+    a = memoAcks[e.data.requestId];
+    if (!a) return;
+    delete memoAcks[e.data.requestId];
+    if (e.data.status === 'success') a.ok(); else a.fail(e.data.message);
+  });
+
+  function memoLineFailed(op, message) {
+    dbAlert('The deal memo line was not ' + (op === 'insert' ? 'added to' : 'removed from') + ' the budget: ' + message + ' The deal memo itself is saved. Change its status again to retry.', 'Deal memo');
+  }
+
+  function memoLineThroughApp(op, ghost, department) {
+    return new Promise(function (resolve, reject) {
+      var id, timer;
+      memoAckSeq += 1;
+      id = memoAckSeq;
+      timer = setTimeout(function () { delete memoAcks[id]; reject(new Error('The budget did not confirm the change.')); }, 20000);
+      memoAcks[id] = {
+        ok: function () { clearTimeout(timer); resolve(); },
+        fail: function (message) { clearTimeout(timer); reject(new Error(message || 'the budget could not save it.')); }
+      };
+      window.parent.postMessage({ type: 'mbt:tool-action', action: 'docs-memo-line', payload: { requestId: id, projectKey: projectKey, op: op, memoId: editorData.memoId, ghost: ghost || null, department: department || '' } }, window.location.origin);
+    });
+  }
+
+  function memoGhostSection(bgt, department) {
+    var dept = (department || '').toLowerCase(), keys = Object.keys(bgt.sections), match = keys[0], i;
+    for (i = 0; i < keys.length; i++) {
+      if (keys[i].toLowerCase().indexOf(dept) > -1) { match = keys[i]; break; }
+    }
+    return match;
+  }
+
+  function memoLineStandalone(op, ghost, department) {
+    memoChain = memoChain.catch(function () {}).then(function () {
+      /* Read after the earlier queued write finished, so Docs' own write is not taken for a newer copy. */
+      var base = (budget && budget.updated_at) || '';
+      return localforage.getItem(projectKey).then(function (bgt) {
+        var stale, changed = false, sec, j, existing;
+        if (!bgt || !bgt.sections) throw new Error('The saved budget could not be found.');
+        if ((bgt.updated_at || '') > base) { stale = new Error('A newer copy of this budget was saved somewhere else, so nothing was written. Reopen the budget to see the newer copy.'); throw stale; }
+        if (op === 'insert') {
+          sec = bgt.sections[memoGhostSection(bgt, department)];
+          if (!sec.items) sec.items = [];
+          existing = -1;
+          for (j = 0; j < sec.items.length; j++) { if (sec.items[j].memoId === ghost.memoId) { existing = j; break; } }
+          if (existing > -1) sec.items[existing] = ghost; else sec.items.push(ghost);
+          changed = true;
+        } else {
+          Object.keys(bgt.sections).forEach(function (k) {
+            var s = bgt.sections[k], before;
+            if (!s.items) return;
+            before = s.items.length;
+            s.items = s.items.filter(function (item) { return item.memoId !== editorData.memoId; });
+            if (s.items.length !== before) changed = true;
+          });
+        }
+        if (!changed) return;
+        bgt.updated_at = (function (prev) { var now = new Date().toISOString(); return prev && now <= prev ? new Date(new Date(prev).getTime() + 1).toISOString() : now; })(bgt.updated_at);
+        return localforage.setItem(projectKey, bgt).then(function () { if (budget) budget.updated_at = bgt.updated_at; });
+      });
+    });
+    return memoChain;
+  }
+
+  function memoLine(op, ghost, department) {
+    var run = (window.parent && window.parent !== window) ? memoLineThroughApp(op, ghost, department) : memoLineStandalone(op, ghost, department);
+    run.catch(function (err) { memoLineFailed(op, (err && err.message) || 'the budget could not save it.'); });
+  }
+
   /* Phase 71: inject a ghost line item into the budget for a "Sent" deal memo */
   function injectGhostItem() {
     if (!projectKey || !editorData || !editorData.memoId) return;
-    localforage.getItem(projectKey).then(function(bgt) {
-      if (!bgt || !bgt.sections) return;
-      var dept = (editorData.department || editorData.role || '').toLowerCase();
-      var secKeys = Object.keys(bgt.sections);
-      var matchKey = secKeys[0];
-      for (var i = 0; i < secKeys.length; i++) {
-        if (secKeys[i].toLowerCase().indexOf(dept) > -1) { matchKey = secKeys[i]; break; }
-      }
-      var sec = bgt.sections[matchKey];
-      if (!sec.items) sec.items = [];
-      var existing = -1;
-      for (var j = 0; j < sec.items.length; j++) {
-        if (sec.items[j].memoId === editorData.memoId) { existing = j; break; }
-      }
-      var ghost = {
-        id: editorData.memoId,
-        description: editorData.role || 'Deal Memo',
-        crew: { name: editorData.employeeName || '' },
-        memoStatus: 'Pending', /* unchanged — re-inject on save keeps ghost in sync; readonly removed from budget editor fields */
-        memoId: editorData.memoId,
-        quantity: 1,
-        rate: parseFloat(editorData.rate) || 0,
-        multiplier: 1,
-        actual: 0,
-        unit: 'Flat'
-      };
-      if (existing > -1) { sec.items[existing] = ghost; }
-      else { sec.items.push(ghost); }
-      localforage.setItem(projectKey, bgt).then(function() {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, window.location.origin);
-        }
-      });
-    });
+    memoLine('insert', {
+      id: editorData.memoId,
+      description: editorData.role || 'Deal Memo',
+      crew: { name: editorData.employeeName || '' },
+      memoStatus: 'Pending', /* unchanged — re-inject on save keeps ghost in sync; readonly removed from budget editor fields */
+      memoId: editorData.memoId,
+      quantity: 1,
+      rate: parseFloat(editorData.rate) || 0,
+      multiplier: 1,
+      actual: 0,
+      unit: 'Flat'
+    }, editorData.department || editorData.role || '');
   }
 
   /* Phase 71: remove a ghost item from the budget (Draft or Executed status) */
   function removeGhostItem() {
     if (!projectKey || !editorData || !editorData.memoId) return;
-    localforage.getItem(projectKey).then(function(bgt) {
-      if (!bgt || !bgt.sections) return;
-      var changed = false;
-      Object.keys(bgt.sections).forEach(function(k) {
-        var sec = bgt.sections[k];
-        if (!sec.items) return;
-        var before = sec.items.length;
-        sec.items = sec.items.filter(function(item) { return item.memoId !== editorData.memoId; });
-        if (sec.items.length !== before) changed = true;
-      });
-      if (!changed) return;
-      localforage.setItem(projectKey, bgt).then(function() {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, window.location.origin);
-        }
-      });
-    });
+    memoLine('remove', null, '');
   }
 
-  /* Auto-populate Production Info fields from budget ATL crew items */
-  function autoPopulateFromBudget() {
-    if (!budget || !budget.sections) return;
-    dbPushUndoImmediate();
-    var sections = budget.sections;
-    var found = { director: '', producers: '', upm: '', firstAd: '', secondAd: '' };
-
-    Object.keys(sections).forEach(function (k) {
-      var sec = sections[k];
-      (sec.items || []).forEach(function (item) {
-        var d = (item.description || '').toLowerCase();
-        var personName = (item.crew && item.crew.name) || ''; // Pull actual contact name
-        if (!personName) return; 
-
-        // Director
-        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) {
-            found.director = personName;
-        }
-        // Producers
-        else if ((d.indexOf('producer') > -1 && d.indexOf('line') < 0) || d === 'prod') {
-            if (found.producers) {
-                if (found.producers.indexOf(personName) < 0) found.producers += ', ' + personName;
-            } else {
-                found.producers = personName;
-            }
-        }
-        // UPM / Line Producer
-        else if (!found.upm && (d.indexOf('upm') > -1 || d.indexOf('unit production') > -1 || d.indexOf('line producer') > -1)) {
-            found.upm = personName;
-        }
-        // 1st AD
-        else if (!found.firstAd && (d.indexOf('1st ad') > -1 || d.indexOf('first ad') > -1 || d.indexOf('1ad') > -1 || d.indexOf('first assistant') > -1)) {
-            found.firstAd = personName;
-        }
-        // 2nd AD
-        else if (!found.secondAd && (d.indexOf('2nd ad') > -1 || d.indexOf('second ad') > -1 || d.indexOf('2ad') > -1 || d.indexOf('second assistant') > -1)) {
-            found.secondAd = personName;
-        }
-      });
-    });
-
-    var changed = false;
-    ['director','producers','upm','firstAd','secondAd'].forEach(function (k) {
-      if (found[k] && !editorData[k]) { editorData[k] = found[k]; changed = true; }
-    });
-    if (!editorData.productionTitle && budget.projectName) { editorData.productionTitle = budget.projectName; changed = true; }
-    
-    if ((budget.projectCompany || budget.company) && !editorData.productionCompany) {
-      editorData.productionCompany = budget.projectCompany || budget.company;
-      changed = true;
-    }
-    /* Phase 70: inject principal photography start date into call sheet date field */
-    if (budget.startDate && !editorData.date) { editorData.date = budget.startDate; changed = true; }
-
-    var locHydrated = false;
-    if ((budget.projectLocation || budget.startDate) && (!editorData.shootingLocations || editorData.shootingLocations.length === 0)) {
-        editorData.shootingLocations = [{
-            name: 'Basecamp',
-            address: budget.projectLocation || '',
-            parking: '',
-            notes: budget.startDate ? ('Shoot Date: ' + budget.startDate) : ''
-        }];
-        changed = true;
-        if (budget.projectLocation) locHydrated = true;
-    }
-    
-    if (changed) {
-        saveEditorData();
-        buildEditor('callSheet');
-        if (locHydrated) {
-            setTimeout(fetchWeatherAndHospitals, 300);
-        }
-    } else {
-        dbAlert('No additional crew contacts found to populate or fields already filled.');
-    }
-  }
+  function autoPopulateFromBudget() { afRefresh(true); }
 
   /* Phase 149.2: Generic template-aware AI Fill. Sends ai-doc-fill to parent monolith
      with the active template's blank eligible fields. Context is pulled from the Context
@@ -3740,267 +4204,67 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     _dbToastTimer = setTimeout(function () { el.className = ''; }, 3500);
   }
 
-  function runAiFillForActiveTemplate() {
-    if (!budget) { dbToast('No project loaded.', true); return; }
-    if (!activeTemplateId || !AI_FILL_TEMPLATES[activeTemplateId]) return;
-    if (_aiFillPending) return;
-
-    /* Back-compat: fundingPackage uses the richer autoPopulateFundingPackage flow */
-    if (activeTemplateId === 'fundingPackage') { autoPopulateFundingPackage(); return; }
-
-    /* --- Budget-pull: always fill crew/project fields directly from budget (no AI needed) --- */
-    var _jobTitlePlaceholders = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'copywriter'];
-    function _isPlaceholder(v) { return !v || _jobTitlePlaceholders.indexOf(v.trim().toLowerCase()) > -1; }
-
-    if (budget && budget.sections) {
-      dbPushUndoImmediate();
-      var _crewFound = { director: '', producer: '', writer: '', dp: '' };
-      Object.keys(budget.sections).forEach(function(sk) {
-        (budget.sections[sk].items || []).forEach(function(item) {
-          var d = (item.description || '').toLowerCase();
-          var crew = item.crew || {};
-          var name = crew.name || (crew.firstName ? (crew.firstName + ' ' + (crew.lastName || '')).trim() : '') || '';
-          if (!name) return;
-          if (!_crewFound.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) _crewFound.director = name;
-          else if (!_crewFound.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) _crewFound.producer = name;
-          else if (!_crewFound.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) _crewFound.writer = name;
-          else if (!_crewFound.dp && (d.indexOf('dp') === 0 || d.indexOf('director of photography') > -1 || d.indexOf('cinematograph') > -1)) _crewFound.dp = name;
-        });
-      });
-      var _budgetChanged = false;
-      ['director','producer','writer','dp'].forEach(function(k) {
-        if (_crewFound[k] && _isPlaceholder(editorData[k])) { editorData[k] = _crewFound[k]; _budgetChanged = true; }
-      });
-      if (!editorData.productionTitle && budget.projectName) { editorData.productionTitle = budget.projectName; _budgetChanged = true; }
-      if (!editorData.productionCompany && (budget.projectCompany || budget.company)) { editorData.productionCompany = budget.projectCompany || budget.company; _budgetChanged = true; }
-      if (_budgetChanged) { saveEditorData(); buildEditor(activeTemplateId); }
-    }
-
-    /* Find blank eligible fields — crew fields already filled above are excluded */
-    var eligible = AI_FILL_TEMPLATES[activeTemplateId];
-    var blanks = [];
-    for (var i = 0; i < eligible.length; i++) {
-      var k = eligible[i];
-      var v = editorData ? editorData[k] : null;
-      if (!v || String(v).trim() === '') blanks.push(k);
-    }
-    if (!blanks.length) { dbToast('All eligible fields already have values.'); return; }
-
-    if (window.parent === window) {
-      dbToast('AI Fill requires the Budget Editor (open this tool from the main app).', true);
-      return;
-    }
-
-    _aiFillPending = true;
-    var btn = dom.getElementById('btn-ai-fill');
-    var lbl = btn && btn.querySelector('.lbl');
-    var prev = lbl ? lbl.textContent : '';
-    if (btn) btn.disabled = true;
-    if (lbl) lbl.textContent = 'Thinking…';
-
-    /* Ask parent for a ledger summary so we can show the user what's being consulted */
+  /* Plain sentence for a failed AI reply. The parent already sends plain words; anything else is mapped here. */
+  function afAiText(err) {
+    var a = (window.parent && window.parent.mBTAssistant) || window.mBTAssistant || null;
+    var s = String(err == null ? '' : err);
+    if (/^[A-Za-z][^:]*\s\d{3}\b|^no-api-key$|^ai_rate_limited$|failed to fetch/i.test(s) && a && typeof a.plainError === 'function') return a.plainError(s);
+    return s || 'AI Fill did not work. Try again.';
+  }
+  /* Improvement: with no AI key, say so before the review window opens instead of after it. */
+  function afAiReady() {
     try {
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'ledger-rescan' }, window.location.origin);
-    } catch (e) { /* ignore */ }
-
-    var requestId = 'aifill_' + Date.now();
-
-    /* Inline context gives the AI the typed-in fields it already has (even if blank for target
-       fields, these hint at other known values like director, location, etc.) */
-    /* Scrub placeholder job titles from context so AI doesn't use them as real names */
-    function _scrub(v) { return (v && _jobTitlePlaceholders.indexOf(v.trim().toLowerCase()) === -1) ? v : ''; }
-    var ctx = {
-      projectName:       editorData && editorData.productionTitle,
-      productionCompany: editorData && editorData.productionCompany,
-      director:          _scrub(editorData && editorData.director),
-      producer:          _scrub(editorData && (editorData.producer || editorData.producers)),
-      writer:            _scrub(editorData && editorData.writer),
-      location:          budget.projectLocation || '',
-      jurisdiction:      (budget.jurisdiction && budget.jurisdiction.name) || ''
-    };
-
-    var timeout = setTimeout(function () { cleanup(); dbToast('AI Fill timed out. If using a local model, it may need more time — try again.', true); }, 120000);
-
-    function cleanup() {
-      _aiFillPending = false;
-      clearTimeout(timeout);
-      window.removeEventListener('message', onReply);
-      if (btn) btn.disabled = false;
-      if (lbl) lbl.textContent = prev || 'AI Fill';
-    }
-
-    function onReply(e) {
-      if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
-      if (!e.data || e.data.type !== 'mbt:tool-reply') return;
-      if (e.data.requestId !== requestId) return;
-      cleanup();
-      var r = e.data.payload || {};
-      if (r._error === 'no-api-key') {
-        dbToast('AI Fill needs an API key \u2014 Settings \u2192 AI Provider in the main app.', true);
-        return;
-      }
-      if (r._error === 'AI_RATE_LIMITED' || (r._error && String(r._error).indexOf('Wait a few seconds') === 0)) {
-        dbToast('Wait a few seconds before another AI request.', true);
-        return;
-      }
-      if (r._error) {
-        dbToast('AI Fill failed: ' + r._error, true);
-        return;
-      }
-      var changed = false;
-      var filledKeys = [];
-      blanks.forEach(function (k) {
-        if (r[k] != null && String(r[k]).trim() !== '' && (!editorData[k] || String(editorData[k]).trim() === '')) {
-          if (!changed) dbPushUndoImmediate();
-          editorData[k] = String(r[k]);
-          filledKeys.push(k);
-          changed = true;
-        }
-      });
-      if (changed) {
-        saveEditorData();
-        buildEditor(activeTemplateId);
-        /* Flash the fields the AI just wrote so success is visible */
-        setTimeout(function () {
-          filledKeys.forEach(function (k) {
-            var el = dom.querySelector('[data-key="' + k + '"]');
-            if (el) el.classList.add('ai-flash');
-          });
-        }, 60);
-        dbToast('AI filled ' + filledKeys.length + ' field' + (filledKeys.length === 1 ? '' : 's') + '.');
-      } else {
-        dbToast('AI did not return usable values. Try adding a treatment or more project details.', true);
-      }
-    }
-
-    window.addEventListener('message', onReply);
-    window.parent.postMessage({
-      type: 'mbt:tool-action',
-      action: 'ai-doc-fill',
-      requestId: requestId,
-      payload: { templateId: activeTemplateId, fields: blanks, context: ctx, maxTokens: 6000 }
-    }, window.location.origin);
+      var m = window.parent && window.parent.mBTAIModule;
+      if (!m || typeof m.getSelectedProvider !== 'function') return true;
+      var prov = m.getSelectedProvider();
+      if (prov === 'lmstudio' || m.getStoredApiKey(prov)) return true;
+      afNotice(window.parent.mBTAssistant.plainError('no-api-key'), 'AI Fill');
+      return false;
+    } catch (e) { return true; }
   }
 
-  /* ======== Funding Package Autofill (budget -> AI cascade) ======== */
-  var _fpAIPending = false;
-  function autoPopulateFundingPackage() {
-    if (!budget) { dbAlert('No project loaded.', 'Error'); return; }
-    dbPushUndoImmediate();
-    var changed = false;
-
-    /* --- Phase 1: budget-pull (deterministic) --- */
-    if (!editorData.productionTitle && budget.projectName) {
-      editorData.productionTitle = budget.projectName; changed = true;
-    }
-    if (!editorData.productionCompany && (budget.projectCompany || budget.company)) {
-      editorData.productionCompany = budget.projectCompany || budget.company; changed = true;
-    }
-    /* ATL crew scan — prefer assigned crew name, fall back to contact fields */
-    var found = { director: '', producer: '', writer: '', dp: '' };
-    Object.keys(budget.sections || {}).forEach(function (k) {
-      var sec = budget.sections[k];
-      (sec.items || []).forEach(function (item) {
-        var d = (item.description || '').toLowerCase();
-        /* Crew name from assigned contact, or contact.name, or contact.firstName + lastName */
-        var crew = item.crew || {};
-        var person = crew.name || (crew.firstName ? (crew.firstName + ' ' + (crew.lastName || '')).trim() : '') || crew.email || '';
-        if (!found.director && d.indexOf('director') > -1 && d.indexOf('art') < 0 && d.indexOf('photography') < 0) {
-          if (person) found.director = person;
-        } else if (!found.producer && d.indexOf('producer') > -1 && d.indexOf('line') < 0) {
-          if (person) found.producer = person;
-        } else if (!found.writer && (d.indexOf('writer') > -1 || d.indexOf('screenplay') > -1)) {
-          if (person) found.writer = person;
-        } else if (!found.dp && (d.indexOf('dp') === 0 || d.indexOf('cinematograph') > -1 || d.indexOf('director of photography') > -1)) {
-          if (person) found.dp = person;
-        }
-      });
-    });
-    /* Overwrite if blank OR if value looks like a placeholder job title (not a real name) */
-    var jobTitles = ['director', 'producer', 'writer', 'dp', 'cinematographer', 'director of photography'];
-    ['director','producer','writer','dp'].forEach(function (k) {
-      var existing = (editorData[k] || '').trim().toLowerCase();
-      var isPlaceholder = !existing || jobTitles.indexOf(existing) > -1;
-      if (found[k] && isPlaceholder) { editorData[k] = found[k]; changed = true; }
-    });
-
-    if (changed) { saveEditorData(); }
-
-    /* --- Phase 2: AI cascade for remaining blanks (logline, genre, format) --- */
-    var aiFields = [];
-    if (!editorData.logline) aiFields.push('logline');
-    if (!editorData.genre)   aiFields.push('genre');
-    if (!editorData.format)  aiFields.push('format');
-
-    if (aiFields.length === 0) {
-      buildEditor('fundingPackage');
-      if (!changed) dbAlert('All Funding Package fields are already filled.');
-      return;
-    }
-
-    if (_fpAIPending) return;
-    if (window.parent === window) {
-      /* Standalone: no AI bridge — finish with budget results only */
-      buildEditor('fundingPackage');
-      return;
-    }
-
-    _fpAIPending = true;
-    var btn = dom.getElementById('btn-fp-autofill');
-    if (btn) { btn.disabled = true; btn.textContent = ' Thinking..'; }
-
-    var requestId = 'fpAI_' + Date.now();
-    var _tx = '';
-    try { _tx = (localStorage.getItem('mbt_ai_treatment') || '').slice(0, 4000); } catch (_e) { _tx = ''; }
-    var ctx = {
-      projectName: editorData.productionTitle || budget.projectName || '',
-      productionCompany: editorData.productionCompany || '',
-      director: editorData.director || '',
-      producer: editorData.producer || '',
-      writer: editorData.writer || '',
-      runtime: editorData.runtime || '',
-      location: budget.projectLocation || '',
-      jurisdiction: (budget.jurisdiction && budget.jurisdiction.name) || '',
-      treatment: _tx
-    };
-
-    var timeout = setTimeout(function () {
-      cleanup();
-      buildEditor('fundingPackage');
-      dbAlert('AI fill timed out. Budget-pull values were saved.');
-    }, 30000);
-
-    function cleanup() {
-      _fpAIPending = false;
-      clearTimeout(timeout);
-      window.removeEventListener('message', onReply);
-    }
-
-    function onReply(e) {
-      if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
-      if (!e.data || e.data.type !== 'mbt:tool-reply') return;
-      if (e.data.requestId !== requestId) return;
-      cleanup();
-      var r = e.data.payload || {};
-      var aiChanged = false;
-      aiFields.forEach(function (k) {
-        if (r[k] && !editorData[k]) {
-          if (!aiChanged) dbPushUndoImmediate();
-          editorData[k] = String(r[k]); aiChanged = true;
-        }
-      });
-      if (aiChanged) saveEditorData();
-      buildEditor('fundingPackage');
-      if (!aiChanged && !changed) dbAlert('AI did not return usable values.');
-    }
-
-    window.addEventListener('message', onReply);
-    window.parent.postMessage({
-      type: 'mbt:tool-action',
-      action: 'ai-funding-fill',
-      requestId: requestId,
-      payload: { fields: aiFields, context: ctx }
-    }, window.location.origin);
+  function runAiFillForActiveTemplate() {
+    if (_afBusy || !budget || !editorData) return;
+    if (!afAiReady()) return;
+    _afBusy = true;
+    var initial = afTarget();
+    function release() { if (initial.epoch === _afEpoch) _afBusy = false; }
+    afRefresh(true).then(function (accepted) {
+      if (!accepted || !afCurrent(initial)) { release(); return; }
+      var target = afTarget(), p = _afProjection;
+      var typedAtStart = JSON.parse(JSON.stringify(afMeta().overrides));
+      var blanks = p.prose.filter(function (key) { return afBlank(editorData[key]); });
+      if (!blanks.length) { _afBusy = false; afNotice('No eligible blank prose fields remain. Facts and agreed terms are not generated by AI.'); return; }
+      if (window.parent === window) { _afBusy = false; afNotice('AI Fill requires this document tool to be opened from the budget editor.'); return; }
+      var button = dom.getElementById('btn-ai-fill');
+      if (button) button.disabled = true;
+      var requestId = 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      var timer = setTimeout(function () { cleanup(); afNotice('AI Fill timed out after 120 seconds. Accepted fact changes remain saved.'); }, mBTDocumentProjection.timeout);
+      function cleanup() { clearTimeout(timer); window.removeEventListener('message', reply); release(); if (button && target.epoch === _afEpoch) button.disabled = false; }
+      function reply(e) {
+        if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e) || !e.data || e.data.type !== 'mbt:tool-reply' || e.data.requestId !== requestId) return;
+        cleanup();
+        if (!afCurrent(target)) { afNotice('The AI reply belongs to a document that is no longer open. No document fields were changed.'); return; }
+        var response = e.data.payload || {};
+        if (response._error) { afNotice(afAiText(response._error), 'AI Fill'); return; }
+        var keys = blanks.filter(function (key) { return afBlank(editorData[key]) && afMeta().overrides[key] === typedAtStart[key] && typeof response[key] === 'string' && response[key].trim(); });
+        if (!keys.length) { afNotice('AI returned no usable prose. Nothing was changed.'); return; }
+        dbPushUndoImmediate();
+        keys.forEach(function (key) {
+          editorData[key] = response[key];
+          afMeta().sources[key] = { ref: 'AI draft from this document projection and current project sources; review before use', value: response[key] };
+        });
+        saveEditorData(); buildEditor(activeTemplateId);
+        afNotice('AI drafted ' + keys.length + ' prose fields. Review the wording before use.');
+      }
+      window.addEventListener('message', reply);
+      var documentContext = JSON.parse(JSON.stringify(editorData));
+      delete documentContext._autofill;
+      window.parent.postMessage({ type: 'mbt:tool-action', action: 'ai-doc-fill', requestId: requestId, payload: {
+        templateId: target.template, projectName: budget.projectName, fields: blanks,
+        context: documentContext, selections: afMeta().selections, maxTokens: 6000
+      } }, window.location.origin);
+    }).catch(function (err) { release(); afNotice(err.message || 'AI Fill failed.'); });
   }
 
   /* Collect weather addresses: shooting locations → Basecamp → projectLocation (read-only fallback) */

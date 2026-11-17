@@ -96,12 +96,27 @@
 
         <!-- Date Range Summary -->
         <div id="date-summary" class="bg-white rounded-xl border border-slate-200 p-4 hidden">
-                <span id="total-days-label" class="text-[9px] font-black text-slate-400 uppercase tracking-widest"></span>
-            </div>
+            <span id="total-days-label" class="text-[9px] font-black text-slate-400 uppercase tracking-widest"></span>
             <div class="flex gap-4 text-[10px] mt-2">
                 <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Start</span><span id="label-start" class="font-black text-slate-800">—</span></div>
                 <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Delivery</span><span id="label-delivery" class="font-black text-slate-800">—</span></div>
                 <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Project</span><span id="label-project" class="font-black text-slate-800">—</span></div>
+            </div>
+            <div id="hot-costs-panel" class="mt-4 pt-3 border-t border-slate-100">
+                <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Hot Costs</div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[10px]">
+                    <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Budget</span><span id="hot-budget" class="font-black text-slate-800">—</span></div>
+                    <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Committed</span><span id="hot-committed" class="font-black text-slate-800">—</span></div>
+                    <div><span class="text-slate-400 font-bold uppercase tracking-widest text-[8px] block">Paid</span><span id="hot-paid" class="font-black text-slate-800">—</span></div>
+                    <div id="hot-remain-wrap" class="rounded-lg px-2 py-1 bg-amber-600 text-white">
+                        <span id="hot-remain-label" class="font-bold uppercase tracking-widest text-[8px] block text-amber-200">Remaining</span>
+                        <span id="hot-remain-value" class="font-black">—</span>
+                    </div>
+                </div>
+                <div id="hot-per-day" class="hidden mt-2 text-[9px]">
+                    <span class="text-slate-400 font-bold uppercase tracking-widest text-[8px]">Per shoot day</span>
+                    <span id="hot-per-day-values" class="font-bold text-slate-700 ml-1"></span>
+                </div>
             </div>
         </div>
 
@@ -204,7 +219,114 @@ var mBTCalendar = (function () {
         { key: 'dist', label: 'Distribution',      color: '#ec4899', text: '#fff' }
     ];
 
-    function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    function fmtMoney(n) {
+        var v = parseFloat(n) || 0;
+        try {
+            return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        } catch (e) {
+            return String(Math.round(v));
+        }
+    }
+
+    function sumSectionItemTotals(budget) {
+        var sum = 0;
+        if (!budget || !budget.sections) return 0;
+        var keys = Object.keys(budget.sections);
+        for (var i = 0; i < keys.length; i++) {
+            var sec = budget.sections[keys[i]];
+            if (!sec || !sec.items) continue;
+            for (var j = 0; j < sec.items.length; j++) {
+                var it = sec.items[j];
+                if (it && it.total != null) sum += parseFloat(it.total) || 0;
+            }
+        }
+        return sum;
+    }
+
+    function calcBudgetAmount(budget) {
+        if (budget.grandTotal != null && budget.grandTotal !== '') {
+            var gt = parseFloat(budget.grandTotal);
+            if (!isNaN(gt)) return gt;
+        }
+        return sumSectionItemTotals(budget);
+    }
+
+    function getProductionDays(budget) {
+        if (!budget || !budget.targetLock || !budget.targetLock.stages) return 0;
+        var stages = budget.targetLock.stages;
+        if (stages.prod) return parseFloat(stages.prod.days) || 0;
+        if (stages.shoot) return parseFloat(stages.shoot.days) || 0;
+        return 0;
+    }
+
+    function renderHotCosts(budget) {
+        var panel = dom.getElementById('hot-costs-panel');
+        if (!panel) return;
+        if (!budget) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        var budgetAmt = calcBudgetAmount(budget);
+        var pos = (budget.ledgers && budget.ledgers.pos) ? budget.ledgers.pos : [];
+        var committed = 0;
+        var paid = 0;
+        var unconverted = 0, unconvertedPaid = 0;
+        var ci;
+        for (ci = 0; ci < pos.length; ci++) {
+            var p = pos[ci];
+            var amt = parseFloat(p.paidAmount);
+            if (!amt) amt = parseFloat(p.amount) || 0;
+            /* A PO keeps its own currency: convert it once into the budget's before adding, the same rule as the finance engine. */
+            if (p.currency && budget.currency && p.currency !== budget.currency) {
+                var poConv = null;
+                try {
+                    var poEngine = window.parent && window.parent.mBT && window.parent.mBT.le;
+                    if (poEngine && typeof poEngine.convertCurrencyOrNull === 'function') poConv = poEngine.convertCurrencyOrNull(amt, p.currency, budget.currency, budget);
+                } catch (poErr) { /* engine unavailable */ }
+                if (typeof poConv === 'number' && isFinite(poConv)) amt = poConv;
+                else { if (p.status === 'Committed' || p.status === 'Invoiced' || p.status === 'Paid') unconverted++; if (p.status === 'Paid') unconvertedPaid++; continue; }
+            }
+            if (p.status === 'Committed' || p.status === 'Invoiced' || p.status === 'Paid') committed += amt;
+            if (p.status === 'Paid') paid += amt;
+        }
+
+        var remaining = budgetAmt - committed;
+        var isOver = remaining < 0;
+
+        dom.getElementById('hot-budget').textContent = fmtMoney(budgetAmt);
+        dom.getElementById('hot-committed').textContent = fmtMoney(committed) + (unconverted ? ' (+' + unconverted + (unconverted === 1 ? ' PO' : ' POs') + ' in another currency, no rate to convert)' : '');
+        dom.getElementById('hot-paid').textContent = fmtMoney(paid) + (unconvertedPaid ? ' (+' + unconvertedPaid + (unconvertedPaid === 1 ? ' PO' : ' POs') + ' in another currency, no rate to convert)' : '');
+
+        var remainLabel = dom.getElementById('hot-remain-label');
+        var remainVal = dom.getElementById('hot-remain-value');
+        var remainWrap = dom.getElementById('hot-remain-wrap');
+        if (remainLabel) remainLabel.textContent = isOver ? 'Over' : 'Remaining';
+        if (remainVal) remainVal.textContent = fmtMoney(Math.abs(remaining)) + (unconverted ? ' (not counting ' + unconverted + (unconverted === 1 ? ' PO' : ' POs') + ' in another currency, no rate)' : '');
+        if (remainWrap) {
+            remainWrap.classList.toggle('bg-amber-600', !isOver);
+            remainWrap.classList.toggle('bg-rose-600', isOver);
+        }
+        if (remainLabel) {
+            remainLabel.classList.toggle('text-amber-200', !isOver);
+            remainLabel.classList.toggle('text-rose-200', isOver);
+        }
+
+        var shootDays = getProductionDays(budget);
+        var perDayEl = dom.getElementById('hot-per-day');
+        var perDayVals = dom.getElementById('hot-per-day-values');
+        if (shootDays > 0 && perDayEl && perDayVals) {
+            perDayEl.classList.remove('hidden');
+            perDayVals.textContent = (budgetAmt / shootDays).toFixed(2) + ' budget, ' +
+                (committed / shootDays).toFixed(2) + ' committed, ' +
+                (paid / shootDays).toFixed(2) + ' paid';
+        } else if (perDayEl) {
+            perDayEl.classList.add('hidden');
+        }
+    }
 
     function fmtDate(d) {
         if (!d) return '—';
@@ -475,7 +597,7 @@ var mBTCalendar = (function () {
                 var stageLabel = stage ? '<span class="text-[6px] font-black uppercase tracking-widest truncate block mt-0.5" style="color:' + stage.color + ';">' + esc(stage.label.split('-')[0].trim()) + '</span>' : '';
                 var blackoutLabel = isBlackout ? '<span class="text-[6px] font-black text-violet-500 uppercase">OFF</span>' : '';
 
-                html += '<div onclick="mBTCalendar.toggleBlackout(\'' + dateStr + '\')" class="' + cellBg + ' ' + todayRing + ' min-h-[48px] p-1 cursor-pointer hover:brightness-95 transition-all flex flex-col items-center" style="' + cellStyle + '">' +
+                html += '<div onclick="mBTCalendar.toggleBlackout(' + esc(JSON.stringify(String(dateStr))) + ')" class="' + cellBg + ' ' + todayRing + ' min-h-[48px] p-1 cursor-pointer hover:brightness-95 transition-all flex flex-col items-center" style="' + cellStyle + '">' +
                     dayNum +
                     msDot +
                     stageLabel +
@@ -607,6 +729,46 @@ var mBTCalendar = (function () {
         }).catch(function (e) { console.error('[CAL] save failed', e); });
     }
 
+    function _calendarSectionsHaveStageData(budget) {
+        var secKeys;
+        var ski;
+        var sii;
+        var sec;
+        var item;
+        if (!budget || !budget.sections) return false;
+        secKeys = Object.keys(budget.sections);
+        for (ski = 0; ski < secKeys.length; ski++) {
+            sec = budget.sections[secKeys[ski]];
+            if (!sec || !sec.items) continue;
+            for (sii = 0; sii < sec.items.length; sii++) {
+                item = sec.items[sii];
+                if (item && item.stageData && Object.keys(item.stageData).length) return true;
+            }
+        }
+        return false;
+    }
+
+    function _calendarShowPlanToast() {
+        try {
+            if (window.parent && window.parent !== window) {
+                if (window.parent.mBTME && typeof window.parent.mBTME.toast === 'function') {
+                    window.parent.mBTME.toast('Calendar will match the plan.');
+                } else if (window.parent.document) {
+                    var toastContainer = window.parent.document.getElementById('toastContainer');
+                    if (toastContainer) {
+                        var toastEl = window.parent.document.createElement('div');
+                        toastEl.setAttribute('style', 'background:#0f172a;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;box-shadow:0 4px 12px rgba(15,23,42,.3);');
+                        toastEl.textContent = 'Calendar will match the plan.';
+                        toastContainer.appendChild(toastEl);
+                        setTimeout(function () {
+                            if (toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
+                        }, 3000);
+                    }
+                }
+            }
+        } catch (_toastErr) { /* ignore */ }
+    }
+
     function load() {
         var params = new URLSearchParams(window.location.search);
         state.projectKey = params.get('projectKey') || null;
@@ -637,6 +799,7 @@ var mBTCalendar = (function () {
             dom.getElementById('label-project').textContent = budget.projectName || '—';
             dom.getElementById('label-start').textContent = budget.startDate ? fmtDate(parseDate(budget.startDate)) : 'Not set';
             dom.getElementById('label-delivery').textContent = budget.deliveryDate ? fmtDate(parseDate(budget.deliveryDate)) : 'Not set';
+            renderHotCosts(budget);
 
             var timeline = calcTimeline(budget);
             var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
@@ -663,6 +826,7 @@ var mBTCalendar = (function () {
         var totalDays = timeline ? timeline.reduce(function (s, t) { return s + t.days; }, 0) : 0;
         var totalWorking = timeline ? timeline.reduce(function (s, t) { return s + t.workingDays; }, 0) : 0;
         dom.getElementById('total-days-label').textContent = totalDays + ' days (' + totalWorking + ' working)';
+        renderHotCosts(state.budget);
         if (timeline) {
             renderGantt(timeline);
             renderStageTable(timeline);
@@ -749,7 +913,67 @@ var mBTCalendar = (function () {
         updateStageDays: function (stageKey, val) {
             if (!state.budget || !state.budget.targetLock || !state.budget.targetLock.stages) return;
             if (!state.budget.targetLock.stages[stageKey]) return;
-            state.budget.targetLock.stages[stageKey].days = parseFloat(val) || 0;
+            var typed = parseFloat(val) || 0;
+            var max = 0;
+            var parentHasValidate = false;
+            var secKeys;
+            var ski;
+            var sii;
+            var sec;
+            var item;
+            var d;
+            var sectionsThin = !_calendarSectionsHaveStageData(state.budget);
+            try {
+                if (window.parent && window.parent !== window && window.parent.mBT &&
+                    window.parent.mBT.logic && window.parent.mBT.logic.stages &&
+                    typeof window.parent.mBT.logic.stages.validateTimeline === 'function') {
+                    var validation = window.parent.mBT.logic.stages.validateTimeline(stageKey);
+                    parentHasValidate = true;
+                    if (validation) max = parseFloat(validation.maxNeeded) || 0;
+                }
+            } catch (_valErr) { /* ignore */ }
+            if (!parentHasValidate && state.budget.sections) {
+                secKeys = Object.keys(state.budget.sections);
+                for (ski = 0; ski < secKeys.length; ski++) {
+                    sec = state.budget.sections[secKeys[ski]];
+                    if (!sec || !sec.items) continue;
+                    for (sii = 0; sii < sec.items.length; sii++) {
+                        item = sec.items[sii];
+                        if (!item || !item.stageData || !item.stageData[stageKey]) continue;
+                        d = parseFloat(item.stageData[stageKey].days) || 0;
+                        if (d > max) max = d;
+                    }
+                }
+            }
+            var finalDays = typed;
+            var needsSnap = max > 0 && typed < max;
+            if (needsSnap) finalDays = max;
+            if (sectionsThin) {
+                try {
+                    if (window.parent && window.parent !== window && window.parent.budget &&
+                        window.parent.budget.targetLock && window.parent.budget.targetLock.stages &&
+                        window.parent.budget.targetLock.stages[stageKey]) {
+                        if (needsSnap) _calendarShowPlanToast();
+                        window.parent.budget.targetLock.stages[stageKey].days = finalDays;
+                        if (typeof window.parent.saveBudget === 'function') window.parent.saveBudget();
+                    }
+                } catch (_parentErr) { /* ignore */ }
+                state.budget.targetLock.stages[stageKey].days = finalDays;
+                refreshAll();
+                return;
+            }
+            if (needsSnap) {
+                try {
+                    if (window.parent && window.parent !== window && window.parent.budget &&
+                        window.parent.budget.targetLock && window.parent.budget.targetLock.stages &&
+                        window.parent.budget.targetLock.stages[stageKey]) {
+                        _calendarShowPlanToast();
+                        window.parent.budget.targetLock.stages[stageKey].days = finalDays;
+                        if (typeof window.parent.saveBudget === 'function') window.parent.saveBudget();
+                    }
+                } catch (_snapErr) { /* ignore */ }
+            }
+            state.budget.targetLock.stages[stageKey].days = finalDays;
             save();
             refreshAll();
         },

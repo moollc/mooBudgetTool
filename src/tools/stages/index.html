@@ -6,12 +6,18 @@
     <title>mooBudgetTool — Stages</title>
     <script src="../../lib/tailwind.min.js"></script>
     <script src="../../core/components/ToolBridge.js"></script>
+    <script src="../../core/logic/BudgetSafety.js"></script>
     <script src="../../core/components/EmbeddedMode.js"></script>
     <script src="../../lib/Sortable.min.js"></script>
     <script src="../../lib/localforage.min.js"></script>
+    <script src="../../scripts/engine/mbtle.js"></script>
     <script src="../../core/mBT.assets.js"></script>
     <script src="../../core/mBT.templates.js"></script>
+    <script src="../../core/mBT.batch2.js"></script>
     <script src="../../lib/html2pdf.bundle.min.js"></script>
+    <script src="../../core/finance.engine.js"></script>
+    <script src="../../scripts/engine/publisher.js"></script>
+    <script src="../../core/logic/DocumentProjection.js"></script>
     <script>
         /* Theme Bridge: Instant Inheritance */
         (function() {
@@ -76,6 +82,11 @@
         #stages-header-right { min-width: 0; flex-shrink: 1; }
         #active-project-name { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #stages-layout, #stages-skeleton { width: 100%; min-width: 0; }
+        /* End space lets the first and last cards reach the viewport center. */
+        #stages-layout::before, #stages-layout::after { content: ''; flex-shrink: 0; }
+        #stages-layout::before { flex-basis: var(--stage-leading, 0px); }
+        #stages-layout::after { flex-basis: var(--stage-trailing, 0px); }
+        #stages-layout .stage-card { scroll-snap-align: center; }
         /* Cashflow carousel card: wider than siblings so the week table breathes
            (reverted full-overlay per user feedback) */
         #panel-cashflow { min-height: 0; }
@@ -297,6 +308,7 @@
             <div class="p-4 border-b border-slate-50 shrink-0">
                 <input type="text" id="modal-search" aria-label="Search items" placeholder="Search items.." oninput="mBTStages.filterModalList(this.value)" class="w-full p-3 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-blue-400 transition-colors">
             </div>
+            <div class="px-4 shrink-0" id="modal-dept-box"></div>
             <div id="modal-list" class="flex-grow overflow-y-auto"></div>
             <!-- Custom Item Form -->
             <div class="p-4 border-t border-slate-100 shrink-0">
@@ -326,7 +338,7 @@
         function esc(str) {
             var d = document.createElement('div');
             d.textContent = String(str || '');
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         var _stagesDialogEl = null;
@@ -353,7 +365,7 @@
                 '<button type="button" id="stages-confirm-cancel" style="padding:8px 14px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">Cancel</button>' +
                 '<button type="button" id="stages-confirm-ok" style="padding:8px 16px;border-radius:12px;border:none;background:#e11d48;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">Confirm</button>' +
                 '</div></div></div>';
-            document.body.appendChild(overlay);
+            (dom.body || dom).appendChild(overlay);
             _stagesDialogEl = overlay;
             var cancelBtn = overlay.querySelector('#stages-confirm-cancel');
             var confirmBtn = overlay.querySelector('#stages-confirm-ok');
@@ -383,11 +395,12 @@
                 '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
                 '<button type="button" id="stages-alert-ok" style="padding:8px 16px;border-radius:12px;border:none;background:#2563eb;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;font-family:inherit;min-height:44px;">OK</button>' +
                 '</div></div></div>';
-            document.body.appendChild(overlay);
+            (dom.body || dom).appendChild(overlay);
             _stagesDialogEl = overlay;
             var okBtn = overlay.querySelector('#stages-alert-ok');
             function dismiss() { _stagesRemoveDialog(); }
             okBtn.addEventListener('click', dismiss);
+            overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') dismiss(); });
             overlay.addEventListener('click', function(e) { if (e.target === overlay) dismiss(); });
             okBtn.focus();
         }
@@ -485,7 +498,7 @@
                 stagesAlert('PDF export engine (html2pdf) not loaded.', 'Export PDF');
                 return;
             }
-            var btn = document.getElementById('btn-stages-export-pdf');
+            var btn = dom.getElementById('btn-stages-export-pdf');
             var origTitle = btn ? btn.title : 'Export PDF';
             if (btn) {
                 btn.disabled = true;
@@ -493,30 +506,25 @@
             }
             var bodyHtml = buildStagesExportHtml(b);
             var container = document.createElement('div');
-            container.style.cssText = 'position:fixed;left:0;top:0;width:8.5in;background:white;opacity:0;pointer-events:none;z-index:9999;';
+            container.setAttribute('data-mbt-pdf-export', '1');
+            container.style.cssText = 'position:fixed;left:-10000px;top:0;width:7.2in;background:white;opacity:1;pointer-events:none;';
             container.innerHTML = bodyHtml;
-            document.body.appendChild(container);
+            (dom.body || dom).appendChild(container);
             var fname = _stagesSanitizeFilename(b.projectName) + '-stages-summary.pdf';
-            var opts = {
-                margin: [0.65, 0.65, 0.65, 0.65],
-                filename: fname,
-                image: { type: 'jpeg', quality: 0.97 },
-                html2canvas: { scale: 2, useCORS: false, logging: false },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-            };
+            var opts = mBTPublisher.templates._html2pdfOptions(fname, container);
             var done = function() {
                 if (btn) {
                     btn.disabled = false;
                     btn.title = origTitle;
                 }
             };
-            html2pdf().set(opts).from(container).save().then(function() {
-                if (document.body.contains(container)) document.body.removeChild(container);
+            Promise.resolve().then(function() { return mBTPublisher.templates._runHtml2pdf(container, opts, 'save'); }).then(function() {
+                if (container.parentNode) container.parentNode.removeChild(container);
                 done();
             }).catch(function(err) {
-                if (document.body.contains(container)) document.body.removeChild(container);
+                if (container.parentNode) container.parentNode.removeChild(container);
                 console.error('[mBTStages export]', err);
-                stagesAlert('Export failed. Please try again.', 'Export PDF');
+                stagesAlert('PDF export failed: ' + (err.message || 'The renderer could not create this document.') + ' Close this notice and try again.', 'Export PDF');
                 done();
             });
         }
@@ -527,32 +535,14 @@
            Amounts in the loaded budget are stored in its base currency — convert for display
            using the same live/locked rate table the parent uses (shared localStorage). --- */
         var _syncedRates = null; /* pushed by parent in mbt:displayCurrency payload */
-        function _rateTable() {
-            if (_syncedRates) return _syncedRates;
-            /* Same-origin parent: ask its currency engine directly */
-            try {
-                if (window.parent && window.parent !== window && window.parent.mBT &&
-                    window.parent.mBT.logic && window.parent.mBT.logic.currency) {
-                    return window.parent.mBT.logic.currency._getRates();
-                }
-            } catch (e) { }
-            try {
-                if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
-                    var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
-                    if (snap) return JSON.parse(snap);
-                }
-                var live = localStorage.getItem('prodBudget_v5_rates');
-                if (live) return JSON.parse(live);
-            } catch (e) { }
-            return null;
-        }
         function fmt(n) {
             var code = (mBTStages && mBTStages.state && mBTStages.state._currency) ? mBTStages.state._currency : 'JMD';
             var base = (mBTStages && mBTStages.state && mBTStages.state.project && mBTStages.state.project.currency) ? mBTStages.state.project.currency : 'JMD';
             var v = parseFloat(n) || 0;
             if (base !== code) {
-                var rates = _rateTable();
-                if (rates && rates[base] && rates[code]) v = v / rates[base] * rates[code];
+                var converted = window.mBT.le.convertCurrencyOrNull(v, base, code, mBTStages.state.project);
+                if (converted !== null) v = converted;
+                else return base + ' ' + v.toLocaleString('en-US') + ' (no exchange rate)';
             }
             try {
                 return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
@@ -573,7 +563,17 @@
 
         /* Phase 195: IO helpers — debounced save + unsaved state indicator */
         var _mBTStagesSaveTimeout = null;
-        function _mBTStagesDebouncedSave() {
+        var _mBTStagesFollowStageKeys = [];
+        function _mBTStagesQueueFollow(stageKey) {
+            var qi;
+            if (!stageKey) return;
+            for (qi = 0; qi < _mBTStagesFollowStageKeys.length; qi++) {
+                if (_mBTStagesFollowStageKeys[qi] === stageKey) return;
+            }
+            _mBTStagesFollowStageKeys.push(stageKey);
+        }
+        function _mBTStagesDebouncedSave(stageKey) {
+            if (stageKey) _mBTStagesQueueFollow(stageKey);
             if (_mBTStagesSaveTimeout) clearTimeout(_mBTStagesSaveTimeout);
             var indicator = document.getElementById('unsaved-indicator');
             if (indicator) indicator.style.opacity = '1';
@@ -593,7 +593,88 @@
 
         function stagesCaptureSnapshot() {
             if (!mBTStages || !mBTStages.state || !mBTStages.state.project) return null;
-            return JSON.parse(JSON.stringify(mBTStages.state.project));
+            return { projectKey: mBTStages.state._projectKey || '',
+                before: JSON.parse(JSON.stringify(mBTStages.state.project)), after: null };
+        }
+
+        function stagesSealSnapshot(snapshot) {
+            if (!snapshot) return;
+            Promise.resolve().then(function () {
+                if (snapshot.projectKey === (mBTStages.state._projectKey || '')) snapshot.after = JSON.parse(JSON.stringify(mBTStages.state.project));
+            });
+        }
+
+        function stagesUndoProjection(project, other) {
+            var copy = JSON.parse(JSON.stringify(project));
+            if (!copy.projectName) copy.projectName = copy.name || copy.id || mBTStages.state._projectKey || 'Stages';
+            if (copy.settings) copy.settings = Object.prototype.hasOwnProperty.call(copy.settings, 'workWeek') ? { workWeek: copy.settings.workWeek } : {};
+            Object.keys(copy.sections || {}).forEach(function (key) {
+                if (!(other.sections && other.sections[key])) return;
+                var items = copy.sections[key].items || [], matches = Object.create(null), seen = Object.create(null);
+                ((other.sections[key] && other.sections[key].items) || []).forEach(function (item) { matches[item.id] = true; });
+                items.forEach(function (item) {
+                    if (item.id == null || item.id === '') throw new Error('Undo needs stable line item ids. No data was changed.');
+                    if (Object.prototype.hasOwnProperty.call(seen, item.id)) throw new Error('Undo needs unique line item ids. No data was changed.');
+                    seen[item.id] = true;
+                    if (!matches[item.id]) return;
+                    Object.keys(item).forEach(function (field) {
+                        if (['id', 'stageData', 'rate', 'baseRate', 'quantity', 'multiplier', 'unit', 'rateType', 'rateSource'].indexOf(field) === -1) delete item[field];
+                    });
+                });
+                copy.sections[key] = { items: items };
+            });
+            return copy;
+        }
+
+        /* After Undo or Redo restored the draft: a line that lost one stage and gained another was moved back or forward.
+           Record that as a move (so the budget's live stage is copied, never the old entry) and drop the pending move it
+           reverses. A line whose stages changed in any other way drops its pending moves and falls back to the plain diff. */
+        function stagesNoteMovesAfterRestore(prev, next) {
+            var moves = (mBTStages.state._moves || []).slice(), added = [];
+            Object.keys(next.sections || {}).forEach(function (sk) {
+                ((next.sections[sk] || {}).items || []).forEach(function (it) {
+                    var hit = stagesFindItem(prev, it.id), pk, nk, lost, gained, baseHit, swap;
+                    if (!hit) return;
+                    pk = Object.keys(hit.item.stageData || {}); nk = Object.keys(it.stageData || {});
+                    lost = pk.filter(function (k) { return nk.indexOf(k) < 0; });
+                    gained = nk.filter(function (k) { return pk.indexOf(k) < 0; });
+                    if (!lost.length && !gained.length) return;
+                    swap = lost.length === 1 && gained.length === 1;
+                    moves = moves.filter(function (m) {
+                        if (m.id !== it.id) return true;
+                        return swap ? !(m.from === gained[0] && m.to === lost[0]) : false;
+                    });
+                    if (swap) {
+                        baseHit = mBTStages.state._base ? stagesFindItem(mBTStages.state._base, it.id) : null;
+                        added.push({ id: it.id, from: lost[0], to: gained[0], destInBase: !!(baseHit && baseHit.item.stageData && baseHit.item.stageData[gained[0]]) });
+                    }
+                });
+            });
+            mBTStages.state._moves = moves.concat(added);
+        }
+
+        function stagesRestoreSnapshot(snapshot, destination) {
+            if (!snapshot || !snapshot.after || snapshot.projectKey !== (mBTStages.state._projectKey || '')) {
+                alert('Undo belongs to a different budget, or its operation is not complete. No data was changed.');
+                return false;
+            }
+            try {
+                var before = stagesUndoProjection(snapshot.before, snapshot.after);
+                var after = stagesUndoProjection(snapshot.after, snapshot.before);
+                var live = JSON.parse(JSON.stringify(mBTStages.state.project));
+                var hadName = !!live.projectName;
+                if (!hadName) live.projectName = live.name || live.id || mBTStages.state._projectKey || 'Stages';
+                var record = mBTBudgetSafety.capture(before, after, ['sections', 'targetLock', 'settings', 'blackoutDays', 'startDate', 'deliveryDate']);
+                var result = mBTBudgetSafety.restore(record, live);
+                if (!result.ok) { alert(result.message); return false; }
+                if (!hadName) delete live.projectName;
+                var reverse = { projectKey: snapshot.projectKey,
+                    before: JSON.parse(JSON.stringify(mBTStages.state.project)), after: JSON.parse(JSON.stringify(live)) };
+                stagesNoteMovesAfterRestore(mBTStages.state.project, live);
+                mBTStages.state.project = live;
+                destination.push(reverse);
+                return true;
+            } catch (err) { alert(err.message || 'Undo was not applied. No data was changed.'); return false; }
         }
 
         function stagesPushUndo() {
@@ -601,6 +682,7 @@
                 stagesUndoBurstSnap = stagesCaptureSnapshot();
             }
             clearTimeout(stagesUndoDebounceTimer);
+            stagesSealSnapshot(stagesUndoBurstSnap);
             stagesUndoDebounceTimer = setTimeout(function() {
                 if (stagesUndoBurstSnap) {
                     stagesUndoStack.push(stagesUndoBurstSnap);
@@ -620,6 +702,7 @@
             var snap = stagesCaptureSnapshot();
             if (!snap) return;
             stagesUndoStack.push(snap);
+            stagesSealSnapshot(snap);
             if (stagesUndoStack.length > STAGES_MAX_HISTORY) stagesUndoStack.shift();
             stagesRedoStack = [];
             stagesUpdateUndoUI();
@@ -627,13 +710,11 @@
 
         function stagesUndo() {
             if (!stagesUndoStack.length) return;
+            if (!stagesRestoreSnapshot(stagesUndoStack[stagesUndoStack.length - 1], stagesRedoStack)) return;
             clearTimeout(stagesUndoDebounceTimer);
             stagesUndoDebounceTimer = null;
             stagesUndoBurstSnap = null;
-            var snap = stagesCaptureSnapshot();
-            if (snap) stagesRedoStack.push(snap);
-            var prev = stagesUndoStack.pop();
-            mBTStages.state.project = prev;
+            stagesUndoStack.pop();
             mBTStages.render();
             mBTStages.save();
             stagesUpdateUndoUI();
@@ -641,13 +722,11 @@
 
         function stagesRedo() {
             if (!stagesRedoStack.length) return;
+            if (!stagesRestoreSnapshot(stagesRedoStack[stagesRedoStack.length - 1], stagesUndoStack)) return;
             clearTimeout(stagesUndoDebounceTimer);
             stagesUndoDebounceTimer = null;
             stagesUndoBurstSnap = null;
-            var snap = stagesCaptureSnapshot();
-            if (snap) stagesUndoStack.push(snap);
-            var next = stagesRedoStack.pop();
-            mBTStages.state.project = next;
+            stagesRedoStack.pop();
             mBTStages.render();
             mBTStages.save();
             stagesUpdateUndoUI();
@@ -807,6 +886,214 @@
                 delta:      userDays - maxItemDays,
                 isBankrupt: hasItems && userDays === 0
             };
+        }
+
+        /* ---- Set S0: the Stages tool sends the app only what it changed (stage data on lines, lines it added or removed,
+           the stage plan fields, the start and delivery dates). Nothing here replaces the budget's sections. ---- */
+        function stagesCopy(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+
+        function stagesFindItem(target, id) {
+            var keys = Object.keys((target && target.sections) || {}), i, j, items;
+            for (i = 0; i < keys.length; i++) {
+                items = (target.sections[keys[i]] || {}).items || [];
+                for (j = 0; j < items.length; j++) {
+                    if (items[j] && items[j].id === id) return { key: keys[i], index: j, item: items[j] };
+                }
+            }
+            return null;
+        }
+
+        /* A line's stage data is compared and applied one stage at a time and one field at a time (days, rate, multiplier,
+           rateOverride, order, anything else in a stage entry). The grid writes into the same objects, so a whole block is
+           never sent and never assigned. */
+        function stagesLineDelta(baseSD, curSD) {
+            var b = baseSD || {}, c = curSD || {}, out = { stages: {}, removedStages: [] }, any = false;
+            Object.keys(c).forEach(function (sk) {
+                var cb = b[sk], cc = c[sk], f = {}, del = [], ch = false;
+                /* A stage new to the Stages base is sent only as a whole entry to be created. It is written only if the
+                   budget does not have that stage; if the grid already has it, it is left untouched. */
+                if (!cb) { out.stages[sk] = { isNew: true, fields: {}, deleted: [], full: stagesCopy(cc) }; any = true; return; }
+                Object.keys(cc).forEach(function (fk) { if (JSON.stringify(cc[fk]) !== JSON.stringify(cb[fk])) { f[fk] = stagesCopy(cc[fk]); ch = true; } });
+                Object.keys(cb).forEach(function (fk) { if (!Object.prototype.hasOwnProperty.call(cc, fk)) { del.push(fk); ch = true; } });
+                /* A stage that existed in the base is sent as changed fields only, never as a whole entry. */
+                if (ch) { out.stages[sk] = { fields: f, deleted: del }; any = true; }
+            });
+            Object.keys(b).forEach(function (sk) { if (!Object.prototype.hasOwnProperty.call(c, sk)) { out.removedStages.push(sk); any = true; } });
+            return any ? out : null;
+        }
+        /* Apply one line's change onto a line object. Returns how many entries had nowhere to go (a stage the budget no
+           longer has). A move builds the destination from the live source stage on the target, then removes the source.
+           A move into a stage that was not in the Stages base is skipped if the target already has that stage (the grid
+           added it): nothing is assigned, the source is kept, and the field changes for that stage are not written. */
+        function stagesApplyLine(item, l) {
+            var sk, f, skipped = 0, movedAway = {};
+            if (!item.stageData || typeof item.stageData !== 'object') item.stageData = {};
+            (l.moves || []).forEach(function (m) {
+                var src = item.stageData[m.from];
+                if (!src) { skipped++; movedAway[m.to] = true; return; }
+                if (m.destInBase === false && item.stageData[m.to]) { skipped++; movedAway[m.to] = true; return; }
+                item.stageData[m.to] = stagesCopy(src);
+                delete item.stageData[m.from];
+            });
+            for (sk in l.stages) {
+                if (!Object.prototype.hasOwnProperty.call(l.stages, sk)) continue;
+                if (movedAway[sk]) continue;
+                if (l.stages[sk].isNew) { if (!item.stageData[sk]) item.stageData[sk] = stagesCopy(l.stages[sk].full); continue; }
+                if (!item.stageData[sk]) { skipped++; continue; }
+                for (f in l.stages[sk].fields) { if (Object.prototype.hasOwnProperty.call(l.stages[sk].fields, f)) item.stageData[sk][f] = stagesCopy(l.stages[sk].fields[f]); }
+                (l.stages[sk].deleted || []).forEach(function (df) { delete item.stageData[sk][df]; });
+            }
+            (l.removedStages || []).forEach(function (sk2) { delete item.stageData[sk2]; });
+            return skipped;
+        }
+
+        /* What changed in cur since base. Lines are matched by id. Stage fields are compared one by one, so a field changed
+           somewhere else (for example the calendar's days) is not sent back unless Stages itself changed it. */
+        function stagesDelta(base, cur, followKeys, moves) {
+            var d = { lines: [], added: [], removed: [], targetLock: null, follow: (followKeys || []).slice() };
+            var baseItems = {}, seen = {}, movesById = {}, bt, ct, bs, cs, tl, changed = false;
+            (moves || []).forEach(function (m) { (movesById[m.id] = movesById[m.id] || []).push(m); });
+            base = base || {}; cur = cur || {};
+            Object.keys(base.sections || {}).forEach(function (sk) {
+                ((base.sections[sk] || {}).items || []).forEach(function (it) { if (it && it.id != null && it.id !== '') baseItems[it.id] = it; });
+            });
+            Object.keys(cur.sections || {}).forEach(function (sk) {
+                ((cur.sections[sk] || {}).items || []).forEach(function (it) {
+                    var b, ld, sim, applied;
+                    if (!it || it.id == null || it.id === '') return;
+                    seen[it.id] = true;
+                    b = baseItems[it.id];
+                    if (!b) d.added.push({ sectionKey: sk, sectionId: cur.sections[sk].id, item: stagesCopy(it) });
+                    else {
+                        /* A drag between stages is its own change: the destination is built from the live source stage on the budget. */
+                        sim = stagesCopy(b.stageData || {}); applied = [];
+                        (movesById[it.id] || []).forEach(function (m) {
+                            if (sim[m.from]) { sim[m.to] = stagesCopy(sim[m.from]); delete sim[m.from]; applied.push({ from: m.from, to: m.to, destInBase: m.destInBase }); }
+                        });
+                        ld = stagesLineDelta(sim, it.stageData);
+                        if (applied.length || ld) d.lines.push({ id: it.id, moves: applied, stages: ld ? ld.stages : {}, removedStages: ld ? ld.removedStages : [] });
+                    }
+                });
+            });
+            Object.keys(baseItems).forEach(function (id) { if (!seen[id]) d.removed.push(id); });
+            bt = base.targetLock || {}; ct = cur.targetLock || {};
+            tl = { fields: {}, deleted: [], stages: {} };
+            Object.keys(ct).forEach(function (k) {
+                if (k === 'stages') return;
+                if (JSON.stringify(ct[k]) !== JSON.stringify(bt[k])) { tl.fields[k] = stagesCopy(ct[k]); changed = true; }
+            });
+            Object.keys(bt).forEach(function (k) { if (k !== 'stages' && !Object.prototype.hasOwnProperty.call(ct, k)) { tl.deleted.push(k); changed = true; } });
+            bs = bt.stages || {}; cs = ct.stages || {};
+            Object.keys(cs).forEach(function (sk) {
+                var b = bs[sk], c = cs[sk], f = {}, del = [], ch = false;
+                if (!b) { tl.stages[sk] = { fields: stagesCopy(c), deleted: [], full: stagesCopy(c) }; changed = true; return; }
+                Object.keys(c).forEach(function (fk) { if (JSON.stringify(c[fk]) !== JSON.stringify(b[fk])) { f[fk] = stagesCopy(c[fk]); ch = true; } });
+                Object.keys(b).forEach(function (fk) { if (!Object.prototype.hasOwnProperty.call(c, fk)) { del.push(fk); ch = true; } });
+                if (ch) { tl.stages[sk] = { fields: f, deleted: del, full: stagesCopy(c) }; changed = true; }
+            });
+            if (changed) d.targetLock = tl;
+            if (cur.startDate !== base.startDate) d.startDate = cur.startDate;
+            if (cur.deliveryDate !== base.deliveryDate) d.deliveryDate = cur.deliveryDate;
+            d.empty = !(d.lines.length || d.added.length || d.removed.length || d.targetLock || d.follow.length ||
+                Object.prototype.hasOwnProperty.call(d, 'startDate') || Object.prototype.hasOwnProperty.call(d, 'deliveryDate'));
+            return d;
+        }
+
+        /* Put a delta onto a budget object (the stored copy when standalone, the tool's own base after a save). Lines that
+           are no longer there are counted in skipped, never recreated. */
+        function applyStagesDelta(target, d) {
+            var skipped = 0, k, t, f;
+            if (!target.sections) target.sections = {};
+            (d.lines || []).forEach(function (l) {
+                var hit = stagesFindItem(target, l.id);
+                if (hit) skipped += stagesApplyLine(hit.item, l); else skipped++;
+            });
+            (d.added || []).forEach(function (a) {
+                var sec;
+                if (!a.item || stagesFindItem(target, a.item.id)) return;
+                sec = target.sections[a.sectionKey];
+                if (!sec) sec = target.sections[a.sectionKey] = { id: a.sectionId || a.sectionKey, isOpen: true, items: [] };
+                if (!sec.items) sec.items = [];
+                sec.items.push(stagesCopy(a.item));
+            });
+            (d.removed || []).forEach(function (id) {
+                var hit = stagesFindItem(target, id);
+                if (hit) target.sections[hit.key].items.splice(hit.index, 1);
+            });
+            t = d.targetLock;
+            if (t) {
+                if (!target.targetLock) target.targetLock = { enabled: true, totalCap: 0, stages: {} };
+                if (!target.targetLock.stages) target.targetLock.stages = {};
+                for (k in t.fields) { if (Object.prototype.hasOwnProperty.call(t.fields, k)) target.targetLock[k] = stagesCopy(t.fields[k]); }
+                (t.deleted || []).forEach(function (dk) { delete target.targetLock[dk]; });
+                for (k in t.stages) {
+                    if (!Object.prototype.hasOwnProperty.call(t.stages, k)) continue;
+                    if (!target.targetLock.stages[k]) { target.targetLock.stages[k] = stagesCopy(t.stages[k].full); continue; }
+                    for (f in t.stages[k].fields) { if (Object.prototype.hasOwnProperty.call(t.stages[k].fields, f)) target.targetLock.stages[k][f] = stagesCopy(t.stages[k].fields[f]); }
+                    (t.stages[k].deleted || []).forEach(function (df) { delete target.targetLock.stages[k][df]; });
+                }
+            }
+            if (Object.prototype.hasOwnProperty.call(d, 'startDate')) target.startDate = d.startDate;
+            if (Object.prototype.hasOwnProperty.call(d, 'deliveryDate')) target.deliveryDate = d.deliveryDate;
+            return { target: target, skipped: skipped };
+        }
+
+        /* A save that did not land is said out loud and the draft stays on screen. Text only. */
+        function stagesShowNotice(message, kind) {
+            var el = document.getElementById('stages-save-notice'), btn;
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'stages-save-notice';
+                el.setAttribute('role', 'alert');
+                el.style.cssText = 'position:sticky;top:0;z-index:60;background:#fef3c7;color:#92400e;border-bottom:1px solid #fcd34d;padding:8px 12px;font-size:12px;font-weight:700;display:flex;gap:12px;align-items:center;justify-content:space-between;';
+                el.appendChild(document.createElement('span'));
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = 'Retry save';
+                btn.setAttribute('data-kind', 'failure');
+                btn.style.cssText = 'background:#92400e;color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer;';
+                btn.addEventListener('click', function () {
+                    if (btn.getAttribute('data-kind') === 'note') stagesClearNotice(); else mBTStages.save();
+                });
+                el.appendChild(btn);
+                document.body.insertBefore(el, document.body.firstChild);
+            }
+            /* A real failure offers Retry. A note about a save that worked (some edits had no line) offers Close and no Retry. */
+            btn = el.lastChild;
+            btn.setAttribute('data-kind', kind === 'note' ? 'note' : 'failure');
+            btn.textContent = kind === 'note' ? 'Close' : 'Retry save';
+            el.firstChild.textContent = message;
+        }
+        function stagesClearNotice() {
+            var el = document.getElementById('stages-save-notice');
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+        /* After a good save only a failure banner goes away. A note the user has not closed stays until closed. */
+        function stagesClearFailure() {
+            var el = document.getElementById('stages-save-notice');
+            if (el && el.lastChild && el.lastChild.getAttribute('data-kind') !== 'note') stagesClearNotice();
+        }
+        function stagesNextStamp(previous) {
+            var now = new Date().toISOString();
+            if (previous && now <= previous) now = new Date(new Date(previous).getTime() + 1).toISOString();
+            return now;
+        }
+
+        function _mBTStagesApplyFollowHeaders(project) {
+            var ki, k, val;
+            if (!project || !_mBTStagesFollowStageKeys.length) return;
+            if (!project.targetLock) project.targetLock = { totalCap: 0, stages: {} };
+            if (!project.targetLock.stages) project.targetLock.stages = {};
+            for (ki = 0; ki < _mBTStagesFollowStageKeys.length; ki++) {
+                k = _mBTStagesFollowStageKeys[ki];
+                val = validateTimeline(project, k);
+                if (val && val.maxNeeded > 0) {
+                    if (!project.targetLock.stages[k]) {
+                        project.targetLock.stages[k] = { label: k.toUpperCase(), ratio: 20, days: 0, locked: false };
+                    }
+                    project.targetLock.stages[k].days = val.maxNeeded;
+                }
+            }
         }
 
         /* Phase 109.1: Weekend-skipping day counter — respects workWeek setting */
@@ -1157,14 +1444,26 @@
                     if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
                 });
 
-                /* Receive reconcile from parent — reload budget from localforage and re-render */
+                /* The budget window answers every Stages save: success (with a note if some edits had nowhere to go) or error. */
+                window.addEventListener('message', function(e) {
+                    var a;
+                    if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'stages-update') return;
+                    a = mBTStages._acks && mBTStages._acks[e.data.requestId];
+                    if (!a) return;
+                    delete mBTStages._acks[e.data.requestId];
+                    if (e.data.status === 'success') a.ok(e.data.message); else a.fail(e.data.message);
+                });
+
+                /* The budget window says it changed. Take the stored copy as the new base, keeping unsaved Stages edits on top,
+                   and never while a save is in flight. */
                 window.addEventListener('message', function(e) {
                     if (!window.mBTToolBridge || !window.mBTToolBridge.originOk(e)) return;
                     if (!e.data || e.data.type !== 'mbt:tool-action' || e.data.action !== 'reconcile') return;
+                    if (mBTStages._pendingSaves) return;
                     if (!mBTStages.state || !mBTStages.state._projectKey) return;
                     localforage.getItem(mBTStages.state._projectKey).then(function(budget) {
-                        if (!budget) return;
-                        mBTStages.state.project = budget;
+                        if (!budget || mBTStages._pendingSaves) return;
+                        mBTStages._rebase(budget);
                         if (typeof mBTStages.renderVitals    === 'function') mBTStages.renderVitals();
                         if (typeof mBTStages.renderStageCards === 'function') mBTStages.renderStageCards();
                     }).catch(function(e) { console.error('[STAGES] reconcile reload failed', e); });
@@ -1180,6 +1479,7 @@
                         mBTStages.state.project.targetLock = { enabled: false, totalCap: 0, stages: {} };
                     }
                     mBTStages.state.project.targetLock.totalCap = nextCap;
+                    if (mBTStages.state._base && mBTStages.state._base.targetLock) mBTStages.state._base.targetLock.totalCap = nextCap;
                     var capInput = document.getElementById('total-cap');
                     if (capInput) capInput.value = nextCap || '';
                     if (typeof mBTStages.renderSliders    === 'function') mBTStages.renderSliders();
@@ -1224,6 +1524,13 @@
                 var ogPromise = (window.mBT && window.mBT.storage)
                     ? window.mBT.storage.getAllOGItems().catch(function() { return []; })
                     : Promise.resolve([]);
+                if (window.parent !== window && window.parent.mBTOG) {
+                    ogPromise = Promise.resolve((window.parent.mBTOG.rates || []).map(function (rate, index) {
+                        var row = JSON.parse(JSON.stringify(rate)); row.id = row.id || 'catalog_' + index;
+                        row.department = row.department || mBTBatch2.classify(row);
+                        return row;
+                    }));
+                }
 
                 Promise.all([projectPromise, ogPromise]).then(function(results) {
                     var project = results[0];
@@ -1233,7 +1540,23 @@
                         return;
                     }
                     self.state.project = project;
-                    self.state.ogItems = ogItems || [];
+                    var budgetTier = project.productionTier || '';
+                    self.state.ogItems = (ogItems || []).map(function (row) {
+                        try { if (budgetTier && window.parent !== window && window.parent.mBTOG && window.parent.mBTOG.rateForTier) row = window.parent.mBTOG.rateForTier(row, budgetTier); } catch (err) {}
+                        /* Show the price in the budget's currency, the same conversion Add uses, so the number listed is the number the row gets. */
+                        try {
+                            var pickCur = project.currency || 'JMD', pickEngine = window.parent !== window && window.parent.mBT && window.parent.mBT.le;
+                            if (row.currency && row.currency !== pickCur && pickEngine && pickEngine.convertCurrencyOrNull && isFinite(Number(row.rate))) {
+                                var shown = {}, sk2;
+                                for (sk2 in row) { if (Object.prototype.hasOwnProperty.call(row, sk2)) shown[sk2] = row[sk2]; }
+                                shown.rate = pickEngine.convertCurrencyOrNull(Number(row.rate), row.currency, pickCur, project);
+                                if (shown.rate !== null) { shown.currency = pickCur; row = shown; }
+                            }
+                        } catch (err2) {}
+                        row.description = row.description || row.label; row.rate = row.rate == null ? row.value : row.rate;
+                        row.category = row.equipmentCategory || row.category;
+                        return row;
+                    });
 
                     /* Ensure targetLock structure */
                     if (!project.targetLock) project.targetLock = { enabled: true, totalCap: project.grandTotal || 0, stages: {} };
@@ -1251,6 +1574,9 @@
                         }
                     });
 
+                    /* The base for Stages saves: the budget as loaded, with the structure above in place. Only changes after this go back. */
+                    self.state._base = JSON.parse(JSON.stringify(project));
+                    self.state._baseUpdatedAt = project.updated_at || '';
                     self.render();
                     self.initDragAndDrop();
                 }).catch(function(err) {
@@ -1302,7 +1628,7 @@
                         '<div class="h-2 bg-slate-800 rounded-full relative overflow-hidden">' +
                             '<div class="absolute top-0 left-0 h-full bg-blue-500 rounded-full pointer-events-none" style="width:' + s.ratio + '%"></div>' +
                             '<input type="range" min="0" max="100" step="0.5" value="' + s.ratio + '" ' +
-                                'oninput="mBTStages.balanceSliders(\'' + k + '\', this.value)" ' +
+                                'oninput="mBTStages.balanceSliders(' + esc(JSON.stringify(String(k))) + ', this.value)" ' +
                                 'onchange="mBTStages.save()" ' +
                                 (s.locked ? 'disabled ' : '') +
                                 'class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">' +
@@ -1608,7 +1934,7 @@
 
                     /* Sync Days button — amber bounce when items exceed stage duration */
                     var syncBtn = (val.maxNeeded > val.current)
-                        ? '<button onclick="mBTStages.syncDays(\'' + k + '\')" title="Sync to ' + val.maxNeeded + ' days" class="absolute -right-2 -top-2 bg-amber-500 hover:bg-amber-600 text-white w-6 h-6 rounded-full shadow-lg z-50 flex items-center justify-center sync-bounce">' +
+                        ? '<button onclick="mBTStages.syncDays(' + esc(JSON.stringify(String(k))) + ')" title="Sync to ' + val.maxNeeded + ' days" class="absolute -right-2 -top-2 bg-amber-500 hover:bg-amber-600 text-white w-6 h-6 rounded-full shadow-lg z-50 flex items-center justify-center sync-bounce">' +
                           '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>' +
                           '</button>'
                         : '';
@@ -1620,7 +1946,7 @@
                     /* dev is always first stage; offsetDays has no effect there */
                     var offsetInput = (k !== 'dev')
                         ? '<div class="flex items-center gap-1 bg-slate-50 px-1 py-0.5 rounded-lg border border-slate-100">' +
-                            '<input type="number" value="' + (s.offsetDays !== undefined ? s.offsetDays : '') + '" oninput="mBTStages.updateStageOffset(\'' + k + '\', this.value)" class="w-8 text-center bg-transparent text-[10px] font-bold text-slate-500 outline-none no-spinner" title="Starts N days into previous stage">' +
+                            '<input type="number" value="' + (s.offsetDays !== undefined ? s.offsetDays : '') + '" oninput="mBTStages.updateStageOffset(' + esc(JSON.stringify(String(k))) + ', this.value)" class="w-8 text-center bg-transparent text-[10px] font-bold text-slate-500 outline-none no-spinner" title="Starts N days into previous stage">' +
                             '<span class="text-[6px] font-black text-slate-400 uppercase tracking-widest mr-0.5">Overlap</span>' +
                           '</div>'
                         : '';
@@ -1629,7 +1955,7 @@
                         '<div class="p-4 border-b border-slate-100 bg-white sticky top-0 z-20 shrink-0">' +
                             '<div class="flex items-center justify-between mb-1 relative">' +
                                 /* Lock button */
-                                '<button onclick="mBTStages.toggleLock(\'' + k + '\')" class="w-6 h-6 flex items-center justify-center rounded-lg ' + (s.locked ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-300 hover:bg-slate-100') + ' transition-colors">' +
+                                '<button onclick="mBTStages.toggleLock(' + esc(JSON.stringify(String(k))) + ')" class="w-6 h-6 flex items-center justify-center rounded-lg ' + (s.locked ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-300 hover:bg-slate-100') + ' transition-colors">' +
                                     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">' +
                                         (s.locked ? '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' : '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>') +
                                     '</svg>' +
@@ -1643,7 +1969,7 @@
                                 '<div class="flex flex-col items-end gap-0.5">' +
                                     '<div class="relative flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100">' +
                                         syncBtn +
-                                        '<input type="number" value="' + s.days + '" oninput="mBTStages.updateStageDays(\'' + k + '\', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
+                                        '<input type="text" inputmode="decimal" value="' + s.days + '" oninput="mBTStages.updateStageDays(' + esc(JSON.stringify(String(k))) + ', this.value)" class="w-10 text-center bg-transparent text-[11px] font-black ' + (conflict ? 'text-amber-600' : 'text-blue-600') + ' outline-none no-spinner">' +
                                         '<span class="text-[7px] font-black text-slate-400 uppercase tracking-widest mr-1">Days</span>' +
                                     '</div>' +
                                     offsetInput +
@@ -1662,7 +1988,7 @@
                             self.renderItems(k) +
                         '</div>' +
                         '<div class="p-4 border-t border-slate-100 bg-white shrink-0">' +
-                            '<button onclick="mBTStages.openAddModal(\'' + k + '\')" class="w-full py-2 rounded-xl bg-slate-50 border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-white transition-all">+ Add Item</button>' +
+                            '<button onclick="mBTStages.openAddModal(' + esc(JSON.stringify(String(k))) + ')" class="w-full py-2 rounded-xl bg-slate-50 border border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-white transition-all">+ Add Item</button>' +
                         '</div>' +
                     '</div>';
                 }).join('');
@@ -1715,22 +2041,22 @@
                                 '<p class="text-[10px] font-black text-slate-800 leading-tight truncate uppercase tracking-tight">' + esc(item.description || 'UNTITLED') + '</p>' +
                                 '<p class="text-[7px] font-black text-slate-400 uppercase tracking-widest truncate">' + esc(entry.secName) + '</p>' +
                             '</div>' +
-                            '<button onclick="mBTStages.removeItem(\'' + esc(item.id) + '\', \'' + stageKey + '\')" class="stage-remove-btn text-slate-300 active:text-rose-500 transition-all shrink-0">' +
+                            '<button onclick="mBTStages.removeItem(' + esc(JSON.stringify(String(item.id))) + ', ' + esc(JSON.stringify(String(stageKey))) + ')" class="stage-remove-btn text-slate-300 active:text-rose-500 transition-all shrink-0">' +
                                 '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
                             '</button>' +
                         '</div>' +
                         '<div class="flex items-center gap-2">' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Days</label>' +
-                                '<input type="number" value="' + (sd.days || 0) + '" oninput="mBTStages.updateItemDays(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 bg-slate-50 rounded text-center text-[10px] text-blue-600 font-bold outline-none no-spinner border border-slate-100">' +
+                                '<input type="text" inputmode="decimal" value="' + (sd.days || 0) + '" oninput="mBTStages.updateItemDays(' + esc(JSON.stringify(String(item.id))) + ', ' + esc(JSON.stringify(String(stageKey))) + ', this.value)" class="w-10 bg-slate-50 rounded text-center text-[10px] text-blue-600 font-bold outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Rate</label>' +
-                                '<input type="number" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStages.updateItemRate(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-16 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
+                                '<input type="text" inputmode="decimal" value="' + (sd.rate || item.rate || 0) + '" oninput="mBTStages.updateItemRate(' + esc(JSON.stringify(String(item.id))) + ', ' + esc(JSON.stringify(String(stageKey))) + ', this.value)" class="w-16 bg-slate-50 rounded text-center text-[10px] text-slate-600 font-bold outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div>' +
                                 '<label class="block text-[7px] font-black ' + (_multActive ? 'text-indigo-500' : 'text-slate-400') + ' uppercase mb-0.5" title="Rate multiplier (1=full, 0.5=half)">x</label>' +
-                                '<input type="number" step="0.1" min="0" value="' + _sdMult + '" oninput="mBTStages.updateItemMultiplier(\'' + esc(item.id) + '\', \'' + stageKey + '\', this.value)" class="w-10 ' + (_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold') + ' rounded text-center text-[10px] outline-none no-spinner border border-slate-100">' +
+                                '<input type="text" inputmode="decimal" step="0.1" min="0" value="' + _sdMult + '" oninput="mBTStages.updateItemMultiplier(' + esc(JSON.stringify(String(item.id))) + ', ' + esc(JSON.stringify(String(stageKey))) + ', this.value)" class="w-10 ' + (_multActive ? 'bg-indigo-50 text-indigo-700 font-black' : 'bg-slate-50 text-slate-500 font-bold') + ' rounded text-center text-[10px] outline-none no-spinner border border-slate-100">' +
                             '</div>' +
                             '<div class="ml-auto text-right">' +
                                 '<label class="block text-[7px] font-black text-slate-400 uppercase mb-0.5">Cost</label>' +
@@ -1844,15 +2170,18 @@
                     stagesPushUndo();
                     item.stageData[stageKey].days = parseFloat(val) || 0;
                     _mBTStagesSurgicalRefresh(itemId, stageKey);
-                    _mBTStagesDebouncedSave();
+                    _mBTStagesDebouncedSave(stageKey);
                 }
             },
 
             updateItemRate: function(itemId, stageKey, val) {
+                if (String(val).trim() === '' || !isFinite(Number(val)) || Number(val) < 0) return;
                 var item = this._findItem(itemId);
                 if (item && item.stageData && item.stageData[stageKey]) {
                     stagesPushUndo();
                     item.stageData[stageKey].rate = parseFloat(val) || 0;
+                    item.stageData[stageKey].rateOverride = true;
+                    mBTBatch2.manual(item.stageData[stageKey]);
                     _mBTStagesSurgicalRefresh(itemId, stageKey);
                     _mBTStagesDebouncedSave();
                 }
@@ -2001,6 +2330,14 @@
                 dom.getElementById('modal-title').textContent = 'Add to ' + stageTitle;
                 dom.getElementById('modal-search').value = '';
                 dom.getElementById('custom-form').classList.add('hidden');
+                dom.getElementById('modal-dept-box').innerHTML = mBTBatch2.boxHtml();
+                var deptState = this.state;
+                this._refreshDept = mBTBatch2.bindBox(dom, function() { return deptState.project; }, function() {
+                    var form = dom.getElementById('custom-form');
+                    return form && !form.classList.contains('hidden') ? dom.getElementById('custom-desc').value : '';
+                });
+                dom.getElementById('custom-desc').oninput = this._refreshDept;
+                dom.getElementById('mbtDeptPick').addEventListener('change', function() { mBTStages._buildModalList(dom.getElementById('modal-search').value); });
                 this._buildModalList('');
                 dom.getElementById('add-item-modal').classList.add('open');
             },
@@ -2016,6 +2353,7 @@
 
             toggleCustomForm: function() {
                 dom.getElementById('custom-form').classList.toggle('hidden');
+                if (this._refreshDept) this._refreshDept();
             },
 
             _buildModalList: function(term) {
@@ -2053,12 +2391,18 @@
                     var badge = item.isExisting
                         ? '<span class="text-[7px] font-black text-emerald-600 uppercase tracking-widest">From Budget · ' + esc(item.secName) + '</span>'
                         : '<span class="text-[7px] font-black text-blue-400 uppercase tracking-widest">Rate DB</span>';
+                    if (!item.isExisting) {
+                        var deptKey = mBTBatch2.pick(dom) || mBTBatch2.classify(item);
+                        badge += deptKey
+                            ? '<span class="mbt-dept-chip text-[7px] font-black text-slate-400 uppercase tracking-widest"> · ' + esc(mBTBatch2.groups[deptKey][0]) + '</span>'
+                            : '<span class="mbt-dept-chip text-[7px] font-black text-red-600"> Needs classification · choose a department</span>';
+                    }
                     return '<div data-stage-action="' + (item.isExisting ? 'existing' : 'og') + '" data-item-id="' + esc(item.id) + '" class="p-3 border-b border-slate-50 bg-white hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors">' +
                         '<div>' +
                             '<div class="text-[11px] font-bold text-slate-700">' + esc(item.description) + '</div>' +
                             badge +
                         '</div>' +
-                        '<div class="text-[10px] font-mono font-bold text-slate-500 ml-4 shrink-0">' + fmt(item.rate) + '</div>' +
+                        '<div class="text-[10px] font-mono font-bold text-slate-500 ml-4 shrink-0">' + (!item.isExisting && item.currency && item.currency !== (b.currency || 'JMD') ? esc(item.currency) + ' ' + esc(item.rate) + ' (no exchange rate)' : fmt(item.rate)) + '</div>' +
                     '</div>';
                 }).join('');
                 var actionRows = modalList.querySelectorAll('[data-stage-action]');
@@ -2094,21 +2438,39 @@
                 if (!ogItem) return;
                 stagesPushUndoImmediate();
 
-                /* Guess target section */
-                var secNames = Object.keys(b.sections || {});
-                var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
-                if (sk === 'post') targetSec = secNames.find(function(s) { return /post|edit/i.test(s); }) || targetSec;
-                if (sk === 'dev')  targetSec = secNames.find(function(s) { return /dev|creative/i.test(s); }) || targetSec;
-                if (!targetSec || !b.sections[targetSec]) return;
+                var targetSec;
+                /* Classify a copy: a department picked for this one line must not stick to the catalog row. */
+                var probe = {}, probeKeys = Object.keys(ogItem), probeIdx;
+                for (probeIdx = 0; probeIdx < probeKeys.length; probeIdx++) probe[probeKeys[probeIdx]] = ogItem[probeKeys[probeIdx]];
+                try { targetSec = mBTBatch2.section(b, probe, sk, mBTBatch2.pick(dom)); }
+                catch (err) {
+                    this._buildModalList(dom.getElementById('modal-search').value);
+                    var notice = dom.getElementById('classification-notice');
+                    if (!notice) { notice = document.createElement('p'); notice.id = 'classification-notice'; notice.setAttribute('role', 'alert'); dom.getElementById('modal-list').insertBefore(notice, dom.getElementById('modal-list').firstChild); }
+                    notice.textContent = err.message;
+                    return;
+                }
 
+                var sourceRate = Number(ogItem.rate) || 0;
+                var sourceCurrency = ogItem.currency || b.currency || 'JMD';
+                var rateEngine = window.mBT && mBT.le;
+                try { if (window.parent !== window && window.parent.mBT) rateEngine = window.parent.mBT.le; } catch (currencyError) {}
+                var budgetRate = sourceRate;
+                if (sourceCurrency !== (b.currency || 'JMD')) {
+                    budgetRate = rateEngine && rateEngine.convertCurrencyOrNull ? rateEngine.convertCurrencyOrNull(sourceRate, sourceCurrency, b.currency || 'JMD', b) : null;
+                    if (budgetRate === null) { stagesAlert('No exchange rate for ' + sourceCurrency + '. No rate was added; the source keeps its own currency.', 'Add Item'); return; }
+                }
                 var newItem = {
                     id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
                     description: ogItem.description,
+                    department: probe.department, rateSource: 'opengate',
+                    itemType: ogItem.itemType || 'crew',
                     quantity: 1, unit: ogItem.unit || 'Day', multiplier: 1,
-                    rate: ogItem.rate || 0, actual: 0, rateType: 'negotiable',
+                    rate: budgetRate, rateCurrency: b.currency || 'JMD', actual: 0, rateType: 'negotiable',
                     stageData: {}
                 };
-                newItem.stageData[sk] = { days: 1, rate: ogItem.rate || 0, order: 0 };
+                newItem.stageData[sk] = { days: 1, rate: budgetRate, order: 0 };
+                if (ogItem.source === 'override' || ogItem.rateSource === 'custom') mBTBatch2.manual(newItem);
                 b.sections[targetSec].items.push(newItem);
 
                 this.closeAddModal();
@@ -2121,23 +2483,28 @@
                 var sk   = this.state._modalStage;
                 var b    = this.state.project;
                 var desc = (dom.getElementById('custom-desc').value || '').trim();
-                var rate = parseFloat(dom.getElementById('custom-rate').value) || 0;
+                var rateText = dom.getElementById('custom-rate').value.trim();
+                var rate = rateText === '' ? 0 : Number(rateText);
+                dom.getElementById('custom-rate').setCustomValidity('');
+                if (!isFinite(rate) || rate < 0) { dom.getElementById('custom-rate').setCustomValidity('Enter a nonnegative price.'); dom.getElementById('custom-rate').reportValidity(); return; }
                 var unit = dom.getElementById('custom-unit').value;
                 if (!desc) { dom.getElementById('custom-desc').focus(); return; }
                 stagesPushUndoImmediate();
 
-                var secNames  = Object.keys(b.sections || {});
-                var targetSec = secNames.find(function(s) { return /production/i.test(s); }) || secNames[0];
-                if (sk === 'post') targetSec = secNames.find(function(s) { return /post|edit/i.test(s); }) || targetSec;
-                if (sk === 'dev')  targetSec = secNames.find(function(s) { return /dev|creative/i.test(s); }) || targetSec;
-                if (!targetSec || !b.sections[targetSec]) return;
+                var classification = { description: desc };
+                var targetSec;
+                dom.getElementById('custom-desc').setCustomValidity('');
+                try { targetSec = mBTBatch2.section(b, classification, sk, mBTBatch2.pick(dom)); }
+                catch (err) { dom.getElementById('custom-desc').setCustomValidity(err.message); dom.getElementById('custom-desc').reportValidity(); return; }
 
                 var newItem = {
                     id: 'item_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
                     description: desc, quantity: 1, unit: unit, multiplier: 1,
+                    department: classification.department, itemType: classification.itemType || 'crew', catalogDescription: classification.catalogDescription, rateSource: 'none',
                     rate: rate, actual: 0, rateType: 'negotiable', stageData: {}
                 };
                 newItem.stageData[sk] = { days: 1, rate: rate, order: 0 };
+                if (dom.getElementById('custom-rate').value.trim() !== '') mBTBatch2.manual(newItem);
                 b.sections[targetSec].items.push(newItem);
 
                 /* Reset form */
@@ -2152,41 +2519,109 @@
             /* ========= Persistence ========= */
 
             save: function() {
-                var self = this;
+                var self = this, cleanProject;
                 if (!self.state.project) return;
-                var cleanProject = JSON.parse(JSON.stringify(self.state.project));
-                /* Stamp updated_at so the monolith's OPFS/localforage reconciliation picks the newer record */
-                cleanProject.updated_at = new Date().toISOString();
-
-                var savePromise;
-                if (self.state._projectKey && typeof localforage !== 'undefined') {
-                    /* Shell bridge: write back to localforage so the shell sees changes.
-                       Also mirror to OPFS when available -- the monolith's loader prefers whichever
-                       store has the newer updated_at, so both must stay in step. */
-                    var parentOPFS = null;
-                    try {
-                        if (window.parent && window.parent !== window && window.parent.mBTOPFS && window.parent.mBTOPFS.isReady && window.parent.mBTOPFS.isReady()) {
-                            parentOPFS = window.parent.mBTOPFS;
-                        }
-                    } catch (_) { /* cross-origin: ignore */ }
-                    var lfP = localforage.setItem(self.state._projectKey, cleanProject);
-                    var opfsP = parentOPFS ? parentOPFS.save(self.state._projectKey, cleanProject).catch(function () { return null; }) : Promise.resolve();
-                    savePromise = Promise.all([lfP, opfsP]);
-                } else if (window.mBT && window.mBT.storage) {
-                    savePromise = window.mBT.storage.updateProject(cleanProject);
-                } else {
-                    return;
+                /* Inside the app: send only the Stages changes to the budget window, which applies them to its open budget
+                   (with unsaved edits) and saves. This tool never writes the budget and never posts reconcile. */
+                if (window.parent !== window) return self._saveThroughApp();
+                if (self.state._projectKey && typeof localforage !== 'undefined') return self._saveStandalone();
+                if (window.mBT && window.mBT.storage) {
+                    cleanProject = JSON.parse(JSON.stringify(self.state.project));
+                    cleanProject.updated_at = new Date().toISOString();
+                    return window.mBT.storage.updateProject(cleanProject).catch(function (err) { console.error('[Stages] Save failed:', err); });
                 }
+            },
 
-                savePromise.then(function() {
-                    /* Notify shell to reload budget from storage */
-                    var stages = cleanProject.targetLock ? cleanProject.targetLock.stages : {};
-                    var msg = { type: 'mbt:tool-action', action: 'reconcile', payload: { stages: stages } };
-                    if (window.mBTBridge) window.mBTBridge.send('reconcile', { stages: stages });
-                    else if (window.parent !== window) window.parent.postMessage(msg, window.location.origin);
-                }).catch(function(err) {
-                    console.error('[Stages] Save failed:', err);
+            _saveThroughApp: function () {
+                var self = this, followKeys = _mBTStagesFollowStageKeys.slice(), step;
+                _mBTStagesFollowStageKeys = [];
+                self._pendingSaves = (self._pendingSaves || 0) + 1;
+                step = (self._saveQueue || Promise.resolve()).catch(function () {}).then(function () {
+                    var moves = (self.state._moves || []).slice();
+                    var delta = stagesDelta(self.state._base, self.state.project, followKeys, moves);
+                    if (delta.empty) return null;
+                    return self._sendToApp(delta).then(function (message) {
+                        /* The base moves by exactly what the budget confirmed. */
+                        applyStagesDelta(self.state._base, delta);
+                        self.state._moves = (self.state._moves || []).slice(moves.length);
+                        if (message) stagesShowNotice(message, 'note'); else stagesClearFailure();
+                    });
                 });
+                self._saveQueue = step;
+                return step.then(function () { self._pendingSaves--; return true; }, function (err) {
+                    self._pendingSaves--;
+                    _mBTStagesFollowStageKeys = followKeys.concat(_mBTStagesFollowStageKeys);
+                    console.error('[Stages] Save failed:', err);
+                    stagesShowNotice('Stages changes were not saved: ' + ((err && err.message) || 'the budget could not save them') + ' Your changes are kept on this screen. Change anything or press Retry to save again.', 'failure');
+                    return false;
+                });
+            },
+
+            _sendToApp: function (delta) {
+                var self = this;
+                return new Promise(function (resolve, reject) {
+                    var id, timer;
+                    self._ackSeq = (self._ackSeq || 0) + 1;
+                    id = self._ackSeq;
+                    self._acks = self._acks || {};
+                    timer = setTimeout(function () { delete self._acks[id]; reject(new Error('The budget did not confirm the save.')); }, 20000);
+                    self._acks[id] = {
+                        ok: function (message) { clearTimeout(timer); resolve(message || ''); },
+                        fail: function (message) { clearTimeout(timer); reject(new Error(message || 'the budget could not save it.')); }
+                    };
+                    window.parent.postMessage({ type: 'mbt:tool-action', action: 'stages-update', payload: { requestId: id, projectKey: self.state._projectKey, delta: delta } }, window.location.origin);
+                });
+            },
+
+            /* On its own (no budget window): write only the Stages changes onto the freshly read stored copy, advance
+               updated_at, and refuse to write over a copy saved somewhere else after this one was read. The draft stays. */
+            _saveStandalone: function () {
+                var self = this, key = self.state._projectKey;
+                self._pendingSaves = (self._pendingSaves || 0) + 1;
+                self._saveQueue = (self._saveQueue || Promise.resolve()).catch(function () {}).then(function () {
+                    var moves = (self.state._moves || []).slice();
+                    var delta = stagesDelta(self.state._base, self.state.project, [], moves);
+                    if (delta.empty) return null;
+                    return localforage.getItem(key).then(function (stored) {
+                        var stale;
+                        if (!stored) throw new Error('The saved budget could not be found.');
+                        if ((stored.updated_at || '') > (self.state._baseUpdatedAt || '')) { stale = new Error('stale'); stale.stale = true; throw stale; }
+                        applyStagesDelta(stored, delta);
+                        stored.updated_at = stagesNextStamp(stored.updated_at);
+                        return localforage.setItem(key, stored).then(function () {
+                            self.state._baseUpdatedAt = stored.updated_at;
+                            applyStagesDelta(self.state._base, delta);
+                            self.state._moves = (self.state._moves || []).slice(moves.length);
+                            stagesClearFailure();
+                        });
+                    });
+                });
+                return self._saveQueue.then(function () { self._pendingSaves--; return true; }, function (err) {
+                    self._pendingSaves--;
+                    console.error('[Stages] Save failed:', err);
+                    stagesShowNotice(err && err.stale
+                        ? 'A newer copy of this budget was saved somewhere else. Your Stages changes are kept on this screen but were not saved. Reopen the budget to see the newer copy.'
+                        : 'Stages changes were not saved: ' + ((err && err.message) || 'storage error') + ' Your changes are kept on this screen.', 'failure');
+                    return false;
+                });
+            },
+
+            /* A drag between stages is remembered so it is sent as a move, not as a copy of the old stage. */
+            _recordMove: function (id, from, to) {
+                this.state._moves = this.state._moves || [];
+                var baseHit = this.state._base ? stagesFindItem(this.state._base, id) : null;
+                /* Remember whether the destination was already in the Stages base: if it was not and the budget has it, the move is skipped. */
+                this.state._moves.push({ id: id, from: from, to: to, destInBase: !!(baseHit && baseHit.item.stageData && baseHit.item.stageData[to]) });
+            },
+
+            /* Take a newer copy of the budget as the new base and put any unsaved Stages edits back on top of it. */
+            _rebase: function (fresh) {
+                var self = this, pending = null, next = JSON.parse(JSON.stringify(fresh));
+                if (self.state._base && self.state.project) pending = stagesDelta(self.state._base, self.state.project, [], self.state._moves || []);
+                if (pending && !pending.empty) applyStagesDelta(next, pending);
+                self.state._base = JSON.parse(JSON.stringify(fresh));
+                self.state._baseUpdatedAt = fresh.updated_at || self.state._baseUpdatedAt || '';
+                self.state.project = next;
             },
 
             syncFromDb: function() {
@@ -2198,7 +2633,7 @@
                     loadPromise = window.mBT.storage.getProject(self.state.projectId);
                 } else { return; }
                 loadPromise.then(function(project) {
-                    if (project) { self.state.project = project; self.render(); }
+                    if (project) { self._rebase(project); self.render(); }
                 });
             },
 
@@ -2229,7 +2664,10 @@
                                 if (item && item.stageData && item.stageData[fromStage]) {
                                     item.stageData[toStage] = Object.assign({}, item.stageData[fromStage]);
                                     delete item.stageData[fromStage];
+                                    self._recordMove(itemId, fromStage, toStage);
                                 }
+                                _mBTStagesQueueFollow(toStage);
+                                _mBTStagesQueueFollow(fromStage);
                             }
 
                             /* Persist new order */
@@ -2241,6 +2679,9 @@
 
                             self.renderVitals();
                             self.renderStageCards();
+                            if (_mBTStagesFollowStageKeys.length) {
+                                _mBTStagesApplyFollowHeaders(self.state.project);
+                            }
                             self.save();
                         }
                     });
@@ -2298,47 +2739,94 @@
             _initTabNavigation: function() {
                 var self = this;
                 var tabs = dom.querySelectorAll('.tab-btn');
+                var carousel = dom.getElementById('stages-layout');
+                var scrollTimer, resizeTimer;
                 self._tabBtns = tabs;
 
-                /* Tab click handler — looks up panel lazily at click time */
+                function activate(panelId) {
+                    self._activeTabPanelId = panelId;
+                    tabs.forEach(function(tab) {
+                        tab.classList.toggle('active', tab.dataset.tab === panelId);
+                    });
+                }
+
+                /* Measure in carousel coordinates: stage cards live inside a nested flex container. */
+                self._centerTabPanel = function(panelId, behavior) {
+                    var panel = dom.getElementById(panelId);
+                    if (!panel) return;
+                    var first = dom.getElementById('panel-setup');
+                    var last = dom.getElementById('dist');
+                    if (first && last) {
+                        carousel.style.setProperty('--stage-leading', Math.max(0, (carousel.clientWidth - first.getBoundingClientRect().width) / 2) + 'px');
+                        carousel.style.setProperty('--stage-trailing', Math.max(0, (carousel.clientWidth - last.getBoundingClientRect().width) / 2) + 'px');
+                    }
+                    var bounds = carousel.getBoundingClientRect();
+                    var rect = panel.getBoundingClientRect();
+                    var left = carousel.scrollLeft + rect.left - bounds.left - carousel.clientLeft +
+                        (rect.width - carousel.clientWidth) / 2;
+                    left = Math.max(0, Math.min(left, carousel.scrollWidth - carousel.clientWidth));
+                    self._selectedTabPanelId = panelId;
+                    activate(panelId);
+                    carousel.scrollTo({ left: left, behavior: behavior });
+                };
+
                 tabs.forEach(function(tab) {
                     tab.addEventListener('click', function() {
-                        var targetPanelId = this.dataset.tab;
-                        var targetPanel = dom.getElementById(targetPanelId);
-                        if (!targetPanel) return;
-                        targetPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        tabs.forEach(function(t) { t.classList.remove('active'); });
-                        this.classList.add('active');
+                        self._centerTabPanel(this.dataset.tab, 'smooth');
                     });
                 });
 
-                /* Create IntersectionObserver once — panels attached after cards render via _observeTabPanels() */
-                self._tabObserver = new IntersectionObserver(function(entries) {
-                    entries.forEach(function(entry) {
-                        if (!entry.isIntersecting) return;
-                        var panelId = entry.target.id;
-                        if (!panelId) return;
-                        self._tabBtns.forEach(function(t) { t.classList.remove('active'); });
-                        var tab = dom.querySelector('.tab-btn[data-tab="' + panelId + '"]');
-                        if (tab) tab.classList.add('active');
-                    });
-                }, {
-                    root: dom.getElementById('stages-layout'),
-                    rootMargin: '0px',
-                    threshold: 0.4
+                /* Keep the clicked tab active throughout animation, even with several visible cards.
+                   Manual scrolling hands selection back to the card nearest the carousel center. */
+                function manualScroll() { self._selectedTabPanelId = null; }
+                carousel.addEventListener('wheel', manualScroll);
+                carousel.addEventListener('pointerdown', manualScroll);
+                carousel.addEventListener('touchstart', manualScroll);
+                carousel.addEventListener('keydown', function(e) {
+                    if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].indexOf(e.key) !== -1) manualScroll();
                 });
+                carousel.addEventListener('scroll', function() {
+                    clearTimeout(scrollTimer);
+                    scrollTimer = setTimeout(function() {
+                        if (self._selectedTabPanelId) return;
+                        var bounds = carousel.getBoundingClientRect();
+                        var center = bounds.left + carousel.clientLeft + carousel.clientWidth / 2;
+                        var nearest = null;
+                        var distance = Infinity;
+                        tabs.forEach(function(tab) {
+                            var panel = dom.getElementById(tab.dataset.tab);
+                            if (!panel) return;
+                            var rect = panel.getBoundingClientRect();
+                            var delta = Math.abs(rect.left + rect.width / 2 - center);
+                            if (delta < distance) { distance = delta; nearest = tab.dataset.tab; }
+                        });
+                        if (nearest) activate(nearest);
+                    }, 120);
+                });
+                window.addEventListener('resize', function() {
+                    self._centerTabPanel(self._selectedTabPanelId || self._activeTabPanelId, 'auto');
+                    /* Card widths transition for 300ms; measure their settled widths too. */
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(function() {
+                        self._centerTabPanel(self._selectedTabPanelId || self._activeTabPanelId, 'auto');
+                    }, 350);
+                });
+                /* Iframe and card sizes can settle after the window resize event. */
+                if (typeof ResizeObserver !== 'undefined') {
+                    var panelSizes = new ResizeObserver(function() {
+                        self._centerTabPanel(self._selectedTabPanelId || self._activeTabPanelId || 'panel-setup', 'auto');
+                    });
+                    panelSizes.observe(carousel);
+                    panelSizes.observe(dom.getElementById('panel-setup'));
+                }
+                activate('panel-setup');
             },
 
-            /* Re-attach scroll spy after every renderStageCards call */
+            /* Preserve the selected panel when budget updates replace the stage cards. */
             _observeTabPanels: function() {
-                if (!this._tabObserver) return;
-                var panels = ['panel-setup', 'panel-vitals', 'panel-cashflow', 'dev', 'pre', 'prod', 'post', 'dist'];
-                this._tabObserver.disconnect();
-                var obs = this._tabObserver;
-                panels.forEach(function(id) {
-                    var el = dom.getElementById(id);
-                    if (el) obs.observe(el);
-                });
+                if (this._centerTabPanel) {
+                    this._centerTabPanel(this._selectedTabPanelId || this._activeTabPanelId || 'panel-setup', 'auto');
+                }
             },
 
             /* ========= Utilities ========= */
@@ -2366,6 +2854,12 @@
         };
 
         window.onload = function() { mBTStages.init(); };
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.action !== 'owner-budget-update') return;
+            mBTStages._rebase(e.data.payload);
+            mBTStages.state._projectKey = 'prodBudget_v5_' + mBTStages.state.project.projectName;
+            mBTStages.render();
+        });
     </script>
 </body>
 </html>

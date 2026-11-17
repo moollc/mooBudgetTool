@@ -124,7 +124,7 @@
   <div id="apply-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
       <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-900 mb-2">Apply Template?</h3>
-      <p class="text-[11px] text-slate-500 mb-4">This will replace the current budget sections with this template's structure. Project name, dates, and settings are preserved.</p>
+      <p class="text-[11px] text-slate-500 mb-4">If the budget already has lines, it asks whether to add this template's lines or replace the budget's lines, and nothing changes until you choose. An empty budget gets the template straight away. Project name, dates, and settings are preserved.</p>
       <!-- Phase 116 Step 5: Rates injection — only shown for built-in templates -->
       <label id="apply-rates-label" class="hidden items-center gap-2 mb-5 cursor-pointer select-none">
         <input type="checkbox" id="apply-inject-rates" class="w-4 h-4 rounded accent-violet-600">
@@ -210,13 +210,13 @@
             }
         };
 
-        var state = { projectKey: null, pendingApplyKey: null, pendingApplyData: null };
+        var state = { projectKey: null, pendingApplyKey: null, pendingApplyData: null, applySeq: 0, pending: null, ackTimer: null };
 
         /* --- XSS escape --- */
         function esc(str) {
             var d = document.createElement('div');
             d.textContent = String(str || '');
-            return d.innerHTML;
+            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         /* --- Snackbar --- */
@@ -366,88 +366,95 @@
             });
         }
 
-        /* --- Apply a built-in template to the current project --- */
-        /* Phase 116 Step 5: Routes via monolith postMessage so rate injection stays server-side */
-        function applyBuiltInTemplate(key, withRates) {
+        /* --- Apply a template: the tool never writes the budget. It sends the chosen template to the budget window, which
+           applies it to the open budget (with unsaved edits), asks Add or Replace when the budget has lines, backs up before
+           Replace, saves, and answers on the same request id: pending (the choice window is open, no timer runs),
+           saving (chosen, the 20 second timer covers only the save), then success, cancelled or error. Only one request can
+           be open at a time. --- */
+        function clearAckTimer() {
+            if (state.ackTimer) { clearTimeout(state.ackTimer); state.ackTimer = null; }
+        }
+        function startAckTimer(spec, stage) {
+            clearAckTimer();
+            state.ackTimer = setTimeout(function () {
+                if (!state.pending || state.pending !== spec) return;
+                if (stage === 'sent') {
+                    /* The budget never acknowledged the request, so nothing started: the choice is kept. */
+                    templateNotApplied('The budget did not answer.');
+                } else {
+                    /* A save was started and has not been confirmed. Do not allow a second apply on top of it. */
+                    snack('The budget has not confirmed the template yet. Check the budget before applying again.');
+                }
+            }, 20000);
+        }
+        function sendTemplateRequest(spec) {
             if (!state.projectKey) { snack('No project loaded.'); return; }
-            var t = BUILT_IN[key];
-            if (!t || !t.structure) { snack('Template not found.'); return; }
-
-            /* Route via parent monolith when running inside iframe (normal case) */
-            if (window.parent && window.parent !== window) {
-                window.parent.postMessage({
-                    type: 'mbt:tool-action',
-                    action: 'apply-template',
-                    payload: { templateKey: key, withRates: !!withRates }
-                }, window.location.origin);
-                snack('Blueprint applied' + (withRates ? ' with industry rates.' : '.'));
+            if (!(window.parent && window.parent !== window)) {
+                snack('Open the Template tool from inside the budget to apply a template. Nothing was changed.');
                 return;
             }
-
-            /* Fallback: standalone (not in iframe) — direct localforage write without rates */
-            localforage.getItem(state.projectKey).then(function(project) {
-                if (!project) { snack('Budget not found in storage.'); return; }
-
-                var newSections = {};
-                t.structure.forEach(function(sec) {
-                    var items = sec.items.map(function(itemName, idx) {
-                        return {
-                            id: 'item_' + sec.id + '_' + idx,
-                            description: itemName,
-                            quantity: 1,
-                            rate: 0,
-                            multiplier: 1,
-                            unit: 'Flat',
-                            actual: 0,
-                            notes: '',
-                            stageData: {}
-                        };
-                    });
-                    newSections[sec.name] = {
-                        id: sec.id,
-                        items: items,
-                        collapsed: false
-                    };
-                });
-
-                project.sections = newSections;
-                return localforage.setItem(state.projectKey, project);
-            }).then(function() {
-                snack('Template applied. Reload budget to see changes.');
-            }).catch(function(e) { snack('Error: ' + e.message); });
+            if (state.pending) { snack('A template is already being applied. Wait for the budget to answer.'); return; }
+            state.applySeq += 1;
+            state.pending = spec;
+            window.parent.postMessage({
+                type: 'mbt:tool-action',
+                action: 'template-apply',
+                payload: { requestId: state.applySeq, projectKey: state.projectKey, kind: spec.kind, label: spec.label, templateKey: spec.key, withRates: !!spec.withRates, structure: spec.structure }
+            }, window.location.origin);
+            snack('Waiting for the budget to apply the template.');
+            startAckTimer(spec, 'sent');
         }
 
-        /* --- Apply a custom template to the current project --- */
+        /* A template that was not applied keeps its choice: the apply window opens again on the same template. */
+        function templateNotApplied(message) {
+            var spec = state.pending;
+            state.pending = null;
+            clearAckTimer();
+            if (spec) {
+                state.pendingApplyKey = spec.key;
+                state.pendingApplyType = spec.type;
+                var modal = document.getElementById('apply-modal');
+                if (modal) modal.classList.remove('hidden');
+            }
+            snack(message);
+        }
+
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'template-apply') return;
+            if (e.data.requestId && e.data.requestId !== state.applySeq) return;
+            if (e.data.status === 'pending') {
+                clearAckTimer();
+                snack('Choose Add or Replace in the budget window.');
+            } else if (e.data.status === 'saving') {
+                if (state.pending) startAckTimer(state.pending, 'saving');
+                snack('Applying the template.');
+            } else if (e.data.status === 'success') {
+                state.pending = null;
+                clearAckTimer();
+                snack('Template applied.');
+            } else if (e.data.status === 'cancelled') {
+                state.pending = null;
+                clearAckTimer();
+                snack('Nothing was changed.');
+            } else {
+                templateNotApplied('Template not applied: ' + (e.data.message || 'the budget could not save it') + ' Your choice is kept, try again.');
+            }
+        });
+
+        function applyBuiltInTemplate(key, withRates) {
+            var t = BUILT_IN[key];
+            if (!t || !t.structure) { snack('Template not found.'); return; }
+            sendTemplateRequest({ kind: 'builtin', type: 'builtin', key: key, label: t.label || key, withRates: !!withRates, structure: JSON.parse(JSON.stringify(t.structure)) });
+        }
+
         function applyCustomTemplate(key) {
             if (!state.projectKey) { snack('No project loaded.'); return; }
-
             loadCustomTemplates().then(function(custom) {
                 var t = custom[key];
                 if (!t) { snack('Template not found.'); return; }
-
                 var structure = Array.isArray(t.structure) ? t.structure : (Array.isArray(t.items) ? t.items : null);
                 if (!structure) { snack('Template has no section structure.'); return; }
-
-                return localforage.getItem(state.projectKey).then(function(project) {
-                    if (!project) { snack('Budget not found in storage.'); return; }
-
-                    var newSections = {};
-                    structure.forEach(function(sec) {
-                        newSections[sec.name] = {
-                            id: sec.id,
-                            items: sec.items || [],
-                            collapsed: false
-                        };
-                    });
-
-                    project.sections = newSections;
-                    return localforage.setItem(state.projectKey, project);
-                }).then(function() {
-                    snack('Template applied. Reload budget to see changes.');
-                    if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'mbt:tool-action', action: 'reconcile' }, window.location.origin);
-                    }
-                });
+                sendTemplateRequest({ kind: 'custom', type: 'custom', key: key, label: t.label || key, withRates: false, structure: JSON.parse(JSON.stringify(structure)) });
             }).catch(function(e) { snack('Error: ' + e.message); });
         }
 

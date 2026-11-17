@@ -11,6 +11,7 @@
   <script src="../../core/mBT.assets.js"></script>
   <script src="../../core/mBT.templates.js"></script>
   <script src="../../scripts/storage.js"></script>
+  <script src="../../core/mBT.batch2.js"></script>
   <script src="../../core/services/Contacts.js"></script>
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
@@ -56,6 +57,20 @@
     .glass-card:hover {
       box-shadow: 0 8px 32px rgba(15,23,42,0.13), 0 2px 8px rgba(15,23,42,0.08);
       transform: translateY(-1px);
+    }
+    .contact-card { padding: 12px; gap: 8px; }
+    .contact-card .contact-details { min-height: 32px; }
+    /* Restore the original right-aligned Push action. Pin the footer below details. */
+    .contact-card .card-footer { margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+    .contact-card .card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .contact-card .card-footer button { height: 32px; padding: 0 10px; white-space: nowrap; }
+    .contact-card [data-action="push"] { width: auto; margin-left: auto; }
+    select { appearance: none; -webkit-appearance: none; background-image: none; }
+    @media (max-width: 480px) {
+        #header-bar { height: auto; min-height: 48px; flex-wrap: wrap; padding: 8px 12px; }
+        #header-bar > .flex:first-child { flex-basis: 100%; min-height: 28px; }
+        #header-bar > .flex:last-child { margin-left: auto; }
+        .contact-card .text-\[17px\] { font-size: 14px; }
     }
     .dept-pill { background: rgba(241,245,249,0.9); color: #64748b; transition: background 0.15s; }
     .dept-pill:hover { background: #e2e8f0; }
@@ -127,7 +142,7 @@
 
   <div class="px-4 py-1.5 bg-slate-950 border-b border-slate-800 flex flex-col gap-0.5">
       <div class="text-[8px] text-slate-500 font-medium uppercase tracking-tight whitespace-nowrap">
-          <span class="text-blue-400">Desktop Tip:</span> Export from Google Contacts as <span class="text-white">CSV</span> for best results on PC/Mac.
+          <span class="text-blue-400">Import files:</span> <span class="text-white">vCard (.vcf or .vcard), CSV (.csv) or JSON (.json)</span>. Google Contacts CSV is supported.
       </div>
       <div class="text-[8px] text-slate-500 font-medium uppercase tracking-tight whitespace-nowrap">
           <span class="text-blue-400">Mobile:</span> Use Device Select for native phonebook access.
@@ -135,7 +150,7 @@
   </div>
 
   <!-- Phase 127.B: Hidden Import Bridge -->
-  <input type="file" id="contact-import-input" accept=".vcf,.json,.csv" class="hidden">
+  <input type="file" id="contact-import-input" accept=".vcf,.vcard,.json,.csv,text/vcard,text/csv,application/json" class="hidden">
 
   <!-- View Tabs: DB vs Budget Crew -->
   <div id="tab-bar" class="shrink-0 bg-slate-900 border-b border-slate-800 px-4 flex items-end">
@@ -158,7 +173,7 @@
   </div>
 
   <!-- Body -->
-  <div class="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6">
+  <div class="flex-1 overflow-y-auto no-scrollbar p-3">
 
     <!-- Skeleton loader -->
     <div id="skeleton" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -168,7 +183,7 @@
     </div>
 
     <!-- Contact card grid -->
-    <div id="contacts-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 hidden"></div>
+    <div id="contacts-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 hidden"></div>
 
     <!-- Empty state -->
     <div id="empty-state" class="hidden flex-col items-center justify-center py-20 text-center">
@@ -186,6 +201,16 @@
       </button>
     </div>
 
+  </div>
+
+  <!-- Rename note: what a rename from Edit did to the budgets, with Undo -->
+  <div id="rename-note" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-4 rounded-xl shadow-2xl z-50 w-[28rem] max-w-[92vw]" role="status">
+    <div id="rename-note-title" class="text-[10px] font-black uppercase tracking-widest mb-2"></div>
+    <div id="rename-note-text" class="text-[11px] leading-snug space-y-1.5"></div>
+    <div class="flex items-center justify-end gap-3 mt-3">
+      <button id="rename-note-undo" class="hidden text-blue-400 hover:text-blue-300 font-black uppercase tracking-widest text-[9px] transition-colors">Undo</button>
+      <button id="rename-note-ok" class="text-slate-300 hover:text-white font-black uppercase tracking-widest text-[9px] transition-colors">OK</button>
+    </div>
   </div>
 
   <!-- Wallet feedback snackbar -->
@@ -230,17 +255,18 @@ var mBTContacts = (function () {
         'Craft Services': 200, 'Miscellaneous': 150
     };
 
-    function deptStandard(dept) {
+    function deptStandard(dept, currency) {
         var usd = STANDARD_RATES[dept] || 0;
-        if (!usd || state.currency === 'USD') return usd;
+        currency = currency || (state.budget && state.budget.currency) || 'JMD';
+        if (!usd || currency === 'USD') return usd;
         try {
             var le = window.parent && window.parent.mBT && window.parent.mBT.le;
-            if (le && typeof le.convertCurrency === 'function') {
-                var converted = le.convertCurrency(usd, 'USD', state.currency);
-                if (converted && isFinite(converted)) return Math.round(converted);
+            if (le && typeof le.convertCurrencyOrNull === 'function') {
+                var converted = le.convertCurrencyOrNull(usd, 'USD', currency, state.budget);
+                if (converted && isFinite(converted)) return converted;
             }
         } catch (e) { /* cross-origin or engine unavailable — fall through */ }
-        return usd;
+        return null;
     }
 
     var DEPT_COLORS = {
@@ -254,12 +280,13 @@ var mBTContacts = (function () {
 
     /* --- Helpers --- */
     function esc(s) {
-        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     var CURRENCY_CODES = {
         JMD: true, USD: true, EUR: true, GBP: true, CAD: true, MXN: true,
-        AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true
+        AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true,
+        TTD: true, BBD: true, GYD: true, XCD: true
     };
 
     function safeCurrency(code) {
@@ -278,6 +305,29 @@ var mBTContacts = (function () {
 
     function fmtCurrency(n) {
         return esc(safeCurrency(state.currency)) + ' ' + (parseFloat(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    /* A PO, and its payment, are in the currency stored on the record (the budget's when it has none). */
+    /* The PO's own currency is kept as saved when it is a three letter code, even one this tool's display list lacks (TTD, for example). */
+    function isoCode(code, fallback) { var c = String(code || '').toUpperCase(); return /^[A-Z]{3}$/.test(c) ? c : fallback; }
+    function poCurrency(po) {
+        return isoCode(po && po.currency, isoCode(state.budget && state.budget.currency, 'JMD'));
+    }
+    function fmtIn(n, cur) {
+        return esc(isoCode(cur, safeCurrency(cur))) + ' ' + (parseFloat(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    /* Converts once, into the display currency, for totals. Returns null when no rate is available, never a guess. */
+    function toDisplayAmount(n, from) {
+        var num = parseFloat(n) || 0, to = safeCurrency(state.currency);
+        if (from === to) return num;
+        try {
+            var le = window.parent && window.parent.mBT && window.parent.mBT.le;
+            if (le && typeof le.convertCurrencyOrNull === 'function') {
+                var converted = le.convertCurrencyOrNull(num, from, to, state.budget);
+                if (typeof converted === 'number' && isFinite(converted)) return converted;
+            }
+        } catch (e) { /* engine unavailable */ }
+        return null;
     }
 
     function walletSnack(msg) {
@@ -407,6 +457,8 @@ var mBTContacts = (function () {
             updateSaveAllBtn();
             render();
 
+            if (params.get('contactAction') === 'edit' && state.highlightId) editContact(state.highlightId);
+            if (params.get('contactAction') === 'new') showAddContactModal();
             if (state.highlightId) {
                 setTimeout(function () {
                     var el = dom.getElementById('card-' + state.highlightId);
@@ -455,7 +507,8 @@ var mBTContacts = (function () {
                     id: 'budget_' + cid,
                     name: item.description,
                     department: dept,
-                    rate: item.rate || deptStandard(dept),
+                    rate: item.rate == null ? deptStandard(dept) : item.rate,
+                    currency: budget.currency || 'JMD',
                     projectName: budget.projectName || 'Active Budget',
                     isBudgetExtraction: true
                 });
@@ -525,7 +578,7 @@ var mBTContacts = (function () {
     function buildCard(c) {
         var card = document.createElement('div');
         card.id = 'card-' + (c.id || '');
-        card.className = 'glass-card rounded-2xl p-5 flex flex-col gap-3';
+        card.className = 'glass-card contact-card rounded-xl flex flex-col';
 
         var name = c.name || 'Unnamed';
         var dept = c.department || 'General';
@@ -537,14 +590,21 @@ var mBTContacts = (function () {
         if (hasStoredRate) {
             var contactCurrency = c.currency || (state.budget && state.budget.currency) || 'JMD';
             if (contactCurrency !== state.currency) {
+                displayRate = null;
                 try {
                     var le = window.parent && window.parent.mBT && window.parent.mBT.le;
-                    if (le && typeof le.convertCurrency === 'function') {
-                        displayRate = le.convertCurrency(finalRate, contactCurrency, state.currency);
+                    if (le && typeof le.convertCurrencyOrNull === 'function') {
+                        displayRate = le.convertCurrencyOrNull(finalRate, contactCurrency, state.currency, state.budget);
                         conversionSubline = '<div class="text-[9px] text-slate-400 font-medium">≈ ' + esc(contactCurrency) + ' ' + finalRate.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + '</div>';
                     }
                 } catch (e) { /* cross-origin or engine unavailable */ }
             }
+        }
+        var rateText = fmt(displayRate);
+        if (!hasStoredRate && deptStandard(dept) === null) { rateText = 'No rate'; conversionSubline = '<div class="text-[9px] text-amber-700">No exchange rate for the USD suggested price.</div>'; }
+        if (displayRate === null) {
+            rateText = fmtIn(finalRate, contactCurrency);
+            conversionSubline = '<div class="text-[9px] text-amber-700">No exchange rate; source keeps its own currency.</div>';
         }
         var isBudget = c.isBudgetExtraction;
         var accent = DEPT_COLORS[dept] || '#64748b';
@@ -552,7 +612,7 @@ var mBTContacts = (function () {
         var html =
             '<div class="flex items-start justify-between gap-3">' +
                 '<div class="min-w-0 flex-1">' +
-                    '<div class="flex items-center gap-2 flex-wrap mb-2">' +
+                    '<div class="flex items-center gap-1 flex-wrap mb-1">' +
                         '<span class="text-[13px] font-black text-slate-900 truncate">' + esc(name) + '</span>' +
                         (isBudget ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-widest">Budget</span>' : '') +
                         (c.sharedFrom ? '<span class="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 uppercase tracking-widest" title="Shared via OpenGate by ' + esc(c.sharedFrom) + '">OpenGate</span>' : '') +
@@ -563,7 +623,7 @@ var mBTContacts = (function () {
                 '</div>' +
                 '<div class="text-right shrink-0">' +
                     '<div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Daily Rate</div>' +
-                    '<div class="text-[17px] font-black text-slate-900 leading-none">' + fmt(displayRate) + '</div>' +
+                    '<div class="text-[17px] font-black text-slate-900 leading-none">' + rateText + '</div>' +
                     conversionSubline +
                 '</div>' +
             '</div>';
@@ -591,7 +651,11 @@ var mBTContacts = (function () {
                 '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' +
                 esc(walletLabel) + (c.walletAddress ? ': ' + esc(c.walletAddress) : '') + '</div>';
         }
-        if (details) html += '<div class="space-y-1">' + details + '</div>';
+        html += '<div class="contact-details space-y-1">' + details + '</div>';
+
+        /* Optional details stay above the common action footer. */
+        html += '<div id="wallet-panel-' + esc(c.id) + '" class="' + (state.expandedId === c.id ? '' : 'hidden') + ' pt-2 border-t border-slate-100">' +
+            (state.expandedId === c.id ? buildDetailPanel(c) : '') + '</div>';
 
         /* Action buttons */
         var isExpanded = state.expandedId === c.id;
@@ -601,25 +665,22 @@ var mBTContacts = (function () {
                    ((po.contactId && c.id && po.contactId === c.id) || (po.vendor && c.name && po.vendor.toLowerCase() === c.name.toLowerCase()));
         }).length;
         var poBadge = linkedPosCount > 0 ? '<span class="ml-1 px-1.5 py-0.5 bg-emerald-200 text-emerald-800 rounded font-black text-[7px] leading-none">' + linkedPosCount + '</span>' : '';
-        var chevron = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="ml-0.5 transition-transform ' + (isExpanded ? 'rotate-180' : '') + '"><path d="M6 9l6 6 6-6"/></svg>';
+        var chevron = isExpanded ? ' Close' : ' Open';
 
         html += '<div class="card-footer flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100 flex-wrap">';
-        html += '<div class="flex items-center gap-1.5">';
+        html += '<div class="card-actions">';
         if (isBudget) {
             html += '<button data-action="save-db" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors">Save to DB</button>';
         } else {
+            if (!c.readOnly) {
             html += '<button data-action="edit" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">Edit</button>';
             html += '<button data-action="delete" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors">Delete</button>';
+            }
             html += '<button data-action="wallet" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 ' + walletBg + '"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>Wallet' + poBadge + chevron + '</button>';
         }
         html += '</div>';
         html += '<button data-action="push" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors ml-auto">Push to Budget</button>';
         html += '</div>';
-
-        /* Wallet detail panel placeholder — populated on expand */
-        html += '<div id="wallet-panel-' + esc(c.id) + '" class="' + (state.expandedId === c.id ? '' : 'hidden') + ' mt-2 pt-2 border-t border-slate-100">' +
-            (state.expandedId === c.id ? buildDetailPanel(c) : '') +
-        '</div>';
 
         card.innerHTML = html;
 
@@ -628,7 +689,7 @@ var mBTContacts = (function () {
             if (!btn) return;
             var action = btn.getAttribute('data-action');
             if (action === 'edit') editContact(c.id);
-            if (action === 'delete') initiateDelete(c);
+            if (action === 'delete') requestDelete(c);
             if (action === 'save-db') saveBudgetContactToDB(c);
             if (action === 'push') pushContactToBudget(c);
             if (action === 'wallet') toggleWalletPanel(c);
@@ -686,7 +747,7 @@ var mBTContacts = (function () {
         html += '<div class="mb-3">';
         html += '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Open Purchase Orders</div>';
         if (openPos.length === 0) {
-            html += '<div class="text-[9px] text-slate-400 italic">No open POs. Create one in the PO tool first.</div>';
+            html += '<div class="text-[9px] text-slate-400 italic">No open purchase orders. Create one under Purchase orders first.</div>';
         } else {
             openPos.forEach(function(po) {
                 html += '<div class="flex items-center justify-between p-2 bg-slate-50 rounded-xl mb-1 gap-2 min-w-0">' +
@@ -695,7 +756,7 @@ var mBTContacts = (function () {
                         '<div class="text-[8px] text-slate-400 truncate">' + esc(po.status) + ' &bull; ' + esc(po.date || '') + '</div>' +
                     '</div>' +
                     '<div class="flex items-center gap-2 shrink-0">' +
-                        '<span class="text-[10px] font-black text-slate-800 font-mono">' + esc(fmtCurrency(po.amount)) + '</span>' +
+                        '<span class="text-[10px] font-black text-slate-800 font-mono">' + esc(fmtIn(po.amount, poCurrency(po))) + '</span>' +
                         '<button data-action="pay-po" data-po-id="' + esc(po.id) + '" class="text-[8px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Pay</button>' +
                     '</div>' +
                 '</div>';
@@ -709,9 +770,16 @@ var mBTContacts = (function () {
         if (paidPos.length === 0) {
             html += '<div class="text-[9px] text-slate-400 italic">No payment history.</div>';
         } else {
-            var totalPaid = 0;
-            paidPos.forEach(function(po) { totalPaid += parseFloat(po.paidAmount || po.amount) || 0; });
-            html += '<div class="text-[9px] font-black text-slate-600 mb-1.5">Total paid: ' + esc(fmtCurrency(totalPaid)) + '</div>';
+            var totalPaid = 0, totalKnown = true, perCurrency = {};
+            paidPos.forEach(function(po) {
+                var paidNum = parseFloat(po.paidAmount || po.amount) || 0, paidCur = poCurrency(po);
+                perCurrency[paidCur] = (perCurrency[paidCur] || 0) + paidNum;
+                var shown = toDisplayAmount(paidNum, paidCur);
+                if (shown === null) totalKnown = false; else totalPaid += shown;
+            });
+            /* One total in the display currency when every PO can be converted, otherwise each currency on its own. */
+            var totalText = totalKnown ? fmtIn(totalPaid, state.currency) : Object.keys(perCurrency).map(function(k) { return fmtIn(perCurrency[k], k); }).join(' + ');
+            html += '<div class="text-[9px] font-black text-slate-600 mb-1.5">Total paid: ' + esc(totalText) + '</div>';
             paidPos.slice().sort(function(a, b) { return (b.paidDate || '').localeCompare(a.paidDate || ''); }).forEach(function(po) {
                 var svc2 = null;
                 if (typeof PAYMENT_SERVICES !== 'undefined') {
@@ -728,7 +796,7 @@ var mBTContacts = (function () {
                         '</div>' +
                     '</div>' +
                     '<div class="text-right">' +
-                        '<div class="text-[9px] font-black text-slate-800 font-mono">' + esc(fmtCurrency(po.paidAmount || po.amount)) + '</div>' +
+                        '<div class="text-[9px] font-black text-slate-800 font-mono">' + esc(fmtIn(po.paidAmount || po.amount, poCurrency(po))) + '</div>' +
                         '<div class="text-[8px] text-emerald-500 font-black uppercase tracking-widest">Paid</div>' +
                     '</div>' +
                 '</div>';
@@ -812,11 +880,11 @@ var mBTContacts = (function () {
                     '<div class="p-3 bg-slate-800 rounded-xl">' +
                         '<div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Purchase Order</div>' +
                         '<div class="text-[11px] font-black text-white">' + esc(po.poNumber) + ' &mdash; ' + esc(po.vendor) + '</div>' +
-                        '<div class="text-[9px] text-slate-400">' + esc(po.description || '') + ' &bull; ' + esc(fmtCurrency(po.amount)) + '</div>' +
+                        '<div class="text-[9px] text-slate-400">' + esc(po.description || '') + ' &bull; ' + esc(fmtIn(po.amount, poCurrency(po))) + '</div>' +
                     '</div>' +
                     '<div id="pay-error" class="hidden text-[10px] font-bold text-rose-400 -mt-2"></div>' +
                     /* Amount */
-                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Amount</label>' +
+                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Amount (' + esc(poCurrency(po)) + ')</label>' +
                     '<input type="number" id="pay-amount" step="0.01" min="0" value="' + esc(po.amount) + '" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[13px] font-black text-white outline-none focus:border-emerald-500 transition-colors font-mono"></div>' +
                     /* Method */
                     '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Method</label>' +
@@ -907,6 +975,13 @@ var mBTContacts = (function () {
         });
     }
 
+    function requestDelete(contact) {
+        if (contact.readOnly) { walletSnack('Shared contacts are read-only.'); return; }
+        var owner = window.parent !== window && window.parent.mBTME;
+        if (owner) owner.confirm('Delete contact', 'Delete ' + contact.name + ' from the Contacts pool? Existing budget items and payment records will remain.', function () { initiateDelete(contact); });
+        else if (window.confirm('Delete ' + contact.name + ' from the Contacts pool?')) initiateDelete(contact);
+    }
+
     /* --- Soft delete with undo snackbar --- */
     function initiateDelete(contact) {
         /* Commit any previous pending delete before starting a new one */
@@ -949,7 +1024,7 @@ var mBTContacts = (function () {
                 og.contacts = og.contacts.filter(function (c) {
                     if (!c) { return false; }
                     if (targetId && c.id === targetId) { return false; }
-                    if (targetName && String(c.name || '').toLowerCase() === targetName) { return false; }
+                    if (!targetId && targetName && String(c.name || '').toLowerCase() === targetName) { return false; }
                     return true;
                 });
                 if (og.contacts.length !== before && typeof og.saveContacts === 'function') {
@@ -1023,15 +1098,16 @@ var mBTContacts = (function () {
         var hasRate = (rate !== null && rate !== undefined && rate !== '');
         var contactCurrency = c.currency || (state.budget && state.budget.currency) || 'JMD';
         var baseCurrency = (state.budget && state.budget.currency) || 'JMD';
-        var finalRate = rate;
+        var finalRate = contactCurrency === baseCurrency ? rate : null;
         if (hasRate && contactCurrency !== baseCurrency) {
             try {
                 var le = window.parent && window.parent.mBT && window.parent.mBT.le;
-                if (le && typeof le.convertCurrency === 'function') {
-                    finalRate = Math.round(le.convertCurrency(rate, contactCurrency, baseCurrency));
+                if (le && typeof le.convertCurrencyOrNull === 'function') {
+                    finalRate = le.convertCurrencyOrNull(Number(rate), contactCurrency, baseCurrency, state.budget);
                 }
             } catch (e) { /* cross-origin or engine unavailable */ }
         }
+        if (hasRate && finalRate === null) { walletSnack('No exchange rate. No rate was added; the contact keeps ' + contactCurrency + '.'); return; }
         window.parent.postMessage({
             type: 'mbt:tool-action',
             action: 'inject-contact',
@@ -1039,6 +1115,11 @@ var mBTContacts = (function () {
                 contactId: c.id || null,
                 name: c.name,
                 department: c.department,
+                role: c.role || c.department,
+                userPrice: c.userPrice,
+                userPriceId: c.userPriceId,
+                userPriceAt: c.userPriceAt,
+                userPriceUserId: c.userPriceUserId,
                 rate: finalRate,
                 email: c.email || null,
                 phone: c.phone || null
@@ -1052,14 +1133,19 @@ var mBTContacts = (function () {
         state.editingId = isEdit ? prefill.id : null;
 
         var DEPT_LIST = ['Production', 'Art', 'Camera', 'Sound', 'Electrical', 'Editing', 'Post', 'Transport', 'Craft Services', 'Miscellaneous'];
+        /* A saved department the list does not carry (Wardrobe, for example) stays in the choices, so editing a phone number cannot change it. */
+        var savedDept = prefill && prefill.department;
+        if (savedDept && DEPT_LIST.indexOf(savedDept) === -1) DEPT_LIST.push(savedDept);
         var deptOpts = DEPT_LIST.map(function (d) {
             return '<option value="' + esc(d) + '"' + (d === ((prefill && prefill.department) || 'Production') ? ' selected' : '') + '>' + esc(d) + '</option>';
         }).join('');
 
         var contactCurrency = (prefill && prefill.currency) || (state.budget && state.budget.currency) || 'JMD';
-        var currencyList = ['JMD', 'USD', 'EUR', 'GBP', 'CAD', 'MXN'];
+        var currencyList = ['JMD', 'USD', 'EUR', 'GBP', 'CAD', 'MXN', 'TTD', 'BBD', 'GYD', 'XCD'];
+        /* Same for a saved currency the list does not carry (TTD, for example). */
+        if (contactCurrency && currencyList.indexOf(contactCurrency) === -1) currencyList.push(contactCurrency);
         var currencyOpts = currencyList.map(function (curr) {
-            return '<option value="' + curr + '"' + (curr === contactCurrency ? ' selected' : '') + '>' + curr + '</option>';
+            return '<option value="' + esc(curr) + '"' + (curr === contactCurrency ? ' selected' : '') + '>' + esc(curr) + '</option>';
         }).join('');
 
         var modal = document.createElement('div');
@@ -1080,7 +1166,7 @@ var mBTContacts = (function () {
                     '<div>' +
                         '<label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Daily Rate &amp; Currency</label>' +
                         '<div class="flex gap-2">' +
-                            '<input type="number" id="m-rate" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors" placeholder="Dept standard if blank" value="' + esc((prefill && prefill.rate) || '') + '">' +
+                            '<input type="number" id="m-rate" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors" placeholder="Dept standard if blank" value="' + esc(prefill && prefill.rate != null ? prefill.rate : '') + '">' +
                             '<select id="m-currency" class="w-32 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-blue-500 transition-colors">' + currencyOpts + '</select>' +
                         '</div>' +
                     '</div>' +
@@ -1216,11 +1302,65 @@ var mBTContacts = (function () {
         state.editingId = null;
     }
 
+    /* --- Rename from Edit: carry the new name into the budgets --- */
+    function showRenameNote(title, lines, undoable) {
+        var box = document.getElementById('rename-note'), t = document.getElementById('rename-note-text');
+        document.getElementById('rename-note-title').textContent = title;
+        t.innerHTML = '';
+        (lines || []).forEach(function (l) { var p = document.createElement('div'); p.textContent = l; t.appendChild(p); });
+        document.getElementById('rename-note-undo').classList.toggle('hidden', !undoable);
+        box.classList.remove('hidden');
+    }
+    function hideRenameNote() { document.getElementById('rename-note').classList.add('hidden'); }
+
+    /* Read the contacts and the budget again, so the cards show what is saved now. */
+    function reloadAfterRename() {
+        var budgetPromise = state.projectKey ? localforage.getItem(state.projectKey) : (STORAGE.getMonolithBudget ? STORAGE.getMonolithBudget() : Promise.resolve(null));
+        return Promise.all([STORAGE.getAllContacts(), budgetPromise]).then(function (r) {
+            state.dbContacts = r[0] || [];
+            state.budget = r[1] || null;
+            state.budgetCrew = extractBudgetCrew(state.budget);
+            state.pos = (state.budget && state.budget.ledgers && Array.isArray(state.budget.ledgers.pos)) ? state.budget.ledgers.pos : [];
+            updateSaveAllBtn();
+            render();
+        });
+    }
+
+    function parentAssistant() {
+        try { return window.parent !== window ? window.parent.mBTAIModule : null; } catch (e) { return null; }
+    }
+
+    /* Runs right after the contact is saved and before the rate sync below, so
+       the budget is backed up before anything else touches it. */
+    function startRename(id, oldName, newName) {
+        var ai = parentAssistant();
+        if (!ai || typeof ai.renameFromContacts !== 'function') {
+            return Promise.resolve({ title: 'Contact saved', lines: ['"' + oldName + '" is now "' + newName + '" in Contacts only. Budget lines were not changed, because Contacts was not opened from a budget.'], undo: false });
+        }
+        return ai.renameFromContacts({ id: id, oldName: oldName, newName: newName }).catch(function () {
+            return { title: 'Contact saved', lines: ['The budget lines could not be checked. Change them by hand.'], undo: false };
+        });
+    }
+    function finishRename(r) {
+        return reloadAfterRename().catch(function () { /* the cards refresh on the next open */ }).then(function () { showRenameNote(r.title, r.lines, r.undo); });
+    }
+
+    dom.getElementById('rename-note-ok').addEventListener('click', hideRenameNote);
+    dom.getElementById('rename-note-undo').addEventListener('click', function () {
+        var ai = parentAssistant();
+        var undoFn = ai && (typeof ai.undoContactEdit === 'function' ? 'undoContactEdit' : (typeof ai.undoContactRename === 'function' ? 'undoContactRename' : ''));
+        if (!undoFn) { hideRenameNote(); return; }
+        ai[undoFn]().then(function (r) {
+            return reloadAfterRename().catch(function () { /* the cards refresh on the next open */ }).then(function () { showRenameNote(r.ok ? 'Undone' : 'Undo not applied', [r.text], false); });
+        });
+    });
+
     function saveContact() {
         var name = document.getElementById('m-name').value.trim();
         var dept = document.getElementById('m-dept').value;
         var rateStr = document.getElementById('m-rate').value;
-        var rate = rateStr ? parseFloat(rateStr) : deptStandard(dept);
+        var rate = rateStr.trim() !== '' ? Number(rateStr) : deptStandard(dept, document.getElementById('m-currency').value);
+        if (rateStr.trim() !== '' && (!isFinite(rate) || rate < 0)) { alert('Enter a nonnegative price.'); return; }
         var currency = document.getElementById('m-currency').value;
         var email = document.getElementById('m-email').value.trim();
         var phone = document.getElementById('m-phone').value.trim();
@@ -1244,7 +1384,7 @@ var mBTContacts = (function () {
 
         var contact = {
             name: name, department: dept, email: email || null, phone: phone || null,
-            rate: rate || null, currency: currency, role: dept, category: dept,
+            rate: rate == null ? null : rate, currency: currency, role: (existingC && existingC.role) || dept, category: (existingC && existingC.category && existingC.category !== existingC.department) ? existingC.category : dept,
             dietaryRestrictions: dietary || null, allergies: allergies || null,
             walletType:    walletType    || null,
             walletAddress: walletAddress || null,
@@ -1252,42 +1392,91 @@ var mBTContacts = (function () {
             privateContact: privateContact
         };
         if (state.editingId) contact.id = state.editingId;
+        /* Preserve fields that this form does not edit, including identity metadata. */
+        if (existingC) Object.keys(existingC).forEach(function (key) { if (!Object.prototype.hasOwnProperty.call(contact, key)) contact[key] = existingC[key]; });
+        if (existingC && existingC.userPrice) ['userPrice', 'userPriceId', 'userPriceAt', 'userPriceUserId', 'rateOverride', 'rateSource'].forEach(function (key) { contact[key] = existingC[key]; });
+        if (rateStr.trim() !== '' && (!existingC || Number(existingC.rate) !== rate || (existingC.currency || state.currency || 'JMD') !== currency)) {
+            var tagger = window.parent !== window && window.parent.mBTBatch2 ? window.parent.mBTBatch2 : mBTBatch2;
+            tagger.manual(contact);
+        }
 
         var wasEdit = !!state.editingId;
-        var savedId = null;
+        var savedId = null, renameResult = null, rateForBudget = null;
+        /* A new name on an existing contact is carried into the budgets after the save. */
+        var renamedFrom = (wasEdit && existingC && String(existingC.name || '').trim() !== name) ? existingC : null;
+        var oldNameBeforeEdit = renamedFrom ? String(renamedFrom.name || '') : '';
+        /* The rate goes to the budget lines only when the user changed the rate field in this edit
+           (a typed rate that differs from the saved one, or a different currency). A rename, a phone
+           edit or the department rate filled in for a blank field never replaces rates set by hand. */
+        var rateEdited = !!(wasEdit && existingC && rateStr.trim() !== '' && (Number(existingC.rate) !== rate || (existingC.currency || state.currency || 'JMD') !== currency));
+        var contactBefore = existingC ? JSON.parse(JSON.stringify(existingC)) : null;   /* for Undo, taken before the save */
+        var ai = parentAssistant();
+        var oneCall = !!(ai && typeof ai.contactEdit === 'function');
         STORAGE.saveContact(contact).then(function (saved) {
             savedId = (saved && saved.id) || contact.id || null;
-            /* Rate sync: dispatch to Budget Editor if editing an existing contact */
-            if (state.editingId && contact.rate && window.parent !== window) {
-                var syncRate = contact.rate;
+            if (oneCall) return null;
+            return renamedFrom ? startRename(savedId, oldNameBeforeEdit, name) : null;
+        }).then(function (r) {
+            renameResult = r;
+            /* Rate sync: only to the budget editor of an existing contact, and only for a rate the user changed. */
+            if (state.editingId && contact.rate != null && window.parent !== window && rateEdited) {
+                var syncRate = null;
                 var contactCurrency = contact.currency || (state.budget && state.budget.currency) || 'JMD';
                 var baseCurrency = (state.budget && state.budget.currency) || 'JMD';
+                if (contactCurrency === baseCurrency) syncRate = contact.rate;
                 if (contactCurrency !== baseCurrency) {
                     try {
                         var le = window.parent && window.parent.mBT && window.parent.mBT.le;
-                        if (le && typeof le.convertCurrency === 'function') {
-                            syncRate = Math.round(le.convertCurrency(contact.rate, contactCurrency, baseCurrency));
+                        if (le && typeof le.convertCurrencyOrNull === 'function') {
+                            syncRate = le.convertCurrencyOrNull(Number(contact.rate), contactCurrency, baseCurrency, state.budget);
                         }
                     } catch (e) { /* cross-origin or engine unavailable */ }
                 }
-                window.parent.postMessage({
+                if (syncRate === null) walletSnack('No exchange rate. No rate was added to the budget; the contact keeps ' + contactCurrency + '.');
+                else if (oneCall) rateForBudget = {
+                    contactId: contact.id || state.editingId || null,
+                    name: renamedFrom ? '' : contact.name,   /* a rename is carried by the rename step, not by the rate sync */
+                    rate: syncRate,
+                    currency: baseCurrency,
+                    userPrice: contact.userPrice,
+                    userPriceId: contact.userPriceId,
+                    userPriceAt: contact.userPriceAt,
+                    userPriceUserId: contact.userPriceUserId
+                };
+                else window.parent.postMessage({
                     type: 'mbt:tool-action',
                     action: 'update-contact-rate',
                     payload: {
                         contactId: contact.id || state.editingId || null,
-                        name: contact.name,
-                        rate: syncRate
+                        name: renamedFrom ? '' : contact.name,   /* a rename is carried by the rename step above, not by the rate sync */
+                        rate: syncRate,
+                        userPrice: contact.userPrice,
+                        userPriceId: contact.userPriceId,
+                        userPriceAt: contact.userPriceAt,
+                        userPriceUserId: contact.userPriceUserId
                     }
                 }, window.location.origin);
             }
+            if (!oneCall || (!renamedFrom && !rateForBudget)) return null;
+            /* One call renames, then sets the rate, and gives back one note with one Undo. */
+            return ai.contactEdit({
+                rename: renamedFrom ? { id: savedId, oldName: oldNameBeforeEdit, newName: name } : null,
+                rate: rateForBudget,
+                before: contactBefore
+            }).catch(function () {
+                return { title: 'Contact saved', lines: ['The budget lines could not be checked. Change them by hand.'], undo: false };
+            }).then(function (res) { renameResult = res; });
+        }).then(function () {
             return STORAGE.getAllContacts();
         }).then(function (all) {
             state.dbContacts = all || [];
             closeModal();
-            /* A brand-new contact may not match the active dept/search filter — reveal it.
-               An edit keeps the user's current view (don't yank their filter). */
+            /* Refresh the parent's existing projection from the same pool. */
+            if (window.parent !== window && window.parent.mBT_UI_Settings_refreshContacts) window.parent.mBT_UI_Settings_refreshContacts().catch(function () { walletSnack('Saved. Reopen Contacts to refresh the list.'); });
+            /* A new contact may not match the filter. An edit keeps the current view. */
             if (wasEdit) render();
             else revealNewContacts(savedId);
+            if (renameResult) return finishRename(renameResult);
         }).catch(function (e) {
             console.error('[mBTContacts] Save error:', e);
             alert('Error saving contact');
@@ -1299,7 +1488,8 @@ var mBTContacts = (function () {
         for (var i = 0; i < state.dbContacts.length; i++) {
             if (state.dbContacts[i].id === id) { found = state.dbContacts[i]; break; }
         }
-        if (found) showAddContactModal(found);
+        if (found && !found.readOnly) showAddContactModal(found);
+        else if (found) walletSnack('Shared contacts are read-only.');
     }
 
     /* --- Catering summary print --- */
@@ -1366,6 +1556,8 @@ var mBTContacts = (function () {
 
     /* --- Phase 127.B: Contact Import --- */
     function parseVCard(text) {
+        text = String(text || '').replace(/\r\n[ \t]|\n[ \t]/g, '').replace(/\r\n/g, '\n');
+        function value(s) { return String(s || '').replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1').trim(); }
         var contacts = [];
         var blocks = text.split(/BEGIN:VCARD/i);
         for (var i = 1; i < blocks.length; i++) {
@@ -1375,9 +1567,9 @@ var mBTContacts = (function () {
             var emailMatch = block.match(/^EMAIL[^:]*:(.+)$/m);
             if (!fnMatch) continue;
             contacts.push({
-                name:  fnMatch[1].trim(),
-                phone: telMatch   ? telMatch[1].trim()   : null,
-                email: emailMatch ? emailMatch[1].trim() : null
+                name:  value(fnMatch[1]),
+                phone: telMatch   ? value(telMatch[1])   : null,
+                email: emailMatch ? value(emailMatch[1]) : null
             });
         }
         return contacts;
@@ -1403,11 +1595,15 @@ var mBTContacts = (function () {
     function importContacts(file) {
         if (!file) return;
         var ext = file.name.split('.').pop().toLowerCase();
+        if (['vcf', 'vcard', 'csv', 'json'].indexOf(ext) === -1) {
+            walletSnack('Unsupported file type. Choose vCard (.vcf or .vcard), CSV (.csv) or JSON (.json).'); return;
+        }
         var reader = new FileReader();
+        reader.onerror = function () { walletSnack('Could not read this file. Choose a readable vCard, CSV or JSON file.'); };
         reader.onload = function (ev) {
             var text = ev.target.result;
             var parsed = [];
-            if (ext === 'vcf') parsed = parseVCard(text);
+            if (ext === 'vcf' || ext === 'vcard') parsed = parseVCard(text);
             else if (ext === 'json') parsed = parseJSON(text);
             else if (ext === 'csv') {
                 /* Use service's CSV parser if available, otherwise fallback to basic */
@@ -1418,7 +1614,7 @@ var mBTContacts = (function () {
                     parsed = STORAGE.parseCSV(text);
                 }
             }
-            if (!parsed || !parsed.length) { walletSnack('No contacts found in file.'); return; }
+            if (!parsed || !parsed.length) { walletSnack('No contacts found. vCard needs a full name (FN). CSV needs Name or Given Name columns and a data row.'); return; }
 
             var existingNames  = {};
             var existingEmails = {};

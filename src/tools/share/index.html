@@ -19,6 +19,14 @@
     </script>
    <style>
      body { font-family: 'Inter', system-ui, sans-serif; }
+     /* Both durable history and the standalone activity feed use the current theme. */
+     #activity-list { color: #334155; overflow-wrap: anywhere; }
+     #activity-list > li { background-color: #fff; border-color: #e2e8f0; }
+     #activity-list .activity-entry { color: #334155; }
+     #activity-list .activity-meta { color: #475569; }
+     .mbt-theme-dark #activity-list, .mbt-theme-dark #activity-list .activity-entry { color: #e2e8f0; }
+     .mbt-theme-dark #activity-list > li { background-color: #0f172a; border-color: #334155; }
+     .mbt-theme-dark #activity-list .activity-meta { color: #cbd5e1; }
      .no-scrollbar::-webkit-scrollbar { display: none; }
      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -172,6 +180,8 @@
             activeToken: null,
             peers: [],
             myUserId: '',
+            inviteLocked: '',
+            ownerConfirmed: false,
             proposals: [],
             activityLog: []
         };
@@ -211,6 +221,7 @@
             try {
                 if (window.parent && window.parent.budget) {
                     window.parent.budget.collab_project_id = collabId;
+                    window.parent.budget.historyEnabled = true;
                     if (window.parent.mBT && window.parent.mBT.data && typeof window.parent.mBT.data.save === 'function') {
                         window.parent.mBT.data.save();
                     }
@@ -267,9 +278,15 @@
 
         function ensureCollabProjectAndInvite() {
             var input = document.getElementById('invite-link-input');
-            if (input) input.value = 'Creating collab project / invite..';
-
             var existingId = getParentCollabId();
+            state.ownerConfirmed = false;
+            if (existingId) {
+                /* Shared budget: no invite control works until the owner role is confirmed. */
+                setCheckingRole();
+            } else if (input) {
+                input.value = 'Creating collab project / invite..';
+            }
+
             var chain;
             if (existingId) {
                 chain = Promise.resolve({ id: existingId });
@@ -296,8 +313,24 @@
 
             chain.then(function (row) {
                 state.collabProjectId = row.id;
-                return mBTCollab.createInvite(row.id, 'editor');
+                /* A budget made here is the signed-in user's own. For an existing shared budget only the owner may make invite links, so ask first and send no request for anyone else. */
+                if (!existingId) {
+                    enableOwnerInvites();
+                    return mBTCollab.createInvite(row.id, 'editor');
+                }
+                return mBTCollab.getMemberRole(row.id).then(function (role) {
+                    if (role === 'owner') {
+                        enableOwnerInvites();
+                        return mBTCollab.createInvite(row.id, 'editor');
+                    }
+                    lockInvites(role ? 'Only the owner can create invite links' : 'Could not check your role on this shared budget, so no invite link was made');
+                    return null;
+                }, function () {
+                    lockInvites('Could not check your role on this shared budget, so no invite link was made');
+                    return null;
+                });
             }).then(function (inviteRow) {
+                if (!inviteRow) return;
                 state.activeToken = inviteRow.token;
                 renderLink();
                 setCollabStatus('Invite ready (editor). Project ' + state.collabProjectId);
@@ -310,6 +343,37 @@
             });
         }
 
+        /* Editors and viewers see one plain line instead of the link controls. */
+        function lockInvites(message) {
+            state.inviteLocked = message;
+            var input = document.getElementById('invite-link-input');
+            if (input) input.value = message;
+            ['btn-copy', 'btn-regenerate'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) { el.disabled = true; el.style.display = 'none'; }
+            });
+            setCollabStatus(message);
+        }
+
+        /* Shared budget: Copy and Burn stay disabled until the owner role is confirmed. */
+        function setCheckingRole() {
+            state.inviteLocked = '';
+            var input = document.getElementById('invite-link-input');
+            if (input) input.value = 'Checking your role...';
+            ['btn-copy', 'btn-regenerate'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) { el.disabled = true; el.style.display = ''; }
+            });
+        }
+
+        function enableOwnerInvites() {
+            state.ownerConfirmed = true;
+            ['btn-copy', 'btn-regenerate'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) { el.disabled = false; el.style.display = ''; }
+            });
+        }
+
         function renderLink() {
             if (!state.activeToken) return;
             var invitePath = window.location.origin + window.location.pathname.replace('/src/tools/share/index.html', '/index.html');
@@ -318,6 +382,14 @@
         }
 
         function burnToken() {
+            if (state.inviteLocked) {
+                snack(state.inviteLocked);
+                return;
+            }
+            if (!state.ownerConfirmed) {
+                snack('Invite link is not ready yet');
+                return;
+            }
             if (!confirm('Burn this invite link? The old link will stop working for new guests.')) return;
             if (!window.mBTCollab) return;
             if (!mBTCollab.getSession()) {
@@ -468,6 +540,10 @@
         }
 
         function fetchProposals() {
+            if (getParentCollabId() && window.parent !== window && window.parent.mBTHistory) {
+                window.parent.mBTHistory.mount(document.getElementById('proposals-list'));
+                return;
+            }
             var baseUrl = getBaseUrl();
             var projectId = state.projectKey ? state.projectKey.replace('prodBudget_v5_', '') : '';
             if (!baseUrl || !projectId) { renderProposals(); return; }
@@ -488,6 +564,10 @@
         }
 
         function renderProposals() {
+            if (getParentCollabId() && window.parent !== window && window.parent.mBTHistory) {
+                window.parent.mBTHistory.mount(document.getElementById('proposals-list'));
+                return;
+            }
             var list = document.getElementById('proposals-list');
             if (!list) return;
             if (!state.proposals || state.proposals.length === 0) {
@@ -568,6 +648,10 @@
 
         /* --- Activity Feed (mbt-collab project_activity via mBTCollab) --- */
         function fetchActivityLog() {
+            if (window.parent !== window && window.parent.mBTHistory) {
+                window.parent.mBTHistory.mount(document.getElementById('activity-list'));
+                return;
+            }
             var collabId = getParentCollabId();
             if (!collabId || !window.mBTCollab || typeof mBTCollab.listActivity !== 'function') {
                 state.activityLog = [];
@@ -610,6 +694,10 @@
         }
 
         function renderActivityLog() {
+            if (window.parent !== window && window.parent.mBTHistory) {
+                window.parent.mBTHistory.mount(document.getElementById('activity-list'));
+                return;
+            }
             var list = document.getElementById('activity-list');
             if (!list) return;
             if (!state.activityLog || state.activityLog.length === 0) {
@@ -629,14 +717,14 @@
                 var user = entry.user_name || activityUserLabel(entry.user_id);
                 var desc = entry.description || entry.details || '';
                 var time = entry.created_at ? new Date(entry.created_at).toLocaleString() : '';
-                html += '<li class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 flex items-start gap-3 fade-in">' +
+                html += '<li class="activity-entry bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 fade-in">' +
                     '<div class="shrink-0 mt-0.5 ' + getActivityColor(type) + '">' + getActivityIcon(type) + '</div>' +
                     '<div class="flex-1 min-w-0">' +
                         '<div class="flex items-center justify-between gap-2">' +
-                            '<span class="text-[13px] font-bold text-slate-200 truncate">' + esc(user) + '</span>' +
-                            '<span class="text-[11px] text-slate-500 shrink-0">' + esc(time) + '</span>' +
+                            '<span class="text-[13px] font-bold truncate">' + esc(user) + '</span>' +
+                            '<span class="activity-meta text-[11px] shrink-0">' + esc(time) + '</span>' +
                         '</div>' +
-                        '<p class="text-xs text-slate-400 mt-0.5 truncate">' + esc(desc) + '</p>' +
+                        '<p class="activity-meta text-xs mt-0.5">' + esc(desc) + '</p>' +
                     '</div>' +
                 '</li>';
             });
@@ -906,6 +994,7 @@
             if (parentId) state.collabProjectId = parentId;
 
             wireEvents();
+            if (params.get('tab') === 'activity') switchTab('activity');
             bindScrollAffordance();
             initInviteToken();
             requestPeers();

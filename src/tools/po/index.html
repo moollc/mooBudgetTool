@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>mBT — PO & Petty Cash</title>
+  <title>mBT — Purchase orders & petty cash</title>
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../lib/localforage.min.js"></script>
+    <script src="../../scripts/engine/mbtle.js"></script>
+  <script src="../../scripts/storage.js"></script>
   <style>
+    /* Batch 6 menu rule: no down arrow on choice boxes. They stay native selects, so keyboard use and phone pickers are unchanged. */
+    select { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: none; }
     body { font-family: 'Inter', system-ui, sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -18,18 +22,18 @@
 <body class="bg-slate-100 h-screen overflow-hidden flex flex-col">
 
   <!-- Header -->
-  <div class="h-12 bg-white flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
-    <div class="flex items-center gap-4">
+  <div class="min-h-12 bg-white flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 py-1.5 border-b border-slate-200 shrink-0">
+    <div class="flex items-center gap-3 min-w-0">
       <button id="btn-back" class="flex items-center gap-2 text-slate-600 hover:text-slate-800 text-[10px] font-black uppercase tracking-widest transition-colors">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         Back
       </button>
       <div class="h-4 w-px bg-slate-200"></div>
-      <span class="text-slate-800 text-xl font-bold">PO &amp; Petty Cash</span>
+      <span class="text-slate-800 text-base sm:text-xl font-bold leading-tight whitespace-nowrap">Purchase orders &amp; petty cash</span>
     </div>
-    <button id="btn-add" class="flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-colors">
+    <button id="btn-add" class="shrink-0 ml-auto flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-colors">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      New PO
+      New purchase order
     </button>
   </div>
 
@@ -81,10 +85,10 @@
 
       <div class="space-y-3">
         <div>
-          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Name</label>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor (who you are buying from)</label>
           <div class="flex gap-2">
             <input id="po-vendor" type="text" placeholder="Vendor name" class="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
-            <button id="po-vendor-lookup" class="px-3 py-2 bg-slate-100 hover:bg-sky-50 rounded-xl text-[9px] font-black text-slate-500 hover:text-sky-600 uppercase tracking-widest transition-colors">Lookup</button>
+            <button id="po-vendor-lookup" class="px-3 py-2 bg-slate-100 hover:bg-sky-50 rounded-xl text-[9px] font-black text-slate-500 hover:text-sky-600 uppercase tracking-widest transition-colors" title="Pick the vendor from the contacts saved in this app">Choose from Contacts</button>
           </div>
         </div>
         <div>
@@ -93,7 +97,7 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Amount</label>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Amount <span id="po-amount-cur"></span></label>
             <input id="po-amount" type="number" step="0.01" min="0" placeholder="0.00" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-700 outline-none focus:border-sky-400">
           </div>
           <div>
@@ -112,11 +116,17 @@
             </select>
           </div>
           <div>
-            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Section (Dept)</label>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Budget section (department)</label>
             <select id="po-section" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
-              <option value="">— General —</option>
+              <option value="">— No section —</option>
             </select>
           </div>
+        </div>
+        <div>
+          <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Budget line (where the cost is counted)</label>
+          <select id="po-item" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
+            <option value="">— No budget line —</option>
+          </select>
         </div>
         <div>
           <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes</label>
@@ -126,7 +136,7 @@
 
       <div class="flex gap-3 pt-2">
         <button id="po-modal-cancel" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors">Cancel</button>
-        <button id="po-modal-save" class="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest transition-colors">Save PO</button>
+        <button id="po-modal-save" class="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-widest transition-colors">Save purchase order</button>
       </div>
     </div>
   </div>
@@ -167,23 +177,24 @@
         var state = { projectKey: null, budget: null, currency: 'JMD', activeTab: 'po', editingPoId: null, pendingContactId: null };
 
         /* --- Utilities --- */
-        function snack(msg) {
+        function snack(msg, ms) {
             var el = document.getElementById('snackbar');
             if (!el) return;
             el.textContent = msg;
             el.classList.remove('hidden'); el.classList.add('snack-in');
             clearTimeout(el._t);
-            el._t = setTimeout(function() { el.classList.add('hidden'); }, 3000);
+            el._t = setTimeout(function() { el.classList.add('hidden'); }, ms || 3000);
         }
 
         function esc(str) {
             if (str == null) return '';
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         var CURRENCY_CODES = {
             JMD: true, USD: true, EUR: true, GBP: true, CAD: true, MXN: true,
-            AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true
+            AUD: true, NZD: true, ZAR: true, INR: true, CNY: true, JPY: true,
+            TTD: true, BBD: true, GYD: true, XCD: true
         };
 
         function safeCurrency(code) {
@@ -195,35 +206,25 @@
            Ledger amounts are stored in the budget's base currency — convert to the live
            display currency (state.currency) using the same rate table the parent uses. --- */
         var _syncedRates = null; /* pushed by parent in mbt:displayCurrency payload */
-        function _rateTable() {
-            if (_syncedRates) return _syncedRates;
-            /* Same-origin parent: ask its currency engine directly */
-            try {
-                if (window.parent && window.parent !== window && window.parent.mBT &&
-                    window.parent.mBT.logic && window.parent.mBT.logic.currency) {
-                    return window.parent.mBT.logic.currency._getRates();
-                }
-            } catch (e) { }
-            try {
-                if (localStorage.getItem('prodBudget_v5_ratesLocked') === 'true') {
-                    var snap = localStorage.getItem('prodBudget_v5_ratesLockedSnap');
-                    if (snap) return JSON.parse(snap);
-                }
-                var live = localStorage.getItem('prodBudget_v5_rates');
-                if (live) return JSON.parse(live);
-            } catch (e) { }
-            return null;
-        }
-
-        function fmt(n) {
-            var display = safeCurrency(state.currency || 'JMD');
-            var base = (state.budget && state.budget.currency) ? state.budget.currency : 'JMD';
+        /* Every ledger record keeps its own currency. Convert it once, here, when it is shown or added up. */
+        function baseCurrency() { return (state.budget && state.budget.currency) ? safeCurrency(state.budget.currency) : 'JMD'; }
+        /* A record's own currency is kept as saved when it is a three letter code (TTD, XCD ...), even if this tool's list of display currencies lacks it. */
+        function isoCode(code, fallback) { var c = String(code || '').toUpperCase(); return /^[A-Z]{3}$/.test(c) ? c : fallback; }
+        function recordCurrency(rec, fallback) { return isoCode(rec && rec.currency, isoCode(fallback, baseCurrency())); }
+        /* Returns the converted number, or null when the rate table has no pair for these currencies (never the raw number). */
+        function conv(n, from, to) {
             var num = parseFloat(n) || 0;
-            if (base !== display) {
-                var rates = _rateTable();
-                if (rates && rates[base] && rates[display]) num = num / rates[base] * rates[display];
-            }
-            return esc(display) + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (from === to) return num;
+            return window.mBT.le.convertCurrencyOrNull(num, from, to, state.budget);
+        }
+        function money(num, cur) { return esc(cur) + ' ' + num.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        /* fmt(amount, currencyOfAmount): shows the amount in the display currency. Without a currency the amount is taken as the budget's. */
+        function fmt(n, from) {
+            var display = safeCurrency(state.currency || 'JMD'), own = isoCode(from, baseCurrency());
+            var num = conv(n, own, display);
+            /* No rate: show the amount in its own currency rather than as display money. */
+            if (num === null) return money(parseFloat(n) || 0, own);
+            return money(num, display);
         }
 
         function genId() { return 'po_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4); }
@@ -276,7 +277,7 @@
                 if (empty) empty.classList.add('hidden');
                 var html = '';
                 l.pos.forEach(function(po) {
-                    html += '<li class="bg-white px-4 py-3 flex items-start gap-3 group">' +
+                    html += '<li class="bg-white px-4 py-3 flex flex-wrap sm:flex-nowrap items-start gap-3 group">' +
                         '<div class="flex-1 min-w-0">' +
                             '<div class="flex items-center gap-2 flex-wrap">' +
                                 '<span class="text-[11px] font-black text-slate-700">' + esc(po.poNumber) + '</span>' +
@@ -285,17 +286,18 @@
                             '</div>' +
                             '<p class="text-[12px] font-semibold text-slate-800 truncate mt-0.5">' + esc(po.vendor || '—') + '</p>' +
                             (po.description ? '<p class="text-[10px] text-slate-400 truncate">' + esc(po.description) + '</p>' : '') +
+                            (po.itemId ? '' : '<p class="po-no-line text-[10px] font-bold text-amber-700 mt-1">No budget line yet: this order is not counted against any line of the budget. Choose Edit to link it.</p>') +
                         '</div>' +
                         '<div class="flex flex-col items-end gap-1 shrink-0">' +
-                            '<span class="text-[12px] font-black font-mono text-slate-800">' + fmt(po.amount) + '</span>' +
+                            '<span class="text-[12px] font-black font-mono text-slate-800">' + fmt(po.amount, recordCurrency(po)) + '</span>' +
                             '<span class="text-[9px] text-slate-400">' + esc(po.date || '') + '</span>' +
                         '</div>' +
-                        '<div class="flex flex-col gap-1 shrink-0">' +
-                            '<button class="po-edit text-slate-300 hover:text-sky-500 transition-colors" data-id="' + esc(po.id) + '" title="Edit">' +
-                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+                        '<div class="flex flex-row sm:flex-col gap-2 sm:gap-1.5 w-full sm:w-auto shrink-0">' +
+                            '<button class="po-edit flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-300 text-[12px] font-bold text-slate-700 hover:border-sky-400 hover:text-sky-600 transition-colors" data-id="' + esc(po.id) + '" title="Edit this purchase order" aria-label="Edit purchase order ' + esc(po.poNumber) + '">' +
+                                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit' +
                             '</button>' +
-                            '<button class="po-delete text-slate-300 hover:text-rose-500 transition-colors" data-id="' + esc(po.id) + '" title="Delete">' +
-                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>' +
+                            '<button class="po-delete flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-300 text-[12px] font-bold text-slate-700 hover:border-rose-400 hover:text-rose-600 transition-colors" data-id="' + esc(po.id) + '" title="Delete this purchase order" aria-label="Delete purchase order ' + esc(po.poNumber) + '">' +
+                                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Delete' +
                             '</button>' +
                         '</div>' +
                     '</li>';
@@ -303,12 +305,20 @@
                 list.innerHTML = html;
             }
 
-            /* summary: total committed + invoiced */
+            /* summary: total committed + invoiced + paid */
+            var committedLeft = {};
             var committed = (l.pos || []).reduce(function(s, p) {
-                return s + (p.status === 'Committed' || p.status === 'Invoiced' ? (parseFloat(p.amount) || 0) : 0);
+                if (p.status !== 'Committed' && p.status !== 'Invoiced' && p.status !== 'Paid') return s;
+                var amt = parseFloat(p.paidAmount);
+                if (!amt) amt = parseFloat(p.amount) || 0;
+                var inDisplay = conv(amt, recordCurrency(p), safeCurrency(state.currency || 'JMD'));
+                if (inDisplay === null) { committedLeft[recordCurrency(p)] = (committedLeft[recordCurrency(p)] || 0) + amt; return s; }
+                return s + inDisplay;
             }, 0);
-            if (summaryLabel) summaryLabel.textContent = 'Total Committed / Invoiced';
-            if (summaryTotal) summaryTotal.textContent = fmt(committed);
+            /* A currency with no rate stays out of the total and is listed beside it in its own currency. */
+            var leftNote = Object.keys(committedLeft).map(function(k) { return money(committedLeft[k], k); }).join(' + ');
+            if (summaryLabel) summaryLabel.textContent = 'Total Committed / Invoiced / Paid';
+            if (summaryTotal) summaryTotal.textContent = fmt(committed, safeCurrency(state.currency || 'JMD')) + (leftNote ? ' + ' + leftNote.replace(/&amp;/g, '&') + ' (no exchange rate, not added)' : '');
         }
 
         /* --- Render Petty Cash list --- */
@@ -327,8 +337,16 @@
 
             var html = '';
             l.pettyCash.forEach(function(f) {
-                var spent = (f.receipts || []).reduce(function(s, r) { return s + (parseFloat(r.amount) || 0); }, 0);
-                var variance = (parseFloat(f.floatAmount) || 0) - spent;
+                var shownCur = safeCurrency(state.currency || 'JMD'), floatCur = recordCurrency(f);
+                var rcpts = f.receipts || [];
+                /* Everything in the display currency when every amount has a rate, otherwise in the float's own currency. */
+                var allConvert = conv(f.floatAmount, floatCur, shownCur) !== null && rcpts.every(function(r) { return conv(r.amount, recordCurrency(r, floatCur), shownCur) !== null; });
+                if (!allConvert) shownCur = floatCur;
+                var floatShown = conv(f.floatAmount, floatCur, shownCur);
+                var skipped = 0;
+                var spent = rcpts.reduce(function(s, r) { var v = conv(r.amount, recordCurrency(r, floatCur), shownCur); if (v === null) { skipped++; return s; } return s + v; }, 0);
+                var variance = floatShown - spent;
+                var cashNote = skipped ? ' <span class="text-amber-600">(' + skipped + (skipped === 1 ? ' receipt' : ' receipts') + ' with no exchange rate not counted)</span>' : '';
                 html += '<li class="bg-white px-4 py-3 space-y-2">' +
                     '<div class="flex items-center justify-between">' +
                         '<div>' +
@@ -346,20 +364,20 @@
                         '</div>' +
                     '</div>' +
                     '<div class="flex gap-4 text-[10px] font-bold">' +
-                        '<span class="text-slate-500">Float: <span class="font-black text-slate-800">' + fmt(f.floatAmount) + '</span></span>' +
-                        '<span class="text-slate-500">Spent: <span class="font-black text-amber-700">' + fmt(spent) + '</span></span>' +
-                        '<span class="text-slate-500">Remaining: <span class="font-black ' + (variance >= 0 ? 'text-emerald-600' : 'text-rose-600') + '">' + fmt(variance) + '</span></span>' +
+                        '<span class="text-slate-500">Float: <span class="font-black text-slate-800">' + fmt(floatShown, shownCur) + '</span></span>' +
+                        '<span class="text-slate-500">Spent: <span class="font-black text-amber-700">' + fmt(spent, shownCur) + '</span></span>' +
+                        '<span class="text-slate-500">Remaining: <span class="font-black ' + (variance >= 0 ? 'text-emerald-600' : 'text-rose-600') + '">' + fmt(variance, shownCur) + '</span>' + cashNote + '</span>' +
                     '</div>' +
                     /* receipt add row */
                     '<div class="flex gap-2 pt-1">' +
                         '<input type="text" class="float-receipt-desc flex-1 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-amber-400" placeholder="Receipt description" data-fid="' + esc(f.id) + '">' +
-                        '<input type="number" step="0.01" min="0" class="float-receipt-amt w-20 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono font-bold text-slate-700 outline-none focus:border-amber-400" placeholder="0.00" data-fid="' + esc(f.id) + '">' +
+                        '<input type="number" step="0.01" min="0" class="float-receipt-amt w-20 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono font-bold text-slate-700 outline-none focus:border-amber-400" placeholder="0.00" title="Receipt amount in ' + esc(floatCur) + '" aria-label="Receipt amount in ' + esc(floatCur) + '" data-fid="' + esc(f.id) + '">' +
                         '<button class="float-receipt-add bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest transition-colors" data-fid="' + esc(f.id) + '">Add</button>' +
                     '</div>' +
                     (f.receipts && f.receipts.length ? '<ul class="space-y-0.5 pt-1">' + f.receipts.map(function(r, ri) {
                         return '<li class="flex justify-between items-center text-[10px] text-slate-500 py-0.5">' +
                             '<span>' + esc(r.description) + '</span>' +
-                            '<div class="flex items-center gap-2"><span class="font-mono font-bold">' + fmt(r.amount) + '</span>' +
+                            '<div class="flex items-center gap-2"><span class="font-mono font-bold">' + fmt(r.amount, recordCurrency(r, floatCur)) + '</span>' +
                             '<button class="float-receipt-del text-slate-200 hover:text-rose-400 transition-colors" data-fid="' + esc(f.id) + '" data-ri="' + ri + '">' +
                                 '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
                             '</button></div></li>';
@@ -385,10 +403,24 @@
             var sel = document.getElementById('po-section');
             if (!sel || !state.budget || !state.budget.sections) return;
             var existing = sel.innerHTML;
-            var opts = '<option value="">— General —</option>';
+            var opts = '<option value="">— No section —</option>';
             Object.keys(state.budget.sections).forEach(function(k) {
                 opts += '<option value="' + esc(k) + '">' + esc(k) + '</option>';
             });
+            sel.innerHTML = opts;
+        }
+
+        function populateItems(sectionKey) {
+            var sel = document.getElementById('po-item');
+            if (!sel) return;
+            var opts = '<option value="">— No budget line —</option>';
+            if (sectionKey && state.budget && state.budget.sections && state.budget.sections[sectionKey]) {
+                var items = state.budget.sections[sectionKey].items || [];
+                items.forEach(function(item) {
+                    var label = (item.label || item.name || 'Item') + ' (' + item.id + ')';
+                    opts += '<option value="' + esc(item.id) + '">' + esc(label) + '</option>';
+                });
+            }
             sel.innerHTML = opts;
         }
 
@@ -400,11 +432,16 @@
             document.getElementById('po-vendor').value = po ? po.vendor : '';
             document.getElementById('po-description').value = po ? po.description : '';
             document.getElementById('po-amount').value = po ? po.amount : '';
+            var curHint = document.getElementById('po-amount-cur');
+            if (curHint) curHint.textContent = '(' + (po ? recordCurrency(po) : safeCurrency(state.currency || 'JMD')) + ')';
             document.getElementById('po-date').value = po ? po.date : new Date().toISOString().split('T')[0];
             document.getElementById('po-status').value = po ? po.status : 'Draft';
             document.getElementById('po-notes').value = po ? (po.notes || '') : '';
             populateSections();
-            if (po && po.sectionKey) document.getElementById('po-section').value = po.sectionKey;
+            var sectionKey = po && po.sectionKey ? po.sectionKey : '';
+            document.getElementById('po-section').value = sectionKey;
+            populateItems(sectionKey);
+            document.getElementById('po-item').value = po && po.itemId ? po.itemId : '';
             document.getElementById('po-modal').classList.remove('hidden');
         }
 
@@ -419,7 +456,12 @@
             var l = getLedgers();
             var vendor = document.getElementById('po-vendor').value.trim();
             var amount = parseFloat(document.getElementById('po-amount').value) || 0;
-            if (!vendor) { snack('Vendor name required'); return; }
+            var sectionKey = document.getElementById('po-section').value;
+            var itemSel = document.getElementById('po-item').value;
+            var itemId = itemSel ? itemSel : null;
+            var status = document.getElementById('po-status').value;
+            var wasEdit = !!state.editingPoId;
+            if (!vendor) { snack('Vendor name required (type one, or choose from Contacts)'); return; }
             if (amount <= 0) { snack('Amount must be greater than 0'); return; }
 
             if (state.editingPoId) {
@@ -428,31 +470,43 @@
                     existing.vendor = vendor;
                     existing.description = document.getElementById('po-description').value.trim();
                     existing.amount = amount;
+                    /* The record keeps its own currency: the amount in the form is in that currency. */
+                    if (!existing.currency) existing.currency = baseCurrency();
                     existing.date = document.getElementById('po-date').value;
-                    existing.status = document.getElementById('po-status').value;
-                    existing.sectionKey = document.getElementById('po-section').value;
+                    existing.status = status;
+                    existing.sectionKey = sectionKey;
+                    existing.itemId = itemId;
                     existing.notes = document.getElementById('po-notes').value.trim();
                     if (state.pendingContactId) existing.contactId = state.pendingContactId;
+                    if (status === 'Paid') existing.paidAmount = amount;
+                    else delete existing.paidAmount;
                 }
             } else {
-                l.pos.push({
+                var newPo = {
                     id: genId(),
                     poNumber: getPoNumber(),
                     vendor: vendor,
                     contactId: state.pendingContactId || null,
                     description: document.getElementById('po-description').value.trim(),
                     amount: amount,
+                    currency: state.currency,
                     date: document.getElementById('po-date').value,
-                    status: document.getElementById('po-status').value,
-                    sectionKey: document.getElementById('po-section').value,
-                    itemId: null,
+                    status: status,
+                    sectionKey: sectionKey,
+                    itemId: itemId,
                     notes: document.getElementById('po-notes').value.trim()
-                });
+                };
+                if (status === 'Paid') newPo.paidAmount = amount;
+                l.pos.push(newPo);
             }
             saveLedgers();
             renderPOs();
             closePoModal();
-            snack(state.editingPoId ? 'PO updated' : 'PO created');
+            if (!itemId) {
+                snack('Saved, but this purchase order has no budget line. It is not counted against any line of the budget until you choose one (Edit).' + (sectionKey ? '' : ' It has no section either.'), 7000);
+            } else {
+                snack(wasEdit ? 'Purchase order updated' : 'Purchase order created');
+            }
         }
 
         /* --- Issue Float --- */
@@ -473,6 +527,7 @@
                 id: genId(),
                 floatHolder: holder,
                 floatAmount: amount,
+                currency: state.currency,
                 issuedDate: document.getElementById('float-date').value,
                 status: 'Issued',
                 receipts: []
@@ -502,7 +557,7 @@
                         l.pos = l.pos.filter(function(p) { return p.id !== delBtn.dataset.id; });
                         saveLedgers();
                         renderPOs();
-                        snack('PO removed');
+                        snack('Purchase order removed');
                         return;
                     }
                 });
@@ -544,7 +599,7 @@
                         var fl2 = l.pettyCash.find(function(f) { return f.id === fid; });
                         if (fl2) {
                             if (!fl2.receipts) fl2.receipts = [];
-                            fl2.receipts.push({ description: desc, amount: amt, date: new Date().toISOString().split('T')[0] });
+                            fl2.receipts.push({ id: genId(), description: desc, amount: amt, currency: recordCurrency(fl2), date: new Date().toISOString().split('T')[0] });
                             if (fl2.status === 'Issued') fl2.status = 'Active';
                             saveLedgers();
                             renderCash();
@@ -566,25 +621,48 @@
             }
         }
 
-        /* --- Vendor lookup (reads from Contacts DB via localforage) --- */
+        /* --- Vendor lookup uses the same Contacts pool as the Contacts tool. --- */
         function wireVendorLookup() {
             var btn = document.getElementById('po-vendor-lookup');
             if (!btn) return;
             btn.addEventListener('click', function() {
-                var contactsKey = 'mbtContacts_' + (state.projectKey || '');
-                localforage.getItem(contactsKey).then(function(contacts) {
-                    if (!contacts || !contacts.length) { snack('No contacts found'); return; }
-                    var vendors = contacts.filter(function(c) { return c.type === 'Vendor' || c.category === 'Vendor' || true; });
-                    var listHtml = vendors.slice(0, 30).map(function(c) {
-                        return '<button class="vendor-pick w-full text-left px-3 py-2 hover:bg-sky-50 rounded-lg text-sm font-bold text-slate-700 transition-colors" data-name="' + esc(c.name || '') + '" data-contact-id="' + esc(c.id || '') + '">' + esc(c.name || '') + (c.company ? ' <span class="text-slate-400 font-normal text-xs">— ' + esc(c.company) + '</span>' : '') + '</button>';
+                window.mBTStorage.getAllContacts().then(function(contacts) {
+                    if (!contacts || !contacts.length) { snack('No contacts are saved yet. Add one in the Contacts tool, or type the vendor name.', 5000); return; }
+                    /* Contacts have no person or company field, and the New Contact form has no company box. Only tag when a company is saved: equal to the contact's own name is a company, a different company means a person who works there. Anything else gets no tag. */
+                    function contactKind(c) {
+                        var name = String(c.name || '').trim().toLowerCase(), co = String(c.company || '').trim().toLowerCase();
+                        if (co && co === name) return 'company';
+                        if (co) return 'person';
+                        return 'unknown';
+                    }
+                    var kindTag = {
+                        person: '<span class="ml-2 px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[9px] font-black uppercase tracking-widest align-middle">Person</span>',
+                        company: '<span class="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-black uppercase tracking-widest align-middle">Company</span>',
+                        unknown: ''
+                    };
+                    var listHtml = contacts.map(function(c) {
+                        var kind = contactKind(c);
+                        var detail = kind === 'company' ? (c.department || '') : [c.role, (c.company ? 'works at ' + c.company : '')].filter(Boolean).join(', ');
+                        return '<button class="vendor-pick w-full text-left px-3 py-2 hover:bg-sky-50 rounded-lg text-sm font-bold text-slate-700 transition-colors" data-name="' + esc(c.name || '') + '" data-contact-id="' + esc(c.id || '') + '">' + esc(c.name || '') + kindTag[kind] + (detail ? '<span class="block text-slate-400 font-normal text-xs">' + esc(detail) + '</span>' : '') + '</button>';
                     }).join('');
                     var overlay = document.createElement('div');
                     overlay.className = 'fixed inset-0 z-[60] flex items-end sm:items-center justify-center';
                     overlay.style.background = 'rgba(15,23,42,0.7)';
                     overlay.innerHTML = '<div class="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-4 max-h-[70vh] overflow-y-auto">' +
-                        '<p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Select Vendor</p>' +
-                        listHtml + '</div>';
+                        '<p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Choose a contact as the vendor</p>' +
+                        '<p class="text-[10px] text-slate-500 mb-3">These are the contacts saved in this app. Click one to fill in the vendor.</p>' +
+                        '<input type="search" class="vendor-search w-full border rounded-lg px-3 py-2 mb-3" placeholder="Search name, company or tags" aria-label="Search contacts">' +
+                        '<div class="vendor-results">' + listHtml + '</div>' +
+                        '<p class="text-[10px] text-slate-400 mt-3">Contacts do not record whether they are a person or a company. A tag shows only when a company is saved: Company when it matches the contact name, Person when it is the company they work at. No tag means nothing saved tells us.</p></div>';
                     document.body.appendChild(overlay);
+                    overlay.querySelector('.vendor-search').addEventListener('input', function () {
+                        var query = this.value.toLowerCase();
+                        var picks = overlay.querySelectorAll('.vendor-pick');
+                        contacts.forEach(function (c, i) {
+                            var text = [c.name, c.company, c.type, c.category, c.role, c.department, JSON.stringify(c.tags || [])].join(' ').toLowerCase();
+                            picks[i].style.display = text.indexOf(query) >= 0 ? '' : 'none';
+                        });
+                    });
                     overlay.addEventListener('click', function(e) {
                         var pick = e.target.closest('.vendor-pick');
                         if (pick) { document.getElementById('po-vendor').value = pick.dataset.name; state.pendingContactId = pick.dataset.contactId || null; document.body.removeChild(overlay); return; }
@@ -612,6 +690,12 @@
 
             document.getElementById('po-modal-cancel').addEventListener('click', closePoModal);
             document.getElementById('po-modal-save').addEventListener('click', savePO);
+            var sectionSel = document.getElementById('po-section');
+            if (sectionSel) {
+                sectionSel.addEventListener('change', function() {
+                    populateItems(sectionSel.value);
+                });
+            }
             document.getElementById('float-modal-cancel').addEventListener('click', function() { document.getElementById('float-modal').classList.add('hidden'); });
             document.getElementById('float-modal-save').addEventListener('click', saveFloat);
 
@@ -655,6 +739,7 @@
         return {
             init: init,
             io: {
+                hydrateOwnerBudget: function (budget) { state.budget = JSON.parse(JSON.stringify(budget)); state.projectKey = 'prodBudget_v5_' + state.budget.projectName; renderPOs(); renderCash(); },
                 hydrateLedgerViews: function(pos, pettyCash) { hydrateLedgerViews(pos, pettyCash); },
                 setDisplayCurrency: function(code, rates) { setDisplayCurrency(code, rates); }
             }
@@ -669,6 +754,7 @@
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
         var action = e.data.action;
         var payload = e.data.payload || {};
+        if (action === 'owner-budget-update' && e.source === window.parent) { mBTPO.io.hydrateOwnerBudget(payload); return; }
         /* Phase 80: relay from monolith when sibling Contacts tool processes a payment */
         if (action === 'reload-ledgers') {
             mBTPO.io.hydrateLedgerViews(payload.pos, payload.pettyCash);

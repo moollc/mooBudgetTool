@@ -7,6 +7,7 @@
   <script src="../../lib/tailwind.min.js"></script>
   <script src="../../core/components/ToolBridge.js"></script>
   <script src="../../lib/localforage.min.js"></script>
+  <script src="../../core/finance.engine.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -38,6 +39,8 @@
     <p class="text-[11px] text-orange-700 font-medium">Fringes are global percentage modifiers applied to the budget subtotal (e.g. SAG P&amp;W, Payroll Tax). They appear as explicit line items in exports.</p>
   </div>
 
+  <p id="fringes-production-fee-warning" role="alert" class="hidden px-4 py-3 bg-amber-50 border-b border-amber-500 text-amber-900 text-sm font-bold shrink-0"></p>
+
   <!-- Content -->
   <div class="flex-1 overflow-y-auto no-scrollbar">
 
@@ -56,7 +59,11 @@
     <!-- Summary row -->
     <div id="summary-row" class="hidden px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between">
       <span class="text-[11px] font-black uppercase tracking-widest text-slate-500">Total Fringes</span>
-      <span id="summary-total" class="text-[13px] font-black text-orange-600">0%</span>
+      <div class="flex flex-col items-end gap-0.5">
+        <span id="summary-total" class="text-[13px] font-black text-orange-600">0%</span>
+        <span id="summary-amount" class="text-[12px] font-bold text-orange-600">JMD 0.00</span>
+        <span class="text-[9px] font-medium text-slate-400">of budget subtotal</span>
+      </div>
     </div>
 
   </div>
@@ -68,10 +75,71 @@
     /* ========= mBTFringes ========= */
     var mBTFringes = (function() {
         var state = { projectKey: null, budget: null, currency: 'JMD' };
-        /* v23.59: rate table pushed by parent mbt:displayCurrency payload. Fringes are
-           percentages, so nothing here renders a converted dollar figure today — this is
-           stashed only so a future money surface has the live rates without a round-trip. */
+        window.addEventListener('message', function (e) {
+            if (e.origin !== window.location.origin || e.source !== window.parent || !e.data || e.data.action !== 'owner-budget-update') return;
+            state.budget = JSON.parse(JSON.stringify(e.data.payload)); state.projectKey = 'prodBudget_v5_' + state.budget.projectName; render();
+        });
+        /* v23.59: rate table pushed by parent mbt:displayCurrency payload (stashed for siblings). */
         var _syncedRates = null;
+
+        function _round(val) {
+            return Math.round((parseFloat(val) || 0) * 100) / 100;
+        }
+
+        function budgetSubtotal() {
+            return (state.budget && parseFloat(state.budget.subtotal)) || 0;
+        }
+
+        function budgetCurrency() {
+            return (state.budget && state.budget.currency) || state.currency || 'JMD';
+        }
+
+        function fringeScopedBase(f) {
+            var keys = f && f.sectionKeys;
+            if (!keys || !keys.length) return budgetSubtotal();
+            var base = 0;
+            var sections = state.budget && state.budget.sections;
+            if (!sections) return 0;
+            /* Match Finance: each scoped row contributes once to this fringe. */
+            var seen = Object.create(null), anonymous = [];
+            Object.keys(sections).forEach(function (part) {
+                (sections[part].items || []).forEach(function (item) {
+                    if (keys.indexOf(part) === -1 && keys.indexOf(item._departmentSection) === -1) return;
+                    if (item.id != null && item.id !== '') {
+                        if (seen[item.id]) return;
+                        seen[item.id] = true;
+                    } else {
+                        if (anonymous.indexOf(item) !== -1) return;
+                        anonymous.push(item);
+                    }
+                    base += parseFloat(item.total) || 0;
+                });
+            });
+            return base;
+        }
+
+        function fringeAmount(f) {
+            if (f && f.amount != null) return _round(f.amount);
+            return _round(fringeScopedBase(f) * ((parseFloat(f.rate) || 0) / 100));
+        }
+
+        function sectionKeysToStr(keys) {
+            if (!keys || !keys.length) return '';
+            return keys.join(', ');
+        }
+
+        function parseSectionKeys(str) {
+            if (!str || !String(str).trim()) return null;
+            return String(str).split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+        }
+
+        function fringeScopeLabel(f) {
+            return (f.sectionKeys && f.sectionKeys.length) ? 'of scoped sections' : 'of budget subtotal';
+        }
+
+        function fmtMoney(n) {
+            return esc(budgetCurrency()) + ' ' + (parseFloat(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
 
         function snack(msg) {
             var el = document.getElementById('snackbar');
@@ -96,7 +164,7 @@
 
         function esc(str) {
             if (str == null) return '';
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function totalEnabledRate() {
@@ -104,6 +172,24 @@
             return state.budget.fringes.reduce(function(sum, f) {
                 return sum + (f.enabled !== false ? (parseFloat(f.rate) || 0) : 0);
             }, 0);
+        }
+
+        function totalEnabledAmount() {
+            if (!state.budget || !state.budget.fringes) return 0;
+            return state.budget.fringes.reduce(function(sum, f) {
+                return sum + (f.enabled !== false ? fringeAmount(f) : 0);
+            }, 0);
+        }
+
+        function updateSummaryDisplay() {
+            var warning = document.getElementById('fringes-production-fee-warning');
+            var duplicate = state.budget && window.mBT_Finance.summary(state.budget).duplicateFeeWarning;
+            warning.textContent = duplicate ? window.mBT_Finance.duplicateFeeWarningText : '';
+            warning.classList.toggle('hidden', !duplicate);
+            var summaryTotal = document.getElementById('summary-total');
+            var summaryAmount = document.getElementById('summary-amount');
+            if (summaryTotal) summaryTotal.textContent = totalEnabledRate().toFixed(2).replace(/\.?0+$/, '') + '%';
+            if (summaryAmount) summaryAmount.textContent = fmtMoney(totalEnabledAmount());
         }
 
         function render() {
@@ -114,6 +200,7 @@
             var summaryTotal = document.getElementById('summary-total');
 
             if (!list) return;
+            updateSummaryDisplay();
 
             if (fringes.length === 0) {
                 list.innerHTML = '';
@@ -128,16 +215,28 @@
             var html = '';
             fringes.forEach(function(f) {
                 var enabled = f.enabled !== false;
-                html += '<li class="bg-white px-4 py-3 flex items-center gap-3" data-fringe-id="' + esc(f.id) + '">' +
+                var amount = fringeAmount(f);
+                var scopeLabel = fringeScopeLabel(f);
+                html += '<li class="bg-white px-4 py-3 flex items-center gap-3' + (enabled ? '' : ' opacity-60') + '" data-fringe-id="' + esc(f.id) + '">' +
                     '<button class="fringe-toggle shrink-0 w-9 h-5 rounded-full transition-colors ' + (enabled ? 'bg-orange-500' : 'bg-slate-200') + '" data-id="' + esc(f.id) + '" aria-label="Toggle fringe">' +
                         '<span class="block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ' + (enabled ? 'translate-x-4' : 'translate-x-0') + '"></span>' +
                     '</button>' +
-                    '<input type="text" class="fringe-name flex-1 bg-transparent border-b border-slate-200 focus:border-orange-400 outline-none text-[13px] font-semibold text-slate-800 py-0.5 transition-colors" ' +
-                        'data-id="' + esc(f.id) + '" value="' + esc(f.name) + '" placeholder="Fringe name (e.g. SAG P&W)" />' +
+                    '<div class="flex-1 flex flex-col gap-1 min-w-0">' +
+                        '<input type="text" class="fringe-name w-full bg-transparent border-b border-slate-200 focus:border-orange-400 outline-none text-[13px] font-semibold text-slate-800 py-0.5 transition-colors' + (enabled ? '' : ' line-through text-slate-400') + '" ' +
+                            'data-id="' + esc(f.id) + '" value="' + esc(f.name) + '" placeholder="Fringe name (e.g. SAG P&W)" />' +
+                        '<input type="text" class="fringe-sections w-full bg-transparent border-b border-slate-100 focus:border-orange-300 outline-none text-[10px] text-slate-500 py-0.5 transition-colors' + (enabled ? '' : ' line-through text-slate-300') + '" ' +
+                            'data-id="' + esc(f.id) + '" value="' + esc(sectionKeysToStr(f.sectionKeys)) + '" placeholder="Section keys (comma-separated, blank = all)" />' +
+                    '</div>' +
                     '<div class="flex items-center gap-1 shrink-0">' +
-                        '<input type="number" class="fringe-rate w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[12px] font-bold text-slate-700 outline-none focus:border-orange-400 text-right transition-colors" ' +
+                        '<input type="number" class="fringe-rate w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[12px] font-bold outline-none focus:border-orange-400 text-right transition-colors' + (enabled ? ' text-slate-700' : ' text-slate-300 line-through') + '" ' +
                             'data-id="' + esc(f.id) + '" value="' + (parseFloat(f.rate) || 0) + '" step="0.1" min="0" max="100" />' +
-                        '<span class="text-[11px] font-black text-slate-400">%</span>' +
+                        '<span class="text-[11px] font-black ' + (enabled ? 'text-slate-400' : 'text-slate-300 line-through') + '">%</span>' +
+                    '</div>' +
+                    '<div class="flex flex-col items-end shrink-0 min-w-[6.5rem]">' +
+                        '<span class="fringe-amount text-[11px] font-bold ' + (enabled ? 'text-orange-600' : 'text-slate-300 line-through') + '" data-id="' + esc(f.id) + '">' +
+                            (enabled ? fmtMoney(amount) : '—') +
+                        '</span>' +
+                        '<span class="fringe-scope-label text-[9px] font-medium ' + (enabled ? 'text-slate-400' : 'text-slate-300') + '" data-id="' + esc(f.id) + '">' + scopeLabel + '</span>' +
                     '</div>' +
                     '<button class="fringe-delete shrink-0 text-slate-300 hover:text-red-400 transition-colors p-1" data-id="' + esc(f.id) + '" aria-label="Delete fringe">' +
                         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
@@ -146,8 +245,7 @@
             });
             list.innerHTML = html;
 
-            var total = totalEnabledRate();
-            if (summaryTotal) summaryTotal.textContent = total.toFixed(2).replace(/\.?0+$/, '') + '%';
+            updateSummaryDisplay();
         }
 
         function addFringe() {
@@ -196,11 +294,23 @@
             list.addEventListener('change', function(e) {
                 var nameInput = e.target.closest('.fringe-name');
                 var rateInput = e.target.closest('.fringe-rate');
+                var sectionsInput = e.target.closest('.fringe-sections');
 
                 if (nameInput) {
                     var id = nameInput.dataset.id;
                     var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
-                    if (fringe) { fringe.name = nameInput.value; save(); }
+                    if (fringe) { fringe.name = nameInput.value; updateSummaryDisplay(); save(); }
+                    return;
+                }
+
+                if (sectionsInput) {
+                    var id = sectionsInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) {
+                        fringe.sectionKeys = parseSectionKeys(sectionsInput.value);
+                        render();
+                        save();
+                    }
                     return;
                 }
 
@@ -224,15 +334,31 @@
                     var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
                     if (fringe) {
                         fringe.rate = parseFloat(rateInput.value) || 0;
-                        var summaryTotal = document.getElementById('summary-total');
-                        if (summaryTotal) summaryTotal.textContent = totalEnabledRate().toFixed(2).replace(/\.?0+$/, '') + '%';
+                        var amountEl = document.querySelector('.fringe-amount[data-id="' + id + '"]');
+                        if (amountEl && fringe.enabled !== false) amountEl.textContent = fmtMoney(fringeAmount(fringe));
+                        updateSummaryDisplay();
+                    }
+                }
+                var sectionsInput = e.target.closest('.fringe-sections');
+                if (sectionsInput) {
+                    var id = sectionsInput.dataset.id;
+                    var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
+                    if (fringe) {
+                        fringe.sectionKeys = parseSectionKeys(sectionsInput.value);
+                        var amountEl = document.querySelector('.fringe-amount[data-id="' + id + '"]');
+                        var labelEl = document.querySelector('.fringe-scope-label[data-id="' + id + '"]');
+                        if (fringe.enabled !== false) {
+                            if (amountEl) amountEl.textContent = fmtMoney(fringeAmount(fringe));
+                            if (labelEl) labelEl.textContent = fringeScopeLabel(fringe);
+                        }
+                        updateSummaryDisplay();
                     }
                 }
                 var nameInput = e.target.closest('.fringe-name');
                 if (nameInput) {
                     var id = nameInput.dataset.id;
                     var fringe = state.budget.fringes.find(function(f) { return f.id === id; });
-                    if (fringe) fringe.name = nameInput.value;
+                    if (fringe) { fringe.name = nameInput.value; updateSummaryDisplay(); }
                 }
             });
         }
@@ -267,8 +393,7 @@
         }
 
         /* v23.59: live display-currency switch from parent (mirrors po/stages siblings).
-           Percentages are currency-agnostic, so re-render only keeps state.currency in
-           sync and refreshes should a money surface ever be added. */
+           Fringe dollars use budget.currency (base), not display currency. */
         function setDisplayCurrency(code, rates) {
             state.currency = code || 'JMD';
             if (rates) _syncedRates = rates;

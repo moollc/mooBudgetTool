@@ -519,6 +519,7 @@
   <script src="../../scripts/engine/mbtle.js"></script>
   <script src="../../config/ai.js"></script>
   <script src="../../core/services/mBTAssistant.js"></script>
+  <script src="../../core/finance.engine.js"></script>
   <script src="../../services/ai-context.js"></script>
   <script src="../../services/ai-pattern-recognition.js"></script>
   <script src="../../services/ai-reports.js"></script>
@@ -1371,7 +1372,7 @@ window.openSourceModal   = openSourceModal;
         var schemaGuide = [
             'Return ONLY a valid JSON object \u2014 no markdown fences, no explanation, no comments.',
             'Schema: { "projectName": string, "company": string, "startDate": "YYYY-MM-DD",',
-            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number,',
+            '"contingencyPercentage": number, "salesTaxPercentage": number, "discountPercentage": number, "productionFeePercentage": number,',
             '"sections": { "Section Name": { "id": "snake_id", "isOpen": true, "items": [',
             '{ "id": "item_001", "description": string, "quantity": number,',
             '"unit": "Day|Week|Flat|Hour", "rate": number, "multiplier": 1, "actual": 0, "rateType": "negotiable" }',
@@ -1380,6 +1381,7 @@ window.openSourceModal   = openSourceModal;
             templateHint ? 'Use a ' + templateHint + ' budget structure.' : ''
         ].join(' ');
 
+        schemaGuide += '\n' + productionFeeRules;
         callMonolithAI('Generate a production budget for: ' + userPrompt, schemaGuide)
             .then(function(result) {
                 /* Strip markdown fences and parse */
@@ -1393,6 +1395,7 @@ window.openSourceModal   = openSourceModal;
 
                 /* First-pass sanitization (monolith will sanitize again on receipt) */
                 var sanitized = sanitizeBudgetNode(raw);
+                if (Object.prototype.hasOwnProperty.call(sanitized, 'productionFeePercentage')) sanitized.productionFeePercentage = window.mBT_Finance.normalizeProductionFee(sanitized.productionFeePercentage);
 
                 if (!sanitized.projectName || typeof sanitized.sections !== 'object') {
                     throw new Error('The AI returned an incomplete budget structure. Add more detail to your prompt.');
@@ -1411,15 +1414,13 @@ window.openSourceModal   = openSourceModal;
                 dom.getElementById('genStatus').classList.add('hidden');
                 dom.getElementById('genBtn').disabled = false;
                 dom.getElementById('genBtn').textContent = 'Generate Budget';
-                var em = (err && err.message) || '';
-                if (em === 'AI_RATE_LIMITED') {
-                    errEl.textContent = 'Wait a few seconds before another AI request.';
-                } else {
-                    errEl.textContent = em || 'Generation failed. Check your provider settings and try again.';
-                }
+                console.warn('[mBT] generate failed:', err);
+                errEl.textContent = mBTAssistant.plainError(err);
                 errEl.classList.remove('hidden');
             });
     }
+
+    var productionFeeRules = 'PRODUCTION FEE: Suggest a tier from job size/type for new drafts: 10% small/favour, 15% standard, 20% rush/complex/heavy crew. Use productionFeePercentage (0..100); contingency is never a substitute. Never set or add a fee retroactively to an already-agreed budget unless the user asks. Use update_production_fee for requested changes, including in batch. Never use the legacy Production Fee fringe. If duplicateFeeWarning is true, tell the user both charges are included and ask which to keep; do not add a second fee.';
 
     function buildSystemPrompt(ctx) {
         var lines = [
@@ -1427,6 +1428,7 @@ window.openSourceModal   = openSourceModal;
             'You help producers, line producers, and production managers with budgeting, scheduling, crew, and cost management.',
             'Always ground your responses in film production context. When asked an out-of-scope question, answer briefly then connect it back to production budget implications if relevant.',
             'Use figures from the project context when available. Be concise and specific.',
+            productionFeeRules,
             '',
             '--- PROPOSAL PROTOCOL ---',
             'When you recommend a concrete change the user can apply, emit a proposal block AFTER your prose explanation, using exactly this format:',
@@ -1451,6 +1453,9 @@ window.openSourceModal   = openSourceModal;
 
             lines.push('--- PROJECT CONTEXT ---');
             lines.push('Project: ' + (ctx.projectName || 'Unnamed'));
+            lines.push('productionFeePercentage: ' + (ctx.productionFeePercentage || 0));
+            lines.push('productionFeeAmount: ' + (ctx.productionFeeAmount || 0));
+            lines.push('duplicateFeeWarning: ' + !!ctx.duplicateFeeWarning);
             lines.push('Total Budget (grand total): $' + (ctx.budget ? Number(ctx.budget).toLocaleString() : 'N/A'));
 
             if (ctx.contingencyPercentage != null && !isNaN(ctx.contingencyPercentage)) {
@@ -1719,7 +1724,7 @@ window.openSourceModal   = openSourceModal;
         var typingId = addLLMTyping();
         var systemPrompt = dom.getElementById('injectContext').checked
             ? buildSystemPrompt(context)
-            : 'You are mBT AI, a film production budget assistant.';
+            : 'You are mBT AI, a film production budget assistant. ' + productionFeeRules;
 
         callLLM(text, systemPrompt)
             .then(function (reply) {
@@ -1732,13 +1737,8 @@ window.openSourceModal   = openSourceModal;
             })
             .catch(function (err) {
                 removeLLMTyping(typingId);
-                var em = (err && err.message) || '';
-                if (em === 'AI_RATE_LIMITED') {
-                    addLLMMessage('ai', 'Wait a few seconds before another AI request.');
-                    return;
-                }
-                var prov = mBTAssistant.getProviderLabel(mBTAssistant.getProvider());
-                addLLMMessage('ai', 'Could not reach ' + prov + '. Check that your provider is running and the API key is configured in Settings > Connections. Error: ' + em);
+                console.warn('[mBT] chat failed:', err);
+                addLLMMessage('ai', mBTAssistant.plainError(err));
             });
     }
 
