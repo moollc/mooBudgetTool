@@ -2523,6 +2523,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         d[k] = defaults[k];
       }
     });
+    if (!d.crewCall && d.generalCall != null) d.crewCall = d.generalCall;
+    delete d.generalCall;
     if (String(d.productionOffice || '').trim().toLowerCase() === 'independent') d.productionOffice = '';
 
     /* Migrate legacy scenes and merge with schedule without losing either */
@@ -2566,7 +2568,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     ['client', 'locations', 'hospitals', 'other'].forEach(function (cat) {
       if (!Array.isArray(d.contactsBlock[cat])) d.contactsBlock[cat] = [];
     });
-    if (Array.isArray(d.contacts) && d.contacts.length > 0 && d.contactsBlock.other.length === 0) {
+    if (Array.isArray(d.contacts) && d.contacts.length > 0 && d.contactsBlock.other.length === 0 && !d._keepEmptyContactsBlock) {
       d.contacts.forEach(function (c) {
         if (c && (c.name || c.role || c.phone)) d.contactsBlock.other.push(JSON.parse(JSON.stringify(c)));
       });
@@ -4345,6 +4347,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             editorData.scenes = JSON.parse(JSON.stringify(listDel));
             if (listDel.length === 0) editorData._keepEmptySchedule = true;
           }
+          if (arrN === 'shootingLocations' && listDel.length === 0) editorData._keepEmptyLocations = true;
           if (arrN === 'crew' && listDel.length === 0) editorData._keepEmptyCrew = true;
           if (arrN === 'interviewees' && listDel.length === 0) editorData._keepEmptyInterviewees = true;
           if (arrN.indexOf('contactsBlock.') === 0) editorData._keepEmptyContactsBlock = true;

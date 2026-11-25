@@ -1461,20 +1461,26 @@
                 _mergeScheduleAndScenes: function (scheduleArr, scenesArr) {
                     var self = this;
                     var out = [];
-                    var seen = {};
-                    function addList(arr) {
-                        if (!Array.isArray(arr)) return;
-                        arr.forEach(function (r) {
-                            var m = self._migrateScheduleRow(r);
-                            if (!m || self._isBlankScheduleRow(m)) return;
-                            var sig = [m.time, m.activity, m.location, m.people, m.notes, m.sceneNum, m.intExt, m.dayNight, m.pages, String(m.tbc || '')].map(function (v) { return String(v || '').trim().toLowerCase(); }).join('|');
-                            if (seen[sig]) return;
-                            seen[sig] = true;
-                            out.push(m);
-                        });
+                    var copies = Object.create(null);
+                    function signature(row) {
+                        var ordered = {};
+                        Object.keys(row).sort().forEach(function (k) { ordered[k] = row[k]; });
+                        return JSON.stringify(ordered);
                     }
-                    addList(scheduleArr);
-                    addList(scenesArr);
+                    (Array.isArray(scheduleArr) ? scheduleArr : []).forEach(function (r) {
+                        var row = self._migrateScheduleRow(r);
+                        if (!row) return;
+                        var key = signature(row);
+                        copies[key] = (copies[key] || 0) + 1;
+                        out.push(row);
+                    });
+                    (Array.isArray(scenesArr) ? scenesArr : []).forEach(function (r) {
+                        var row = self._migrateScheduleRow(r);
+                        if (!row) return;
+                        var key = signature(row);
+                        if (copies[key]) { copies[key]--; return; }
+                        out.push(row);
+                    });
                     return out;
                 },
 
@@ -1847,6 +1853,8 @@
                         }
                     }
 
+                    if (rawD && !rawD.crewCall && rawD.generalCall != null) d.crewCall = rawD.generalCall;
+
                     /* Clean out invented legacy values if passed from an unmigrated blank template */
                     if (String(d.productionOffice || '').trim().toLowerCase() === 'independent') d.productionOffice = '';
 
@@ -1860,7 +1868,7 @@
                     /* Write-in blank helper: never uses em dashes for empty fields */
                     var writeIn = function (v, fallbackHtml) {
                         var s = v != null ? String(v).trim() : '';
-                        if (s) return esc(s);
+                        if (s && s !== '—') return esc(s);
                         return fallbackHtml || '<span class="cs-writein">________</span>';
                     };
                     var checkboxHtml = function () {
@@ -1868,7 +1876,7 @@
                     };
                     var fmtDate = function (v) {
                         var s = v != null ? String(v).trim() : '';
-                        if (!s) return '<span class="cs-writein">________</span>';
+                        if (!s || s === '—') return '<span class="cs-writein">________</span>';
                         var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
                         if (!m) return esc(s);
                         var year = parseInt(m[1], 10);
@@ -2150,8 +2158,8 @@
                         }
                     });
                     var otherContactList = (cb.other || []).slice();
-                    if (Array.isArray(d.contacts)) {
-                        d.contacts.forEach(function (c) {
+                    if (!rawD || !rawD.contactsBlock) {
+                        (Array.isArray(d.contacts) ? d.contacts : []).forEach(function (c) {
                             if (c && (c.name || c.phone || c.role)) otherContactList.push(c);
                         });
                     }
@@ -2338,19 +2346,19 @@
                         '</div>';
 
                     /* ---- Kit Checklist Section ---- */
-                    var kitItemsList = (Array.isArray(d.kit) && d.kit.length > 0) ? d.kit : defaults.kit;
+                    var kitItemsList = Array.isArray(d.kit) ? d.kit : defaults.kit;
                     var kitHtml = '<div class="callsheet-block" data-section="kit"><h3>Kit Checklist</h3>' +
                         renderChecklistItems(kitItemsList) +
                         '</div>';
 
                     /* ---- Paperwork on Set Section ---- */
-                    var paperworkList = (Array.isArray(d.paperwork) && d.paperwork.length > 0) ? d.paperwork : defaults.paperwork;
+                    var paperworkList = Array.isArray(d.paperwork) ? d.paperwork : defaults.paperwork;
                     var paperworkHtml = '<div class="callsheet-block" data-section="paperwork"><h3>Paperwork on Set</h3>' +
                         renderChecklistItems(paperworkList) +
                         '</div>';
 
                     /* ---- Wrap Checklist Section ---- */
-                    var wrapList = (Array.isArray(d.wrap) && d.wrap.length > 0) ? d.wrap : defaults.wrap;
+                    var wrapList = Array.isArray(d.wrap) ? d.wrap : defaults.wrap;
                     var wrapHtml = '<div class="callsheet-block" data-section="wrap"><h3>Wrap Checklist</h3>' +
                         renderChecklistItems(wrapList) +
                         '</div>';
