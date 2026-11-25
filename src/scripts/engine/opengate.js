@@ -1343,15 +1343,22 @@
                 {
                     id: 'callSheet', cat: 'Production', label: 'Daily Call Sheet', icon: 'alert', default: true,
                     widgets: [
+                        { id: 'tbc', x: 0, w: 12, h: 2, type: 'tbc', label: "TBC / Unconfirmed Items", autoPosition: true },
                         { id: 'contacts', x: 0, w: 6, h: 4, type: 'contacts', label: "Key Contacts", autoPosition: true },
                         { id: 'logistics', x: 6, w: 6, h: 4, type: 'logistics', label: "Logistics", autoPosition: true },
+                        { id: 'crew', x: 0, w: 12, h: 6, type: 'crew', label: "Crew List", autoPosition: true },
                         { id: 'schedule', x: 0, w: 12, h: 6, type: 'schedule', label: "Schedule", autoPosition: true },
-                        { id: 'cast', x: 0, w: 6, h: 6, type: 'cast', label: "Cast List", autoPosition: true },
-                        { id: 'crew', x: 6, w: 6, h: 6, type: 'crew', label: "Crew List", autoPosition: true },
+                        { id: 'interviewees', x: 0, w: 6, h: 6, type: 'interviewees', label: "Interviewees", autoPosition: true },
+                        { id: 'cast', x: 6, w: 6, h: 6, type: 'cast', label: "Cast List", autoPosition: true },
+                        { id: 'meals', x: 0, w: 6, h: 4, type: 'meals', label: "Meals & Lodging", autoPosition: true },
+                        { id: 'route', x: 6, w: 6, h: 4, type: 'route', label: "Route & Location Pin", autoPosition: true },
+                        { id: 'kit', x: 0, w: 4, h: 6, type: 'checklist', label: "Kit Checklist", autoPosition: true },
+                        { id: 'paperwork', x: 4, w: 4, h: 6, type: 'checklist', label: "Paperwork Checklist", autoPosition: true },
+                        { id: 'wrap', x: 8, w: 4, h: 6, type: 'checklist', label: "Wrap Checklist", autoPosition: true },
                         { id: 'notes', x: 0, w: 12, h: 2, type: 'richText', label: "General Notes", autoPosition: true },
                         { id: 'footer', x: 0, w: 12, h: 2, type: 'footer', label: "Safety Footer", autoPosition: true }
                     ],
-                    defaults: { contacts: [], locations: [], schedule: [], cast: [], crew: [], additional: { notes: "" } }
+                    defaults: { tbc: [], contacts: [], locations: [], crew: [], schedule: [], interviewees: [], cast: [], meals: {}, route: {}, kit: [], paperwork: [], wrap: [], additional: { notes: "" } }
                 },
                 {
                     id: 'prodReport', cat: 'Production', label: 'Production Report', icon: 'barChart', default: true,
