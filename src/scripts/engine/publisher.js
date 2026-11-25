@@ -1034,6 +1034,45 @@
                 '.detail-sec-total { background: #f1f5f9; font-weight: 700; }',
                 '.detail-sec-block { margin-bottom: 14px; page-break-before: auto; page-break-inside: avoid; }',
                 '.detail-sec-block + .detail-sec-block { page-break-before: always; }',
+                '.callsheet-block { margin-bottom: 0; border: 1px solid #cbd5e1; border-top: none; page-break-inside: avoid; }',
+                '.callsheet-block h3 { background: #1e293b; color: #f8fafc; margin: 0; padding: 5px 8px; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; border-top: 1px solid #0f172a; }',
+                '.callsheet-block table { margin-bottom: 0; }',
+                '.cs-header { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #cbd5e1; margin-bottom: 0; }',
+                '.cs-header-left, .cs-header-right { padding: 8px 10px; }',
+                '.cs-header-right { border-left: 1px solid #cbd5e1; }',
+                '.cs-title { font-size: 15pt; font-weight: 900; text-transform: uppercase; letter-spacing: -0.3px; margin: 0 0 2px 0; }',
+                '.cs-day { font-size: 9pt; font-weight: 700; color: #334155; margin-bottom: 6px; }',
+                '.cs-kv { font-size: 8pt; line-height: 1.6; }',
+                '.cs-kv b { display: inline-block; width: 65px; color: #475569; }',
+                '.cs-meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; border: 1px solid #cbd5e1; border-top: none; }',
+                '.cs-meta-cell { padding: 6px 10px; border-right: 1px solid #cbd5e1; font-size: 8pt; }',
+                '.cs-meta-cell:last-child { border-right: none; }',
+                '.cs-meta-cell h4 { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin: 0 0 3px 0; }',
+                '.cs-sched-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; border: 1px solid #cbd5e1; border-top: none; }',
+                '.cs-sched-cell { padding: 5px 10px; border-right: 1px solid #cbd5e1; font-size: 8pt; text-align: center; }',
+                '.cs-sched-cell:last-child { border-right: none; }',
+                '.cs-sched-cell b { display: block; font-size: 7pt; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }',
+                '.cs-sched-cell span { font-size: 11pt; font-weight: 700; }',
+                '.cs-dept-grid { display: grid; grid-template-columns: 1fr 1fr; }',
+                '.cs-dept-item { padding: 4px 10px; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; font-size: 8pt; }',
+                '.cs-dept-item:nth-child(even) { border-right: none; }',
+                '.cs-dept-label { font-weight: 700; color: #475569; font-size: 7pt; text-transform: uppercase; }',
+                '.cs-advance { padding: 6px 10px; font-size: 8pt; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }',
+                '.cs-footer-row { display: grid; grid-template-columns: 1fr 1fr; padding: 5px 10px; font-size: 7.5pt; color: #475569; border-top: 1px solid #e2e8f0; }',
+                '@media print { .callsheet-block { page-break-inside: avoid; } table { page-break-inside: avoid; } .cs-header, .cs-meta-grid, .cs-sched-grid { page-break-inside: avoid; } }'
+            ].join('\n'),
+
+            /* Scoped ink-friendly CSS used only by callSheet so all other 28 generators remain byte-identical */
+            _callSheetCss: [
+                '@page { size: letter portrait; margin: 0.65in; }',
+                'body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; background: white; margin: 0; }',
+                '.ts-page { max-width: 7.2in; margin: 0 auto; }',
+                'table { width: 100%; border-collapse: collapse; }',
+                'td, th { padding: 4px 7px; vertical-align: middle; }',
+                '.col-r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }',
+                '.col-c { text-align: center; }',
+                '.sec-row { border-bottom: 1px solid #000; }',
+                '.ts-footer { margin-top: 20px; font-size: 7.5pt; color: #000; text-align: center; border-top: 1px dashed #000; padding-top: 6px; }',
                 '.callsheet-block { margin-bottom: 10px; border: none; page-break-inside: avoid; }',
                 '.callsheet-block h3 { background: transparent; color: #000; margin: 10px 0 6px 0; padding: 4px 0; font-size: 9.5pt; font-weight: 700; letter-spacing: 0.2px; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }',
                 '.callsheet-block table { width: 100%; border-collapse: collapse; margin-bottom: 0; }',
@@ -1069,7 +1108,7 @@
                 '.cs-dept-label { font-weight: 700; color: #000; font-size: 7.5pt; }',
                 '.cs-advance { padding: 6px 10px; font-size: 8.5pt; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #000; }',
                 '.cs-footer-row { display: grid; grid-template-columns: 1fr 1fr; padding: 5px 10px; font-size: 8pt; color: #000; border-top: 1px dashed #000; }',
-                '@media print { .callsheet-block { page-break-inside: avoid; } table { page-break-inside: avoid; } .cs-header, .cs-meta-grid, .cs-sched-grid, .cs-tbc-box { page-break-inside: avoid; } }'
+                '@media print { .callsheet-block { page-break-inside: avoid; } table { page-break-inside: avoid; } .cs-header, .cs-meta-grid, .cs-sched-grid { page-break-inside: avoid; } .cs-tbc-box { page-break-inside: avoid; } }'
             ].join('\n'),
 
             /* Wrap rendered body HTML in a full printable document */
@@ -1102,16 +1141,15 @@
                 ) : '';
 
                 var brandCss = '.ts-brand{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;}.ts-brand-logo{max-height:52px;max-width:130px;object-fit:contain;}.ts-brand-text{text-align:right;}.ts-brand-name{font-size:10pt;font-weight:700;color:#0f172a;}.ts-brand-addr{font-size:7.5pt;color:#64748b;}';
-                var baseCss = isCallSheet
-                    ? this._baseCss.replace(/#1e293b/gi, 'transparent').replace(/text-transform:\s*uppercase;?/gi, '')
-                    : this._baseCss;
+                var baseCss = isCallSheet ? this._callSheetCss : this._baseCss;
+                var cleanExtraCss = isCallSheet ? String(extraCss || '').replace('/*cs-ink*/', '') : (extraCss || '');
                 var footerLine = isCallSheet
                     ? '<div class="ts-footer">moo</div>'
                     : '<div class="ts-footer">Generated by mooBudgetTool &mdash; ' + new Date().toLocaleDateString() + '</div>';
 
                 return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
                     '<title>' + esc(title) + '</title>' +
-                    '<style>' + baseCss + brandCss + wmCss + themeCss + (extraCss || '') + '</style>' +
+                    '<style>' + baseCss + brandCss + wmCss + themeCss + cleanExtraCss + '</style>' +
                     '</head><body><div class="ts-page">' + brandHtml + bodyHtml +
                     footerLine +
                     '</div></body></html>';
@@ -1385,6 +1423,61 @@
                     return /\bdirector\b/.test(cleaned) || /\bon[- ]set\s+direction\b/.test(rl);
                 },
 
+                _isBlankScheduleRow: function (r) {
+                    if (!r || typeof r !== 'object') return true;
+                    if (r.tbc) return false;
+                    var keys = Object.keys(r);
+                    for (var i = 0; i < keys.length; i++) {
+                        var k = keys[i];
+                        if ((/Tbc$|_tbc$/i.test(k) && r[k]) || (typeof r[k] === 'string' && /\bTBC\b/i.test(r[k]))) return false;
+                    }
+                    var fields = ['time', 'activity', 'description', 'location', 'people', 'cast', 'notes', 'sceneNum', 'pages'];
+                    for (var j = 0; j < fields.length; j++) {
+                        if (r[fields[j]] != null && String(r[fields[j]]).trim() !== '') return false;
+                    }
+                    return true;
+                },
+
+                _migrateScheduleRow: function (r) {
+                    if (!r || typeof r !== 'object') return null;
+                    var out = {};
+                    Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+                    var act = (r.activity != null && String(r.activity).trim() !== '') ? String(r.activity) : String(r.description || '');
+                    var ppl = (r.people != null && String(r.people).trim() !== '') ? String(r.people) : String(r.cast || '');
+                    out.time = r.time != null ? String(r.time) : '';
+                    out.activity = act;
+                    out.description = (r.description != null && String(r.description).trim() !== '') ? String(r.description) : act;
+                    out.location = r.location != null ? String(r.location) : '';
+                    out.people = ppl;
+                    out.cast = (r.cast != null && String(r.cast).trim() !== '') ? String(r.cast) : ppl;
+                    out.notes = r.notes != null ? String(r.notes) : '';
+                    out.sceneNum = r.sceneNum != null ? String(r.sceneNum) : '';
+                    out.intExt = r.intExt != null ? String(r.intExt) : '';
+                    out.dayNight = r.dayNight != null ? String(r.dayNight) : '';
+                    out.pages = r.pages != null ? String(r.pages) : '';
+                    return out;
+                },
+
+                _mergeScheduleAndScenes: function (scheduleArr, scenesArr) {
+                    var self = this;
+                    var out = [];
+                    var seen = {};
+                    function addList(arr) {
+                        if (!Array.isArray(arr)) return;
+                        arr.forEach(function (r) {
+                            var m = self._migrateScheduleRow(r);
+                            if (!m || self._isBlankScheduleRow(m)) return;
+                            var sig = [m.time, m.activity, m.location, m.people, m.notes, m.sceneNum, m.intExt, m.dayNight, m.pages, String(m.tbc || '')].map(function (v) { return String(v || '').trim().toLowerCase(); }).join('|');
+                            if (seen[sig]) return;
+                            seen[sig] = true;
+                            out.push(m);
+                        });
+                    }
+                    addList(scheduleArr);
+                    addList(scenesArr);
+                    return out;
+                },
+
                 /** Return call sheet JSON pre-populated from budget data and linked contacts.
                     Scans ALL budget sections via linked contacts without inventing defaults. */
                 getDefaultData: function (budgetData, options) {
@@ -1460,14 +1553,21 @@
                             var personEmail = (contact && contact.email) || (item.crew && item.crew.email) || '';
                             var resolvedRole = self._resolveCrewRole(item, contact);
 
-                            /* Match key crew roles across contact.role, item.crew.role, item.role, and item.description */
-                            var candidateRoles = [
+                            /* Match key crew roles: a linked contact's role/crew.role must win over the line description.
+                               Only fall back to description text when the line has no linked contact role. */
+                            var contactRoles = [
                                 contact && contact.role,
-                                contact && contact.title,
-                                item.crew && item.crew.role,
-                                item.role,
-                                desc
-                            ].filter(Boolean);
+                                contact && contact.title
+                            ].map(function (r) { return String(r || '').trim(); }).filter(Boolean);
+                            var itemRoles = [
+                                (item.crew && item.crew.role && String(item.crew.role).trim() !== desc) ? item.crew.role : '',
+                                (item.role && String(item.role).trim() !== desc) ? item.role : '',
+                                (!contactRoles.length && item.crew && item.crew.role) ? item.crew.role : '',
+                                (!contactRoles.length && item.role) ? item.role : ''
+                            ].map(function (r) { return String(r || '').trim(); }).filter(Boolean);
+                            var candidateRoles = contactRoles.length > 0
+                                ? contactRoles.concat(itemRoles)
+                                : (itemRoles.length > 0 ? itemRoles : (desc ? [desc] : []));
 
                             candidateRoles.forEach(function (rText) {
                                 var rl = String(rText).toLowerCase();
@@ -1615,12 +1715,11 @@
 
                     /* Shoot date: only when explicitly known on budget/options, never today's date */
                     var shootDate = b.shootDate || opts.shootDate || '';
-                    /* Day n of productionDays: only when productionDays is explicitly known, never "Day 1 of 1" by default */
-                    var prodDays = parseInt(b.productionDays, 10) ||
-                        (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod && parseInt(b.targetLock.stages.prod.days, 10)) ||
-                        0;
-                    var shootDayNum = parseInt(opts.dayNumber || opts.shootDay || b.shootDay || b.dayNumber, 10) || 1;
-                    var dayOf = prodDays > 0 ? ('Day ' + shootDayNum + ' of ' + prodDays) : '';
+                    /* Day n of productionDays: only when BOTH the day number and productionDays are known;
+                       never assume day 1; no fallback to targetLock days */
+                    var prodDays = parseInt(b.productionDays, 10) || 0;
+                    var shootDayNum = parseInt(opts.dayNumber || opts.shootDay || b.shootDay || b.dayNumber, 10) || 0;
+                    var dayOf = (prodDays > 0 && shootDayNum > 0) ? ('Day ' + shootDayNum + ' of ' + prodDays) : '';
 
                     /* Production office: ignore "Independent" default */
                     var rawOffice = String(b.productionOffice || b.projectCompany || b.company || '').trim();
@@ -1655,8 +1754,9 @@
                         ? b.shootingLocations
                         : [{ address: b.projectLocation || '', contact: '', contactPhone: '', hospital: '', hospitalDistance: '', pin: '', route: '', notes: '' }];
 
-                    var defaultSchedule = Array.isArray(b.schedule) && b.schedule.length > 0
-                        ? b.schedule
+                    var mergedBudgetSchedule = self._mergeScheduleAndScenes(b.schedule, b.scenes);
+                    var defaultSchedule = mergedBudgetSchedule.length > 0
+                        ? mergedBudgetSchedule
                         : [{ time: '', activity: '', location: '', people: '', notes: '', sceneNum: '', intExt: '', dayNight: '', description: '', cast: '', pages: '' }];
 
                     return {
@@ -1737,13 +1837,25 @@
                         if (Array.isArray(rawD.crew) && rawD.crew.length === 0 && defaults.crew && defaults.crew.length > 0 && !rawD._keepEmptyCrew) {
                             d.crew = defaults.crew;
                         }
-                        if (!rawD.contactsBlock && defaults.contactsBlock) {
+                        if (Array.isArray(rawD.interviewees) && rawD.interviewees.length === 0 && defaults.interviewees && defaults.interviewees.length > 0 && !rawD._keepEmptyInterviewees) {
+                            d.interviewees = defaults.interviewees;
+                        }
+                        var rawCb = rawD.contactsBlock;
+                        var rawCbEmpty = !rawCb || (!((rawCb.client && rawCb.client.length) || (rawCb.locations && rawCb.locations.length) || (rawCb.hospitals && rawCb.hospitals.length) || (rawCb.other && rawCb.other.length)));
+                        if (rawCbEmpty && defaults.contactsBlock && !rawD._keepEmptyContactsBlock) {
                             d.contactsBlock = defaults.contactsBlock;
                         }
                     }
 
                     /* Clean out invented legacy values if passed from an unmigrated blank template */
                     if (String(d.productionOffice || '').trim().toLowerCase() === 'independent') d.productionOffice = '';
+
+                    /* Migrate and merge both schedule and scenes rows without losing either */
+                    var scheduleRows = (rawD && (Array.isArray(rawD.schedule) || Array.isArray(rawD.scenes)))
+                        ? self._mergeScheduleAndScenes(rawD.schedule, rawD.scenes)
+                        : self._mergeScheduleAndScenes(d.schedule, d.scenes);
+                    d.schedule = scheduleRows;
+                    d.scenes = scheduleRows;
 
                     /* Write-in blank helper: never uses em dashes for empty fields */
                     var writeIn = function (v, fallbackHtml) {
@@ -1759,8 +1871,14 @@
                         if (!s) return '<span class="cs-writein">________</span>';
                         var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
                         if (!m) return esc(s);
+                        var year = parseInt(m[1], 10);
+                        var monthIdx = parseInt(m[2], 10) - 1;
+                        var dayNum = parseInt(m[3], 10);
+                        if (monthIdx < 0 || monthIdx > 11 || dayNum < 1 || dayNum > 31) return esc(s);
+                        var dt = new Date(Date.UTC(year, monthIdx, dayNum));
+                        if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== monthIdx || dt.getUTCDate() !== dayNum) return esc(s);
                         var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-                        return months[parseInt(m[2], 10) - 1] + ' ' + parseInt(m[3], 10) + ', ' + m[1];
+                        return months[monthIdx] + ' ' + dayNum + ', ' + m[1];
                     };
 
                     /* ---- Collect TBC markings from any field or item ---- */
@@ -1801,6 +1919,8 @@
                         walkieChannels: 'Walkie Channels',
                         productionOffice: 'Production Office',
                         safetyNotes: 'Safety Notes',
+                        advanceScenes: 'Advance Scenes',
+                        advanceCast: 'Advance Cast',
                         meals: 'Meals & Lodging',
                         route: 'Route & Location Pin'
                     };
@@ -1855,24 +1975,32 @@
                     });
 
                     /* 3. Nested objects (meals, route, deptNotes) and array items */
-                    function scanObjectTbc(obj, sectionLabel) {
+                    function scanObjectTbc(obj, sectionLabel, prefixKey) {
                         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
                         if (obj.tbc) {
-                            pushTbc(sectionLabel + (typeof obj.tbc === 'string' ? ': ' + obj.tbc : ''));
+                            if (prefixKey) fieldTbcMap[prefixKey] = true;
+                            pushTbc(sectionLabel + (typeof obj.tbc === 'string' && obj.tbc.trim().toLowerCase() !== 'true' ? ': ' + obj.tbc.trim() : ''));
                         }
                         Object.keys(obj).forEach(function (k) {
                             if (k === 'tbc' || k === 'checklist') return;
                             var m = k.match(/^(.+?)(?:Tbc|_tbc)$/);
                             if (m && obj[k]) {
-                                pushTbc(sectionLabel + ' (' + m[1] + ')' + (typeof obj[k] === 'string' ? ': ' + obj[k] : ''));
+                                var subKey = m[1];
+                                if (prefixKey) fieldTbcMap[prefixKey + '.' + subKey] = true;
+                                fieldTbcMap[subKey] = true;
+                                var subVal = typeof obj[subKey] === 'string' ? obj[subKey].trim() : '';
+                                var noteText = (typeof obj[k] === 'string' && obj[k].trim() && obj[k].trim().toLowerCase() !== 'true') ? obj[k].trim() : subVal;
+                                pushTbc(sectionLabel + ' (' + subKey + ')' + (noteText ? ': ' + noteText : ''));
                             } else if (typeof obj[k] === 'string' && /\bTBC\b/i.test(obj[k])) {
+                                if (prefixKey) fieldTbcMap[prefixKey + '.' + k] = true;
+                                fieldTbcMap[k] = true;
                                 pushTbc(sectionLabel + ' (' + k + '): ' + obj[k].trim());
                             }
                         });
                     }
-                    scanObjectTbc(d.meals, 'Meals & Lodging');
-                    scanObjectTbc(d.route, 'Route');
-                    scanObjectTbc(d.deptNotes, 'Department Notes');
+                    scanObjectTbc(d.meals, 'Meals & Lodging', 'meals');
+                    scanObjectTbc(d.route, 'Route', 'route');
+                    scanObjectTbc(d.deptNotes, 'Department Notes', 'deptNotes');
 
                     function isRowTbc(row) {
                         if (!row || typeof row !== 'object') return false;
@@ -1915,10 +2043,12 @@
                         });
                     }
 
-                    var scheduleRows = (Array.isArray(d.schedule) && d.schedule.length > 0) ? d.schedule : (d.scenes || []);
                     collectArrayTbc(d.crew, 'Crew', function (r) { return [r.role, r.name, r.call].filter(Boolean).join(' / '); });
                     collectArrayTbc(scheduleRows, 'Schedule', function (r) { return [r.time, r.activity || r.description, r.location, r.notes].filter(Boolean).join(' / '); });
                     collectArrayTbc(d.interviewees, 'Interviewee', function (r) { return [r.name, r.role, r.time].filter(Boolean).join(' / '); });
+                    collectArrayTbc(d.cast, 'Cast', function (r) { return [r.character, r.actor, r.call].filter(Boolean).join(' / '); });
+                    collectArrayTbc(d.background, 'Background', function (r) { return [r.quantity, r.description, r.callTime].filter(Boolean).join(' / '); });
+                    collectArrayTbc(d.vehicles, 'Vehicle', function (r) { return [r.driver, r.type, r.pickupLocation, r.destination].filter(Boolean).join(' / '); });
                     collectArrayTbc(d.shootingLocations, 'Location', function (r) { return [r.address, r.contact, r.notes].filter(Boolean).join(' / '); });
                     collectArrayTbc(d.kit, 'Kit', function (r) { return r.item || r.description || r.name || ''; });
                     collectArrayTbc(d.paperwork, 'Paperwork', function (r) { return r.item || r.description || r.name || ''; });
@@ -1944,6 +2074,10 @@
                     var fieldHtml = function (key, val, customWriteIn) {
                         return writeIn(val, customWriteIn) + tbcBadge(fieldTbcMap[key]);
                     };
+                    var subFieldHtml = function (prefixKey, subKey, val, customWriteIn) {
+                        var isTbc = Boolean(fieldTbcMap[prefixKey + '.' + subKey] || fieldTbcMap[subKey]);
+                        return writeIn(val, customWriteIn) + tbcBadge(isTbc);
+                    };
 
                     /* ---- Brand & Top Header (No General Call box, no forced caps) ---- */
                     var titleText = d.productionTitle || b.workingTitle || b.projectTitle || b.projectName || '';
@@ -1956,7 +2090,7 @@
                         '<div class="cs-day">Day: ' + fieldHtml('dayOf', d.dayOf) + ' &nbsp;|&nbsp; Date: ' + fmtDate(d.date) + tbcBadge(fieldTbcMap.date) + '</div>' +
                         '<div class="cs-kv"><b>Director:</b> ' + fieldHtml('director', d.director) + '</div>' +
                         '<div class="cs-kv"><b>Producers:</b> ' + fieldHtml('producers', d.producers) + '</div>' +
-                        (d.dp ? '<div class="cs-kv"><b>DP:</b> ' + fieldHtml('dp', d.dp) + '</div>' : '') +
+                        ((d.dp || fieldTbcMap.dp) ? '<div class="cs-kv"><b>DP:</b> ' + fieldHtml('dp', d.dp) + '</div>' : '') +
                         '<div class="cs-kv"><b>UPM:</b> ' + fieldHtml('upm', d.upm) + '</div>' +
                         '<div class="cs-kv"><b>1st AD:</b> ' + fieldHtml('firstAd', d.firstAd) + '</div>' +
                         '<div class="cs-kv"><b>2nd AD:</b> ' + fieldHtml('secondAd', d.secondAd) + '</div>' +
@@ -1996,12 +2130,13 @@
                         }
                     });
                     var hospList = (cb.hospitals || []).slice();
-                    if (d.hospitalName || d.hospitalAddress || d.hospitalPhone) {
+                    if (d.hospitalName || d.hospitalAddress || d.hospitalPhone || fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone) {
                         hospList.unshift({
                             name: d.hospitalName || '',
                             role: 'Nearest Hospital' + (d.hospitalDistance ? ' (' + d.hospitalDistance + ')' : ''),
                             phone: d.hospitalPhone || '',
-                            address: d.hospitalAddress || ''
+                            address: d.hospitalAddress || '',
+                            tbc: Boolean(fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone)
                         });
                     }
                     (d.shootingLocations || []).forEach(function (loc) {
@@ -2048,7 +2183,7 @@
                     var wx = '<div class="cs-meta-grid">' +
                         '<div class="cs-meta-cell"><h4>Locations</h4>' +
                         '<div><b>Basecamp:</b> ' + fieldHtml('basecamp', d.basecamp) +
-                        (d.basecampParking ? ' (' + esc(d.basecampParking) + ')' : '') + '</div>' +
+                        (d.basecampParking || fieldTbcMap.basecampParking ? ' (' + fieldHtml('basecampParking', d.basecampParking) + ')' : '') + '</div>' +
                         ((d.shootingLocations || []).map(function (loc) {
                             var parts = ['<div><b>Shooting:</b> ' + writeIn(loc.address) + tbcBadge(isRowTbc(loc))];
                             if (loc.eta) parts.push(' | <b>ETA:</b> ' + esc(loc.eta));
@@ -2060,9 +2195,9 @@
                         }).join('')) +
                         '</div>' +
                         '<div class="cs-meta-cell"><h4>Weather</h4>' +
-                        '<div><b>High / Low:</b> ' + (d.weatherHigh || d.weatherLow ? (writeIn(d.weatherHigh) + ' / ' + writeIn(d.weatherLow)) : writeIn('')) + '</div>' +
+                        '<div><b>High / Low:</b> ' + (d.weatherHigh || d.weatherLow || fieldTbcMap.weatherHigh || fieldTbcMap.weatherLow ? (fieldHtml('weatherHigh', d.weatherHigh) + ' / ' + fieldHtml('weatherLow', d.weatherLow)) : writeIn('')) + '</div>' +
                         '<div><b>Conditions:</b> ' + fieldHtml('weatherConditions', d.weatherConditions) + '</div>' +
-                        '<div><b>Sunrise / Sunset:</b> ' + (d.sunrise || d.sunset ? (writeIn(d.sunrise) + ' / ' + writeIn(d.sunset)) : writeIn('')) + '</div>' +
+                        '<div><b>Sunrise / Sunset:</b> ' + (d.sunrise || d.sunset || fieldTbcMap.sunrise || fieldTbcMap.sunset ? (fieldHtml('sunrise', d.sunrise) + ' / ' + fieldHtml('sunset', d.sunset)) : writeIn('')) + '</div>' +
                         '</div></div>';
 
                     /* ---- Crew Table (from all budget sections via linked contacts) ---- */
@@ -2133,7 +2268,7 @@
                         '<tbody>' + intBody + '</tbody></table></div>';
 
                     /* ---- Cast Call (only when narrative cast rows are populated or feature mode) ---- */
-                    var castList = (d.cast || []).filter(function (c) { return c && (c.actor || c.character); });
+                    var castList = (d.cast || []).filter(function (c) { return c && (c.actor || c.character || isRowTbc(c)); });
                     var castTable = '';
                     if (castList.length > 0 || showFeatureCols) {
                         var castBody = castList.length > 0 ? castList.map(function (c) {
@@ -2167,7 +2302,7 @@
                         breakfast: typeof d.meals === 'string' ? d.meals : (d.breakfast || ''),
                         lunch: d.lunch || '',
                         dinner: d.dinner || '',
-                        waterAndSnacks: d.waterNotes || '',
+                        waterAndSnacks: d.waterAndSnacks || d.waterNotes || '',
                         lodging: d.lodging || '',
                         checklist: Array.isArray(d.meals) ? d.meals : (defaults.meals.checklist || [])
                     };
@@ -2175,8 +2310,11 @@
                         ? mealsObj.checklist
                         : defaults.meals.checklist;
                     var mealsHtml = '<div class="callsheet-block" data-section="meals"><h3>Meals &amp; Lodging</h3>' +
-                        '<div class="cs-kv"><b>Breakfast:</b> ' + writeIn(mealsObj.breakfast) + ' &nbsp;|&nbsp; <b>Lunch:</b> ' + writeIn(mealsObj.lunch) + ' &nbsp;|&nbsp; <b>Water / Snacks:</b> ' + writeIn(mealsObj.waterAndSnacks) + '</div>' +
-                        '<div class="cs-kv"><b>Lodging:</b> ' + writeIn(mealsObj.lodging || d.lodging) + tbcBadge(fieldTbcMap.meals) + '</div>' +
+                        '<div class="cs-kv"><b>Breakfast:</b> ' + subFieldHtml('meals', 'breakfast', mealsObj.breakfast || d.breakfast) +
+                        ' &nbsp;|&nbsp; <b>Lunch:</b> ' + subFieldHtml('meals', 'lunch', mealsObj.lunch || d.lunch) +
+                        ' &nbsp;|&nbsp; <b>Dinner:</b> ' + subFieldHtml('meals', 'dinner', mealsObj.dinner || d.dinner) + '</div>' +
+                        '<div class="cs-kv"><b>Water / Snacks:</b> ' + subFieldHtml('meals', 'waterAndSnacks', mealsObj.waterAndSnacks || d.waterAndSnacks || d.waterNotes) +
+                        ' &nbsp;|&nbsp; <b>Lodging:</b> ' + subFieldHtml('meals', 'lodging', mealsObj.lodging || d.lodging) + tbcBadge(fieldTbcMap.meals) + '</div>' +
                         renderChecklistItems(mealsChecklist) +
                         '</div>';
 
@@ -2192,9 +2330,10 @@
                         ? routeObj.checklist
                         : defaults.route.checklist;
                     var routeHtml = '<div class="callsheet-block" data-section="route"><h3>Route &amp; Location Pin</h3>' +
-                        '<div class="cs-kv"><b>Route / Directions:</b> ' + writeIn(routeObj.directions) + tbcBadge(fieldTbcMap.route) + '</div>' +
-                        '<div class="cs-kv"><b>Location Pin / Coordinates:</b> ' + writeIn(routeObj.locationPin) + ' &nbsp;|&nbsp; <b>Meeting Spot:</b> ' + writeIn(routeObj.meetingSpot) + '</div>' +
-                        '<div class="cs-kv"><b>Fuel / Stops:</b> ' + writeIn(routeObj.fuelNotes) + '</div>' +
+                        '<div class="cs-kv"><b>Route / Directions:</b> ' + subFieldHtml('route', 'directions', routeObj.directions || d.routeNotes || d.directions) + tbcBadge(fieldTbcMap.route) + '</div>' +
+                        '<div class="cs-kv"><b>Location Pin / Coordinates:</b> ' + subFieldHtml('route', 'locationPin', routeObj.locationPin || d.locationPin || d.mapPin) +
+                        ' &nbsp;|&nbsp; <b>Meeting Spot:</b> ' + subFieldHtml('route', 'meetingSpot', routeObj.meetingSpot || d.meetingSpot) + '</div>' +
+                        '<div class="cs-kv"><b>Fuel / Stops:</b> ' + subFieldHtml('route', 'fuelNotes', routeObj.fuelNotes || d.fuelNotes) + '</div>' +
                         renderChecklistItems(routeChecklist) +
                         '</div>';
 
@@ -2223,28 +2362,29 @@
                         bgHtml = '<div class="callsheet-block"><h3>Background / Stand-ins</h3>' +
                             '<table><thead><tr class="th-row"><th>Qty</th><th>Description</th><th>Call Time</th></tr></thead><tbody>' +
                             bg.map(function (bgRow) {
-                                return '<tr class="sec-row"><td class="col-c">' + writeIn(bgRow.quantity) + '</td><td>' + writeIn(bgRow.description) + '</td><td class="col-c">' + writeIn(bgRow.callTime) + '</td></tr>';
+                                return '<tr class="sec-row"><td class="col-c">' + writeIn(bgRow.quantity) + '</td><td>' + writeIn(bgRow.description) + tbcBadge(isRowTbc(bgRow)) + '</td><td class="col-c">' + writeIn(bgRow.callTime) + '</td></tr>';
                             }).join('') +
                             '</tbody></table></div>';
                     }
 
                     var notes = d.deptNotes || {};
-                    var hasNotes = notes.camera || notes.ge || notes.artProps || notes.wardrobeFx;
+                    var hasNotes = notes.camera || notes.ge || notes.artProps || notes.wardrobeFx ||
+                        fieldTbcMap['deptNotes.camera'] || fieldTbcMap['deptNotes.ge'] || fieldTbcMap['deptNotes.artProps'] || fieldTbcMap['deptNotes.wardrobeFx'];
                     var notesHtml = '';
                     if (hasNotes) {
                         notesHtml = '<div class="callsheet-block"><h3>Department Notes</h3><div class="cs-dept-grid">';
-                        if (notes.camera) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Camera</div>' + esc(notes.camera) + '</div>';
-                        if (notes.ge) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">G&amp;E</div>' + esc(notes.ge) + '</div>';
-                        if (notes.artProps) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Art / Props</div>' + esc(notes.artProps) + '</div>';
-                        if (notes.wardrobeFx) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Wardrobe / FX</div>' + esc(notes.wardrobeFx) + '</div>';
+                        if (notes.camera || fieldTbcMap['deptNotes.camera']) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Camera</div>' + subFieldHtml('deptNotes', 'camera', notes.camera) + '</div>';
+                        if (notes.ge || fieldTbcMap['deptNotes.ge']) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">G&amp;E</div>' + subFieldHtml('deptNotes', 'ge', notes.ge) + '</div>';
+                        if (notes.artProps || fieldTbcMap['deptNotes.artProps']) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Art / Props</div>' + subFieldHtml('deptNotes', 'artProps', notes.artProps) + '</div>';
+                        if (notes.wardrobeFx || fieldTbcMap['deptNotes.wardrobeFx']) notesHtml += '<div class="cs-dept-item"><div class="cs-dept-label">Wardrobe / FX</div>' + subFieldHtml('deptNotes', 'wardrobeFx', notes.wardrobeFx) + '</div>';
                         notesHtml += '</div></div>';
                     }
 
                     var advHtml = '';
-                    if (d.advanceScenes || d.advanceCast) {
+                    if (d.advanceScenes || d.advanceCast || fieldTbcMap.advanceScenes || fieldTbcMap.advanceCast) {
                         advHtml = '<div class="callsheet-block"><h3>Advance Schedule</h3><div class="cs-advance">' +
-                            '<div><b>Scenes:</b> ' + writeIn(d.advanceScenes) + '</div>' +
-                            '<div><b>Cast:</b> ' + writeIn(d.advanceCast) + '</div>' +
+                            '<div><b>Scenes:</b> ' + fieldHtml('advanceScenes', d.advanceScenes) + '</div>' +
+                            '<div><b>Cast:</b> ' + fieldHtml('advanceCast', d.advanceCast) + '</div>' +
                             '</div></div>';
                     }
 
@@ -2254,7 +2394,7 @@
                         '<div><b>Walkie Channels:</b> ' + fieldHtml('walkieChannels', d.walkieChannels) + '</div>' +
                         '<div><b>Production Office:</b> ' + fieldHtml('productionOffice', d.productionOffice) + '</div>' +
                         '</div>' +
-                        (d.safetyNotes ? '<div style="padding:3px 10px 5px;font-size:7.5pt;color:#000;font-weight:700;">Safety: ' + esc(d.safetyNotes) + '</div>' : '') +
+                        ((d.safetyNotes || fieldTbcMap.safetyNotes) ? '<div style="padding:3px 10px 5px;font-size:7.5pt;color:#000;font-weight:700;">Safety: ' + fieldHtml('safetyNotes', d.safetyNotes) + '</div>' : '') +
                         '</div>';
 
                     return engine._wrapHtml(

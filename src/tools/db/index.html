@@ -2441,14 +2441,52 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* ======== Form Field Helpers ======== */
-  function fld(key, label, type, wide) {
-    var v = '';
+  function getEditorKeyVal(key) {
+    if (!editorData) return '';
     if (key.indexOf('.') > -1) {
       var parts = key.split('.');
-      v = (editorData[parts[0]] || {})[parts[1]] || '';
-    } else {
-      v = editorData[key] || '';
+      return (editorData[parts[0]] && editorData[parts[0]][parts[1]] != null) ? editorData[parts[0]][parts[1]] : '';
     }
+    return editorData[key] != null ? editorData[key] : '';
+  }
+
+  function setEditorKeyVal(key, val) {
+    if (!editorData) return;
+    if (key.indexOf('.') > -1) {
+      var parts = key.split('.');
+      if (!editorData[parts[0]] || typeof editorData[parts[0]] !== 'object' || Array.isArray(editorData[parts[0]])) {
+        editorData[parts[0]] = {};
+      }
+      editorData[parts[0]][parts[1]] = val;
+    } else {
+      editorData[key] = val;
+    }
+  }
+
+  function getEditorArr(arrPath, createIfMissing) {
+    if (!editorData || !arrPath) return null;
+    if (arrPath.indexOf('.') > -1) {
+      var parts = arrPath.split('.');
+      var obj = editorData[parts[0]];
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        if (!createIfMissing) return null;
+        obj = editorData[parts[0]] = {};
+      }
+      if (!Array.isArray(obj[parts[1]])) {
+        if (!createIfMissing) return null;
+        obj[parts[1]] = [];
+      }
+      return obj[parts[1]];
+    }
+    if (!Array.isArray(editorData[arrPath])) {
+      if (!createIfMissing) return null;
+      editorData[arrPath] = [];
+    }
+    return editorData[arrPath];
+  }
+
+  function fld(key, label, type, wide) {
+    var v = getEditorKeyVal(key);
     var source = editorData._autofill && editorData._autofill.sources && editorData._autofill.sources[key];
     var sourceText = source ? source.ref + (editorData._autofill.overrides[key] ? '; edited in this document' : '') : 'Document value. Use Sources and refresh to review mapped facts.';
     var cls = (wide ? ' style="grid-column:1/-1;"' : '') + ' title="' + esc(sourceText) + '"';
@@ -2458,6 +2496,154 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return '<div class="ed-field"' + cls + '><label>' + esc(label) + '</label><input type="' + (type || 'text') + '" data-key="' + key + '" value="' + esc(v) + '"></div>';
   }
 
+  function fldCs(key, label, type, wide, placeholder) {
+    var v = getEditorKeyVal(key);
+    var tbcKey = key + 'Tbc';
+    var isTbc = Boolean(getEditorKeyVal(tbcKey)) || (typeof v === 'string' && /\bTBC\b/i.test(v));
+    var source = editorData && editorData._autofill && editorData._autofill.sources && editorData._autofill.sources[key];
+    var sourceText = source ? source.ref + (editorData._autofill.overrides[key] ? '; edited in this document' : '') : 'Document value. Use Sources and refresh to review mapped facts.';
+    var cls = (wide ? ' style="grid-column:1/-1;"' : '') + ' title="' + esc(sourceText) + '"';
+    var tbcToggle = '<span style="float:right;display:inline-flex;align-items:center;gap:3px;font-size:8.5px;font-weight:700;color:var(--muted);cursor:pointer;text-transform:none;" title="Mark To Be Confirmed">' +
+      '<input type="checkbox" data-key="' + esc(tbcKey) + '"' + (isTbc ? ' checked' : '') + ' style="width:auto;margin:0;">TBC</span>';
+    var ph = placeholder ? ' placeholder="' + esc(placeholder) + '"' : '';
+    if (type === 'textarea') {
+      return '<div class="ed-field"' + cls + '><label>' + esc(label) + tbcToggle + '</label><textarea data-key="' + esc(key) + '"' + ph + '>' + esc(v) + '</textarea></div>';
+    }
+    return '<div class="ed-field"' + cls + '><label>' + esc(label) + tbcToggle + '</label><input type="' + (type || 'text') + '" data-key="' + esc(key) + '" value="' + esc(v) + '"' + ph + '></div>';
+  }
+
+  function normalizeCallSheetEditorData(d) {
+    if (!d || typeof d !== 'object') return;
+    var csTmpl = pub && pub.templates && pub.templates.callSheet;
+    var defaults = csTmpl && csTmpl.getDefaultData ? csTmpl.getDefaultData(budget || {}) : {};
+    var overrides = (d._autofill && d._autofill.overrides) || {};
+
+    ['productionTitle', 'director', 'producers', 'dp', 'upm', 'firstAd', 'secondAd', 'productionOffice', 'dayOf', 'date'].forEach(function (k) {
+      if ((d[k] == null || d[k] === '') && !overrides[k] && defaults[k]) {
+        d[k] = defaults[k];
+      }
+    });
+    if (String(d.productionOffice || '').trim().toLowerCase() === 'independent') d.productionOffice = '';
+
+    /* Migrate legacy scenes and merge with schedule without losing either */
+    var mergedSched = csTmpl && csTmpl._mergeScheduleAndScenes
+      ? csTmpl._mergeScheduleAndScenes(d.schedule, d.scenes)
+      : (Array.isArray(d.schedule) && d.schedule.length ? d.schedule : (d.scenes || []));
+    if (mergedSched.length > 0) {
+      d.schedule = mergedSched;
+      d.scenes = JSON.parse(JSON.stringify(mergedSched));
+    } else if (!d._keepEmptySchedule) {
+      var blankSched = [{ time: '', activity: '', location: '', people: '', notes: '', sceneNum: '', intExt: '', dayNight: '', description: '', cast: '', pages: '', tbc: false }];
+      d.schedule = blankSched;
+      d.scenes = JSON.parse(JSON.stringify(blankSched));
+    } else {
+      d.schedule = [];
+      d.scenes = [];
+    }
+
+    /* Crew table from linked contacts */
+    if ((!Array.isArray(d.crew) || d.crew.length === 0) && !d._keepEmptyCrew) {
+      if (defaults.crew && defaults.crew.length > 0) {
+        d.crew = JSON.parse(JSON.stringify(defaults.crew));
+      } else {
+        d.crew = [{ role: '', name: '', phone: '', call: '', notes: '', tbc: false }];
+      }
+    }
+
+    /* Interviewees table */
+    if ((!Array.isArray(d.interviewees) || d.interviewees.length === 0) && !d._keepEmptyInterviewees) {
+      if (defaults.interviewees && defaults.interviewees.length > 0) {
+        d.interviewees = JSON.parse(JSON.stringify(defaults.interviewees));
+      } else {
+        d.interviewees = [{ name: '', role: '', time: '', location: '', releaseStatus: '', notes: '', tbc: false }];
+      }
+    }
+
+    /* Contacts block (client, locations, hospitals, other) */
+    if (!d.contactsBlock || typeof d.contactsBlock !== 'object' || Array.isArray(d.contactsBlock)) {
+      d.contactsBlock = { client: [], locations: [], hospitals: [], other: [] };
+    }
+    ['client', 'locations', 'hospitals', 'other'].forEach(function (cat) {
+      if (!Array.isArray(d.contactsBlock[cat])) d.contactsBlock[cat] = [];
+    });
+    if (Array.isArray(d.contacts) && d.contacts.length > 0 && d.contactsBlock.other.length === 0) {
+      d.contacts.forEach(function (c) {
+        if (c && (c.name || c.role || c.phone)) d.contactsBlock.other.push(JSON.parse(JSON.stringify(c)));
+      });
+    }
+    var cbEmpty = !d.contactsBlock.client.length && !d.contactsBlock.locations.length && !d.contactsBlock.hospitals.length && !d.contactsBlock.other.length;
+    if (cbEmpty && !d._keepEmptyContactsBlock && defaults.contactsBlock) {
+      ['client', 'locations', 'hospitals', 'other'].forEach(function (cat) {
+        if (Array.isArray(defaults.contactsBlock[cat]) && defaults.contactsBlock[cat].length > 0) {
+          d.contactsBlock[cat] = JSON.parse(JSON.stringify(defaults.contactsBlock[cat]));
+        }
+      });
+    }
+
+    /* Shooting locations */
+    if ((!Array.isArray(d.shootingLocations) || d.shootingLocations.length === 0) && !d._keepEmptyLocations) {
+      d.shootingLocations = (defaults.shootingLocations && defaults.shootingLocations.length > 0)
+        ? JSON.parse(JSON.stringify(defaults.shootingLocations))
+        : [{ address: '', eta: '', notes: '', tbc: false }];
+    }
+
+    /* Meals & Lodging */
+    var defMeals = defaults.meals || { breakfast: '', lunch: '', dinner: '', waterAndSnacks: '', lodging: '', checklist: [] };
+    if (!d.meals || typeof d.meals !== 'object' || Array.isArray(d.meals)) {
+      d.meals = {
+        breakfast: typeof d.meals === 'string' ? d.meals : (d.breakfast || ''),
+        lunch: d.lunch || '',
+        dinner: d.dinner || '',
+        waterAndSnacks: d.waterAndSnacks || d.waterNotes || '',
+        lodging: d.lodging || '',
+        checklist: Array.isArray(d.meals) ? d.meals : JSON.parse(JSON.stringify(defMeals.checklist || []))
+      };
+    } else {
+      if (d.meals.breakfast == null) d.meals.breakfast = d.breakfast || '';
+      if (d.meals.lunch == null) d.meals.lunch = d.lunch || '';
+      if (d.meals.dinner == null) d.meals.dinner = d.dinner || '';
+      if (d.meals.waterAndSnacks == null) d.meals.waterAndSnacks = d.waterAndSnacks || d.waterNotes || '';
+      if (d.meals.lodging == null) d.meals.lodging = d.lodging || '';
+      if (!Array.isArray(d.meals.checklist)) {
+        d.meals.checklist = JSON.parse(JSON.stringify(defMeals.checklist || []));
+      }
+    }
+
+    /* Route & Location Pin */
+    var defRoute = defaults.route || { directions: '', locationPin: '', meetingSpot: '', fuelNotes: '', checklist: [] };
+    if (!d.route || typeof d.route !== 'object' || Array.isArray(d.route)) {
+      d.route = {
+        directions: typeof d.route === 'string' ? d.route : (d.routeNotes || d.directions || defRoute.directions || ''),
+        locationPin: d.locationPin || d.mapPin || defRoute.locationPin || '',
+        meetingSpot: d.meetingSpot || defRoute.meetingSpot || '',
+        fuelNotes: d.fuelNotes || defRoute.fuelNotes || '',
+        checklist: Array.isArray(d.route) ? d.route : JSON.parse(JSON.stringify(defRoute.checklist || []))
+      };
+    } else {
+      if (d.route.directions == null) d.route.directions = d.routeNotes || d.directions || '';
+      if (d.route.locationPin == null) d.route.locationPin = d.locationPin || d.mapPin || '';
+      if (d.route.meetingSpot == null) d.route.meetingSpot = d.meetingSpot || '';
+      if (d.route.fuelNotes == null) d.route.fuelNotes = d.fuelNotes || '';
+      if (!Array.isArray(d.route.checklist)) {
+        d.route.checklist = JSON.parse(JSON.stringify(defRoute.checklist || []));
+      }
+    }
+
+    /* Checklists: kit, paperwork, wrap (unticked by default) */
+    ['kit', 'paperwork', 'wrap'].forEach(function (sec) {
+      if ((!Array.isArray(d[sec]) || d[sec].length === 0) && !d['_keepEmpty_' + sec]) {
+        d[sec] = Array.isArray(defaults[sec]) ? JSON.parse(JSON.stringify(defaults[sec])) : [];
+      }
+      (d[sec] || []).forEach(function (entry) {
+        if (entry && typeof entry === 'object' && entry.checked == null) entry.checked = false;
+      });
+    });
+
+    if (!d.deptNotes || typeof d.deptNotes !== 'object') {
+      d.deptNotes = { camera: '', ge: '', artProps: '', wardrobeFx: '' };
+    }
+  }
+
   /* ======== Build Editor (dispatcher) ======== */
   function buildEditor(templateId) {
     if (templateId === 'storyboard') refreshStoryboardChoices();
@@ -2465,9 +2651,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var d = editorData;
     var html;
     if (templateId === 'callSheet') {
-      if ((!d.shootingLocations || d.shootingLocations.length === 0) && !d.productionTitle) {
-          setTimeout(autoPopulateFromBudget, 50);
-      }
+      normalizeCallSheetEditorData(d);
       html = buildCallSheetHtml(d);
     } else if (templateId === 'purchaseOrder') {
       html = buildPurchaseOrderHtml(d);
@@ -2673,49 +2857,138 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function buildCallSheetHtml(d) {
     var html = '';
-    /* Section 1: Production Info */
+    function rowTbcChecked(r) {
+      if (!r || typeof r !== 'object') return false;
+      if (r.tbc) return true;
+      var keys = Object.keys(r);
+      for (var k = 0; k < keys.length; k++) {
+        var key = keys[k];
+        if ((/Tbc$|_tbc$/i.test(key) && r[key]) || (typeof r[key] === 'string' && /\bTBC\b/i.test(r[key]))) return true;
+      }
+      return false;
+    }
+    function tbcCell(arrName, idx, rowObj) {
+      return '<td style="width:42px;text-align:center;"><input type="checkbox" data-arr="' + esc(arrName) + '" data-i="' + idx + '" data-f="tbc"' + (rowTbcChecked(rowObj) ? ' checked' : '') + ' title="Mark item TBC" style="width:auto;"></td>';
+    }
+
+    /* Section 1: Production Info & Key Crew */
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Production Info' +
       '<button class="smart-btn" id="btn-load-budget" type="button">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>' +
       ' Load from Budget</button></div>' +
-      '<div class="ed-row">' + fld('productionTitle', 'Production Title', null, true) + '</div>' +
-      '<div class="ed-row" style="grid-template-columns:1fr 1fr 1fr;">' + fld('date', 'Date', 'date') + fld('dayOf', 'Day Of') + fld('generalCall', 'General Call', 'time') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('director', 'Director') + fld('producers', 'Producers') + '</div>' +
-      '<div class="ed-row ed-3">' + fld('firstAd', '1st AD') + fld('secondAd', '2nd AD') + fld('upm', 'UPM') + '</div>' +
+      '<div class="ed-row">' + fldCs('productionTitle', 'Production Title', null, true) + '</div>' +
+      '<div class="ed-row ed-3">' + fldCs('date', 'Date', 'date') + fldCs('dayOf', 'Day Of') + fldCs('productionOffice', 'Production Office') + '</div>' +
+      '<div class="ed-row ed-3">' + fldCs('director', 'Director') + fldCs('producers', 'Producers') + fldCs('dp', 'DP') + '</div>' +
+      '<div class="ed-row ed-3">' + fldCs('firstAd', '1st AD') + fldCs('secondAd', '2nd AD') + fldCs('upm', 'UPM') + '</div>' +
       '</div>';
-    /* Section 2: Schedule */
-    html += '<div class="ed-section"><div class="ed-section-hdr">Schedule</div>' +
-      '<div class="ed-row ed-4">' + fld('crewCall', 'Crew Call', 'time') + fld('shootingCall', 'Shooting Call', 'time') + fld('estimatedLunch', 'Est. Lunch', 'time') + fld('estimatedWrap', 'Est. Wrap', 'time') + '</div>' +
-      '</div>';
-    /* Section 3: Locations */
+
+    /* Section 2: Call Times & Per-Person Crew Overrides */
+    html += '<div class="ed-section"><div class="ed-section-hdr">Crew Call Times &amp; Per-Person Overrides</div>' +
+      '<div class="ed-row ed-4">' + fldCs('crewCall', 'Crew Call', 'time') + fldCs('shootingCall', 'Shooting Call', 'time') + fldCs('estimatedLunch', 'Est. Lunch', 'time') + fldCs('estimatedWrap', 'Est. Wrap', 'time') + '</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-cs-crew"><thead><tr><th>Role</th><th>Name</th><th>Phone</th><th style="width:90px;">Call</th><th>Notes</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+    (d.crew || []).forEach(function (m, i) {
+      html += '<tr>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="role" value="' + esc(m.role || '') + '" placeholder="Role"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="name" value="' + esc(m.name || '') + '" placeholder="Crew member"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="phone" value="' + esc(m.phone || '') + '" placeholder="Phone"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="call" value="' + esc(m.call || '') + '" placeholder="Call time"></td>' +
+        '<td><input data-arr="crew" data-i="' + i + '" data-f="notes" value="' + esc(m.notes || '') + '"></td>' +
+        tbcCell('crew', i, m) +
+        '<td><button class="ed-del" data-arr="crew" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="crew">+ Add Crew Override</button></div>';
+
+    /* Section 3: Contacts Block (Client, Locations, Hospitals, Other) */
+    var cb = d.contactsBlock || { client: [], locations: [], hospitals: [], other: [] };
+    var contactCats = [
+      { key: 'client', label: 'Client Contacts', btn: '+ Add Client Contact' },
+      { key: 'locations', label: 'Location Contacts', btn: '+ Add Location Contact' },
+      { key: 'hospitals', label: 'Hospital / Emergency Contacts', btn: '+ Add Hospital Contact' },
+      { key: 'other', label: 'Other Contacts', btn: '+ Add Other Contact' }
+    ];
+    html += '<div class="ed-section"><div class="ed-section-hdr">Contacts Block (Client, Locations, Hospitals, Other)</div>';
+    contactCats.forEach(function (cat) {
+      var arrPath = 'contactsBlock.' + cat.key;
+      var rows = cb[cat.key] || [];
+      html += '<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;">' + esc(cat.label) + '</div>' +
+        '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Name</th><th>Role / Site</th><th>Phone / Address</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+      rows.forEach(function (c, i) {
+        html += '<tr>' +
+          '<td><input data-arr="' + arrPath + '" data-i="' + i + '" data-f="name" value="' + esc(c.name || '') + '" placeholder="Name"></td>' +
+          '<td><input data-arr="' + arrPath + '" data-i="' + i + '" data-f="role" value="' + esc(c.role || '') + '" placeholder="Role or site"></td>' +
+          '<td><input data-arr="' + arrPath + '" data-i="' + i + '" data-f="phone" value="' + esc(c.phone || '') + '" placeholder="Phone / contact info"></td>' +
+          tbcCell(arrPath, i, c) +
+          '<td><button class="ed-del" data-arr="' + arrPath + '" data-del="' + i + '">&times;</button></td></tr>';
+      });
+      html += '</tbody></table></div><button class="ed-add-btn" data-add="' + arrPath + '">' + esc(cat.btn) + '</button>';
+    });
+    html += '</div>';
+
+    /* Section 4: Documentary Schedule (Time, Activity, Location, People, Notes) */
+    var schedRows = (Array.isArray(d.schedule) && d.schedule.length > 0) ? d.schedule : (d.scenes || []);
+    html += '<div class="ed-section"><div class="ed-section-hdr">Schedule (Time / Activity / Location / People / Notes)</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-schedule"><thead><tr><th style="width:85px;">Time</th><th>Activity</th><th>Location</th><th>People</th><th>Notes</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+    schedRows.forEach(function (s, i) {
+      var actVal = (s.activity != null && s.activity !== '') ? s.activity : (s.description || '');
+      var pplVal = (s.people != null && s.people !== '') ? s.people : (s.cast || '');
+      html += '<tr>' +
+        '<td><input data-arr="schedule" data-i="' + i + '" data-f="time" value="' + esc(s.time || '') + '" placeholder="HH:MM"></td>' +
+        '<td><input data-arr="schedule" data-i="' + i + '" data-f="activity" value="' + esc(actVal) + '" placeholder="Activity / scene"></td>' +
+        '<td><input data-arr="schedule" data-i="' + i + '" data-f="location" value="' + esc(s.location || '') + '" placeholder="Location"></td>' +
+        '<td><input data-arr="schedule" data-i="' + i + '" data-f="people" value="' + esc(pplVal) + '" placeholder="People"></td>' +
+        '<td><input data-arr="schedule" data-i="' + i + '" data-f="notes" value="' + esc(s.notes || '') + '" placeholder="Notes"></td>' +
+        tbcCell('schedule', i, s) +
+        '<td><button class="ed-del" data-arr="schedule" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="schedule">+ Add Schedule Row</button></div>';
+
+    /* Section 5: Interviewees (Name, Role, Time, Location, Release Status) */
+    html += '<div class="ed-section"><div class="ed-section-hdr">Interviewees</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-interviewees"><thead><tr><th>Name</th><th>Role</th><th style="width:85px;">Time</th><th>Location</th><th>Release Status</th><th>Notes</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+    (d.interviewees || []).forEach(function (iv, i) {
+      html += '<tr>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="name" value="' + esc(iv.name || '') + '" placeholder="Interviewee name"></td>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="role" value="' + esc(iv.role || '') + '" placeholder="Title / role"></td>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="time" value="' + esc(iv.time || '') + '" placeholder="HH:MM"></td>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="location" value="' + esc(iv.location || '') + '" placeholder="Location"></td>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="releaseStatus" value="' + esc(iv.releaseStatus || '') + '" placeholder="Release signed"></td>' +
+        '<td><input data-arr="interviewees" data-i="' + i + '" data-f="notes" value="' + esc(iv.notes || '') + '" placeholder="Notes"></td>' +
+        tbcCell('interviewees', i, iv) +
+        '<td><button class="ed-del" data-arr="interviewees" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="interviewees">+ Add Interviewee</button></div>';
+
+    /* Section 6: Shooting Locations */
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Shooting Locations' +
       '<button class="smart-btn" id="btn-fetch-weather-loc" type="button">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
       ' Fetch All Forecasts</button></div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th style="width:90px;">ETA</th><th>Notes</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-locations"><thead><tr><th>Address</th><th style="width:90px;">ETA</th><th>Notes</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
     (d.shootingLocations || []).forEach(function (loc, i) {
       html += '<tr><td><input data-arr="shootingLocations" data-i="' + i + '" data-f="address" value="' + esc(loc.address || '') + '" placeholder="Street, City, Country"></td>' +
         '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="eta" type="time" value="' + esc(loc.eta || '') + '" style="width:80px;"></td>' +
         '<td><input data-arr="shootingLocations" data-i="' + i + '" data-f="notes" value="' + esc(loc.notes || '') + '"></td>' +
+        tbcCell('shootingLocations', i, loc) +
         '<td><button class="ed-del" data-arr="shootingLocations" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="shootingLocations">+ Add Location</button>' +
       '<div style="font-size:10px;color:var(--muted);padding:4px 2px 0;">Fetch All Forecasts uses shooting location rows first, then Basecamp if rows are empty.</div>' +
       '</div>';
-    /* Section 4: Weather & Logistics */
+
+    /* Section 7: Weather & Logistics */
     html += '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Weather &amp; Logistics' +
       '<button class="smart-btn" id="btn-fetch-weather" type="button">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>' +
       ' Fetch from Address</button></div>' +
       '<div class="smart-bar"><span id="weather-status"></span></div>' +
       '<div id="hospital-picker"></div>' +
-      '<div class="ed-row ed-2">' + fld('basecamp', 'Basecamp Address') + fld('basecampParking', 'Parking Notes') + '</div>' +
-      '<div class="ed-row ed-3">' + fld('weatherHigh', 'High') + fld('weatherLow', 'Low') + fld('weatherConditions', 'Conditions') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('sunrise', 'Sunrise', 'time') + fld('sunset', 'Sunset', 'time') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('hospitalName', 'Hospital Name') + fld('hospitalPhone', 'Hospital Phone') + '</div>' +
-      '<div class="ed-row">' + fld('hospitalAddress', 'Hospital Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('basecamp', 'Basecamp Address') + fldCs('basecampParking', 'Parking Notes') + '</div>' +
+      '<div class="ed-row ed-3">' + fldCs('weatherHigh', 'High') + fldCs('weatherLow', 'Low') + fldCs('weatherConditions', 'Conditions') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('sunrise', 'Sunrise', 'time') + fldCs('sunset', 'Sunset', 'time') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('hospitalName', 'Hospital Name') + fldCs('hospitalPhone', 'Hospital Phone') + '</div>' +
+      '<div class="ed-row">' + fldCs('hospitalAddress', 'Hospital Address', null, true) + '</div>' +
       '</div>';
-    /* 45.4 — Multi-location 3-day forecast (shown when locationForecasts populated by fetchWeatherAndHospitals) */
+
     if (d.locationForecasts && d.locationForecasts.length > 0) {
       html += '<div class="ed-section"><div class="ed-section-hdr">3-Day Forecast by Location</div>';
       d.locationForecasts.forEach(function (loc) {
@@ -2734,36 +3007,82 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       });
       html += '</div>';
     }
-    /* Section 4: Shooting Schedule (dynamic table) */
-    html += '<div class="ed-section"><div class="ed-section-hdr">Shooting Schedule</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-scenes"><thead><tr><th>Scene</th><th>I/E</th><th>D/N</th><th>Description</th><th>Cast</th><th>Pages</th><th>Location</th><th></th></tr></thead><tbody>';
-    (d.scenes || []).forEach(function (s, i) {
-      html += sceneRow(s, i);
+
+    /* Section 8: Meals & Lodging */
+    var mealsChecklist = (d.meals && Array.isArray(d.meals.checklist)) ? d.meals.checklist : [];
+    html += '<div class="ed-section"><div class="ed-section-hdr">Meals &amp; Lodging</div>' +
+      '<div class="ed-row ed-3">' + fldCs('meals.breakfast', 'Breakfast') + fldCs('meals.lunch', 'Lunch') + fldCs('meals.dinner', 'Dinner') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('meals.waterAndSnacks', 'Water / Snacks') + fldCs('meals.lodging', 'Lodging') + '</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Meals / Lodging Checklist Item</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+    mealsChecklist.forEach(function (entry, i) {
+      var itemText = typeof entry === 'string' ? entry : (entry && entry.item || '');
+      html += '<tr>' +
+        '<td><input data-arr="meals.checklist" data-i="' + i + '" data-f="item" value="' + esc(itemText) + '"></td>' +
+        tbcCell('meals.checklist', i, entry) +
+        '<td><button class="ed-del" data-arr="meals.checklist" data-del="' + i + '">&times;</button></td></tr>';
     });
-    html += '</tbody></table></div><button class="ed-add-btn" data-add="scenes">+ Add Scene</button></div>';
-    /* Section 5: Cast Call (dynamic table) */
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="meals.checklist">+ Add Meals Checklist Item</button></div>';
+
+    /* Section 9: Route & Location Pin */
+    var routeChecklist = (d.route && Array.isArray(d.route.checklist)) ? d.route.checklist : [];
+    html += '<div class="ed-section"><div class="ed-section-hdr">Route &amp; Location Pin</div>' +
+      '<div class="ed-row ed-2">' + fldCs('route.directions', 'Route / Directions') + fldCs('route.locationPin', 'Location Pin (Text / URL)', null, false, 'Coordinates or map URL') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('route.meetingSpot', 'Meeting Spot') + fldCs('route.fuelNotes', 'Fuel / Stops') + '</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Route Checklist Item</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+    routeChecklist.forEach(function (entry, i) {
+      var itemText = typeof entry === 'string' ? entry : (entry && entry.item || '');
+      html += '<tr>' +
+        '<td><input data-arr="route.checklist" data-i="' + i + '" data-f="item" value="' + esc(itemText) + '"></td>' +
+        tbcCell('route.checklist', i, entry) +
+        '<td><button class="ed-del" data-arr="route.checklist" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="route.checklist">+ Add Route Checklist Item</button></div>';
+
+    /* Section 10: Kit, Paperwork on Set, and Wrap Checklists (add/remove, unticked by default) */
+    [
+      { key: 'kit', title: 'Kit Checklist', btn: '+ Add Kit Item' },
+      { key: 'paperwork', title: 'Paperwork on Set', btn: '+ Add Paperwork Item' },
+      { key: 'wrap', title: 'Wrap Checklist', btn: '+ Add Wrap Item' }
+    ].forEach(function (chk) {
+      var list = d[chk.key] || [];
+      html += '<div class="ed-section"><div class="ed-section-hdr">' + esc(chk.title) + '</div>' +
+        '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Checklist Item (printed unticked)</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
+      list.forEach(function (entry, i) {
+        var itemText = typeof entry === 'string' ? entry : (entry && (entry.item || entry.description || '') || '');
+        html += '<tr>' +
+          '<td><input data-arr="' + chk.key + '" data-i="' + i + '" data-f="item" value="' + esc(itemText) + '"></td>' +
+          tbcCell(chk.key, i, entry) +
+          '<td><button class="ed-del" data-arr="' + chk.key + '" data-del="' + i + '">&times;</button></td></tr>';
+      });
+      html += '</tbody></table></div><button class="ed-add-btn" data-add="' + chk.key + '">' + esc(chk.btn) + '</button></div>';
+    });
+
+    /* Section 11: Cast Call (dynamic table) */
     html += '<div class="ed-section"><div class="ed-section-hdr">Cast Call</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-cast"><thead><tr><th>#</th><th>Character</th><th>Actor</th><th>Status</th><th>Pickup</th><th>Call</th><th>B/R</th><th>MU/WR</th><th>On Set</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-cast"><thead><tr><th>#</th><th>Character</th><th>Actor</th><th>Status</th><th>Pickup</th><th>Call</th><th>B/R</th><th>MU/WR</th><th>On Set</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
     (d.cast || []).forEach(function (c, i) {
       html += castRow(c, i);
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="cast">+ Add Cast</button></div>';
-    /* Section 6: Background (dynamic table) */
+
+    /* Section 12: Background (dynamic table) */
     html += '<div class="ed-section"><div class="ed-section-hdr">Background / Stand-ins</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-background"><thead><tr><th>Qty</th><th>Description</th><th>Call Time</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-background"><thead><tr><th>Qty</th><th>Description</th><th>Call Time</th><th style="width:42px;text-align:center;">TBC</th><th></th></tr></thead><tbody>';
     (d.background || []).forEach(function (b, i) {
       html += '<tr><td><input data-arr="background" data-i="' + i + '" data-f="quantity" value="' + esc(b.quantity) + '" style="width:50px;"></td>' +
         '<td><input data-arr="background" data-i="' + i + '" data-f="description" value="' + esc(b.description) + '"></td>' +
         '<td><input data-arr="background" data-i="' + i + '" data-f="callTime" value="' + esc(b.callTime) + '" style="width:80px;"></td>' +
+        tbcCell('background', i, b) +
         '<td><button class="ed-del" data-arr="background" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="background">+ Add Background</button></div>';
-    /* Section 7: Vehicle Assignments */
+
+    /* Section 13: Vehicle Assignments */
     html += '<div class="ed-section"><div class="ed-section-hdr">Vehicle Assignments</div>' +
       '<div class="ed-tbl-wrap"><table class="ed-tbl" id="tbl-vehicles"><thead><tr>' +
       '<th>Vehicle / Driver</th><th style="width:80px;">Type</th><th>Passengers / Cargo</th>' +
       '<th style="width:100px;">Pickup Location</th><th style="width:70px;">Pickup Time</th>' +
-      '<th style="width:100px;">Destination</th><th style="width:70px;">ETA</th><th></th>' +
+      '<th style="width:100px;">Destination</th><th style="width:70px;">ETA</th><th style="width:42px;text-align:center;">TBC</th><th></th>' +
       '</tr></thead><tbody>';
     (d.vehicles || []).forEach(function (v, i) {
       html += '<tr>' +
@@ -2776,22 +3095,26 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '<td><input data-arr="vehicles" data-i="' + i + '" data-f="pickupTime" type="time" value="' + esc(v.pickupTime) + '"></td>' +
         '<td><input data-arr="vehicles" data-i="' + i + '" data-f="destination" value="' + esc(v.destination) + '"></td>' +
         '<td><input data-arr="vehicles" data-i="' + i + '" data-f="eta" type="time" value="' + esc(v.eta) + '"></td>' +
+        tbcCell('vehicles', i, v) +
         '<td><button class="ed-del" data-arr="vehicles" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="vehicles">+ Add Vehicle</button></div>';
-    /* Section 8: Department Notes */
+
+    /* Section 14: Department Notes */
     html += '<div class="ed-section"><div class="ed-section-hdr">Department Notes</div>' +
-      '<div class="ed-row ed-2">' + fld('deptNotes.camera', 'Camera') + fld('deptNotes.ge', 'G&E') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('deptNotes.artProps', 'Art / Props') + fld('deptNotes.wardrobeFx', 'Wardrobe / FX') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('deptNotes.camera', 'Camera') + fldCs('deptNotes.ge', 'G&E') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('deptNotes.artProps', 'Art / Props') + fldCs('deptNotes.wardrobeFx', 'Wardrobe / FX') + '</div>' +
       '</div>';
-    /* Section 8: Advance Schedule */
+
+    /* Section 15: Advance Schedule */
     html += '<div class="ed-section"><div class="ed-section-hdr">Advance Schedule (Tomorrow)</div>' +
-      '<div class="ed-row ed-2">' + fld('advanceScenes', 'Scenes') + fld('advanceCast', 'Cast') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('advanceScenes', 'Scenes') + fldCs('advanceCast', 'Cast') + '</div>' +
       '</div>';
-    /* Section 9: Footer */
+
+    /* Section 16: Footer */
     html += '<div class="ed-section"><div class="ed-section-hdr">Footer</div>' +
-      '<div class="ed-row">' + fld('walkieChannels', 'Walkie Channels') + '</div>' +
-      '<div class="ed-row ed-2">' + fld('safetyNotes', 'Safety Notes') + fld('productionOffice', 'Production Office') + '</div>' +
+      '<div class="ed-row">' + fldCs('walkieChannels', 'Walkie Channels') + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('safetyNotes', 'Safety Notes') + fldCs('productionOffice', 'Production Office') + '</div>' +
       '</div>';
     return html;
   }
@@ -3133,6 +3456,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<td><input data-arr="cast" data-i="' + i + '" data-f="blockRehearsal" value="' + esc(c.blockRehearsal) + '" style="width:55px;"></td>' +
       '<td><input data-arr="cast" data-i="' + i + '" data-f="wardrobeMakeup" value="' + esc(c.wardrobeMakeup) + '" style="width:55px;"></td>' +
       '<td><input data-arr="cast" data-i="' + i + '" data-f="onSet" value="' + esc(c.onSet) + '" style="width:60px;"></td>' +
+      '<td style="width:42px;text-align:center;"><input type="checkbox" data-arr="cast" data-i="' + i + '" data-f="tbc"' + (c.tbc ? ' checked' : '') + ' title="Mark cast row TBC" style="width:auto;"></td>' +
       '<td><button class="ed-del" data-arr="cast" data-del="' + i + '">&times;</button></td></tr>';
   }
 
@@ -3935,71 +4259,58 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Wire Editor Events ======== */
   function wireEditor(panel) {
 
-    /* Simple field inputs (data-key) */
-    panel.addEventListener('input', function (e) {
-      var el = e.target;
+    function applyControlChange(el) {
+      if (!el || !el.getAttribute) return;
       var key = el.getAttribute('data-key');
       var arr = el.getAttribute('data-arr');
+      var val = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
 
       if (key) {
         afTyped(key.split('.')[0]);
-        if (key.indexOf('.') > -1) {
-          var parts = key.split('.');
-          if (!editorData[parts[0]]) editorData[parts[0]] = {};
-          editorData[parts[0]][parts[1]] = el.value;
-        } else {
-          editorData[key] = el.value;
-        }
+        setEditorKeyVal(key, val);
         saveEditorData();
         return;
       }
 
-      /* Array field inputs (data-arr, data-i, data-f) */
       if (arr) {
-        afTyped(arr);
+        afTyped(arr.split('.')[0]);
         var idx = parseInt(el.getAttribute('data-i'), 10);
         var field = el.getAttribute('data-f');
-        if (editorData[arr] && editorData[arr][idx] !== undefined) {
+        var list = getEditorArr(arr, false);
+        if (list && list[idx] !== undefined) {
+          if (typeof list[idx] === 'string') {
+            list[idx] = { item: list[idx], checked: false };
+          }
           if (field.indexOf('.') > -1) {
             var fp = field.split('.');
-            if (!editorData[arr][idx][fp[0]]) editorData[arr][idx][fp[0]] = {};
-            editorData[arr][idx][fp[0]][fp[1]] = el.value;
+            if (!list[idx][fp[0]]) list[idx][fp[0]] = {};
+            list[idx][fp[0]][fp[1]] = val;
           } else {
-            editorData[arr][idx][field] = el.value;
+            list[idx][field] = val;
+            if (arr === 'schedule' && field === 'activity') list[idx].description = val;
+            if (arr === 'schedule' && field === 'people') list[idx].cast = val;
           }
+          if (arr === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(list));
+          if (arr === 'scenes' && activeTemplateId === 'callSheet') editorData.schedule = JSON.parse(JSON.stringify(list));
           saveEditorData();
         }
       }
+    }
+
+    /* Simple and array field inputs (data-key, data-arr) */
+    panel.addEventListener('input', function (e) {
+      applyControlChange(e.target);
     });
 
-    /* Also handle select changes */
+    /* Handle select and checkbox changes */
     panel.addEventListener('change', function (e) {
       var el = e.target;
-      if (el.tagName !== 'SELECT') return;
-      var arr = el.getAttribute('data-arr');
-      var key = el.getAttribute('data-key');
-      if (key) {
-        afTyped(key);
-        editorData[key] = el.value;
-        saveEditorData();
-      } else if (arr) {
-        afTyped(arr);
-        var idx = parseInt(el.getAttribute('data-i'), 10);
-        var field = el.getAttribute('data-f');
-        if (editorData[arr] && editorData[arr][idx] !== undefined) {
-          if (field.indexOf('.') > -1) {
-            var fp = field.split('.');
-            if (!editorData[arr][idx][fp[0]]) editorData[arr][idx][fp[0]] = {};
-            editorData[arr][idx][fp[0]][fp[1]] = el.value;
-          } else {
-            editorData[arr][idx][field] = el.value;
-          }
-          saveEditorData();
-        }
-      }
+      if (!el) return;
+      if (el.tagName !== 'SELECT' && el.type !== 'checkbox') return;
+      applyControlChange(el);
     });
 
-    /* Add row buttons */
+    /* Add and delete row buttons */
     panel.addEventListener('click', function (e) {
       var addBtn = e.target.closest('[data-add]');
       var delBtn = e.target.closest('[data-del]');
@@ -4008,8 +4319,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var arrName = addBtn.getAttribute('data-add');
         var newItem = getBlankRow(arrName);
         dbPushUndoImmediate();
-        if (!editorData[arrName]) editorData[arrName] = [];
-        editorData[arrName].push(newItem);
+        var listAdd = getEditorArr(arrName, true);
+        listAdd.push(newItem);
+        if (arrName === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(listAdd));
         saveEditorData();
         var scrollY = panel.scrollTop;
         buildEditor(activeTemplateId);
@@ -4021,13 +4333,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (delBtn) {
         var arrN = delBtn.getAttribute('data-arr');
         var delIdx = parseInt(delBtn.getAttribute('data-del'), 10);
-        if (editorData[arrN]) {
+        var listDel = getEditorArr(arrN, false);
+        if (listDel) {
           dbPushUndoImmediate();
           if (arrN === 'sources' && activeTemplateId === 'fundingPackage') {
             var removedSource = editorData.sources[delIdx];
             if (removedSource && removedSource.id && fundingDeletes.indexOf(removedSource.id) < 0) fundingDeletes.push(removedSource.id);
           }
-          editorData[arrN].splice(delIdx, 1);
+          listDel.splice(delIdx, 1);
+          if (arrN === 'schedule') {
+            editorData.scenes = JSON.parse(JSON.stringify(listDel));
+            if (listDel.length === 0) editorData._keepEmptySchedule = true;
+          }
+          if (arrN === 'crew' && listDel.length === 0) editorData._keepEmptyCrew = true;
+          if (arrN === 'interviewees' && listDel.length === 0) editorData._keepEmptyInterviewees = true;
+          if (arrN.indexOf('contactsBlock.') === 0) editorData._keepEmptyContactsBlock = true;
+          if (['kit', 'paperwork', 'wrap'].indexOf(arrN) > -1 && listDel.length === 0) editorData['_keepEmpty_' + arrN] = true;
           saveEditorData();
           var scrollYDel = panel.scrollTop;
           buildEditor(activeTemplateId);
@@ -4042,15 +4363,26 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (arrName === 'scenes' && activeTemplateId === 'productionReport') {
       return { num: '', ie: 'INT', dn: 'DAY', description: '', pages: '', status: 'Complete' };
     }
+    if (arrName === 'crew' && activeTemplateId === 'callSheet') {
+      return { role: '', name: '', phone: '', call: '', notes: '', tbc: false };
+    }
+    if (arrName.indexOf('contactsBlock.') === 0) {
+      return { name: '', role: '', phone: '', address: '', notes: '', tbc: false };
+    }
+    if (['kit', 'paperwork', 'wrap', 'meals.checklist', 'route.checklist'].indexOf(arrName) > -1) {
+      return { item: '', checked: false, tbc: false };
+    }
     var blanks = {
-      scenes: { sceneNum: '', intExt: 'INT', dayNight: 'DAY', description: '', cast: '', pages: '', location: '' },
-      cast: { id: '', character: '', actor: '', status: 'W', pickup: '', call: '', blockRehearsal: '', wardrobeMakeup: '', onSet: '' },
-      background: { quantity: '', description: '', callTime: '' },
-      shootingLocations: { address: '', eta: '', notes: '' },
+      schedule: { time: '', activity: '', location: '', people: '', notes: '', sceneNum: '', intExt: '', dayNight: '', description: '', cast: '', pages: '', tbc: false },
+      interviewees: { name: '', role: '', time: '', location: '', releaseStatus: '', notes: '', tbc: false },
+      scenes: { sceneNum: '', intExt: 'INT', dayNight: 'DAY', description: '', cast: '', pages: '', location: '', tbc: false },
+      cast: { id: '', character: '', actor: '', status: 'W', pickup: '', call: '', blockRehearsal: '', wardrobeMakeup: '', onSet: '', tbc: false },
+      background: { quantity: '', description: '', callTime: '', tbc: false },
+      shootingLocations: { address: '', eta: '', notes: '', tbc: false },
       items: { description: '', quantity: '1', unitPrice: '', total: '' },
       entries: { date: new Date().toISOString().split('T')[0], description: '', category: '', amount: '', receiptNum: '', approvedBy: '' },
       crew: { department: '', name: '', role: '', phases: '', rate: '', rateUnit: 'Day', union: '', phone: '', email: '', emergencyContact: '', emergencyPhone: '' },
-      vehicles: { driver: '', type: 'Van', passengers: '', pickupLocation: '', pickupTime: '', destination: '', eta: '' },
+      vehicles: { driver: '', type: 'Van', passengers: '', pickupLocation: '', pickupTime: '', destination: '', eta: '', tbc: false },
       delays: { duration: '', reason: '' },
       equipment: { description: '', serialNum: '', replacementValue: '', rentalRate: '', rateType: 'Daily' },
       sources: { name: '', amount: 0, currency: currency, status: 'Pending' },
