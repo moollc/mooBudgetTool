@@ -720,7 +720,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '<style>' + styleCss + '</style>\n</head>\n<body>\n<div class="container">\n' +
         '<div class="page-header"><h1>' + safeName + '</h1><p>mooBudgetTool Digital Export ' + (ink ? '-' : '&mdash;') + ' Generated ' + new Date().toLocaleDateString() + '</p></div>\n' +
         '<div class="card"><div class="card-header">Financial Summary</div><div class="card-body"><div class="summary-grid">' +
-        '<div class="summary-item"><div class="label">Company</div><div class="value">' + esc(b.company || (emptyInput ? '' : 'Independent')) + '</div></div>' +
+        '<div class="summary-item"><div class="label">Company</div><div class="value">' + esc(pub.templates.paperBrand(b.company || (emptyInput ? '' : 'Independent'))) + '</div></div>' +
         '<div class="summary-item"><div class="label">Currency</div><div class="value">' + esc(cur) + '</div></div>' +
         (emptyInput ? [] : pub.financialSummary(b)).map(function (row) {
           return '<div class="summary-item"><div class="label">' + esc(row[0]) + '</div><div class="value">' + esc(row[1].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + '</div></div>';

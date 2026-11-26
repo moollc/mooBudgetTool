@@ -106,10 +106,19 @@
         return '';
     }
     /* Company/office names only; preserve email domains and web addresses in the same text. */
-    function paperBrand(text) { return String(text || '').replace(/(^|[^\p{L}\p{N}@/.])moo\.llc(?![\p{L}\p{N}/]|\.[\p{L}\p{N}])/giu, '$1moo'); }
+    function paperBrand(text) { return String(text || '').replace(/(^|[^\p{L}\p{N}@/.])moo\.llc(?![\p{L}\p{N}/?#]|:\d|\.[\p{L}\p{N}])/giu, '$1moo'); }
     function paperEsc(text) { return esc(paperBrand(text)); }
     function paperContacts(b, opts) {
-        var lists = [], seen = {}, out = [];
+        var lists = [], seen = Object.create(null), out = [], linked = Object.create(null);
+        var budgetContacts = b && Array.isArray(b.contacts) ? b.contacts : [];
+        function link(item) {
+            if (item && item.contactId != null && item.contactId !== '') linked[String(item.contactId)] = true;
+        }
+        Object.keys((b && b.sections) || {}).forEach(function (name) { (((b.sections[name] || {}).items) || []).forEach(link); });
+        var ledgers = (b && b.ledgers) || {};
+        (ledgers.pos || []).forEach(link);
+        (ledgers.pettyCash || []).forEach(function (fl) { if (fl) (fl.receipts || []).forEach(link); });
+        budgetContacts.forEach(function (c) { if (c && c.id != null && c.id !== '') linked[String(c.id)] = true; });
         opts = opts || {};
         if (Array.isArray(opts.contacts)) lists.push(opts.contacts);
         if (opts.editorData && Array.isArray(opts.editorData.contacts)) lists.push(opts.editorData.contacts);
@@ -119,6 +128,7 @@
         lists.forEach(function (arr) {
             arr.forEach(function (c) {
                 if (!c || typeof c !== 'object') return;
+                if (budgetContacts.indexOf(c) === -1 && !(c.id != null && linked[String(c.id)])) return;
                 var key = c.id != null && c.id !== '' ? 'id:' + c.id : 'name:' + String(c.name || '').toLowerCase();
                 if (seen[key]) return;
                 seen[key] = true;
@@ -146,7 +156,7 @@
         }
         return null;
     }
-    function paperAmount(v) {
+    function paperAmount(v, currency) {
         if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
         // Stored numeric values are computed money; only typed text uses the strict grammar below.
         if (typeof v === 'number') {
@@ -157,17 +167,21 @@
         }
         var s = String(v).trim();
         if (!s) return null;
-        var match = s.match(/^(?:(?:J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(?:JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
+        var match = s.match(/^(?:(J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
         if (!match) return null;
-        var n = Number(match[1].replace(/,/g, '') + (match[2] ? '.' + match[2] : ''));
+        if (currency && [match[1], match[4]].some(function (marker) {
+            var code = /^(J\$|JMD|Jamaican dollars?)$/i.test(marker || '') ? 'JMD' : /^(US\$|USD|United States dollars?)$/i.test(marker || '') ? 'USD' : '';
+            return code && code !== String(currency).toUpperCase();
+        })) return null;
+        var n = Number(match[2].replace(/,/g, '') + (match[3] ? '.' + match[3] : ''));
         if (!isFinite(n) || n < 0 || n >= 1e12) return null;
         return n === 0 ? 0 : n;
     }
-    function paperLineTotal(item) {
+    function paperLineTotal(item, currency) {
         if (!item) return null;
         // A supplied total or amount is authoritative, including invalid text: never guess a replacement.
-        if (item.total !== undefined) return paperAmount(item.total);
-        if (item.amount !== undefined) return paperAmount(item.amount);
+        if (item.total !== undefined) return paperAmount(item.total, currency);
+        if (item.amount !== undefined) return paperAmount(item.amount, currency);
         var q = paperAmount(item.quantity), r = paperAmount(item.rate);
         if (q === null || r === null) return null;
         var m = (item.multiplier != null && item.multiplier !== '') ? paperAmount(item.multiplier) : 1;
@@ -177,6 +191,13 @@
         if (typeof item.rate === 'number') r = item.rate;
         if (typeof item.multiplier === 'number') m = item.multiplier;
         return paperAmount(q * r * m);
+    }
+    function paperProductionSection(sec, name) {
+        var id = String((sec && sec.id) || '').toLowerCase();
+        return ['prod', 'btl', 'btl_prod', 'tech', 'gear', 'conn', 'equipment',
+            'dep-camera', 'dep-sound', 'dep-electrical', 'dep-grip', 'dep-art', 'dep-wardrobe', 'dep-makeup',
+            'dep-production', 'dep-location', 'dep-transport', 'dep-catering', 'dep-live', 'dep-equipment'].indexOf(id) > -1 ||
+            /production|equipment|gear/i.test(String(name || ''));
     }
     function paperIsProducerRole(text) {
         var t = String(text || '').toLowerCase();
@@ -1549,6 +1570,12 @@
                 return String(text).replace(/&mdash;|&ndash;|\u2014|\u2013/g, '-').toLowerCase().replace(/[a-z][a-z-]*/g, function (w, i) {
                     return (i > 0 && small[w]) ? w : w.charAt(0).toUpperCase() + w.slice(1);
                 });
+            },
+
+            /* Generators identify empty fallbacks before user text and labels share a text node. */
+            _fallbackEsc: function (value, options) {
+                return !value && options && options.easyOnTheInk
+                    ? '<span class="ink-writein">________</span>' : esc(value || '\u2014');
             },
 
             /* Ink changes styles and exact dash placeholder nodes only. User text stays verbatim. */
@@ -3052,7 +3079,7 @@
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div class="ts-subtitle">' + engine._inkHeading('PETTY CASH LOG') + (d.department ? ' \u2014 ' + esc(d.department) : '') + '</div>' +
-                        '<div class="ts-meta"><span>Custodian: ' + esc(d.custodian || '\u2014') + '</span><span>Float: ' + fmt(floatAmt) + '</span>' +
+                        '<div class="ts-meta"><span>Custodian: ' + engine._fallbackEsc(d.custodian, options) + '</span><span>Float: ' + fmt(floatAmt) + '</span>' +
                         (d.dateRange ? '<span>' + esc(d.dateRange) + '</span>' : '') + '</div></div>';
 
                     var running = floatAmt;
@@ -4309,7 +4336,7 @@
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;text-align:left;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
                     var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
-                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + esc(d.director || '—') + ' &bull; Scenes: ' + (d.scriptScenes || []).length + '</p>' +
+                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + engine._fallbackEsc(d.director, options) + ' &bull; Scenes: ' + (d.scriptScenes || []).length + '</p>' +
                         '<table><thead><tr><th>Sc#</th><th>I/E</th><th>D/N</th><th>Location</th><th>Description</th><th>Requirements</th></tr></thead><tbody>' + sceneRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
                 }
@@ -4343,7 +4370,7 @@
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
                     var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
-                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + esc(d.director || '—') + ' &bull; Shoot Days: ' + (d.shootDays || []).length + '</p>' +
+                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + engine._fallbackEsc(d.director, options) + ' &bull; Shoot Days: ' + (d.shootDays || []).length + '</p>' +
                         '<table><thead><tr><th>Day</th><th>Date</th><th>Location</th><th>Crew Call</th><th>Wrap</th><th>Scenes</th><th>Cast</th><th>Pages</th><th>Notes</th></tr></thead><tbody>' + dayRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
                 }
@@ -4414,7 +4441,7 @@
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:8.5pt;}td{padding:4px 7px;border-bottom:1px solid #e2e8f0;font-size:8.5pt;}';
                     var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
-                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Supervisor: ' + esc(d.supervisor || '—') + ' &bull; Date: ' + esc(d.shootDate || '—') + '</p>' +
+                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Supervisor: ' + engine._fallbackEsc(d.supervisor, options) + ' &bull; Date: ' + engine._fallbackEsc(d.shootDate, options) + '</p>' +
                         '<table><thead><tr><th>Sc</th><th>Shot</th><th>Take</th><th>TC</th><th>Description</th><th>Costume</th><th>Hair</th><th>Makeup</th><th>Props</th><th>Notes</th></tr></thead><tbody>' + shotRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
                 }
@@ -4516,7 +4543,7 @@
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
                     var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
-                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Date: ' + esc(d.shootDate || '—') + ' &bull; Transport: ' + esc(d.transportCoordinator || '—') + ' &bull; Basecamp: ' + esc(d.basecamp || '—') + '</p>' +
+                        '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Date: ' + engine._fallbackEsc(d.shootDate, options) + ' &bull; Transport: ' + engine._fallbackEsc(d.transportCoordinator, options) + ' &bull; Basecamp: ' + engine._fallbackEsc(d.basecamp, options) + '</p>' +
                         '<table><thead><tr><th>Name</th><th>Role</th><th>Pickup Address</th><th>PU Time</th><th>Vehicle</th><th>Destination</th><th>ETA</th><th>Notes</th></tr></thead><tbody>' + bodyRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
                 }
@@ -5182,7 +5209,7 @@
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div style="font-size:16pt;font-weight:900;">' + esc(title) + '</div>' +
                         '<div style="font-size:11pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('WEEKLY COST REPORT') + '</div>' +
-                        '<div style="font-size:8pt;color:#64748b;margin-top:6px;">Period: ' + period + ' &bull; Report Date: ' + esc(d.reportDate || '\u2014') +
+                        '<div style="font-size:8pt;color:#64748b;margin-top:6px;">Period: ' + period + ' &bull; Report Date: ' + engine._fallbackEsc(d.reportDate, options) +
                         (d.preparedBy ? ' &bull; Prepared by: ' + esc(d.preparedBy) : '') + '</div></div>';
 
                     var grandPct = grandBudget > 0 ? ((grandActual + grandCommitted) / grandBudget * 100) : 0;
@@ -5430,7 +5457,7 @@
                 _sectionKind: function (sec, name) {
                     var id = String((sec && sec.id) || '').toLowerCase(), n = String(name || '').toLowerCase();
                     if (['travel', 'logistics'].indexOf(id) > -1 || /\b(travel|logistics|transport)\b/.test(n)) return 'travel';
-                    if (['prod', 'btl', 'btl_prod', 'tech', 'gear', 'conn'].indexOf(id) > -1 || /\bproduction\b/.test(n)) return 'production';
+                    if (paperProductionSection(sec, name)) return 'production';
                     return '';
                 },
                 _isExtrasLine: function (item, contact) {
@@ -5468,7 +5495,7 @@
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
                                 purpose: purpose,
-                                total: paperLineTotal(item),
+                                total: paperLineTotal(item, currency),
                                 deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
                                 items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount) }; }) : []
@@ -5479,7 +5506,7 @@
                     floats.forEach(function (fl) {
                         if (!fl) return;
                         if (paperText(fl.floatHolder)) {
-                            vouchers.push({ source: 'pettyCashFloat', floatId: fl.id || '', payee: paperText(fl.floatHolder), purpose: 'Petty cash float', total: paperAmount(fl.floatAmount), deposit: null, currency: fl.currency || currency, items: [] });
+                            vouchers.push({ source: 'pettyCashFloat', floatId: fl.id || '', payee: paperText(fl.floatHolder), purpose: 'Petty cash float', total: paperAmount(fl.floatAmount, fl.currency || currency), deposit: null, currency: fl.currency || currency, items: [] });
                         }
                         (fl.receipts || []).forEach(function (r) {
                             if (!r) return;
@@ -5491,7 +5518,7 @@
                                 paperStripName(c && c.role, rPayee, c),
                                 paperStripName(c && c.title, rPayee, c)
                             );
-                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: c && c.id != null ? String(c.id) : '', payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount), date: r.date || '', deposit: null, currency: r.currency || fl.currency || currency, items: [] });
+                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: c && c.id != null ? String(c.id) : '', payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount, r.currency || fl.currency || currency), date: r.date || '', deposit: null, currency: r.currency || fl.currency || currency, items: [] });
                         });
                     });
                     var company = paperBrand(paperFirst(b.projectCompany, b.company));
@@ -5511,9 +5538,10 @@
                     };
                 },
                 /* One voucher becomes one page, or a deposit page and a balance page when split. */
-                _pages: function (v) {
-                    var total = paperAmount(v.total), dep = paperAmount(v.deposit);
-                    var bal = paperAmount(v.balanceAfter != null ? v.balanceAfter : (v.balanceRemaining != null ? v.balanceRemaining : v.balance));
+                _pages: function (v, currency) {
+                    currency = currency || v.currency;
+                    var total = paperAmount(v.total, currency), dep = paperAmount(v.deposit, currency);
+                    var bal = paperAmount(v.balanceAfter != null ? v.balanceAfter : (v.balanceRemaining != null ? v.balanceRemaining : v.balance), currency);
                     var invalidDeposit = v.deposit != null && (dep === null || (total !== null && dep > total));
                     if (total !== null && dep !== null && dep > 0 && dep < total) {
                         var remainder = Math.round((total - dep) * 100) / 100;
@@ -5548,7 +5576,7 @@
                             paperStripName(v.description, payee, contact),
                             paperStripName(v.role, payee, contact)
                         );
-                        self._pages(v).forEach(function (p) {
+                        self._pages(v, currency).forEach(function (p) {
                             var number = numbered ? prefix + String(start + pageNo) : '';
                             pageNo += 1;
                             var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount) !== null); }) : [];
@@ -5837,13 +5865,15 @@
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
                 _isEquipmentLine: function (item, sec, name) {
+                    var kind = String(item.itemType || '').toLowerCase().trim();
+                    if (['equipment', 'equip', 'gear', 'rental', 'rentals', 'kit'].indexOf(kind) > -1) return true;
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
                     if (/\bkit rental\b/.test(desc)) return true;
-                    var prodLike = ['prod', 'btl', 'btl_prod', 'tech', 'gear', 'conn', 'equipment'].indexOf(secId) > -1 || /\b(production|equipment|gear)\b/.test(String(name || '').toLowerCase());
-                    if (!prodLike) return false;
+                    if (['gear', 'equipment'].indexOf(secId) > -1 && !/\b(recordist|operator|director|assistant|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc)) return true;
+                    if (!paperProductionSection(sec, name)) return false;
                     return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) &&
-                        !/\b(pilot|fee|deposit|recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc);
+                        !/\b(pilot|operator|fee|deposit)\b/.test(desc);
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;

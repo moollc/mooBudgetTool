@@ -1848,7 +1848,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var inkEl = dom.getElementById('easy-on-ink');
     var inkOn = inkEl ? !!inkEl.checked : (function () { try { return localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) { return false; } })();
     var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme, easyOnTheInk: inkOn };
-    if (Array.isArray(_docContacts)) o.contacts = _docContacts;
+    if ((PAPERWORK_TEMPLATES.indexOf(activeTemplateId) > -1 || RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1) && Array.isArray(_docContacts)) o.contacts = _docContacts;
     if (editorData) { o.callSheetData = editorData; o.editorData = editorData; }
     if (activeTemplateId === 'storyboard') o.storyboardFrame = dom.getElementById('storyboard-frame').value;
     o.fundingRates = {};
@@ -2509,7 +2509,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function loadEditorData(templateId, cb) {
     var key = storageKey(templateId), epoch = _afEpoch;
     function current() { return epoch === _afEpoch && templateId === activeTemplateId && key === storageKey(templateId); }
-    Promise.all([localforage.getItem(key), mBTStorage.getAllContacts()]).then(function (results) {
+    var contactsRead = Promise.resolve().then(function () { return mBTStorage.getAllContacts(); }).catch(function (err) {
+      if (current()) afNotice('Contacts could not be loaded: ' + (err.message || err));
+      return [];
+    });
+    Promise.all([localforage.getItem(key), contactsRead]).then(function (results) {
       if (!current()) return;
       var saved = results[0];
       _docContacts = Array.isArray(results[1]) ? results[1] : [];
