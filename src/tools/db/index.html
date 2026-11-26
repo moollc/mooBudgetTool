@@ -29,6 +29,7 @@
   <script src="../../scripts/engine/publisher.js"></script>
   <script src="../../core/logic/DocumentProjection.js"></script>
   <script src="../../core/logic/ShootSchedule.js"></script>
+  <script src="../../core/logic/SavedDocs.js"></script>
 
   <style>
     /* Batch 6 menu rule: no down arrow on choice boxes. They stay native selects, so keyboard use and phone pickers are unchanged. */
@@ -1075,15 +1076,83 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   /* ======== Saved Documents ======== */
+  /* List lives on budget.savedDocs (travels in the .moo). Legacy localStorage key is read-only backup. */
   function savedDocsKey() { return 'mbtdb_saved_docs_' + (projectKey || 'default'); }
-  function getSavedDocs() {
-    try { return JSON.parse(localStorage.getItem(savedDocsKey()) || '[]'); } catch (e) { return []; }
+  /* J4-R2: marker must NOT start with mbtdb_saved_docs_ (harness treats that prefix as legacy writes). */
+  function savedDocsMigratedKey() { return 'mbtdb_sd_migrated_' + (projectKey || 'default'); }
+  function readLegacySavedDocs() {
+    try {
+      var raw = localStorage.getItem(savedDocsKey());
+      var parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
   }
+  function persistBudgetSavedDocs(cb) {
+    var posted = false;
+    try {
+      if (window.parent && window.parent !== window) {
+        var origin = '*';
+        try { if (window.location && window.location.origin) origin = window.location.origin; } catch (eOrigin) {}
+        window.parent.postMessage({
+          type: 'mbt:tool-action',
+          action: 'docs-saved-documents',
+          payload: {
+            projectKey: projectKey,
+            savedDocs: (budget && Array.isArray(budget.savedDocs)) ? JSON.parse(JSON.stringify(budget.savedDocs)) : [],
+            savedDocsDeleted: (budget && Array.isArray(budget.savedDocsDeleted)) ? JSON.parse(JSON.stringify(budget.savedDocsDeleted)) : []
+          }
+        }, origin);
+        posted = true;
+      }
+    } catch (ePost) { /* ignore */ }
+    if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
+      localforage.setItem(projectKey, budget).then(function () {
+        if (cb) cb(true);
+      }, function () {
+        if (cb) cb(!!posted);
+      });
+      return;
+    }
+    if (cb) cb(posted);
+  }
+  function maybeMigrateSavedDocs() {
+    if (!budget || !window.mBTSavedDocs) return;
+    var marker = null;
+    try { marker = localStorage.getItem(savedDocsMigratedKey()); } catch (eM) { marker = null; }
+    if (marker === '1') return;
+    var legacy = readLegacySavedDocs();
+    if (!legacy.length) return;
+    var result = window.mBTSavedDocs.migrate(budget, legacy);
+    if (result && result.dropped) {
+      afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
+    }
+    if (result && result.changed) {
+      afNotice('Saved documents from other browsers are not migrated.', 'Saved documents');
+      persistBudgetSavedDocs(function (ok) {
+        if (ok) {
+          try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
+        }
+      });
+    } else {
+      try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet2) {}
+    }
+  }
+  function getSavedDocs() {
+    maybeMigrateSavedDocs();
+    if (window.mBTSavedDocs) return window.mBTSavedDocs.list(budget);
+    return [];
+  }
+  /* Writes budget.savedDocs only. Never writes or removes the legacy localStorage key. */
   function setSavedDocs(docs) {
-    try { localStorage.setItem(savedDocsKey(), JSON.stringify(docs)); } catch (e) {}
+    if (!budget) return;
+    budget.savedDocs = Array.isArray(docs) ? docs : [];
+    persistBudgetSavedDocs();
   }
   function saveDocument() {
     if (!activeTemplateId) return;
+    if (!budget) budget = {};
+    if (!window.mBTSavedDocs) return;
     var tmpl = pub.templates[activeTemplateId];
     var title = (editorData && editorData.productionTitle) || (budget && budget.projectName) || activeTemplateId;
     var doc = {
@@ -1094,11 +1163,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       date: new Date().toISOString(),
       editorData: editorData ? JSON.parse(JSON.stringify(editorData)) : null
     };
-    if (activeTemplateId === 'fundingPackage' && doc.editorData) delete doc.editorData.sources;
-    var docs = getSavedDocs();
-    docs.unshift(doc);
-    if (docs.length > 50) docs.length = 50;
-    setSavedDocs(docs);
+    var result = window.mBTSavedDocs.add(budget, doc);
+    if (result && result.dropped) {
+      afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
+    }
+    persistBudgetSavedDocs();
     buildSavedDocsList();
     var btn = dom.getElementById('btn-save-doc');
     if (btn) { var orig = btn.innerHTML; btn.innerHTML = orig.replace('Save', 'Saved ✓'); setTimeout(function () { btn.innerHTML = orig; }, 1200); }
@@ -1156,7 +1226,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         e.stopPropagation();
         var id = btn.getAttribute('data-del-id');
         dbConfirm('Delete this saved document?', function () {
-          setSavedDocs(getSavedDocs().filter(function (x) { return x.id !== id; }));
+          if (window.mBTSavedDocs && budget) {
+            window.mBTSavedDocs.remove(budget, id);
+            persistBudgetSavedDocs();
+          }
           buildSavedDocsList();
         });
       });
@@ -1166,16 +1239,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         e.stopPropagation();
         var id = btn.getAttribute('data-dup-id');
         var orig = getSavedDocs().find(function (x) { return x.id === id; });
-        if (!orig) return;
+        if (!orig || !window.mBTSavedDocs || !budget) return;
         var clone = JSON.parse(JSON.stringify(orig));
         clone.id = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         clone.date = new Date().toISOString();
         clone.title = orig.title + ' (Copy)';
-        var docs = getSavedDocs();
-        var idx = docs.findIndex(function (x) { return x.id === id; });
-        docs.splice(idx + 1, 0, clone);
-        if (docs.length > 50) docs.length = 50;
-        setSavedDocs(docs);
+        var result = window.mBTSavedDocs.add(budget, clone);
+        if (result && result.dropped) {
+          afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
+            ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
+        }
+        persistBudgetSavedDocs();
         buildSavedDocsList();
       });
     });

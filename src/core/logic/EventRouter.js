@@ -1206,6 +1206,31 @@ window.mBTRouter = (function () {
         } else if (action === 'docs-memo-line') {
             _applyDocsMemoLine(e.source, action, payload, budget);
 
+        /* --- docs-saved-documents: Docs writes budget.savedDocs / savedDocsDeleted, then the main window saves --- */
+        } else if (action === 'docs-saved-documents') {
+            (function () {
+                function ack(status, message) {
+                    _safePostMessage(e.source, { type: 'mbt:tool-ack', action: action, status: status, message: message || '', requestId: payload && payload.requestId });
+                }
+                if (!budget || !budget.projectName) { ack('error', 'No budget is open.'); return; }
+                if (!payload || !payload.projectKey || payload.projectKey !== _ctx.storageKeyPrefix + budget.projectName) {
+                    ack('error', 'Another budget is open now (' + (budget.projectName || '') + ').');
+                    return;
+                }
+                if (!window.saveBudget) { ack('error', 'The budget cannot be saved right now.'); return; }
+                if (Object.prototype.hasOwnProperty.call(payload, 'savedDocs')) {
+                    budget.savedDocs = Array.isArray(payload.savedDocs) ? JSON.parse(JSON.stringify(payload.savedDocs)) : [];
+                }
+                if (Object.prototype.hasOwnProperty.call(payload, 'savedDocsDeleted')) {
+                    budget.savedDocsDeleted = Array.isArray(payload.savedDocsDeleted) ? JSON.parse(JSON.stringify(payload.savedDocsDeleted)) : [];
+                }
+                Promise.resolve().then(function () { return window.saveBudget(true); }).then(function () {
+                    ack('success');
+                }, function (err) {
+                    ack('error', (err && err.message) || 'save failed');
+                });
+            })();
+
         /* --- stages-update: the Stages tool's changes only, applied to the open budget, saved, answered --- */
         } else if (action === 'stages-update') {
             _applyStagesUpdate(e.source, action, payload, budget);

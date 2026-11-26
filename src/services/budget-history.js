@@ -306,7 +306,8 @@
     function fieldLabel(value) {
         var labels = { calendarNotes: 'Calendar note', sections: 'Budget line', items: 'Budget line',
             fundingSources: 'Funding source', productionDays: 'Shoot days', preProductionDays: 'Pre-production days',
-            postProductionDays: 'Post-production days', shootSchedule: 'Shoot schedule', stageConfig: 'Stage', projectName: 'Project name',
+            postProductionDays: 'Post-production days', shootSchedule: 'Shoot schedule', savedDocs: 'Saved documents',
+            savedDocsDeleted: 'Saved document removals', stageConfig: 'Stage', projectName: 'Project name',
             purchaseOrders: 'Purchase order', contacts: 'Contact', rate: 'Rate', qty: 'Quantity' };
         if (labels[value]) return labels[value];
         var words = String(value || 'Budget').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');

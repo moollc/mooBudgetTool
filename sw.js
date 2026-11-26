@@ -45,6 +45,7 @@ var PRECACHE_ASSETS = [
     './src/scripts/engine/publisher.js',
     './src/core/logic/DocumentProjection.js',
     './src/core/logic/ShootSchedule.js',
+    './src/core/logic/SavedDocs.js',
     './src/data/document-field-map.json',
 
     /* --- Event routing & AI bridge --- */
