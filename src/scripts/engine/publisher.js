@@ -5884,9 +5884,14 @@
                     var gearNoun = /(?<![\p{L}\p{M}\p{N}_])(?:kit|package|rig|console|cart|monitor|recorder|case|stand)$/u.test(label) &&
                         !/\b(with|incl|own)\b|[+/]/.test(label);
                     var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
+                    // AC also appears in gear voltage descriptions.
+                    var acLabel = kind ? desc.replace(/^[\s\p{Cf}]+|[\s\p{P}\p{Cf}]+$/gu, '') : '';
+                    // Ordinals ending in 11, 12 or 13 take the suffix 'th'.
                     var taggedCrewRole = kind && (
                         /\b(op|asst|tech|trainee|loader|crew|electrician|spark|puller|dit|stand-in)\b/.test(desc) ||
-                        desc.trim() === 'ac' || /\b\d+(?:(?:st|nd|rd|th)\s+)?ac\b/.test(desc) ||
+                        acLabel === 'ac' || /^[1-9]\s*ac(?![\p{L}\p{M}\p{N}_])/u.test(acLabel) ||
+                        /(?<![\p{L}\p{M}\p{N}_])(?:(?!\d*1[123](?:st|nd|rd))\d*(?:1st|2nd|3rd)|\d*(?:1[123]|[04-9])th)\s*ac(?![\p{L}\p{M}\p{N}_])/u.test(acLabel) ||
+                        /(?<![\p{L}\p{M}\p{N}_])(?:camera|lead|key|b|second|first|focus)\s+ac$/u.test(acLabel) ||
                         (!catalogMatch && /\b(gaffer|grip|dp|cinematographer|photographer|videographer|swinger|best boy)\b/.test(desc))
                     );
                     if (!gearNoun && (crewRole || taggedCrewRole)) return false;
