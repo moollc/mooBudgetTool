@@ -1848,6 +1848,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var inkEl = dom.getElementById('easy-on-ink');
     var inkOn = inkEl ? !!inkEl.checked : (function () { try { return localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) { return false; } })();
     var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme, easyOnTheInk: inkOn };
+    if (Array.isArray(_docContacts)) o.contacts = _docContacts;
     if (editorData) { o.callSheetData = editorData; o.editorData = editorData; }
     if (activeTemplateId === 'storyboard') o.storyboardFrame = dom.getElementById('storyboard-frame').value;
     o.fundingRates = {};
@@ -2065,7 +2066,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function loadDealMemoFromBudget() { afRefresh(true); }
 
   /* One projection for initial load, refresh, Load from Budget and AI Fill. */
-  var _afEpoch = 0, _afProjection = null, _afBusy = false;
+  var _afEpoch = 0, _afProjection = null, _afBusy = false, _docContacts = null;
   function afTarget() { return { template: activeTemplateId, key: storageKey(activeTemplateId), data: editorData, epoch: _afEpoch }; }
   function afCurrent(t) { return t.template === activeTemplateId && t.key === storageKey(activeTemplateId) && t.data === editorData && t.epoch === _afEpoch; }
   var _afRateNoticeKey = '';
@@ -2102,6 +2103,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (!afCurrent(target)) throw new Error('The document changed. Autofill was not applied.');
       var m = afMeta();
       var proj = mBTDocumentProjection.project(target.template, budget, results[1], { document: editorData, selections: selections || m.selections || {} });
+      _docContacts = results[1] || [];
       if (proj && typeof proj === 'object') proj.contacts = results[1] || [];
       return proj;
     });
@@ -2320,9 +2322,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!tmpl || typeof tmpl.getDefaultData !== 'function') return d;
     var contacts = Array.isArray(contactsList) && contactsList.length
       ? contactsList
-      : ((budget && Array.isArray(budget.contacts) && budget.contacts.length)
+      : (Array.isArray(_docContacts) && _docContacts.length ? _docContacts : ((budget && Array.isArray(budget.contacts) && budget.contacts.length)
         ? budget.contacts
-        : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : []));
+        : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : [])));
     var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { producerName: d.producerName, clientName: d.clientName, client: d.client } }) || {};
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
     // Convert the brand only; preserve all other characters in custom release text.
@@ -2330,15 +2332,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (typeof d[key] === 'string') d[key] = pub.templates.paperBrand(d[key]);
     });
     var overrides = (d._autofill && d._autofill.overrides) || {};
+    var generated = (d._autofill && d._autofill.generated) || {};
+    function recordGenerated(key) {
+      if (!d._autofill) d._autofill = { sources: {}, overrides: {}, selections: {} };
+      if (!d._autofill.generated) d._autofill.generated = {};
+      d._autofill.generated[key] = d[key];
+    }
     // Only exact generator defaults may be refreshed; write-ins also occur in custom text.
     var currentGrantee = d.granteeLine == null ? '' : String(d.granteeLine);
-    if (!currentGrantee.trim() || (!overrides.granteeLine && (currentGrantee === blankDefaults.granteeLine || currentGrantee === defaults.granteeLine))) {
+    if (!currentGrantee.trim() || currentGrantee === generated.granteeLine || (!overrides.granteeLine && (currentGrantee === blankDefaults.granteeLine || currentGrantee === defaults.granteeLine))) {
       d.granteeLine = defaults.granteeLine || '';
+      recordGenerated('granteeLine');
     }
     var currentTerms = d.terms == null ? '' : String(d.terms);
     var defsWithGrantee = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { granteeLine: d.granteeLine, producerName: d.producerName, clientName: d.clientName, client: d.client } }) || defaults;
-    if (!currentTerms.trim() || (!overrides.terms && (currentTerms === blankDefaults.terms || currentTerms === defaults.terms || currentTerms === defsWithGrantee.terms))) {
+    if (!currentTerms.trim() || currentTerms === generated.terms || (!overrides.terms && (currentTerms === blankDefaults.terms || currentTerms === defaults.terms || currentTerms === defsWithGrantee.terms))) {
       d.terms = defsWithGrantee.terms || defaults.terms || '';
+      recordGenerated('terms');
     }
     ['productionTitle', 'productionCompany', 'producerName', 'shootLocation', 'propertyAddress', 'filmingDates', 'startDate', 'endDate', 'guaranteedDays'].forEach(function (k) {
       if ((d[k] == null || String(d[k]).trim() === '') && !overrides[k] && defaults[k]) {
@@ -2417,18 +2427,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function afRefresh(review) {
     if (!budget || !editorData) return Promise.resolve(false);
     if (PAPERWORK_TEMPLATES.indexOf(activeTemplateId) > -1) {
-      var tmpl = pub && pub.templates && pub.templates[activeTemplateId];
-      var defs = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget) : {};
-      var overrides = (editorData._autofill && editorData._autofill.overrides) || {};
-      Object.keys(defs).forEach(function (k) {
-        if (activeTemplateId === 'interviewQuestions' && k === 'durationLine' && editorData[k] !== undefined) return;
-        if (!review && (overrides[k] || editorData['_keepEmpty_' + k])) return;
-        if (afBlank(editorData[k])) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
-      });
-      if (activeTemplateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
-      saveEditorData();
-      if (review) buildEditor(activeTemplateId);
-      return Promise.resolve(true);
+      var paperTarget = afTarget();
+      return Promise.resolve().then(function () { return mBTStorage.getAllContacts(); }).then(function (contacts) {
+        if (!afCurrent(paperTarget)) return false;
+        _docContacts = Array.isArray(contacts) ? contacts : [];
+        var tmpl = pub && pub.templates && pub.templates[activeTemplateId];
+        var defs = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget, { contacts: _docContacts }) : {};
+        var overrides = (editorData._autofill && editorData._autofill.overrides) || {};
+        Object.keys(defs).forEach(function (k) {
+          if (activeTemplateId === 'interviewQuestions' && k === 'durationLine' && editorData[k] !== undefined) return;
+          if (!review && (overrides[k] || editorData['_keepEmpty_' + k])) return;
+          if (afBlank(editorData[k])) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
+        });
+        if (activeTemplateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
+        saveEditorData();
+        if (review) buildEditor(activeTemplateId);
+        return true;
+      }).catch(function (err) { afNotice(err.message || 'Autofill could not load its sources.'); return false; });
     }
     var target = afTarget();
     return afProject(target).then(function (p) {
@@ -2454,7 +2469,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (templateId === 'purchaseOrder') return { productionTitle: '', poNumber: '', date: '', vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '', vendorTaxId: '', budgetCategory: '', paymentTerms: '', requestedBy: '', approvedBy: '', taxRate: '', notes: '', items: [] };
     var tmpl = pub.templates[templateId];
     if (PAPERWORK_TEMPLATES.indexOf(templateId) > -1) {
-      var pd = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
+      var pd = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}, { contacts: _docContacts }) : {};
       if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(pd);
       return pd;
     }
@@ -2494,8 +2509,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function loadEditorData(templateId, cb) {
     var key = storageKey(templateId), epoch = _afEpoch;
     function current() { return epoch === _afEpoch && templateId === activeTemplateId && key === storageKey(templateId); }
-    localforage.getItem(key).then(function (saved) {
+    Promise.all([localforage.getItem(key), mBTStorage.getAllContacts()]).then(function (results) {
       if (!current()) return;
+      var saved = results[0];
+      _docContacts = Array.isArray(results[1]) ? results[1] : [];
       var pending = pendingDocumentSaves[key];
       editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
       if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, editorData);
@@ -4515,6 +4532,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (key) {
         afTyped(key.split('.')[0]);
         setEditorKeyVal(key, val);
+        if (RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1 && ['producerName', 'clientName', 'client'].indexOf(key) > -1) {
+          normalizeReleaseEditorData(activeTemplateId, editorData, _docContacts);
+          ['granteeLine', 'terms'].forEach(function (generatedKey) {
+            var control = panel.querySelector('[data-key="' + generatedKey + '"]');
+            if (control) control.value = editorData[generatedKey] || '';
+          });
+        }
         if (key === 'durationLine' && Array.isArray(editorData.howWeFilm) && editorData.howWeFilm.length >= 7) {
           editorData.howWeFilm[6] = val;
         }

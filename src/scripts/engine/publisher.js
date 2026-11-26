@@ -148,6 +148,13 @@
     }
     function paperAmount(v) {
         if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
+        // Stored numeric values are computed money; only typed text uses the strict grammar below.
+        if (typeof v === 'number') {
+            if (!isFinite(v) || v < 0 || v >= 1e12) return null;
+            var parts = String(v).split('e');
+            var rounded = Math.round(Number(parts[0] + 'e' + ((Number(parts[1]) || 0) + 2))) / 100;
+            return rounded >= 1e12 ? null : (rounded === 0 ? 0 : rounded);
+        }
         var s = String(v).trim();
         if (!s) return null;
         var match = s.match(/^(?:(?:J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(?:JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
@@ -165,7 +172,11 @@
         if (q === null || r === null) return null;
         var m = (item.multiplier != null && item.multiplier !== '') ? paperAmount(item.multiplier) : 1;
         if (m === null) return null;
-        return paperAmount(Math.round(q * r * m * 100) / 100);
+        // Validate operands without rounding numeric rates or quantities before multiplication.
+        if (typeof item.quantity === 'number') q = item.quantity;
+        if (typeof item.rate === 'number') r = item.rate;
+        if (typeof item.multiplier === 'number') m = item.multiplier;
+        return paperAmount(q * r * m);
     }
     function paperIsProducerRole(text) {
         var t = String(text || '').toLowerCase();
@@ -3517,10 +3528,10 @@
                         '<div><div class="dm-lbl">OT Rate</div><div class="dm-val">' + esc(d.overtimeRate || emptyVal) + '</div></div>' +
                         '<div><div class="dm-lbl">Fitting Rate</div><div class="dm-val">' + esc(d.fittingRate || emptyVal) + '</div></div>' +
                         '<div><div class="dm-lbl">Per Diem</div><div class="dm-val">' + esc(d.perDiem || emptyVal) + '</div></div>' +
-                        '<div><div class="dm-lbl">Start Date</div><div class="dm-val">' + esc(d.startDate || emptyVal) + '</div></div>' +
-                        '<div><div class="dm-lbl">End Date</div><div class="dm-val">' + esc(d.endDate || emptyVal) + '</div></div>' +
+                        '<div><div class="dm-lbl">Start Date</div><div class="dm-val">' + esc(paperDate(d.startDate) || emptyVal) + '</div></div>' +
+                        '<div><div class="dm-lbl">End Date</div><div class="dm-val">' + esc(paperDate(d.endDate) || emptyVal) + '</div></div>' +
                         '<div><div class="dm-lbl">Guaranteed Days</div><div class="dm-val">' + esc(d.guaranteedDays || emptyVal) + '</div></div>' +
-                        (d.holdDates ? '<div style="grid-column:span 4"><div class="dm-lbl">Hold Dates</div><div class="dm-val">' + esc(d.holdDates) + '</div></div>' : '') +
+                        (d.holdDates ? '<div style="grid-column:span 4"><div class="dm-lbl">Hold Dates</div><div class="dm-val">' + esc(paperDate(d.holdDates)) + '</div></div>' : '') +
                         (d.travelProvisions ? '<div style="grid-column:span 4"><div class="dm-lbl">Travel &amp; Accommodation</div><div class="dm-val">' + esc(d.travelProvisions) + '</div></div>' : '') +
                         '<div><div class="dm-lbl">Payment Schedule</div><div class="dm-val">' + esc(d.paymentSchedule || '') + '</div></div>' +
                         '<div><div class="dm-lbl">Union Status</div><div class="dm-val">' + esc(d.unionStatus || '') + (d.unionAgreementType ? ' / ' + esc(d.unionAgreementType) : '') + '</div></div>' +
@@ -3596,7 +3607,7 @@
                     var filmingDates = '';
                     var startDate = b.startDate || (b.production && b.production.startDate) || '';
                     if (startDate) {
-                        filmingDates = startDate;
+                        filmingDates = paperDate(startDate);
                         var prodDays = 0;
                         if (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod) {
                             prodDays = parseInt(b.targetLock.stages.prod.days, 10) || 0;
@@ -3613,7 +3624,7 @@
                                     var endDate = endDt.getFullYear() + '-' +
                                         String(endDt.getMonth() + 1).replace(/^(\d)$/, '0$1') + '-' +
                                         String(endDt.getDate()).replace(/^(\d)$/, '0$1');
-                                    filmingDates = startDate + ' to ' + endDate;
+                                    filmingDates = paperDate(startDate) + ' to ' + paperDate(endDate);
                                 }
                             }
                         }
@@ -3660,9 +3671,9 @@
                         (d.accessInstructions ? '<div class="dm-sub"><b>Access:</b> ' + esc(d.accessInstructions) + '</div>' : '') + '</div></div>';
 
                     var schedule = '<div class="dm-hdr">Filming Schedule</div><div class="dm-4col">' +
-                        '<div><div class="dm-lbl">Filming Dates</div><div class="dm-val">' + esc(d.filmingDates || emptyVal) + '</div></div>' +
-                        '<div><div class="dm-lbl">Prep Dates</div><div class="dm-val">' + esc(d.prepDates || emptyVal) + '</div></div>' +
-                        '<div><div class="dm-lbl">Strike / Restore</div><div class="dm-val">' + esc(d.strikeDates || emptyVal) + '</div></div>' +
+                        '<div><div class="dm-lbl">Filming Dates</div><div class="dm-val">' + esc(paperDate(d.filmingDates) || emptyVal) + '</div></div>' +
+                        '<div><div class="dm-lbl">Prep Dates</div><div class="dm-val">' + esc(paperDate(d.prepDates) || emptyVal) + '</div></div>' +
+                        '<div><div class="dm-lbl">Strike / Restore</div><div class="dm-val">' + esc(paperDate(d.strikeDates) || emptyVal) + '</div></div>' +
                         '<div></div>' +
                         '<div><div class="dm-lbl">Earliest Crew Arrival</div><div class="dm-val">' + esc(d.crewArrival || emptyVal) + '</div></div>' +
                         '<div><div class="dm-lbl">Latest Departure</div><div class="dm-val">' + esc(d.crewDeparture || emptyVal) + '</div></div>' +
@@ -4677,7 +4688,7 @@
                         (d.releasorAddress ? '<div class="dm-sub">' + esc(d.releasorAddress) + '</div>' : '') +
                         (d.releasorPhone ? '<div class="dm-sub">Tel: ' + esc(d.releasorPhone) + '</div>' : '') + '</div>' +
                         '<div class="dm-kvlist">' +
-                        '<div class="dm-kv"><b>Date:</b> ' + or(d.date) + '</div>' +
+                        '<div class="dm-kv"><b>Date:</b> ' + or(paperDate(d.date)) + '</div>' +
                         '<div class="dm-kv"><b>Location:</b> ' + or(d.shootLocation) + '</div>' +
                         (d.sceneDescription ? '<div class="dm-kv"><b>Scene:</b> ' + esc(d.sceneDescription) + '</div>' : '') +
                         '<div class="dm-kv"><b>Compensation:</b> ' + esc(documentValue(d.compensationType)) + (d.compensationAmount ? titleSep + esc(d.compensationAmount) : '') + '</div>' +
@@ -5471,16 +5482,16 @@
                             vouchers.push({ source: 'pettyCashFloat', floatId: fl.id || '', payee: paperText(fl.floatHolder), purpose: 'Petty cash float', total: paperAmount(fl.floatAmount), deposit: null, currency: fl.currency || currency, items: [] });
                         }
                         (fl.receipts || []).forEach(function (r) {
-                            var c = r && paperContactById(contacts, r.contactId);
-                            if (!c || !paperText(c.name)) return;
-                            var rPayee = paperText(c.name);
+                            if (!r) return;
+                            var c = paperContactById(contacts, r.contactId);
+                            var rPayee = paperText(c && c.name);
                             var rPurpose = paperFirst(
                                 paperStripName(r.purpose, rPayee, c),
                                 paperStripName(r.description, rPayee, c),
-                                paperStripName(c.role, rPayee, c),
-                                paperStripName(c.title, rPayee, c)
+                                paperStripName(c && c.role, rPayee, c),
+                                paperStripName(c && c.title, rPayee, c)
                             );
-                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: String(c.id), payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount), deposit: null, currency: r.currency || fl.currency || currency, items: [] });
+                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: c && c.id != null ? String(c.id) : '', payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount), date: r.date || '', deposit: null, currency: r.currency || fl.currency || currency, items: [] });
                         });
                     });
                     var company = paperBrand(paperFirst(b.projectCompany, b.company));
@@ -5761,7 +5772,7 @@
                     var forLine = paperText(d.intervieweeName)
                         ? paperEsc(paperText(d.intervieweeName)) + (paperText(d.intervieweeRole) ? ', ' + paperEsc(paperText(d.intervieweeRole)) : '')
                         : paperWriteIn('');
-                    var shootBits = [paperText(d.shootDate), paperText(d.projectLocation)].filter(Boolean).map(paperEsc).join(', ');
+                    var shootBits = [paperDate(d.shootDate), paperText(d.projectLocation)].filter(Boolean).map(paperEsc).join(', ');
                     var shoot = (shootBits || paperWriteIn('')) +
                         '<br>Start time: ' + paperWriteIn(d.startTime) + ' &nbsp; Meeting place: ' + paperWriteIn(d.meetingPlace);
                     var title = paperText(d.documentaryTitle);
@@ -5826,16 +5837,13 @@
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
                 _isEquipmentLine: function (item, sec, name) {
-                    var kind = String(item.itemType || item.item_type || item.type || '').toLowerCase().trim();
-                    if (['equipment', 'equip', 'gear', 'rental', 'rentals', 'kit'].indexOf(kind) > -1) return true;
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
-                    if (/\bkit rental\b|\brental\b/.test(desc)) return true;
+                    if (/\bkit rental\b/.test(desc)) return true;
                     var prodLike = ['prod', 'btl', 'btl_prod', 'tech', 'gear', 'conn', 'equipment'].indexOf(secId) > -1 || /\b(production|equipment|gear)\b/.test(String(name || '').toLowerCase());
                     if (!prodLike) return false;
-                    if (['gear', 'equipment'].indexOf(secId) > -1 && !/\b(recordist|operator|director|assistant|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc)) return true;
                     return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) &&
-                        !/\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc);
+                        !/\b(pilot|fee|deposit|recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc);
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;
@@ -5849,14 +5857,18 @@
                             if (!item || item.memoId || item.memoStatus || !paperText(item.description)) return;
                             if (!self._isEquipmentLine(item, sec, name)) return;
                             var c = paperLineContact(item, contacts);
-                            if (c && vendors.indexOf(c) === -1) vendors.push(c);
+                            var vendor = paperFirst(c && c.name, item.crew && item.crew.name);
+                            var vendorPhone = paperFirst(c && c.phone, item.crew && item.crew.phone);
+                            if ((vendor || vendorPhone) && !vendors.some(function (v) { return v.name === vendor && v.phone === vendorPhone; })) {
+                                vendors.push({ name: vendor, phone: vendorPhone });
+                            }
                             gear.push({
                                 itemId: item.id || '',
                                 qty: item.quantity != null && String(item.quantity).trim() !== '' ? String(item.quantity) : '',
                                 description: paperText(item.description),
                                 serial: '', notes: '',
-                                vendor: c ? paperText(c.name) : '',
-                                vendorPhone: c ? paperText(c.phone) : ''
+                                vendor: vendor,
+                                vendorPhone: vendorPhone
                             });
                         });
                     });
@@ -5896,7 +5908,7 @@
                         paperField('OWNER OR VENDOR', paperWriteIn(vendor)) +
                         paperField('PHONE', paperWriteIn(vendorPhone, false, true)) +
                         paperField('ISSUED TO / CREW RESPONSIBLE', paperWriteIn(d.issuedTo)) +
-                        paperField('SHOOT DATES OR DAY COUNT', paperWriteIn(d.shootDates)) +
+                        paperField('SHOOT DATES OR DAY COUNT', paperWriteIn(paperDate(d.shootDates))) +
                         '</div>' +
                         '<table class="pp-table pp-gear"><thead><tr><th class="col-c" style="width:36px;">QTY</th><th>ITEM / DESCRIPTION</th><th>SERIAL OR ASSET NO.</th><th class="col-c" style="width:30px;">OUT</th><th class="col-c" style="width:30px;">IN</th><th>CONDITION OUT</th><th>CONDITION IN</th><th>NOTES</th></tr></thead><tbody>' + tbody + '</tbody></table>' +
                         '<h2 class="pp-h2">Damage or shortage notes</h2>' + paperLines(4) +
