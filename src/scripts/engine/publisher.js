@@ -5875,8 +5875,9 @@
                     var desc = String(item.description || '').toLowerCase();
                     if (/\bkit rental\b/.test(desc)) return true;
                     // Catalog adoption can stamp a crew tag from a partial description match.
-                    var catalog = typeof item.catalogDescription === 'string' ? item.catalogDescription.replace(/\p{P}/gu, '').trim().toLowerCase() : '';
-                    var catalogMatch = catalog && desc.replace(/\p{P}/gu, '').trim() === catalog;
+                    var catalogWordBreak = /[^\p{L}\p{Nd}]+/gu;
+                    var catalog = typeof item.catalogDescription === 'string' ? item.catalogDescription.toLowerCase().replace(catalogWordBreak, ' ').trim() : '';
+                    var catalogMatch = catalog && desc.replace(catalogWordBreak, ' ').trim() === catalog;
                     if ((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) return false;
 
                     var label = kind ? paperWithoutParentheses(desc).replace(/[\s\p{P}]+$/u, '') : '';
@@ -5884,7 +5885,8 @@
                         !/\b(with|incl|own)\b|[+/]/.test(label);
                     var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
                     var taggedCrewRole = kind && (
-                        /\b(op|asst|tech|trainee|loader|crew|electrician|spark|ac|puller|dit|stand-in)\b/.test(desc) ||
+                        /\b(op|asst|tech|trainee|loader|crew|electrician|spark|puller|dit|stand-in)\b/.test(desc) ||
+                        desc.trim() === 'ac' || /\b\d+(?:(?:st|nd|rd|th)\s+)?ac\b/.test(desc) ||
                         (!catalogMatch && /\b(gaffer|grip|dp|cinematographer|photographer|videographer|swinger|best boy)\b/.test(desc))
                     );
                     if (!gearNoun && (crewRole || taggedCrewRole)) return false;
