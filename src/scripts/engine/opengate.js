@@ -1315,6 +1315,17 @@
                 { id: 'charProf', cat: 'Pre-Prod', label: 'Character Profiles', icon: 'user', default: false },
                 { id: 'dood', cat: 'Pre-Prod', label: 'Day Out of Days', icon: 'calendar', default: false },
                 { id: 'stripboard', cat: 'Pre-Prod', label: 'Stripboard Schedule', icon: 'calendar', default: false },
+                {
+                    id: 'interviewQs', publisherId: 'interviewQuestions', cat: 'Pre-Prod', label: 'Interview Question Sheet', icon: 'file', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'consent', x: 0, w: 12, h: 3, type: 'richText', label: 'Informed Consent', autoPosition: true },
+                        { id: 'howWeFilm', x: 0, w: 12, h: 4, type: 'richText', label: 'How We Will Film This', autoPosition: true },
+                        { id: 'questionGroups', x: 0, w: 12, h: 8, type: 'richText', label: 'Question Groups', autoPosition: true },
+                        { id: 'whoElse', x: 0, w: 12, h: 4, type: 'richText', label: 'Who Else We Would Like to Speak With', autoPosition: true }
+                    ],
+                    defaults: { questionGroups: [], whoElsePrompts: [], additional: { subhead: 'For review before the shoot. This is not a script.' } }
+                },
                 /* --- FINANCIAL & PITCH --- */
                 {
                     id: 'pitchDeck', cat: 'Pre-Prod', label: 'Funding Pitch Deck', icon: 'maximize', default: false,
@@ -1386,6 +1397,26 @@
                 { id: 'propList', cat: 'Production', label: 'Prop List', icon: 'hazard', default: false },
                 { id: 'catering', cat: 'Production', label: 'Catering/Meal Tracker', icon: 'coffee', default: false },
                 { id: 'pettyCash', cat: 'Production', label: 'Petty Cash Log', icon: 'money', default: false },
+                {
+                    id: 'cashVoucher', publisherId: 'cashPaymentVoucher', cat: 'Production', label: 'Cash Payment Voucher', icon: 'money', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'voucher_fields', x: 0, w: 12, h: 6, type: 'richText', label: 'Payment Details', autoPosition: true },
+                        { id: 'items', x: 0, w: 12, h: 4, type: 'schedule', label: 'Itemised Breakdown', autoPosition: true },
+                        { id: 'signatures', x: 0, w: 12, h: 3, type: 'footer', label: 'Dual Signatures', autoPosition: true }
+                    ],
+                    defaults: { vouchers: [], items: [], additional: { acknowledgement: 'I acknowledge receipt of the amount stated above. Each party keeps a signed copy.', footer: 'Each party keeps a signed copy.' } }
+                },
+                {
+                    id: 'equipCheck', publisherId: 'equipmentChecklist', cat: 'Production', label: 'Equipment Checklist', icon: 'camera', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'items', x: 0, w: 12, h: 10, type: 'checklist', label: 'Equipment Pack-In / Pack-Out', autoPosition: true },
+                        { id: 'damageNotes', x: 0, w: 12, h: 3, type: 'richText', label: 'Damage or Shortage Notes', autoPosition: true },
+                        { id: 'signatures', x: 0, w: 12, h: 4, type: 'footer', label: 'Out / In Dual Signatures', autoPosition: true }
+                    ],
+                    defaults: { items: [], additional: { footer: 'Keep this list with the kit until every item is checked back in.' } }
+                },
                 { id: 'po', cat: 'Production', label: 'Purchase Order', icon: 'receipt', default: false },
                 { id: 'timecard', cat: 'Production', label: 'Timecards', icon: 'history', default: false },
                 { id: 'riskAI', cat: 'Production', label: 'AI Risk Assessment', icon: 'sparkle', default: false },
@@ -1428,12 +1459,38 @@
                 { id: 'delivery', cat: 'Post-Prod', label: 'Delivery Schedule', icon: 'folder', default: false },
                 { id: 'festTrack', cat: 'Post-Prod', label: 'Festival Tracker', icon: 'sparkle', default: false },
                 { id: 'locRel', cat: 'Legal', label: 'Location Release', icon: 'mapPin', default: true },
+                {
+                    id: 'groupMinor', publisherId: 'groupMinorConsent', cat: 'Legal', label: 'Group Filming Notice + Minor Consent', icon: 'check', default: true,
+                    widgets: [
+                        { id: 'meta_header', x: 0, w: 12, h: 2, type: 'header', autoPosition: true },
+                        { id: 'partA', x: 0, w: 12, h: 6, type: 'richText', label: 'A. Group and background filming notice', autoPosition: true },
+                        { id: 'partB', x: 0, w: 12, h: 8, type: 'richText', label: 'B. Parent or guardian consent for a minor (under 18)', autoPosition: true }
+                    ],
+                    defaults: { extraPartBCopies: 0, additional: {} }
+                },
                 { id: 'kitRental', cat: 'Legal', label: 'Kit Rental Agreement', icon: 'camera', default: false },
                 { id: 'covid', cat: 'Legal', label: 'COVID Protocols', icon: 'hazard', default: false },
                 { id: 'sag', cat: 'Legal', label: 'SAG-AFTRA Paperwork', icon: 'sparkle', default: false }
             ];
             this.templates.length = 0;
             for (var i = 0; i < t.length; i++) { this.templates.push(t[i]); }
+        },
+
+        getTemplate: function (id) {
+            if (!this.templates || !this.templates.length) this.loadTemplates();
+            for (var i = 0; i < this.templates.length; i++) {
+                var row = this.templates[i];
+                if (row && (row.id === id || row.publisherId === id)) return row;
+            }
+            return null;
+        },
+
+        renderTemplate: function (id, budgetData, options) {
+            var row = this.getTemplate(id);
+            var pubId = (row && (row.publisherId || row.id)) || id;
+            var pub = (typeof window !== 'undefined' && window.mBTPublisher && window.mBTPublisher.templates) || null;
+            if (!pub || typeof pub.render !== 'function') return '';
+            return pub.render(pubId, budgetData || {}, options || {});
         },
 
 

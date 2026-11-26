@@ -147,6 +147,8 @@
 
           </div>
 
+          <label class="block text-sm"><input type="checkbox" id="easy-on-ink"> Easy On The Ink</label>
+
           <!-- Status message area -->
           <fieldset class="p-4 bg-slate-50 rounded-xl space-y-2">
             <legend class="text-xs font-bold">Ledger export details for this budget</legend>
@@ -299,7 +301,21 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     dom.getElementById('btn-fallback-back').addEventListener('click', returnToApp);
 
     // ─── 1. Boot: read URL params, load project ──────────────────────────────────
+    function isEasyOnInk() {
+      var el = dom.getElementById('easy-on-ink');
+      if (el) return !!el.checked;
+      try { return localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) { return false; }
+    }
+
     function init() {
+      var inkToggle = dom.getElementById('easy-on-ink');
+      if (inkToggle) {
+        try { inkToggle.checked = localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) {}
+        inkToggle.addEventListener('change', function () {
+          try { localStorage.setItem('mbt_easy_on_the_ink', this.checked ? '1' : '0'); } catch (e) {}
+          if (budget) renderAll();
+        });
+      }
       var params     = new URLSearchParams(window.location.search);
       var projectKey = params.get('projectKey') || null;
       var projectId  = params.get('projectId')  || null;
@@ -580,7 +596,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         function live() { return window.parent !== window && window.parent.budget && window.parent.budget.projectName === budget.projectName ? window.parent.budget : budget; }
         budget = JSON.parse(JSON.stringify(live()));
         var snapshot = JSON.stringify(budget);
-        pub.templates.toPdfBlob('detailBudget', budget, { currency: baseCurrency }).then(function (blob) {
+        pub.templates.toPdfBlob('detailBudget', budget, { currency: baseCurrency, easyOnTheInk: isEasyOnInk() }).then(function (blob) {
           return mBTBatch2.shareFile(new File([blob], 'budget.pdf', { type: 'application/pdf' }), budget.projectName, function () { return JSON.stringify(live()) === snapshot; });
         }).then(function () { btn.disabled = false; showStatus('Share sheet closed.', 'info'); }, function (err) { btn.disabled = false; showStatus(String(err.message).replace(/[.\s]+$/, '') + '. Use Export PDF to download.', 'error'); });
       });
@@ -590,7 +606,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         showStatus('Generating PDF…', 'info');
         try {
           /* Exports render stored (base-currency) amounts — label them with the base */
-          pub.format.professionalPdf(budget, baseCurrency);
+          pub.format.professionalPdf(budget, baseCurrency, { easyOnTheInk: isEasyOnInk() });
         } catch (e) {
           console.error(e);
           showStatus('PDF export failed. See console.', 'error');
@@ -674,9 +690,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       });
 
       var safeName = String(projectName).replace(/</g, '&lt;');
-      var html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>' + safeName + ' \u2014 Budget Export</title>\n' +
-        '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f3f4f6;padding:20px;color:#1e293b}.container{max-width:900px;margin:0 auto}.page-header{text-align:center;margin-bottom:32px}.page-header h1{font-size:28px;font-weight:900;text-transform:uppercase;letter-spacing:-0.03em;color:#0f172a}.page-header p{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#94a3b8;margin-top:6px}.card{background:white;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:24px}.card-header{background:#0f172a;color:white;padding:10px 16px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.12em}.card-body{padding:16px}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.summary-item{background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:12px}.summary-item .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;margin-bottom:4px}.summary-item .value{font-size:14px;font-weight:700;font-family:monospace;color:#1e293b}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:white;padding:10px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}th:first-child{text-align:left}.footer{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#cbd5e1;margin-top:40px;padding:20px 0;border-top:1px solid #e2e8f0}.grand-total-row td{background:#0f172a;color:white;padding:10px 14px;font-family:monospace;font-weight:900;font-size:14px}@media(max-width:600px){body{padding:10px}}@media print{body{background:white}}</style>\n</head>\n<body>\n<div class="container">\n' +
-        '<div class="page-header"><h1>' + safeName + '</h1><p>mooBudgetTool Digital Export &mdash; Generated ' + new Date().toLocaleDateString() + '</p></div>\n' +
+      var ink = isEasyOnInk();
+      var html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>' + safeName + (ink ? ' - Budget Export' : ' \u2014 Budget Export') + '</title>\n' +
+        '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f3f4f6;padding:20px;color:#1e293b}.container{max-width:900px;margin:0 auto}.page-header{text-align:center;margin-bottom:32px}.page-header h1{font-size:28px;font-weight:900;text-transform:uppercase;letter-spacing:-0.03em;color:#0f172a}.page-header p{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#94a3b8;margin-top:6px}.card{background:white;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:24px}.card-header{background:#0f172a;color:white;padding:10px 16px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.12em}.card-body{padding:16px}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.summary-item{background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:12px}.summary-item .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8;margin-bottom:4px}.summary-item .value{font-size:14px;font-weight:700;font-family:monospace;color:#1e293b}table{width:100%;border-collapse:collapse}th{background:#1e293b;color:white;padding:10px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em}th:first-child{text-align:left}.footer{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#cbd5e1;margin-top:40px;padding:20px 0;border-top:1px solid #e2e8f0}.grand-total-row td{background:#0f172a;color:white;padding:10px 14px;font-family:monospace;font-weight:900;font-size:14px}@media(max-width:600px){body{padding:10px}}@media print{body{background:white}}' +
+        (ink ? 'body,body *{background:transparent !important;color:#000 !important}body{background:#fff !important}.page-header h1,.card-header,.grand-total-row td{text-transform:none !important;letter-spacing:normal !important}.card-header{border-top:1px dashed #000 !important;border-bottom:1px dashed #000 !important}th{border:1px solid #000 !important}' : '') +
+        '</style>\n</head>\n<body>\n<div class="container">\n' +
+        '<div class="page-header"><h1>' + safeName + '</h1><p>mooBudgetTool Digital Export ' + (ink ? '-' : '&mdash;') + ' Generated ' + new Date().toLocaleDateString() + '</p></div>\n' +
         '<div class="card"><div class="card-header">Financial Summary</div><div class="card-body"><div class="summary-grid">' +
         '<div class="summary-item"><div class="label">Company</div><div class="value">' + String(b.company || 'Independent').replace(/</g, '&lt;') + '</div></div>' +
         '<div class="summary-item"><div class="label">Currency</div><div class="value">' + String(cur).replace(/</g, '&lt;') + '</div></div>' +

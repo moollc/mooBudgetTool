@@ -397,6 +397,7 @@
             <option value="#78350f">Gold</option>
           </select>
         </div>
+        <label><input type="checkbox" id="easy-on-ink"> Easy On The Ink</label>
         <span id="preflight-badge"></span>
         <div id="rate-wrap">
           <label for="opt-rate">Rate</label>
@@ -565,9 +566,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var TEMPLATE_CATEGORIES = [
     { label: 'Funding', ids: ['fundingPackage', 'budgetComparison', 'pitchDeck'] },
     { label: 'Financial', ids: ['topSheet', 'detailBudget', 'costReport', 'purchaseOrder', 'pettyCash', 'vendorInvoice', 'extrasVoucher', 'weeklyCostReport'] },
-    { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood', 'incidentReport', 'wrapReport'] },
+    { label: 'Pre-Prod', ids: ['interviewQuestions'] },
+    { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood', 'incidentReport', 'wrapReport', 'cashPaymentVoucher', 'equipmentChecklist'] },
     { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'storyboard'] },
-    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'nda'] }
+    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'groupMinorConsent', 'nda'] }
   ];
 
   /* Required fields per template for preflight check */
@@ -1493,6 +1495,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       });
     }
 
+    var inkToggle = dom.getElementById('easy-on-ink');
+    if (inkToggle) {
+      try { inkToggle.checked = localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) {}
+      inkToggle.addEventListener('change', function () {
+        try { localStorage.setItem('mbt_easy_on_the_ink', this.checked ? '1' : '0'); } catch (e) {}
+        if (activeTab === 'preview' && activeTemplateId) renderPreview();
+      });
+    }
+
     /* Logo wiring */
     loadLogo(function () {
       if (activeTab === 'preview' && activeTemplateId) renderPreview();
@@ -1834,7 +1845,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }, true);
   function getExportOpts() {
     var brand = { name: brandSettings.name, address: brandSettings.address, logo: logoData };
-    var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme };
+    var inkEl = dom.getElementById('easy-on-ink');
+    var inkOn = inkEl ? !!inkEl.checked : (function () { try { return localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) { return false; } })();
+    var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme, easyOnTheInk: inkOn };
     if (editorData) { o.callSheetData = editorData; o.editorData = editorData; }
     if (activeTemplateId === 'storyboard') o.storyboardFrame = dom.getElementById('storyboard-frame').value;
     o.fundingRates = {};
@@ -2296,8 +2309,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       el.querySelector('#af-cancel').focus();
     });
   }
+  var PAPERWORK_TEMPLATES = ['cashPaymentVoucher', 'groupMinorConsent', 'interviewQuestions', 'equipmentChecklist'];
   function afRefresh(review) {
     if (!budget || !editorData) return Promise.resolve(false);
+    if (PAPERWORK_TEMPLATES.indexOf(activeTemplateId) > -1) {
+      var tmpl = pub && pub.templates && pub.templates[activeTemplateId];
+      var defs = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget) : {};
+      Object.keys(defs).forEach(function (k) {
+        if (afBlank(editorData[k])) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
+      });
+      saveEditorData();
+      if (review) buildEditor(activeTemplateId);
+      return Promise.resolve(true);
+    }
     var target = afTarget();
     return afProject(target).then(function (p) {
       _afProjection = p;
@@ -2317,6 +2341,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function afNewDocument(templateId) {
     if (templateId === 'purchaseOrder') return { productionTitle: '', poNumber: '', date: '', vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '', vendorTaxId: '', budgetCategory: '', paymentTerms: '', requestedBy: '', approvedBy: '', taxRate: '', notes: '', items: [] };
     var tmpl = pub.templates[templateId];
+    if (PAPERWORK_TEMPLATES.indexOf(templateId) > -1) {
+      return tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
+    }
     var d = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData({}) : {};
     /* New documents do not present template examples as negotiated or observed facts. */
     Object.keys(d).forEach(function (key) {
@@ -2710,6 +2737,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       html = buildExtrasVoucherHtml(d);
     } else if (templateId === 'weeklyCostReport') {
       html = buildWeeklyCostReportHtml(d);
+    } else if (templateId === 'cashPaymentVoucher') {
+      html = buildCashPaymentVoucherHtml(d);
+    } else if (templateId === 'groupMinorConsent') {
+      html = buildGroupMinorConsentHtml(d);
+    } else if (templateId === 'interviewQuestions') {
+      html = buildInterviewQuestionsHtml(d);
+    } else if (templateId === 'equipmentChecklist') {
+      html = buildEquipmentChecklistHtml(d);
     } else {
       panel.innerHTML = '<p style="padding:20px;color:var(--muted);">This template has no editor.</p>';
       return;
@@ -3322,6 +3357,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row">' + fld('producerName', 'Producer Name (for signature)', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('granteeLine', 'Production / Grantee Line', null, true) + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Performer</div>' +
       '<div class="ed-row ed-2">' + fld('performerLegalName', 'Legal Name') + fld('performerStageName', 'Stage Name') + '</div>' +
@@ -3351,6 +3387,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row">' + fld('producerName', 'Producer Name (for signature)', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('granteeLine', 'Production / Grantee Line', null, true) + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Location Owner</div>' +
       '<div class="ed-row ed-2">' + fld('ownerName', 'Owner / Agent Name') + fld('ownerRelationship', 'Relationship to Property') + '</div>' +
@@ -4014,6 +4051,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row ed-3">' + fld('date', 'Date', 'date') + fld('shootLocation', 'Shoot Location') + fld('director', 'Director') + '</div>' +
+      '<div class="ed-row">' + fld('granteeLine', 'Production / Grantee Line', null, true) + '</div>' +
       '</div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Releasor / Talent</div>' +
       '<div class="ed-row ed-2">' + fld('releasorName', 'Full Name', null, true) + fld('releasorId', 'ID / Passport #') + '</div>' +
@@ -4258,6 +4296,73 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return html;
   }
 
+  function buildCashPaymentVoucherHtml(d) {
+    var html = '<div class="ed-section"><div class="ed-section-hdr">Voucher Header</div>' +
+      '<div class="ed-row ed-3">' + fld('projectName', 'Project Name') + fld('projectLocation', 'Location') + fld('shootDate', 'Shoot Date', 'date') + '</div>' +
+      '<div class="ed-row ed-3">' + fld('voucherPrefix', 'Voucher Prefix') + fld('startNumber', 'Start Number') + fld('currency', 'Currency') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('paidBy', 'Paid By') + fld('producerName', 'Producer Name') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Payees / Vouchers</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Payee</th><th>Purpose</th><th style="width:110px;">Total</th><th style="width:110px;">Deposit (optional)</th><th></th></tr></thead><tbody>';
+    (d.vouchers || []).forEach(function (v, i) {
+      html += '<tr>' +
+        '<td><input data-arr="vouchers" data-i="' + i + '" data-f="payee" value="' + esc(v.payee || '') + '"></td>' +
+        '<td><input data-arr="vouchers" data-i="' + i + '" data-f="purpose" value="' + esc(v.purpose || '') + '"></td>' +
+        '<td><input data-arr="vouchers" data-i="' + i + '" data-f="total" value="' + esc(v.total == null ? '' : v.total) + '"></td>' +
+        '<td><input data-arr="vouchers" data-i="' + i + '" data-f="deposit" value="' + esc(v.deposit == null ? '' : v.deposit) + '"></td>' +
+        '<td><button class="ed-del" data-arr="vouchers" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="vouchers">+ Add Voucher</button></div>';
+    return html;
+  }
+
+  function buildGroupMinorConsentHtml(d) {
+    return '<div class="ed-section"><div class="ed-section-hdr">Group Filming Notice + Minor Consent</div>' +
+      '<div class="ed-row ed-2">' + fld('projectName', 'Project Title') + fld('date', 'Date', 'date') + '</div>' +
+      '<div class="ed-row">' + fld('productionLine', 'Production / Grantee Line', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('projectLocation', 'Project Location') + fld('specificPlace', 'Specific Place') + '</div>' +
+      '<div class="ed-row ed-3">' + fld('organiserName', 'Session Organiser') + fld('producerName', 'Producer Name') + fld('extraPartBCopies', 'Extra Part B Copies', 'number') + '</div></div>';
+  }
+
+  function buildInterviewQuestionsHtml(d) {
+    var html = '<div class="ed-section"><div class="ed-section-hdr">Interview Details</div>' +
+      '<div class="ed-row ed-2">' + fld('intervieweeName', 'Interviewee Name') + fld('intervieweeRole', 'Interviewee Role') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('fromLine', 'From') + fld('client', 'Client') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('projectName', 'Project Title') + fld('documentaryTitle', 'Documentary Title') + '</div>' +
+      '<div class="ed-row ed-4">' + fld('shootDate', 'Shoot Date', 'date') + fld('projectLocation', 'Location') + fld('place', 'Specific Place') + fld('startTime', 'Start Time') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('meetingPlace', 'Meeting Place') + fld('subhead', 'Subhead') + '</div>' +
+      '<div class="ed-row">' + fld('footerNote', 'Footer / Source Note', 'textarea', true) + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Question Groups</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th style="width:220px;">Group Heading</th><th>Questions (one per line)</th><th></th></tr></thead><tbody>';
+    (d.questionGroups || []).forEach(function (g, i) {
+      var qText = Array.isArray(g.questions) ? g.questions.join('\n') : (g.questions || '');
+      html += '<tr>' +
+        '<td><input data-arr="questionGroups" data-i="' + i + '" data-f="heading" value="' + esc(g.heading || g.title || '') + '"></td>' +
+        '<td><textarea data-arr="questionGroups" data-i="' + i + '" data-f="questions" rows="3" style="width:100%;">' + esc(qText) + '</textarea></td>' +
+        '<td><button class="ed-del" data-arr="questionGroups" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="questionGroups">+ Add Question Group</button></div>';
+    return html;
+  }
+
+  function buildEquipmentChecklistHtml(d) {
+    var html = '<div class="ed-section"><div class="ed-section-hdr">Equipment Checklist Header</div>' +
+      '<div class="ed-row ed-3">' + fld('projectName', 'Project Name') + fld('projectLocation', 'Location') + fld('shootDate', 'Shoot Date', 'date') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('kitName', 'Kit or Package Name') + fld('shootDates', 'Shoot Dates / Day Count') + '</div>' +
+      '<div class="ed-row ed-4">' + fld('ownerVendor', 'Owner or Vendor') + fld('ownerPhone', 'Phone') + fld('issuedTo', 'Issued To / Crew') + fld('blankRows', 'Blank Rows', 'number') + '</div></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Equipment Items</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th style="width:60px;">Qty</th><th>Item / Description</th><th style="width:140px;">Serial / Asset No.</th><th>Notes</th><th></th></tr></thead><tbody>';
+    (d.gear || []).forEach(function (r, i) {
+      html += '<tr>' +
+        '<td><input data-arr="gear" data-i="' + i + '" data-f="qty" value="' + esc(r.qty || '') + '"></td>' +
+        '<td><input data-arr="gear" data-i="' + i + '" data-f="description" value="' + esc(r.description || '') + '"></td>' +
+        '<td><input data-arr="gear" data-i="' + i + '" data-f="serial" value="' + esc(r.serial || '') + '"></td>' +
+        '<td><input data-arr="gear" data-i="' + i + '" data-f="notes" value="' + esc(r.notes || '') + '"></td>' +
+        '<td><button class="ed-del" data-arr="gear" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="gear">+ Add Equipment Item</button></div>';
+    return html;
+  }
+
   /* ======== Wire Editor Events ======== */
   function wireEditor(panel) {
 
@@ -4393,7 +4498,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       shootDays: { date: '', dayNum: '', location: '', crewCall: '', wrap: '', scenes: '', cast: '', pages: '', notes: '' },
       shots: { scene: '', shot: '', take: '', tc: '', description: '', costume: '', hair: '', makeup: '', props: '', timeOfDay: '', notes: '' },
       movementRows: { name: '', role: '', pickup: '', pickupTime: '', vehicle: '', destination: '', arrivalTime: '', notes: '' },
-      frames: { num: '', intExt: 'INT', description: '', shotType: '', camera: '' }
+      frames: { num: '', intExt: 'INT', description: '', shotType: '', camera: '' },
+      vouchers: { payee: '', purpose: '', total: '', deposit: '' },
+      questionGroups: { heading: '', questions: '' },
+      whoElse: { text: '', writeIn: 'Name' },
+      gear: { qty: '', description: '', serial: '', notes: '' }
     };
     /* DOOD cast shares the same 'cast' key but needs special handling for days sub-object */
     if (arrName === 'cast' && activeTemplateId === 'dood') {
