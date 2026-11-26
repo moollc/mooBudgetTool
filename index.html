@@ -38,7 +38,7 @@
 
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
-    <title>mooBudgetTool v24.17</title>
+    <title>mooBudgetTool v24.18</title>
     <script>
         /* Pre-paint theme on <html> so tokens resolve before body paint */
         (function () {
@@ -196,6 +196,7 @@
     <script src="./src/scripts/engine/opfs.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
     <script src="./src/core/logic/DocumentProjection.js"></script>
+    <script src="./src/core/logic/ShootSchedule.js"></script>
     <!-- Tier 5B: WebAssembly Conflict Diffing Engine (Phase 63) -->
     <script src="./src/core/wasm/mbt_wasm.js"></script>
     <script>
@@ -927,7 +928,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.17";
+    var APP_VERSION = "24.18";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
