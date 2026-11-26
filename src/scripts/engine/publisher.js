@@ -175,6 +175,37 @@
             return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
         }).replace(/[\u2018\u2019`]/g, "'").replace(/\s+/g, ' ');
     }
+    function paperPurposeUnsafe(result, original) {
+        var tokens = result.split(/\s+/).filter(Boolean);
+        function connective(token) { return /^(?:to|for|of|by|from|at|with|and|&|or|and\/or)$/i.test(token); }
+        if (tokens.length && (connective(tokens[0]) || connective(tokens[tokens.length - 1]))) return true;
+        if (/^[,;:/-]|[,;:/-]$/.test(result) || /\(\s*\)|\[\s*\]/.test(result)) return true;
+        for (var i = 0; i < tokens.length - 1; i++) {
+            if (connective(tokens[i]) && (connective(tokens[i + 1]) || /^[,;:/)\]]/.test(tokens[i + 1]))) return true;
+        }
+        // Bracket wrappers must not hide a newly exposed slash, as in Camera (/Bob).
+        function slashEdges(text) {
+            return text.split(/\s+/).map(function (token) { return token.replace(/^[([{]+|[)\]}]+$/g, ''); })
+                .filter(function (token) { return /^\/|\/$/.test(token); });
+        }
+        var originalEdges = slashEdges(original);
+        var resultEdges = slashEdges(result);
+        for (var k = 0; k < resultEdges.length; k++) {
+            var at = originalEdges.indexOf(resultEdges[k]);
+            if (at === -1) return true;
+            originalEdges.splice(at, 1);
+        }
+        function balanced(text) {
+            var stack = [];
+            for (var j = 0; j < text.length; j++) {
+                var ch = text[j], closing = ')]}'.indexOf(ch);
+                if ('([{'.indexOf(ch) !== -1) stack.push(ch);
+                else if (closing !== -1 && stack.pop() !== '([{'[closing]) return false;
+            }
+            return !stack.length;
+        }
+        return balanced(original) && !balanced(result);
+    }
     function paperStripName(text, payee, contact) {
         var original = paperText(text).normalize('NFC');
         if (!original) return '';
@@ -197,14 +228,15 @@
                 var governing = left.match(/(^|[^\p{L}\p{M}\p{N}_/'\u2018\u2019`-])(to|for|of|by|from|at|with|and|&|or)\s+$/iu);
                 // Only a separator or a coordinating word next to this name can join its span.
                 var separator = right.match(/^\s*[,;:]\s*/);
-                var coordinating = !separator && (governing || !left.trim()) && right.match(/^\s*(and|&|or)(?![\p{L}\p{M}\p{N}_])\s*/iu);
                 if (separator) right = right.slice(separator[0].length);
-                else if (coordinating) right = right.slice(coordinating[0].length);
+                var coordinating = (governing || !left.trim()) && right.match(/^\s*(and|&|or)(?![\p{L}\p{M}\p{N}_/])\s*/iu);
+                if (coordinating) right = right.slice(coordinating[0].length);
                 if (governing) {
                     // "for services", "for sound recordist" and "for tonight" keep their purpose preposition.
                     var keepFor = /^for$/i.test(governing[2]) && /^\s*[\p{L}\p{N}]/u.test(right) &&
-                        !/^\s*(?:only|in|to|for|of|by|from|at|with|and|or)\b/i.test(right);
-                    if (!keepFor) left = left.slice(0, governing.index + governing[1].length);
+                        (!/^\s*(?:only|in|to|for|of|by|from|at|with|and|or)\b/i.test(right) || /^\s*and\/or(?:\s|$)/i.test(right));
+                    var keepCoordinating = coordinating && /^(?:to|for)$/i.test(governing[2]);
+                    if (!keepFor && !keepCoordinating) left = left.slice(0, governing.index + governing[1].length);
                 }
                 // Remove a bracket pair only when this removal has made it empty.
                 var open = left.match(/\s*([([{])\s*$/), close = right.match(/^\s*([)\]}])/);
@@ -243,6 +275,8 @@
         if (parenthetical && knownRepeat(parenthetical[1], parenthetical[2])) s = parenthetical[1].trim();
         var segments = s.split(/\s+[-\u2013\u2014:;/|]\s+|\s*[:;/|]\s*/);
         if (segments.length > 1 && segments.every(function (part) { return knownRepeat(segments[0], part); })) s = segments[0].trim();
+        // The safety net only judges text from which a payee name was actually removed.
+        if (removed && paperPurposeUnsafe(s, original)) return '';
         // Label words alone supply no meaningful purpose.
         if (!/[\p{L}\p{N}]/u.test(s) || /^(?:payment|payments|paid|pay|pays|fee|fees|for|to|of|by|the)(?:\s+(?:payment|payments|paid|pay|pays|fee|fees|for|to|of|by|the))*$/i.test(s)) return '';
         return s;
@@ -5371,11 +5405,8 @@
                     return '';
                 },
                 _isExtrasLine: function (item, contact) {
-                    var roles = [item && item.role, item && item.crew && item.crew.role, contact && contact.role].join(' ').toLowerCase();
-                    var description = paperText(item && item.description).toLowerCase();
-                    // A description must start with the cast role; an incidental "extra" is purpose text.
-                    return /\b(extras?|background (actors?|talent|performers?|cast))\b/.test(roles) ||
-                        /^(extras?|background (actors?|talent|performers?|cast))\b/.test(description);
+                    var text = [item && item.description, item && item.role, item && item.crew && item.crew.role, contact && contact.role].join(' ').toLowerCase();
+                    return /\b(extras?|background (actors?|talent|performers?|cast))\b/.test(text);
                 },
                 /** Voucher data from Production and Travel crew or vendor lines and ledgers.pettyCash.
                     Every line with a payee gives one voucher; a deposit below the total gives a split pair. */
