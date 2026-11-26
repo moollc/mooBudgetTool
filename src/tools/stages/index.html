@@ -295,6 +295,17 @@
         <!-- Stage Cards (injected by render) -->
         <div id="stage-cards-container" class="flex"></div>
 
+        <!-- Shoot days (under the production stage row) -->
+        <div id="shoot-days-card" class="stage-card min-w-[420px] w-[420px] snap-center shrink-0 flex flex-col">
+            <div class="p-4 border-b border-slate-100 bg-white sticky top-0 z-20 shrink-0 flex items-center justify-between gap-2">
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-800">Shoot days</span>
+                <button type="button" id="sd-add-day" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors">Add day</button>
+            </div>
+            <div id="shoot-days" class="flex-grow p-3 space-y-3 overflow-y-auto no-scrollbar bg-slate-50/50">
+                <p id="sd-days-note" class="text-[10px] text-amber-700 font-bold hidden"></p>
+            </div>
+        </div>
+
     </div>
 
     <!-- Add Item Modal (sandboxed — no window.parent) -->
@@ -337,9 +348,13 @@
 
         /* --- XSS Escape --- */
         function esc(str) {
-            var d = document.createElement('div');
-            d.textContent = String(str || '');
-            return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         var _stagesDialogEl = null;
@@ -660,12 +675,19 @@
                 return false;
             }
             try {
+                var live = JSON.parse(JSON.stringify(mBTStages.state.project));
                 var before = stagesUndoProjection(snapshot.before, snapshot.after);
                 var after = stagesUndoProjection(snapshot.after, snapshot.before);
-                var live = JSON.parse(JSON.stringify(mBTStages.state.project));
                 var hadName = !!live.projectName;
                 if (!hadName) live.projectName = live.name || live.id || mBTStages.state._projectKey || 'Stages';
-                var record = mBTBudgetSafety.capture(before, after, ['sections', 'targetLock', 'settings', 'blackoutDays', 'startDate', 'deliveryDate']);
+                var undoRoots = ['sections', 'targetLock', 'settings', 'blackoutDays', 'startDate', 'deliveryDate', 'shootSchedule'];
+                var record = mBTBudgetSafety.capture(before, after, undoRoots);
+                /* If the seal ran before the mutation (empty sealed diff), rebuild from live so Undo still returns to before. */
+                if (!record.fields.length) {
+                    before = stagesUndoProjection(snapshot.before, live);
+                    after = stagesUndoProjection(live, snapshot.before);
+                    record = mBTBudgetSafety.capture(before, after, undoRoots);
+                }
                 var result = mBTBudgetSafety.restore(record, live);
                 if (!result.ok) { alert(result.message); return false; }
                 if (!hadName) delete live.projectName;
@@ -995,8 +1017,27 @@
             if (changed) d.targetLock = tl;
             if (cur.startDate !== base.startDate) d.startDate = cur.startDate;
             if (cur.deliveryDate !== base.deliveryDate) d.deliveryDate = cur.deliveryDate;
+            /* Overseer ruling: send shootSchedule when the tool holds days, or when the base had
+               days and the tool now holds none (explicit clear). Omit only when there is nothing to clear. */
+            (function () {
+                var curHas = Object.prototype.hasOwnProperty.call(cur, 'shootSchedule');
+                var baseHas = Object.prototype.hasOwnProperty.call(base, 'shootSchedule');
+                var curList = curHas && Array.isArray(cur.shootSchedule) ? cur.shootSchedule : null;
+                var baseList = baseHas && Array.isArray(base.shootSchedule) ? base.shootSchedule : null;
+                var baseHadDays = !!(baseList && baseList.length);
+                var curDays = curList && curList.length ? curList : null;
+                var curEmpty = curHas && Array.isArray(cur.shootSchedule) && cur.shootSchedule.length === 0;
+                if (curDays) {
+                    if (JSON.stringify(curDays) !== JSON.stringify(baseList || null)) {
+                        d.shootSchedule = stagesCopy(curDays);
+                    }
+                } else if (curEmpty && baseHadDays) {
+                    d.shootSchedule = JSON.parse('[]');
+                }
+            })();
             d.empty = !(d.lines.length || d.added.length || d.removed.length || d.targetLock || d.follow.length ||
-                Object.prototype.hasOwnProperty.call(d, 'startDate') || Object.prototype.hasOwnProperty.call(d, 'deliveryDate'));
+                Object.prototype.hasOwnProperty.call(d, 'startDate') || Object.prototype.hasOwnProperty.call(d, 'deliveryDate') ||
+                Object.prototype.hasOwnProperty.call(d, 'shootSchedule'));
             return d;
         }
 
@@ -1036,6 +1077,14 @@
             }
             if (Object.prototype.hasOwnProperty.call(d, 'startDate')) target.startDate = d.startDate;
             if (Object.prototype.hasOwnProperty.call(d, 'deliveryDate')) target.deliveryDate = d.deliveryDate;
+            if (Object.prototype.hasOwnProperty.call(d, 'shootSchedule') && Array.isArray(d.shootSchedule)) {
+                if (window.mBTShootSchedule && typeof window.mBTShootSchedule.normalise === 'function') {
+                    target.shootSchedule = window.mBTShootSchedule.normalise({ shootSchedule: d.shootSchedule });
+                    if (typeof window.mBTShootSchedule.ensureIds === 'function') window.mBTShootSchedule.ensureIds(target);
+                } else {
+                    target.shootSchedule = stagesCopy(d.shootSchedule);
+                }
+            }
             return { target: target, skipped: skipped };
         }
 
@@ -1575,6 +1624,12 @@
                         }
                     });
 
+                    /* Normalise an existing shootSchedule on load; never invent the key. */
+                    if (Object.prototype.hasOwnProperty.call(project, 'shootSchedule') && window.mBTShootSchedule &&
+                        typeof window.mBTShootSchedule.normalise === 'function') {
+                        project.shootSchedule = window.mBTShootSchedule.normalise(project);
+                    }
+
                     /* The base for Stages saves: the budget as loaded, with the structure above in place. Only changes after this go back. */
                     self.state._base = JSON.parse(JSON.stringify(project));
                     self.state._baseUpdatedAt = project.updated_at || '';
@@ -1608,6 +1663,337 @@
                 this.renderSliders();
                 this.renderVitals();
                 this.renderStageCards();
+                this.renderShootDays();
+            },
+
+            /* --- Shoot days editor (budget.shootSchedule) --- */
+            _shootScheduleApi: function () {
+                return (typeof window !== 'undefined' && window.mBTShootSchedule) ? window.mBTShootSchedule : null;
+            },
+
+            _ensureShootDaysMount: function () {
+                var root = dom.getElementById('shoot-days');
+                if (!root) {
+                    root = document.createElement('div');
+                    root.id = 'shoot-days';
+                    if (document.body) document.body.appendChild(root);
+                }
+                var note = dom.getElementById('sd-days-note');
+                if (!note) {
+                    note = document.createElement('p');
+                    note.id = 'sd-days-note';
+                    root.insertBefore(note, root.firstChild);
+                }
+                var addBtn = dom.getElementById('sd-add-day');
+                if (!addBtn) {
+                    addBtn = document.createElement('button');
+                    addBtn.id = 'sd-add-day';
+                    addBtn.type = 'button';
+                    addBtn.textContent = 'Add day';
+                    if (root.parentNode) root.parentNode.insertBefore(addBtn, root);
+                    else root.appendChild(addBtn);
+                }
+                return { root: root, note: note, addBtn: addBtn };
+            },
+
+            _blankDay: function () {
+                return { id: '', date: '', dayNum: null, label: '', tbc: false, locations: [], legs: [], interviews: [] };
+            },
+
+            _blankLoc: function () {
+                return { id: '', name: '', address: '', parish: '', siteContactId: '', siteContactName: '', siteContactPhone: '', nearestHospital: '', tbc: false };
+            },
+
+            _blankLeg: function () {
+                return { id: '', kind: 'other', time: '', locationId: '', contactId: null, note: '', tbc: false };
+            },
+
+            _blankInterview: function () {
+                return { id: '', contactId: null, name: '', role: '', time: '', locationId: '', releaseStatus: 'none' };
+            },
+
+            _kindLabel: function (kind) {
+                var k = String(kind || '');
+                if (!k) return '';
+                return k.charAt(0).toUpperCase() + k.slice(1);
+            },
+
+            _locOptions: function (day, selected) {
+                var locs = (day && day.locations) || [];
+                var html = '<option value=""></option>';
+                var i, loc, id;
+                for (i = 0; i < locs.length; i++) {
+                    loc = locs[i] || {};
+                    id = loc.id != null ? String(loc.id) : '';
+                    html += '<option value="' + esc(id) + '"' + (selected === id ? ' selected' : '') + '>' + esc(loc.name || id || ('Location ' + (i + 1))) + '</option>';
+                }
+                return html;
+            },
+
+            _kindOptions: function (selected) {
+                var api = this._shootScheduleApi();
+                var kinds = (api && api.KINDS) ? api.KINDS : ['pickup', 'depart', 'arrive', 'start', 'wrap', 'return', 'interview', 'other'];
+                var html = '';
+                var i, k;
+                for (i = 0; i < kinds.length; i++) {
+                    k = kinds[i];
+                    html += '<option value="' + esc(k) + '"' + (selected === k ? ' selected' : '') + '>' + esc(this._kindLabel(k)) + '</option>';
+                }
+                return html;
+            },
+
+            _releaseOptions: function (selected) {
+                var vals = ['none', 'pending', 'signed'];
+                var html = '';
+                var i, v;
+                for (i = 0; i < vals.length; i++) {
+                    v = vals[i];
+                    html += '<option value="' + esc(v) + '"' + (selected === v ? ' selected' : '') + '>' + esc(v) + '</option>';
+                }
+                return html;
+            },
+
+            _prodDayCount: function () {
+                var b = this.state.project;
+                var s = b && b.targetLock && b.targetLock.stages && b.targetLock.stages.prod;
+                var n = s ? parseFloat(s.days) : 0;
+                return isFinite(n) ? n : 0;
+            },
+
+            _scheduleList: function () {
+                var b = this.state.project;
+                if (!b) return [];
+                if (!Object.prototype.hasOwnProperty.call(b, 'shootSchedule')) return [];
+                return Array.isArray(b.shootSchedule) ? b.shootSchedule : [];
+            },
+
+            renderShootDays: function () {
+                var self = this;
+                var mount = this._ensureShootDaysMount();
+                var root = mount.root;
+                var note = mount.note;
+                var days = this._scheduleList();
+                var prodDays = this._prodDayCount();
+                var dayCount = days.length;
+                if (dayCount !== prodDays) {
+                    note.classList.remove('hidden');
+                    note.style.display = '';
+                    note.textContent = dayCount + ' shoot day' + (dayCount === 1 ? '' : 's') +
+                        ' vs ' + prodDays + ' production day' + (prodDays === 1 ? '' : 's') +
+                        '. The production day count is not changed.';
+                } else {
+                    note.classList.add('hidden');
+                    note.style.display = 'none';
+                    note.textContent = '';
+                }
+                var html = '';
+                var di, day, li, loc, lg, leg, ii, row;
+                for (di = 0; di < days.length; di++) {
+                    day = days[di] || {};
+                    html += '<div class="sd-day bg-white border border-slate-100 rounded-xl p-3 space-y-2" data-day-index="' + di + '">' +
+                        '<div class="flex flex-wrap items-center gap-2">' +
+                            '<input type="date" class="sd-date border border-slate-200 rounded-lg px-2 py-1 text-[11px]" value="' + esc(day.date || '') + '" data-day-index="' + di + '">' +
+                            '<input type="text" class="sd-label flex-1 border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Label" value="' + esc(day.label || '') + '" data-day-index="' + di + '">' +
+                            '<label class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><input type="checkbox" class="sd-tbc" data-day-index="' + di + '"' + (day.tbc ? ' checked' : '') + '> TBC</label>' +
+                            '<button type="button" class="sd-remove-day text-[9px] font-black uppercase tracking-widest text-rose-600" data-day-index="' + di + '">Remove</button>' +
+                        '</div>' +
+                        '<div class="space-y-1">' +
+                            '<div class="flex items-center justify-between"><span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Locations</span>' +
+                            '<button type="button" class="sd-add-location text-[9px] font-black uppercase tracking-widest text-blue-600" data-day-index="' + di + '">Add location</button></div>';
+                    for (li = 0; li < (day.locations || []).length; li++) {
+                        loc = day.locations[li] || {};
+                        html += '<div class="sd-loc grid grid-cols-2 gap-1" data-day-index="' + di + '" data-loc-index="' + li + '">' +
+                            '<input type="text" class="sd-loc-name border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Name" value="' + esc(loc.name || '') + '">' +
+                            '<input type="text" class="sd-loc-address border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Address" value="' + esc(loc.address || '') + '">' +
+                            '<input type="text" class="sd-loc-parish border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Parish" value="' + esc(loc.parish || '') + '">' +
+                            '<input type="text" class="sd-loc-hospital border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Hospital" value="' + esc(loc.nearestHospital || '') + '">' +
+                            '<label class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><input type="checkbox" class="sd-loc-tbc"' + (loc.tbc ? ' checked' : '') + '> TBC</label>' +
+                            '<button type="button" class="sd-remove text-[9px] font-black uppercase tracking-widest text-rose-600">Remove</button>' +
+                        '</div>';
+                    }
+                    html += '</div><div class="space-y-1">' +
+                        '<div class="flex items-center justify-between"><span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Legs</span>' +
+                        '<button type="button" class="sd-add-leg text-[9px] font-black uppercase tracking-widest text-blue-600" data-day-index="' + di + '">Add leg</button></div>';
+                    for (lg = 0; lg < (day.legs || []).length; lg++) {
+                        leg = day.legs[lg] || {};
+                        html += '<div class="sd-leg grid grid-cols-2 gap-1" data-day-index="' + di + '" data-leg-index="' + lg + '">' +
+                            '<select class="sd-leg-kind border border-slate-200 rounded-lg px-2 py-1 text-[11px]">' + self._kindOptions(leg.kind || 'other') + '</select>' +
+                            '<input type="time" class="sd-leg-time border border-slate-200 rounded-lg px-2 py-1 text-[11px]" value="' + esc(leg.time || '') + '">' +
+                            '<select class="sd-leg-location border border-slate-200 rounded-lg px-2 py-1 text-[11px]">' + self._locOptions(day, leg.locationId != null ? String(leg.locationId) : '') + '</select>' +
+                            '<input type="text" class="sd-leg-note border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Note" value="' + esc(leg.note || '') + '">' +
+                            '<label class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><input type="checkbox" class="sd-leg-tbc"' + (leg.tbc ? ' checked' : '') + '> TBC</label>' +
+                            '<button type="button" class="sd-remove text-[9px] font-black uppercase tracking-widest text-rose-600">Remove</button>' +
+                        '</div>';
+                    }
+                    html += '</div><div class="space-y-1">' +
+                        '<div class="flex items-center justify-between"><span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Interviews</span>' +
+                        '<button type="button" class="sd-add-interview text-[9px] font-black uppercase tracking-widest text-blue-600" data-day-index="' + di + '">Add interview</button></div>';
+                    for (ii = 0; ii < (day.interviews || []).length; ii++) {
+                        row = day.interviews[ii] || {};
+                        html += '<div class="sd-int grid grid-cols-2 gap-1" data-day-index="' + di + '" data-int-index="' + ii + '">' +
+                            '<input type="text" class="sd-int-name border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Name" value="' + esc(row.name || '') + '">' +
+                            '<input type="time" class="sd-int-time border border-slate-200 rounded-lg px-2 py-1 text-[11px]" value="' + esc(row.time || '') + '">' +
+                            '<select class="sd-int-location border border-slate-200 rounded-lg px-2 py-1 text-[11px]">' + self._locOptions(day, row.locationId != null ? String(row.locationId) : '') + '</select>' +
+                            '<select class="sd-int-release border border-slate-200 rounded-lg px-2 py-1 text-[11px]">' + self._releaseOptions(row.releaseStatus || 'none') + '</select>' +
+                            '<button type="button" class="sd-remove text-[9px] font-black uppercase tracking-widest text-rose-600">Remove</button>' +
+                        '</div>';
+                    }
+                    html += '</div></div>';
+                }
+                var noteHidden = note.classList.contains('hidden') || note.style.display === 'none';
+                var noteText = note.textContent || '';
+                root.innerHTML = '<p id="sd-days-note" class="text-[10px] text-amber-700 font-bold' +
+                    (noteHidden ? ' hidden' : '') + '"' +
+                    (noteHidden ? ' style="display:none"' : '') + '></p>' + html;
+                note = dom.getElementById('sd-days-note');
+                if (note) {
+                    note.textContent = noteText;
+                    if (noteHidden) { note.classList.add('hidden'); note.style.display = 'none'; }
+                    else { note.classList.remove('hidden'); note.style.display = ''; }
+                }
+                this._wireShootDaysOnce();
+            },
+
+            _wireShootDaysOnce: function () {
+                var self = this;
+                if (self._shootDaysWired) return;
+                self._shootDaysWired = true;
+                var addBtn = dom.getElementById('sd-add-day');
+                if (addBtn) {
+                    addBtn.addEventListener('click', function () {
+                        stagesPushUndoImmediate();
+                        var b = self.state.project;
+                        if (!b) return;
+                        if (!Array.isArray(b.shootSchedule)) b.shootSchedule = [];
+                        b.shootSchedule.push(self._blankDay());
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                    });
+                }
+                var root = dom.getElementById('shoot-days');
+                if (!root) return;
+                root.addEventListener('click', function (e) {
+                    var t = e.target;
+                    if (!t || !t.classList) return;
+                    var dayEl = t.closest ? t.closest('.sd-day') : null;
+                    var dayIndex = dayEl ? parseInt(dayEl.getAttribute('data-day-index'), 10) : -1;
+                    var b = self.state.project;
+                    if (!b) return;
+                    if (!Array.isArray(b.shootSchedule)) return;
+                    if (t.classList.contains('sd-add-day') || t.id === 'sd-add-day') return;
+                    if (t.classList.contains('sd-remove-day')) {
+                        stagesPushUndoImmediate();
+                        b.shootSchedule.splice(dayIndex, 1);
+                        if (!b.shootSchedule.length && !Object.prototype.hasOwnProperty.call(self.state._base || {}, 'shootSchedule')) {
+                            /* keep [] so a clear can be sent when base had days; if base never had one, delete */
+                        }
+                        if (!b.shootSchedule.length) {
+                            var baseHad = self.state._base && Object.prototype.hasOwnProperty.call(self.state._base, 'shootSchedule') &&
+                                Array.isArray(self.state._base.shootSchedule) && self.state._base.shootSchedule.length;
+                            if (!baseHad) delete b.shootSchedule;
+                        }
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                        return;
+                    }
+                    if (t.classList.contains('sd-add-location')) {
+                        stagesPushUndoImmediate();
+                        if (!b.shootSchedule[dayIndex].locations) b.shootSchedule[dayIndex].locations = [];
+                        b.shootSchedule[dayIndex].locations.push(self._blankLoc());
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                        return;
+                    }
+                    if (t.classList.contains('sd-add-leg')) {
+                        stagesPushUndoImmediate();
+                        if (!b.shootSchedule[dayIndex].legs) b.shootSchedule[dayIndex].legs = [];
+                        b.shootSchedule[dayIndex].legs.push(self._blankLeg());
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                        return;
+                    }
+                    if (t.classList.contains('sd-add-interview')) {
+                        stagesPushUndoImmediate();
+                        if (!b.shootSchedule[dayIndex].interviews) b.shootSchedule[dayIndex].interviews = [];
+                        b.shootSchedule[dayIndex].interviews.push(self._blankInterview());
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                        return;
+                    }
+                    if (t.classList.contains('sd-remove')) {
+                        stagesPushUndoImmediate();
+                        var locEl = t.closest('.sd-loc');
+                        var legEl = t.closest('.sd-leg');
+                        var intEl = t.closest('.sd-int');
+                        if (locEl) {
+                            b.shootSchedule[dayIndex].locations.splice(parseInt(locEl.getAttribute('data-loc-index'), 10), 1);
+                        } else if (legEl) {
+                            b.shootSchedule[dayIndex].legs.splice(parseInt(legEl.getAttribute('data-leg-index'), 10), 1);
+                        } else if (intEl) {
+                            b.shootSchedule[dayIndex].interviews.splice(parseInt(intEl.getAttribute('data-int-index'), 10), 1);
+                        }
+                        self.renderShootDays();
+                        _mBTStagesDebouncedSave();
+                    }
+                });
+                root.addEventListener('input', function (e) { self._onShootDayField(e); });
+                root.addEventListener('change', function (e) { self._onShootDayField(e); });
+            },
+
+            _onShootDayField: function (e) {
+                var t = e.target;
+                if (!t || !t.classList) return;
+                var b = this.state.project;
+                if (!b || !Array.isArray(b.shootSchedule)) return;
+                var dayEl = t.closest ? t.closest('.sd-day') : null;
+                if (!dayEl) return;
+                var di = parseInt(dayEl.getAttribute('data-day-index'), 10);
+                var day = b.shootSchedule[di];
+                if (!day) return;
+                stagesPushUndo();
+                if (t.classList.contains('sd-date')) day.date = t.value || '';
+                else if (t.classList.contains('sd-label')) day.label = t.value || '';
+                else if (t.classList.contains('sd-tbc')) day.tbc = !!t.checked;
+                else {
+                    var locEl = t.closest('.sd-loc');
+                    var legEl = t.closest('.sd-leg');
+                    var intEl = t.closest('.sd-int');
+                    if (locEl) {
+                        var loc = day.locations[parseInt(locEl.getAttribute('data-loc-index'), 10)];
+                        if (!loc) return;
+                        if (t.classList.contains('sd-loc-name')) loc.name = t.value || '';
+                        else if (t.classList.contains('sd-loc-address')) loc.address = t.value || '';
+                        else if (t.classList.contains('sd-loc-parish')) loc.parish = t.value || '';
+                        else if (t.classList.contains('sd-loc-hospital')) loc.nearestHospital = t.value || '';
+                        else if (t.classList.contains('sd-loc-tbc')) loc.tbc = !!t.checked;
+                    } else if (legEl) {
+                        var leg = day.legs[parseInt(legEl.getAttribute('data-leg-index'), 10)];
+                        if (!leg) return;
+                        if (t.classList.contains('sd-leg-kind')) leg.kind = t.value || 'other';
+                        else if (t.classList.contains('sd-leg-time')) leg.time = t.value || '';
+                        else if (t.classList.contains('sd-leg-location')) leg.locationId = t.value || '';
+                        else if (t.classList.contains('sd-leg-note')) leg.note = t.value || '';
+                        else if (t.classList.contains('sd-leg-tbc')) leg.tbc = !!t.checked;
+                    } else if (intEl) {
+                        var row = day.interviews[parseInt(intEl.getAttribute('data-int-index'), 10)];
+                        if (!row) return;
+                        if (t.classList.contains('sd-int-name')) row.name = t.value || '';
+                        else if (t.classList.contains('sd-int-time')) row.time = t.value || '';
+                        else if (t.classList.contains('sd-int-location')) row.locationId = t.value || '';
+                        else if (t.classList.contains('sd-int-release')) row.releaseStatus = t.value || 'none';
+                    }
+                }
+                _mBTStagesDebouncedSave();
+            },
+
+            _prepareShootScheduleForSave: function () {
+                var b = this.state.project;
+                var api = this._shootScheduleApi();
+                if (!b || !api) return;
+                if (!Object.prototype.hasOwnProperty.call(b, 'shootSchedule')) return;
+                if (!Array.isArray(b.shootSchedule)) return;
+                b.shootSchedule = api.normalise({ shootSchedule: b.shootSchedule });
+                api.ensureIds(b);
             },
 
             /* --- Sliders --- */
@@ -2538,6 +2924,7 @@
                 _mBTStagesFollowStageKeys = [];
                 self._pendingSaves = (self._pendingSaves || 0) + 1;
                 step = (self._saveQueue || Promise.resolve()).catch(function () {}).then(function () {
+                    self._prepareShootScheduleForSave();
                     var moves = (self.state._moves || []).slice();
                     var delta = stagesDelta(self.state._base, self.state.project, followKeys, moves);
                     if (delta.empty) return null;
@@ -2580,6 +2967,7 @@
                 var self = this, key = self.state._projectKey;
                 self._pendingSaves = (self._pendingSaves || 0) + 1;
                 self._saveQueue = (self._saveQueue || Promise.resolve()).catch(function () {}).then(function () {
+                    self._prepareShootScheduleForSave();
                     var moves = (self.state._moves || []).slice();
                     var delta = stagesDelta(self.state._base, self.state.project, [], moves);
                     if (delta.empty) return null;

@@ -2100,7 +2100,8 @@
                             return { day: days[idx], index: idx };
                         }
                     }
-                    return { day: days[0], index: 0 };
+                    /* No dayId or shootDayIndex: leave call sheet defaults (R1 / J3b). */
+                    return null;
                 },
 
                 _applyShootScheduleToCallSheet: function (data, budgetData, options, contactById) {
@@ -2110,6 +2111,7 @@
                     var days = api.normalise(b);
                     if (!days.length) return data;
                     var picked = this._pickShootDay(days, options || {});
+                    if (!picked || !picked.day) return data;
                     var day = picked.day;
                     var dayIndex = picked.index;
                     var locById = {};

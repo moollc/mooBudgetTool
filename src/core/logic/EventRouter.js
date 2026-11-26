@@ -823,6 +823,14 @@ window.mBTRouter = (function () {
         }
         if (Object.prototype.hasOwnProperty.call(d, 'startDate')) target.startDate = d.startDate;
         if (Object.prototype.hasOwnProperty.call(d, 'deliveryDate')) target.deliveryDate = d.deliveryDate;
+        if (Object.prototype.hasOwnProperty.call(d, 'shootSchedule') && Array.isArray(d.shootSchedule)) {
+            if (window.mBTShootSchedule && typeof window.mBTShootSchedule.normalise === 'function') {
+                target.shootSchedule = window.mBTShootSchedule.normalise({ shootSchedule: d.shootSchedule });
+                if (typeof window.mBTShootSchedule.ensureIds === 'function') window.mBTShootSchedule.ensureIds(target);
+            } else {
+                target.shootSchedule = JSON.parse(JSON.stringify(d.shootSchedule));
+            }
+        }
         return skipped;
     }
     function _applyStagesUpdate(source, action, payload, budget) {
@@ -838,13 +846,17 @@ window.mBTRouter = (function () {
             sections: JSON.parse(JSON.stringify(budget.sections || {})),
             hadLock: !!budget.targetLock, targetLock: budget.targetLock ? JSON.parse(JSON.stringify(budget.targetLock)) : null,
             hadStart: Object.prototype.hasOwnProperty.call(budget, 'startDate'), startDate: budget.startDate,
-            hadDelivery: Object.prototype.hasOwnProperty.call(budget, 'deliveryDate'), deliveryDate: budget.deliveryDate
+            hadDelivery: Object.prototype.hasOwnProperty.call(budget, 'deliveryDate'), deliveryDate: budget.deliveryDate,
+            hadSchedule: Object.prototype.hasOwnProperty.call(budget, 'shootSchedule'),
+            shootSchedule: Object.prototype.hasOwnProperty.call(budget, 'shootSchedule')
+                ? JSON.parse(JSON.stringify(budget.shootSchedule)) : null
         };
         function restore() {
             budget.sections = before.sections;
             if (before.hadLock) budget.targetLock = before.targetLock; else delete budget.targetLock;
             if (before.hadStart) budget.startDate = before.startDate; else delete budget.startDate;
             if (before.hadDelivery) budget.deliveryDate = before.deliveryDate; else delete budget.deliveryDate;
+            if (before.hadSchedule) budget.shootSchedule = before.shootSchedule; else delete budget.shootSchedule;
             if (window.mBT_Finance) window.mBT_Finance.reconcile(budget);
             if (window.mBT && mBT.ui && typeof mBT.ui.paint === 'function') mBT.ui.paint(); else if (window.render) render();
         }

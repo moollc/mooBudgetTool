@@ -1050,7 +1050,7 @@ window.mBTAIModule = {
     /* Every top level field the Assistant can change, for the undo record. */
     _UNDO_ROOTS: ['sections', 'contingencyPercentage', 'productionFeePercentage', 'settings', 'targetLock', 'company', 'projectCompany', 'projectLocation',
         'startDate', 'shootDate', 'deliveryDate', 'salesTaxPercentage', 'discountPercentage', 'fundingSources', 'ledgers',
-        'calendarNotes', 'blackoutDays', 'fringes', 'jurisdiction', 'actualsMode', 'globalItems'],
+        'calendarNotes', 'blackoutDays', 'fringes', 'jurisdiction', 'actualsMode', 'globalItems', 'shootSchedule'],
 
     _SET_FIELDS: { company: 'text', projectCompany: 'text', projectLocation: 'text', startDate: 'date', shootDate: 'date', deliveryDate: 'date',
         salesTaxPercentage: 'pct', discountPercentage: 'pct', totalCap: 'cap', actualsMode: 'bool' },

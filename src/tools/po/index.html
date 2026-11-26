@@ -9,6 +9,7 @@
   <script src="../../lib/localforage.min.js"></script>
     <script src="../../scripts/engine/mbtle.js"></script>
   <script src="../../scripts/storage.js"></script>
+  <script src="../../core/logic/ShootSchedule.js"></script>
   <style>
     /* Batch 6 menu rule: no down arrow on choice boxes. They stay native selects, so keyboard use and phone pickers are unchanged. */
     select { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: none; }
@@ -131,6 +132,25 @@
         <div>
           <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes</label>
           <input id="po-notes" type="text" placeholder="Optional notes" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-400">
+        </div>
+        <div id="po-paid-fields" class="grid grid-cols-2 gap-3 hidden">
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Paid by</label>
+            <select id="po-paid-method" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-sky-400">
+              <option value=""></option>
+              <option value="cash">Cash</option>
+              <option value="transfer">Bank transfer</option>
+              <option value="wire">Wire</option>
+              <option value="cheque">Cheque</option>
+              <option value="paypal">Paypal</option>
+              <option value="wise">Wise</option>
+              <option value="payoneer">Payoneer</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Bank reference</label>
+            <input id="po-paid-ref" type="text" placeholder="Reference" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-400">
+          </div>
         </div>
       </div>
 
@@ -286,6 +306,12 @@
                             '</div>' +
                             '<p class="text-[12px] font-semibold text-slate-800 truncate mt-0.5">' + esc(po.vendor || '—') + '</p>' +
                             (po.description ? '<p class="text-[10px] text-slate-400 truncate">' + esc(po.description) + '</p>' : '') +
+                            (po.status === 'Paid' && (paidByLabel(po.paidMethod) || po.paidRef)
+                                ? '<p class="text-[10px] text-slate-500 mt-0.5">' +
+                                    (paidByLabel(po.paidMethod) ? esc(paidByLabel(po.paidMethod)) : '') +
+                                    (po.paidRef ? (paidByLabel(po.paidMethod) ? ' · ' : '') + esc(po.paidRef) : '') +
+                                  '</p>'
+                                : '') +
                             (po.itemId ? '' : '<p class="po-no-line text-[10px] font-bold text-amber-700 mt-1">No budget line yet: this order is not counted against any line of the budget. Choose Edit to link it.</p>') +
                         '</div>' +
                         '<div class="flex flex-col items-end gap-1 shrink-0">' +
@@ -424,6 +450,50 @@
             sel.innerHTML = opts;
         }
 
+        function syncPaidFieldsVisibility() {
+            var statusEl = document.getElementById('po-status');
+            var wrap = document.getElementById('po-paid-fields');
+            var method = document.getElementById('po-paid-method');
+            var ref = document.getElementById('po-paid-ref');
+            var paid = statusEl && statusEl.value === 'Paid';
+            if (wrap) {
+                if (paid) wrap.classList.remove('hidden');
+                else wrap.classList.add('hidden');
+            }
+            if (method) {
+                if (paid) method.classList.remove('hidden');
+                else method.classList.add('hidden');
+                method.style.display = paid ? '' : 'none';
+            }
+            if (ref) {
+                if (paid) ref.classList.remove('hidden');
+                else ref.classList.add('hidden');
+                ref.style.display = paid ? '' : 'none';
+            }
+        }
+
+        function readPaidFields() {
+            var methodEl = document.getElementById('po-paid-method');
+            var refEl = document.getElementById('po-paid-ref');
+            var raw = {
+                paidMethod: methodEl ? methodEl.value : '',
+                paidRef: refEl ? refEl.value : ''
+            };
+            if (window.mBTPaidBy && typeof window.mBTPaidBy.normalise === 'function') {
+                return window.mBTPaidBy.normalise(raw);
+            }
+            return raw;
+        }
+
+        function paidByLabel(id) {
+            if (window.mBTPaidBy && typeof window.mBTPaidBy.label === 'function') {
+                return window.mBTPaidBy.label(id) || '';
+            }
+            if (id === 'cash') return 'Cash';
+            if (id === 'transfer') return 'Bank transfer';
+            return '';
+        }
+
         /* --- Open PO form --- */
         function openPoModal(po) {
             state.editingPoId = po ? po.id : null;
@@ -437,11 +507,16 @@
             document.getElementById('po-date').value = po ? po.date : new Date().toISOString().split('T')[0];
             document.getElementById('po-status').value = po ? po.status : 'Draft';
             document.getElementById('po-notes').value = po ? (po.notes || '') : '';
+            var methodEl = document.getElementById('po-paid-method');
+            var refEl = document.getElementById('po-paid-ref');
+            if (methodEl) methodEl.value = po && po.paidMethod != null ? String(po.paidMethod) : '';
+            if (refEl) refEl.value = po && po.paidRef != null ? String(po.paidRef) : '';
             populateSections();
             var sectionKey = po && po.sectionKey ? po.sectionKey : '';
             document.getElementById('po-section').value = sectionKey;
             populateItems(sectionKey);
             document.getElementById('po-item').value = po && po.itemId ? po.itemId : '';
+            syncPaidFieldsVisibility();
             document.getElementById('po-modal').classList.remove('hidden');
         }
 
@@ -478,8 +553,14 @@
                     existing.itemId = itemId;
                     existing.notes = document.getElementById('po-notes').value.trim();
                     if (state.pendingContactId) existing.contactId = state.pendingContactId;
-                    if (status === 'Paid') existing.paidAmount = amount;
-                    else delete existing.paidAmount;
+                    if (status === 'Paid') {
+                        existing.paidAmount = amount;
+                        var paidEdit = readPaidFields();
+                        existing.paidMethod = paidEdit.paidMethod;
+                        existing.paidRef = paidEdit.paidRef;
+                    } else {
+                        delete existing.paidAmount;
+                    }
                 }
             } else {
                 var newPo = {
@@ -496,7 +577,12 @@
                     itemId: itemId,
                     notes: document.getElementById('po-notes').value.trim()
                 };
-                if (status === 'Paid') newPo.paidAmount = amount;
+                if (status === 'Paid') {
+                    newPo.paidAmount = amount;
+                    var paidNew = readPaidFields();
+                    newPo.paidMethod = paidNew.paidMethod;
+                    newPo.paidRef = paidNew.paidRef;
+                }
                 l.pos.push(newPo);
             }
             saveLedgers();
@@ -690,6 +776,11 @@
 
             document.getElementById('po-modal-cancel').addEventListener('click', closePoModal);
             document.getElementById('po-modal-save').addEventListener('click', savePO);
+            var statusSel = document.getElementById('po-status');
+            if (statusSel) {
+                statusSel.addEventListener('change', function() { syncPaidFieldsVisibility(); });
+            }
+            syncPaidFieldsVisibility();
             var sectionSel = document.getElementById('po-section');
             if (sectionSel) {
                 sectionSel.addEventListener('change', function() {
