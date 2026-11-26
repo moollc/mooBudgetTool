@@ -2325,6 +2325,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : []));
     var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { producerName: d.producerName, clientName: d.clientName, client: d.client } }) || {};
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
+    // Convert the brand only; preserve all other characters in custom release text.
+    ['granteeLine', 'terms'].forEach(function (key) {
+      if (typeof d[key] === 'string') d[key] = d[key].replace(/moo\.llc/gi, 'moo');
+    });
     var overrides = (d._autofill && d._autofill.overrides) || {};
     // Only exact generator defaults may be refreshed; write-ins also occur in custom text.
     var currentGrantee = d.granteeLine == null ? '' : String(d.granteeLine);

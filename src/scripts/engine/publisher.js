@@ -169,26 +169,56 @@
         var t = String(text || '').toLowerCase();
         return /\bproducer\b/.test(t) && !/\bline\s+producer\b/.test(t);
     }
-    function paperStripName(text, payee) {
-        var s = paperText(text);
-        if (!s) return '';
-        var p = paperText(payee);
+    function paperPurposeNormalized(text) {
+        return paperText(text).normalize('NFKC').replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ');
+    }
+    function paperStripName(text, payee, contact) {
+        var original = paperText(text);
+        if (!original) return '';
+        var s = paperPurposeNormalized(original), p = paperPurposeNormalized(payee);
+        var removed = false;
         if (p) {
             var escP = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            // Remove the full name anywhere, including possessives, without matching inside a word.
-            s = s.replace(new RegExp('(^|[^\\p{L}\\p{N}_])' + escP + "(?:['\\u2019]s|['\\u2019])?(?=$|[^\\p{L}\\p{N}_])", 'giu'), '$1');
+            // A hyphen or apostrophe joining letters belongs to the name, not its boundary.
+            var name = new RegExp("(?<![\\p{L}\\p{M}\\p{N}_])(?<!\\p{L}[-'])" + escP + "(?:'s)?(?![\\p{L}\\p{M}\\p{N}_]|[-']\\p{L})", 'giu');
+            s = s.replace(name, function () { removed = true; return '\uE000'; });
         }
-        s = s.replace(/\(\s*\)|\[\s*\]/g, ' ').replace(/\s+/g, ' ')
-            .replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '').trim();
-        // Keep unrelated parentheticals (for example, Camera (rental)).
-        var wrapped = s.match(/^\(([^()]*)\)$|^\[([^\[\]]*)\]$/);
-        if (wrapped) s = (wrapped[1] || wrapped[2] || '').trim();
+        if (removed) {
+            // Join the phrase across each removed name, discarding punctuation at that seam.
+            s = s.replace(/\s*\uE000\s*[,;:/|\-\u2013\u2014]*\s*/g, ' ');
+            var connective = '(?:to|for|of|by|from|at|with|and|&)';
+            var pair = new RegExp('(^|[^\\p{L}\\p{N}_])(' + connective + ')\\s+(' + connective + ')(?=$|[^\\p{L}\\p{N}_])', 'giu');
+            var dangling = new RegExp('(^|[^\\p{L}\\p{N}_])' + connective + '\\s*(?=$|[,.;:!?/|)\\]}' + '\\-\\u2013\\u2014])', 'giu');
+            var previous;
+            do {
+                previous = s;
+                // "to ... for sound" keeps "for"; "for ... and crew" keeps "for".
+                s = s.replace(pair, function (_, boundary, a, b) { return boundary + (/^(and|&)$/i.test(b) ? a : b); })
+                    .replace(dangling, '$1')
+                    .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, ' ')
+                    .replace(/([,;:/|.])\s*(?=[,;:/|.])/g, '')
+                    .replace(/\s+([,.;:!?)\]}])/g, '$1')
+                    .replace(/([([{])\s+/g, '$1')
+                    .replace(/^[\s,.!?\-:;/|\u2013\u2014]+|[\s,.!?\-:;/|\u2013\u2014]+$/g, '')
+                    .replace(/\s+/g, ' ').trim();
+            } while (s !== previous);
+            var wrapped = s.match(/^\(([^()]*)\)$|^\[([^\[\]]*)\]$/);
+            if (wrapped) s = (wrapped[1] || wrapped[2] || '').trim();
+        } else {
+            s = original;
+        }
+        // Repetition is redundant only for a known payee or that contact's role/title.
+        var known = [p, contact && contact.role, contact && contact.title].map(function (v) { return paperPurposeNormalized(v).toLowerCase(); }).filter(Boolean);
+        function knownRepeat(a, b) {
+            var key = paperPurposeNormalized(a).toLowerCase();
+            return key === paperPurposeNormalized(b).toLowerCase() && known.indexOf(key) !== -1;
+        }
         var parenthetical = s.match(/^(.*?)\s*[([]([^()[\]]+)[)\]]\s*$/);
-        if (parenthetical && parenthetical[1].trim().toLowerCase() === parenthetical[2].trim().toLowerCase()) s = parenthetical[1].trim();
+        if (parenthetical && knownRepeat(parenthetical[1], parenthetical[2])) s = parenthetical[1].trim();
         var segments = s.split(/\s+[-\u2013\u2014:;/|]\s+|\s*[:;/|]\s*/);
-        if (segments.length > 1 && segments.every(function (part) { return part.trim().toLowerCase() === segments[0].trim().toLowerCase(); })) s = segments[0].trim();
-        // A payment label or stranded preposition alone supplies no purpose.
-        if (/^(?:(?:payment|for|to|of|by|the)\s*)+$/i.test(s)) return '';
+        if (segments.length > 1 && segments.every(function (part) { return knownRepeat(segments[0], part); })) s = segments[0].trim();
+        // Label words alone supply no meaningful purpose.
+        if (/^(?:payment|payments|paid|fee|fees|pay|for|to|of|by|from|at|with|the|and|&)(?:\s+(?:payment|payments|paid|fee|fees|pay|for|to|of|by|from|at|with|the|and|&))*$/i.test(s)) return '';
         return s;
     }
     /* Producer, client and the configurable grantee line ("<producer> trading as moo, producer for <client>").
@@ -5338,12 +5368,12 @@
                             var payee = paperFirst(contact && contact.name, item.crew && item.crew.name, item.vendor, item.payee);
                             if (!payee) return;
                             var purpose = paperFirst(
-                                paperStripName(item.purpose, payee),
-                                paperStripName(item.description, payee),
-                                paperStripName(item.role, payee),
-                                paperStripName(item.crew && item.crew.role, payee),
-                                paperStripName(contact && contact.role, payee),
-                                paperStripName(contact && contact.title, payee)
+                                paperStripName(item.purpose, payee, contact),
+                                paperStripName(item.description, payee, contact),
+                                paperStripName(item.role, payee, contact),
+                                paperStripName(item.crew && item.crew.role, payee, contact),
+                                paperStripName(contact && contact.role, payee, contact),
+                                paperStripName(contact && contact.title, payee, contact)
                             );
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
@@ -5367,10 +5397,10 @@
                             if (!c || !paperText(c.name)) return;
                             var rPayee = paperText(c.name);
                             var rPurpose = paperFirst(
-                                paperStripName(r.purpose, rPayee),
-                                paperStripName(r.description, rPayee),
-                                paperStripName(c.role, rPayee),
-                                paperStripName(c.title, rPayee)
+                                paperStripName(r.purpose, rPayee, c),
+                                paperStripName(r.description, rPayee, c),
+                                paperStripName(c.role, rPayee, c),
+                                paperStripName(c.title, rPayee, c)
                             );
                             vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: String(c.id), payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount), deposit: null, currency: r.currency || fl.currency || currency, items: [] });
                         });
@@ -5418,15 +5448,17 @@
                     var docDate = paperDate(d.date || d.shootDate);
                     var pageNo = 0;
                     var pages = [];
+                    var contacts = paperContacts(b, options);
                     vouchers.forEach(function (v) {
                         v = v || {};
                         var currency = v.currency || d.currency || b.currency || 'JMD';
                         var money = function (n) { return n === null || n === undefined ? '' : fmtCurrency(n, currency, 1); };
                         var payee = paperText(v.payee);
+                        var contact = paperLineContact(v, contacts);
                         var purpose = paperFirst(
-                            paperStripName(v.purpose, payee),
-                            paperStripName(v.description, payee),
-                            paperStripName(v.role, payee)
+                            paperStripName(v.purpose, payee, contact),
+                            paperStripName(v.description, payee, contact),
+                            paperStripName(v.role, payee, contact)
                         );
                         self._pages(v).forEach(function (p) {
                             var number = numbered ? prefix + String(start + pageNo) : '';
