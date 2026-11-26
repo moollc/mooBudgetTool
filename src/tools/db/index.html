@@ -2523,9 +2523,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       _docContacts = Array.isArray(results[1]) ? results[1] : [];
       var pending = pendingDocumentSaves[key];
       editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
-      // Legacy agreements saved the producer field before grantee lines were generated.
-      if ((templateId === 'talentAgreement' || templateId === 'locationAgreement') && saved && !pending &&
-          saved.granteeLine === undefined && saved.producerName === '') afTyped('producerName');
       if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, editorData);
       if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
       var ready = Promise.resolve();

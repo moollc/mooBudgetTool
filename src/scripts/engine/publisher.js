@@ -171,7 +171,7 @@
         var text = String(currency || '').trim().toUpperCase();
         if (/^(J\$|JA\$|JMD)$/.test(text)) return 'JMD';
         if (/^(US\$|USD|\$US)$/.test(text)) return 'USD';
-        return '';
+        return /^(GBP|CAD|EUR|TTD|BBD|GYD|XCD)$/.test(text) ? text : '';
     }
     function paperAmount(v, currency) {
         if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
@@ -184,11 +184,11 @@
         }
         var s = String(v).trim();
         if (!s) return null;
-        var match = s.match(/^(?:(J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
+        var match = s.match(/^(?:(J\$|JA\$|US\$|\$US|\$|JMD|USD|GBP|CAD|EUR|TTD|BBD|GYD|XCD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(JMD|USD|GBP|CAD|EUR|TTD|BBD|GYD|XCD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
         if (!match) return null;
         var currencyCode = paperCurrencyCode(currency);
-        if (currencyCode && [match[1], match[4]].some(function (marker) {
-            var code = /^(J\$|JMD|Jamaican dollars?)$/i.test(marker || '') ? 'JMD' : /^(US\$|USD|United States dollars?)$/i.test(marker || '') ? 'USD' : '';
+        if (currency !== undefined && [match[1], match[4]].some(function (marker) {
+            var code = /^Jamaican dollars?$/i.test(marker) ? 'JMD' : /^United States dollars?$/i.test(marker) ? 'USD' : paperCurrencyCode(marker);
             return code && code !== currencyCode;
         })) return null;
         var n = Number(match[2].replace(/,/g, '') + (match[3] ? '.' + match[3] : ''));
@@ -218,8 +218,8 @@
             /production|equipment|gear/i.test(String(name || ''));
     }
     function paperIsProducerRole(text) {
-        var t = String(text || '').toLowerCase();
-        return /\bproducer\b/.test(t) && !/\bline\s+producer\b/.test(t);
+        var role = String(text || '').replace(/\([^()]*\)/g, ' ').replace(/[\s\p{P}]+$/u, '');
+        return /\bproducer$/i.test(role) && !/\b(?:line\s+producer|assistant\s+to\s+the\s+producer)\b/i.test(role);
     }
     function paperPurposeNormalized(text) {
         // Comparison only: never print this folded copy. Keep the established width aliases.
@@ -5490,7 +5490,7 @@
                                 total: paperLineTotal(item, currency),
                                 deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
-                                items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount) }; }) : []
+                                items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount, currency) }; }) : []
                             });
                         });
                     });
@@ -5572,11 +5572,11 @@
                         self._pages(v, currency).forEach(function (p) {
                             var number = numbered ? prefix + String(start + pageNo) : '';
                             pageNo += 1;
-                            var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount) !== null); }) : [];
+                            var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount, currency) !== null); }) : [];
                             var table = '';
                             if (items.length || p.split || p.depositWriteIn) {
                                 var rows = (items.length ? items : [{ description: purpose || 'Agreed total', amount: p.total }]).map(function (r) {
-                                    var rAmt = paperAmount(r.amount);
+                                    var rAmt = paperAmount(r.amount, currency);
                                     return '<tr><td>' + paperWriteIn(r.description) + '</td><td class="col-r">' + (rAmt !== null ? paperEsc(money(rAmt)) : paperWriteIn('')) + '</td></tr>';
                                 }).join('');
                                 if (p.split) {
@@ -5863,10 +5863,18 @@
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
                     if (/\bkit rental\b/.test(desc)) return true;
-                    var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot|fee|deposit)\b/.test(desc);
-                    if (kind !== 'crew' && ['gear', 'equipment'].indexOf(secId) > -1 && !crewRole) return true;
-                    if (kind === 'crew' || !paperProductionSection(sec, name)) return false;
-                    return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) && !crewRole;
+                    // Catalog adoption can stamp a crew tag from a partial description match.
+                    var catalog = typeof item.catalogDescription === 'string' ? item.catalogDescription.replace(/\p{P}/gu, '').trim().toLowerCase() : '';
+                    var catalogMatch = catalog && desc.replace(/\p{P}/gu, '').trim() === catalog;
+                    if ((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) return false;
+
+                    var gearNoun = kind && /\b(kit|package|rig|console|cart|monitor|recorder|case|stand)\b/.test(desc);
+                    var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
+                    var otherCrewRole = kind && !catalogMatch && /\b(gaffer|grip|dp|cinematographer|photographer|videographer|swinger|best boy)\b/.test(desc);
+                    if (!gearNoun && (crewRole || otherCrewRole)) return false;
+
+                    if (['gear', 'equipment'].indexOf(secId) > -1) return true;
+                    return paperProductionSection(sec, name) && /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc);
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;
