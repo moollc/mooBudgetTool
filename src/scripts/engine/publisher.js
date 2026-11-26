@@ -134,26 +134,60 @@
     }
     function paperLineContact(item, contacts) {
         if (!item) return null;
-        return paperContactById(contacts, item.contactId || item.contact_id || (item.crew && item.crew.contactId) || '');
+        var byId = paperContactById(contacts, item.contactId || item.contact_id || (item.crew && item.crew.contactId) || '');
+        if (byId) return byId;
+        var name = paperFirst(item.crew && item.crew.name, item.vendor, item.payee);
+        if (!name) return null;
+        var low = name.toLowerCase();
+        for (var i = 0; i < contacts.length; i++) {
+            if (contacts[i] && paperText(contacts[i].name).toLowerCase() === low) return contacts[i];
+        }
+        return null;
     }
     function paperAmount(v) {
-        if (v == null || v === '') return null;
-        var n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
-        return isNaN(n) || n <= 0 ? null : n;
+        if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
+        var s = String(v).trim();
+        if (!s) return null;
+        var cleaned = s.replace(/[^0-9.\-]/g, '');
+        if (!cleaned || !/[0-9]/.test(cleaned)) return null;
+        var n = Number(cleaned);
+        if (!isFinite(n) || n < 0) return null;
+        return n === 0 ? 0 : n;
     }
     function paperLineTotal(item) {
         if (!item) return null;
         var t = paperAmount(item.total);
         if (t !== null) return t;
-        var q = parseFloat(item.quantity), r = parseFloat(item.rate);
-        if (isNaN(q) || isNaN(r)) return null;
-        return paperAmount(q * r * (parseFloat(item.multiplier) || 1));
+        var a = paperAmount(item.amount);
+        if (a !== null) return a;
+        var q = paperAmount(item.quantity), r = paperAmount(item.rate);
+        if (q === null || r === null) return null;
+        var m = (item.multiplier != null && item.multiplier !== '') ? paperAmount(item.multiplier) : 1;
+        return paperAmount(q * r * (m === null ? 1 : m));
     }
     function paperIsProducerRole(text) {
         var t = String(text || '').toLowerCase();
         return /\bproducer\b/.test(t) && !/\bline\s+producer\b/.test(t);
     }
-    function paperStripName(text) { return String(text || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); }
+    function paperStripName(text, payee) {
+        var s = paperText(text);
+        if (!s) return '';
+        var p = paperText(payee);
+        if (p) {
+            if (s.toLowerCase() === p.toLowerCase()) return '';
+            var escP = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var leadParen = new RegExp('^' + escP + '\\s*\\(([^)]+)\\)\\s*$', 'i').exec(s);
+            if (leadParen) return leadParen[1].trim();
+            s = s
+                .replace(new RegExp('\\s*[\\(\\[]\\s*' + escP + '\\s*[\\)\\]]', 'gi'), '')
+                .replace(new RegExp('^' + escP + '(?:[\\s,\\-:;/|\\u2013\\u2014]+|$)', 'i'), '')
+                .replace(new RegExp('(?:^|[\\s,\\-:;/|\\u2013\\u2014]+)' + escP + '$', 'i'), '')
+                .trim();
+        }
+        s = s.replace(/\s*\([^)]*\)\s*$/, '').replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '').trim();
+        if (p && s.toLowerCase() === p.toLowerCase()) return '';
+        return s;
+    }
     /* Producer, client and the configurable grantee line ("<producer> trading as moo, producer for <client>").
        Order: document value, render option, budget.paperworkSettings, budget fields, then the linked producer line. */
     function paperworkParty(b, opts) {
@@ -175,16 +209,31 @@
                 });
             });
         }
-        var client = paperFirst(ed.clientName, opts.clientName, s.clientName, b.clientName, b.client, b.clientOrganisation, b.clientOrganization, b.projectClient);
+        if (!producer) {
+            contacts.some(function (c) {
+                if (c && (paperIsProducerRole(c.role) || paperIsProducerRole(c.title))) {
+                    producer = paperText(c.name);
+                    return !!producer;
+                }
+                return false;
+            });
+        }
+        var client = paperFirst(ed.clientName, ed.client, ed.grantee, opts.clientName, opts.client, opts.grantee, s.clientName, s.client, b.clientName, b.client, b.clientOrganisation, b.clientOrganization, b.projectClient, b.grantee);
         if (!client) {
             contacts.some(function (c) {
-                if (c.category === 'client') client = paperFirst(c.organisation, c.organization, c.company);
+                if (c.category === 'client') client = paperFirst(c.organisation, c.organization, c.company, c.name);
                 return !!client;
             });
         }
         var line = paperFirst(ed.granteeLine, opts.granteeLine, s.granteeLine, b.granteeLine);
         if (!line && producer) line = producer + ' trading as moo, producer for ' + (client || PAPER_BLANK);
         return { producer: paperBrand(producer), client: paperBrand(client), line: paperBrand(line), brand: 'moo' };
+    }
+    function paperReleaseGrantee(b, opts, explicitLine) {
+        var party = paperworkParty(b, opts);
+        var line = paperBrand(paperFirst(explicitLine, party.line));
+        if (line) return line;
+        return (party.producer || PAPER_BLANK) + ' trading as moo, producer for ' + (party.client || PAPER_BLANK);
     }
     /* Short client name used inside fixed wording: "Environmental Foundation of Jamaica (EFJ)" gives "EFJ". */
     function paperClientShort(client) {
@@ -202,7 +251,9 @@
         return dayNum + ' ' + months[monthIdx] + ' ' + year;
     }
     function paperWords(n, currency) {
-        if (n == null || isNaN(n) || n <= 0) return '';
+        if (n == null || typeof n === 'boolean' || (typeof n === 'string' && !n.trim())) return '';
+        n = Number(n);
+        if (!isFinite(n) || n < 0) return '';
         var ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
         var tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
         function under1000(x) {
@@ -3221,7 +3272,7 @@
                 description: 'Performer contract with compensation, rights, credit, and signatures.',
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
-                getDefaultData: function (budget) {
+                getDefaultData: function (budget, options) {
                     var b = budget || {};
                     var sections = b.sections || {};
                     var producer = '';
@@ -3303,11 +3354,12 @@
                         }
                     }
 
+                    var party = paperworkParty(b, options);
                     return {
                         productionTitle: b.projectName || '',
                         productionCompany: paperBrand(b.projectCompany || b.company || ''),
-                        producerName: producer,
-                        granteeLine: paperworkParty(b, {}).line || (PAPER_BLANK + ' trading as moo, producer for ' + PAPER_BLANK),
+                        producerName: producer || party.producer,
+                        granteeLine: paperReleaseGrantee(b, options),
                         performerLegalName: performerLegalName, performerStageName: '', performerAddress: performerAddress, performerPhone: performerPhone,
                         agentName: '', agentPhone: '',
                         characterName: characterName, roleType: 'Lead', roleDescription: '',
@@ -3324,9 +3376,11 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var b = budgetData || {};
+                    options = options || {};
                     var d = options.editorData || {};
-                    var party = paperworkParty(b, options);
-                    var granteeLine = paperBrand(paperFirst(d.granteeLine, party.line));
+                    var defs = this.getDefaultData(b, options);
+                    var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
+                    var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
                     var titleSep = granteeLine ? ' - ' : ' \u2014 ';
 
@@ -3372,7 +3426,7 @@
                         '</div>';
 
                     var termsBlock = '<div class="dm-hdr">Terms &amp; Conditions</div>' +
-                        '<div style="font-size:7.5pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(d.terms || '') + '</div>';
+                        '<div style="font-size:7.5pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(termsText) + '</div>';
 
                     var sig = '<div class="ta-2col" style="margin-top:30px;">' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Performer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.performerLegalName || '') + '</div></div>' +
@@ -3402,7 +3456,7 @@
                 description: 'Location filming permit with schedule, fee, terms, and signatures.',
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
-                getDefaultData: function (budget) {
+                getDefaultData: function (budget, options) {
                     var b = budget || {};
                     var sections = b.sections || {};
                     var producerFromCrew = '';
@@ -3454,10 +3508,11 @@
                         }
                     }
 
+                    var party = paperworkParty(b, options);
                     return {
                         productionTitle: b.projectName || '', productionCompany: paperBrand(b.projectCompany || b.company || ''),
-                        producerName: producer,
-                        granteeLine: paperworkParty(b, {}).line || (PAPER_BLANK + ' trading as moo, producer for ' + PAPER_BLANK),
+                        producerName: producer || party.producer,
+                        granteeLine: paperReleaseGrantee(b, options),
                         ownerName: '', ownerAddress: '', ownerPhone: '', ownerEmail: '',
                         ownerRelationship: 'Owner',
                         propertyAddress: propertyAddress, propertyDescription: '', accessInstructions: '',
@@ -3470,9 +3525,11 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var b = budgetData || {};
+                    options = options || {};
                     var d = options.editorData || {};
-                    var party = paperworkParty(b, options);
-                    var granteeLine = paperBrand(paperFirst(d.granteeLine, party.line));
+                    var defs = this.getDefaultData(b, options);
+                    var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
+                    var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
                     var titleSep = granteeLine ? ' - ' : ' \u2014 ';
 
@@ -3510,7 +3567,7 @@
                         '</div>';
 
                     var termsBlock = '<div class="dm-hdr">Terms &amp; Conditions</div>' +
-                        '<div style="font-size:7.5pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(d.terms || '') + '</div>';
+                        '<div style="font-size:7.5pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(termsText) + '</div>';
 
                     var sig = '<div class="la-2col" style="margin-top:28px;">' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Location Owner / Agent Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.ownerName || '') + '</div></div>' +
@@ -4474,9 +4531,9 @@
                 description: 'On-camera release for background, extras, and bystanders.',
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
-                getDefaultData: function (budget) {
+                getDefaultData: function (budget, options) {
                     var b = budget || {};
-                    var grantee = paperworkParty(b, {}).line || (PAPER_BLANK + ' trading as moo, producer for ' + PAPER_BLANK);
+                    var grantee = paperReleaseGrantee(b, options);
                     return {
                         productionTitle: b.projectName || '', productionCompany: paperBrand(b.projectCompany || b.company || ''),
                         date: new Date().toISOString().split('T')[0],
@@ -4490,9 +4547,11 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var b = budgetData || {};
+                    options = options || {};
                     var d = options.editorData || {};
-                    var party = paperworkParty(b, options);
-                    var granteeLine = paperBrand(paperFirst(d.granteeLine, party.line));
+                    var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
+                    var defs = this.getDefaultData(b, { contacts: options.contacts, editorData: { granteeLine: granteeLine } });
+                    var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
                     var titleSep = granteeLine ? ' - ' : ' — ';
                     var or = function (v) { return v ? esc(v) : emptyVal; };
@@ -4514,7 +4573,7 @@
                         '</div></div>';
 
                     var terms = '<div class="dm-hdr">Release &amp; Consent</div>' +
-                        '<div style="font-size:8pt;color:#475569;line-height:1.6;padding:8px 0;white-space:pre-wrap;">' + esc(d.terms || '') + '</div>';
+                        '<div style="font-size:8pt;color:#475569;line-height:1.6;padding:8px 0;white-space:pre-wrap;">' + esc(termsText) + '</div>';
 
                     var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px;">' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Releasor Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.releasorName || '') + '</div></div>' +
@@ -5275,10 +5334,18 @@
                             if (self._isExtrasLine(item, contact)) return;
                             var payee = paperFirst(contact && contact.name, item.crew && item.crew.name, item.vendor, item.payee);
                             if (!payee) return;
+                            var purpose = paperFirst(
+                                paperStripName(item.purpose, payee),
+                                paperStripName(item.description, payee),
+                                paperStripName(item.role, payee),
+                                paperStripName(item.crew && item.crew.role, payee),
+                                paperStripName(contact && contact.role, payee),
+                                paperStripName(contact && contact.title, payee)
+                            );
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
-                                purpose: paperFirst(item.purpose, paperStripName(item.description), contact && contact.role),
+                                purpose: purpose,
                                 total: paperLineTotal(item),
                                 deposit: paperAmount(item.deposit != null ? item.deposit : item.depositAmount),
                                 currency: currency,
@@ -5295,7 +5362,14 @@
                         (fl.receipts || []).forEach(function (r) {
                             var c = r && paperContactById(contacts, r.contactId);
                             if (!c || !paperText(c.name)) return;
-                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: String(c.id), payee: paperText(c.name), purpose: paperText(r.description), total: paperAmount(r.amount), deposit: null, currency: r.currency || fl.currency || currency, items: [] });
+                            var rPayee = paperText(c.name);
+                            var rPurpose = paperFirst(
+                                paperStripName(r.purpose, rPayee),
+                                paperStripName(r.description, rPayee),
+                                paperStripName(c.role, rPayee),
+                                paperStripName(c.title, rPayee)
+                            );
+                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: String(c.id), payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount), deposit: null, currency: r.currency || fl.currency || currency, items: [] });
                         });
                     });
                     var company = paperBrand(paperFirst(b.projectCompany, b.company));
@@ -5317,13 +5391,17 @@
                 /* One voucher becomes one page, or a deposit page and a balance page when split. */
                 _pages: function (v) {
                     var total = paperAmount(v.total), dep = paperAmount(v.deposit);
-                    if (total !== null && dep !== null && dep < total) {
+                    var bal = paperAmount(v.balanceAfter != null ? v.balanceAfter : (v.balanceRemaining != null ? v.balanceRemaining : v.balance));
+                    if (total === null && dep !== null && dep > 0 && bal !== null) {
+                        total = dep + bal;
+                    }
+                    if (total !== null && dep !== null && dep > 0 && dep < total) {
                         return [
                             { type: 'Deposit', amount: dep, balanceAfter: total - dep, total: total, split: true, deposit: dep },
                             { type: 'Balance', amount: total - dep, balanceAfter: 0, total: total, split: true, deposit: dep }
                         ];
                     }
-                    return [{ type: 'Full', amount: total, balanceAfter: null, total: total, split: false, deposit: null }];
+                    return [{ type: 'Full', amount: total, balanceAfter: bal, total: total, split: false, deposit: null }];
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var self = this;
@@ -5342,14 +5420,20 @@
                         var currency = v.currency || d.currency || b.currency || 'JMD';
                         var money = function (n) { return n === null || n === undefined ? '' : fmtCurrency(n, currency, 1); };
                         var payee = paperText(v.payee);
+                        var purpose = paperFirst(
+                            paperStripName(v.purpose, payee),
+                            paperStripName(v.description, payee),
+                            paperStripName(v.role, payee)
+                        );
                         self._pages(v).forEach(function (p) {
                             var number = numbered ? prefix + String(start + pageNo) : '';
                             pageNo += 1;
                             var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount) !== null); }) : [];
                             var table = '';
                             if (items.length || p.split) {
-                                var rows = (items.length ? items : [{ description: paperText(v.purpose) || 'Agreed total', amount: p.total }]).map(function (r) {
-                                    return '<tr><td>' + paperWriteIn(r.description) + '</td><td class="col-r">' + (paperAmount(r.amount) !== null ? esc(money(paperAmount(r.amount))) : paperWriteIn('')) + '</td></tr>';
+                                var rows = (items.length ? items : [{ description: purpose || 'Agreed total', amount: p.total }]).map(function (r) {
+                                    var rAmt = paperAmount(r.amount);
+                                    return '<tr><td>' + paperWriteIn(r.description) + '</td><td class="col-r">' + (rAmt !== null ? esc(money(rAmt)) : paperWriteIn('')) + '</td></tr>';
                                 }).join('');
                                 if (p.split) {
                                     rows += '<tr><td>Deposit</td><td class="col-r">' + esc(money(p.deposit)) + '</td></tr>' +
@@ -5358,8 +5442,10 @@
                                 }
                                 table = '<table class="pp-table pp-items"><thead><tr><th>DESCRIPTION</th><th class="col-r">AMOUNT</th></tr></thead><tbody>' + rows + '</tbody></table>';
                             }
-                            var figures = p.amount !== null && p.amount !== undefined ? esc(money(p.amount)) : paperWriteIn('');
-                            var words = p.amount !== null && p.amount !== undefined ? esc(paperWords(p.amount, currency)) : paperWriteIn('', true);
+                            var amt = paperAmount(p.amount);
+                            var balAfter = paperAmount(p.balanceAfter);
+                            var figures = amt !== null ? esc(money(amt)) : paperWriteIn('');
+                            var words = amt !== null ? esc(paperWords(amt, currency)) : paperWriteIn('', true);
                             var footer = d.footerWithPayee && payee ? 'Payment for ' + payee + '. Each party keeps a signed copy.' : 'Each party keeps a signed copy.';
                             pages.push('<div class="pp-page" data-doc="cashPaymentVoucher" data-payment-type="' + esc(p.type) + '">' +
                                 paperHeader('Cash Payment Voucher', [d.projectName || b.projectName, d.projectLocation, paperDate(d.shootDate)]) +
@@ -5369,13 +5455,13 @@
                                 paperField('PAID BY', paperWriteIn(d.paidBy)) +
                                 paperField('PAID TO', paperWriteIn(payee)) +
                                 paperField('METHOD', '<span class="pp-boxes">' + paperBox('Cash') + paperBox('Other') + paperWriteIn('') + '</span>') +
-                                paperField('PURPOSE', paperWriteIn(v.purpose)) +
+                                paperField('PURPOSE', paperWriteIn(purpose)) +
                                 '</div>' + table +
                                 '<div class="pp-grid">' +
                                 paperField('AMOUNT IN FIGURES (THIS PAYMENT)', figures) +
                                 paperField('PAYMENT TYPE', '<span class="pp-boxes">' + paperBox('Deposit') + paperBox('Balance') + paperBox('Full') + '</span>') +
                                 paperField('AMOUNT IN WORDS', words, true) +
-                                paperField('BALANCE REMAINING AFTER THIS PAYMENT', p.split ? esc(money(p.balanceAfter)) : paperWriteIn('')) +
+                                paperField('BALANCE REMAINING AFTER THIS PAYMENT', balAfter !== null ? esc(money(balAfter)) : paperWriteIn('')) +
                                 '</div>' +
                                 '<p class="pp-p pp-ack-text">I acknowledge receipt of the amount stated above. Each party keeps a signed copy.</p>' +
                                 paperDual(paperSig('Received by (payee)', payee), paperSig('Paid by (moo)', paperText(d.producerName))) +
@@ -5468,7 +5554,9 @@
                 description: 'Interviewer sheet, not a script: header from the budget and contacts, consent and filming notes, repeatable question groups and who-else prompts.',
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
-                _howWeFilm: function (name) {
+                _defaultDurationLine: 'About 20 minutes for Collett, about 10 minutes for others.',
+                _howWeFilm: function (durationLine) {
+                    var line = paperText(durationLine) || this._defaultDurationLine;
                     return [
                         'One camera, seated or walking, in a place that shows the work.',
                         'Open questions that start with how, what, or tell me about. No yes or no questions.',
@@ -5476,14 +5564,15 @@
                         'Short answers are welcome. If an answer runs long, we may ask for one or two sentences.',
                         'Speak the way you normally speak. English subtitles can be added if needed.',
                         'A release form is signed before filming. Anyone may decline a question or stop at any time.',
-                        'About 20 minutes for ' + (paperText(name) || 'Collett') + ', about 10 minutes for others.',
+                        line,
                         'Please look over the topics. You do not need to memorise answers. We want your own words.'
                     ];
                 },
                 /** Reference example content (Dolphin Head LFMC). Editorial; loaded on request, never by default. */
                 referenceExample: function () {
                     return {
-                        howWeFilm: this._howWeFilm('Collett'),
+                        durationLine: this._defaultDurationLine,
+                        howWeFilm: this._howWeFilm(this._defaultDurationLine),
                         questionGroups: [
                             { heading: 'About you and the committee.', questions: ['Please tell me your name, your community and your role with the Dolphin Head LFMC.', 'How long have you been part of the committee and how did you get involved?'] },
                             { heading: 'The forest and this place.', questions: ['What makes Dolphin Head important to Jamaica\'s biodiversity?', 'What does this forest mean to you and your community?'] },
@@ -5514,7 +5603,13 @@
                     var name = person ? paperText(person.name) : '';
                     var docTitle = b.workingTitle || b.projectName || '';
                     var projTitle = b.projectName || b.workingTitle || '';
-                    var durName = paperFirst(ed.durationName, opts.durationName, 'Collett');
+                    var durName = paperFirst(ed.durationName, opts.durationName);
+                    var durationLine = paperFirst(
+                        ed.durationLine,
+                        opts.durationLine,
+                        durName ? ('About 20 minutes for ' + durName + ', about 10 minutes for others.') : '',
+                        this._defaultDurationLine
+                    );
                     var d = {
                         intervieweeName: name,
                         intervieweeRole: person ? paperFirst(person.role, person.title) : '',
@@ -5528,7 +5623,8 @@
                         place: paperFirst(b.specificPlace, b.shootPlace),
                         documentaryTitle: docTitle,
                         subhead: 'For review before the shoot. This is not a script.',
-                        howWeFilm: this._howWeFilm(durName),
+                        durationLine: durationLine,
+                        howWeFilm: this._howWeFilm(durationLine),
                         questionGroups: [],
                         whoElse: [],
                         footerNote: ''
@@ -5536,6 +5632,10 @@
                     if (opts.example === 'reference' || opts.loadReferenceExample || opts.includeExampleQuestions || ed.loadReferenceExample || ed.includeExampleQuestions) {
                         var ex = this.referenceExample();
                         Object.keys(ex).forEach(function (k) { d[k] = ex[k]; });
+                        if (paperFirst(ed.durationLine, opts.durationLine, durName)) {
+                            d.durationLine = durationLine;
+                            d.howWeFilm = this._howWeFilm(durationLine);
+                        }
                     }
                     return d;
                 },
@@ -5553,6 +5653,9 @@
                     var title = paperText(d.documentaryTitle);
                     var consent = 'This interview will be recorded for the documentary \'' + (title ? esc(title) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>') + '\'. You may decline any question or stop the interview at any time. A separate release form will be signed before filming.';
                     var bullets = paperList(d.howWeFilm);
+                    if (paperText(d.durationLine) && !(options.editorData && options.editorData.howWeFilm && options.editorData.durationLine === undefined)) {
+                        if (bullets.length >= 7) bullets[6] = paperText(d.durationLine);
+                    }
                     var groups = (Array.isArray(d.questionGroups) ? d.questionGroups : []).filter(function (g) { return g && (paperFirst(g.heading, g.title) || paperList(g.questions).length); });
                     var n = 1, qHtml = '';
                     groups.forEach(function (g) {
@@ -5567,7 +5670,7 @@
                         for (var i = 0; i < 5; i++) blanks += '<li>' + paperWriteIn('', true) + '</li>';
                         qHtml = '<ol class="pp-ol">' + blanks + '</ol>';
                     }
-                    var rawPrompts = (Array.isArray(d.whoElsePrompts) && d.whoElsePrompts.length) ? d.whoElsePrompts : d.whoElse;
+                    var rawPrompts = (Array.isArray(d.whoElse) && d.whoElse.length) ? d.whoElse : d.whoElsePrompts;
                     var prompts = (Array.isArray(rawPrompts) ? rawPrompts : []).filter(function (p) { return p && paperText(p.text || p); });
                     var whoHtml = prompts.length
                         ? '<ul class="pp-ul">' + prompts.map(function (p) {

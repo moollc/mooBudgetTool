@@ -2101,7 +2101,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }).then(function (results) {
       if (!afCurrent(target)) throw new Error('The document changed. Autofill was not applied.');
       var m = afMeta();
-      return mBTDocumentProjection.project(target.template, budget, results[1], { document: editorData, selections: selections || m.selections || {} });
+      var proj = mBTDocumentProjection.project(target.template, budget, results[1], { document: editorData, selections: selections || m.selections || {} });
+      if (proj && typeof proj === 'object') proj.contacts = results[1] || [];
+      return proj;
     });
   }
   function afRowKey(row, root) {
@@ -2310,14 +2312,116 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     });
   }
   var PAPERWORK_TEMPLATES = ['cashPaymentVoucher', 'groupMinorConsent', 'interviewQuestions', 'equipmentChecklist'];
+  var RELEASE_TEMPLATES = ['appearanceRelease', 'talentAgreement', 'locationAgreement'];
+
+  function normalizeReleaseEditorData(templateId, d, contactsList) {
+    if (!d || typeof d !== 'object' || RELEASE_TEMPLATES.indexOf(templateId) === -1) return d;
+    var tmpl = pub && pub.templates && pub.templates[templateId];
+    if (!tmpl || typeof tmpl.getDefaultData !== 'function') return d;
+    var contacts = Array.isArray(contactsList) && contactsList.length
+      ? contactsList
+      : ((budget && Array.isArray(budget.contacts) && budget.contacts.length)
+        ? budget.contacts
+        : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : []));
+    var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { producerName: d.producerName, clientName: d.clientName, client: d.client } }) || {};
+    var blankDefaults = tmpl.getDefaultData({}, {}) || {};
+    var overrides = (d._autofill && d._autofill.overrides) || {};
+    var currentGrantee = d.granteeLine == null ? '' : String(d.granteeLine).trim();
+    if (!currentGrantee || (!overrides.granteeLine && currentGrantee.indexOf('________') > -1 && defaults.granteeLine && defaults.granteeLine !== currentGrantee && (currentGrantee === blankDefaults.granteeLine || defaults.granteeLine.indexOf('________') === -1))) {
+      d.granteeLine = defaults.granteeLine || '';
+    } else {
+      d.granteeLine = currentGrantee.replace(/\bmoo\.llc\b/gi, 'moo');
+    }
+    var currentTerms = d.terms == null ? '' : String(d.terms).trim();
+    var defsWithGrantee = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { granteeLine: d.granteeLine, producerName: d.producerName, clientName: d.clientName, client: d.client } }) || defaults;
+    if (!currentTerms || (!overrides.terms && (currentTerms === blankDefaults.terms || (currentTerms.indexOf('I hereby grant to ') === 0 && currentTerms.indexOf('________') > -1 && defsWithGrantee.terms && defsWithGrantee.terms !== currentTerms)))) {
+      d.terms = defsWithGrantee.terms || defaults.terms || '';
+    }
+    ['productionTitle', 'productionCompany', 'producerName', 'shootLocation', 'propertyAddress', 'filmingDates', 'startDate', 'endDate', 'guaranteedDays'].forEach(function (k) {
+      if ((d[k] == null || String(d[k]).trim() === '') && !overrides[k] && defaults[k]) {
+        d[k] = defaults[k];
+      }
+    });
+    return d;
+  }
+
+  function normalizeInterviewQuestionsEditorData(d) {
+    if (!d || typeof d !== 'object') return d;
+    var tmpl = pub && pub.templates && pub.templates.interviewQuestions;
+    var defaults = tmpl && typeof tmpl.getDefaultData === 'function' ? tmpl.getDefaultData(budget || {}) : {};
+    var defaultDur = (tmpl && tmpl._defaultDurationLine) || defaults.durationLine || 'About 20 minutes for Collett, about 10 minutes for others.';
+    if (d.durationLine == null || String(d.durationLine).trim() === '') {
+      d.durationLine = (Array.isArray(d.howWeFilm) && d.howWeFilm[6]) ? d.howWeFilm[6] : defaultDur;
+    }
+    if (!Array.isArray(d.howWeFilm) || d.howWeFilm.length < 7) {
+      d.howWeFilm = Array.isArray(defaults.howWeFilm) ? JSON.parse(JSON.stringify(defaults.howWeFilm)) : [];
+    }
+    if (d.howWeFilm.length >= 7 && d.durationLine) {
+      d.howWeFilm[6] = d.durationLine;
+    }
+    if (!Array.isArray(d.questionGroups)) {
+      d.questionGroups = [];
+    }
+    if (!Array.isArray(d.whoElse)) {
+      if (Array.isArray(d.whoElsePrompts)) {
+        d.whoElse = d.whoElsePrompts.map(function (p) { return typeof p === 'string' ? { text: p, writeIn: 'Name' } : { text: (p && p.text) || '', writeIn: (p && p.writeIn) || 'Name' }; });
+      } else {
+        d.whoElse = [];
+      }
+    } else {
+      d.whoElse = d.whoElse.map(function (p) {
+        if (typeof p === 'string') return { text: p, writeIn: 'Name' };
+        return { text: (p && p.text) || '', writeIn: (p && p.writeIn) || 'Name' };
+      });
+    }
+    if (d.footerNote == null) {
+      d.footerNote = d.footer || d.sourceNote || '';
+    }
+    if (d.subhead == null || String(d.subhead).trim() === '') {
+      d.subhead = defaults.subhead || 'For review before the shoot. This is not a script.';
+    }
+    return d;
+  }
+
+  function loadInterviewReferenceExample() {
+    if (!editorData || typeof editorData !== 'object') return;
+    var tmpl = pub && pub.templates && pub.templates.interviewQuestions;
+    var ex = tmpl && typeof tmpl.referenceExample === 'function'
+      ? tmpl.referenceExample()
+      : (tmpl && typeof tmpl.getDefaultData === 'function' ? tmpl.getDefaultData(budget || {}, { example: 'reference', loadReferenceExample: true }) : null);
+    if (!ex) return;
+    dbPushUndoImmediate();
+    editorData.questionGroups = JSON.parse(JSON.stringify(ex.questionGroups || []));
+    editorData.whoElse = JSON.parse(JSON.stringify(ex.whoElse || []));
+    editorData.footerNote = ex.footerNote || '';
+    if (!editorData.durationLine && (ex.durationLine || (Array.isArray(ex.howWeFilm) && ex.howWeFilm[6]))) {
+      editorData.durationLine = ex.durationLine || ex.howWeFilm[6];
+    }
+    if (Array.isArray(ex.howWeFilm) && ex.howWeFilm.length) {
+      editorData.howWeFilm = JSON.parse(JSON.stringify(ex.howWeFilm));
+      if (editorData.durationLine && editorData.howWeFilm.length >= 7) {
+        editorData.howWeFilm[6] = editorData.durationLine;
+      }
+    }
+    delete editorData._keepEmpty_questionGroups;
+    delete editorData._keepEmpty_whoElse;
+    afTyped('questionGroups');
+    afTyped('whoElse');
+    afTyped('footerNote');
+    saveEditorData();
+  }
+
   function afRefresh(review) {
     if (!budget || !editorData) return Promise.resolve(false);
     if (PAPERWORK_TEMPLATES.indexOf(activeTemplateId) > -1) {
       var tmpl = pub && pub.templates && pub.templates[activeTemplateId];
       var defs = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget) : {};
+      var overrides = (editorData._autofill && editorData._autofill.overrides) || {};
       Object.keys(defs).forEach(function (k) {
+        if (!review && (overrides[k] || editorData['_keepEmpty_' + k])) return;
         if (afBlank(editorData[k])) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
       });
+      if (activeTemplateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
       saveEditorData();
       if (review) buildEditor(activeTemplateId);
       return Promise.resolve(true);
@@ -2328,6 +2432,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (review) return afReview(p, target);
       var blank = Object.keys(p.values).filter(function (key) { return key !== 'sources' && afBlank(editorData[key]); });
       afApply(p, blank);
+      if (RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1) {
+        normalizeReleaseEditorData(activeTemplateId, editorData, p.contacts);
+        saveEditorData();
+      }
       /* An amount with no exchange rate is filled in its own currency. Say so once per document, in the same sentence the projection built. */
       var rateWarnings = (p.warnings || []).filter(function (w) { return /^Missing exchange rate for [A-Z]{3} to /.test(w); });
       var rateKey = activeTemplateId + '|' + rateWarnings.join('|');
@@ -2342,9 +2450,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (templateId === 'purchaseOrder') return { productionTitle: '', poNumber: '', date: '', vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '', vendorTaxId: '', budgetCategory: '', paymentTerms: '', requestedBy: '', approvedBy: '', taxRate: '', notes: '', items: [] };
     var tmpl = pub.templates[templateId];
     if (PAPERWORK_TEMPLATES.indexOf(templateId) > -1) {
-      return tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
+      var pd = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
+      if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(pd);
+      return pd;
     }
-    var d = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData({}) : {};
+    var d = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
     /* New documents do not present template examples as negotiated or observed facts. */
     Object.keys(d).forEach(function (key) {
       if (typeof d[key] === 'string' && ['framesPerPage', 'columns', 'compTitle', 'snapshotALabel', 'snapshotBLabel'].indexOf(key) < 0) d[key] = '';
@@ -2353,6 +2463,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     ['crew', 'cast', 'entries', 'lineItems', 'sources', 'sections', 'movementRows'].forEach(function (key) {
       if (Array.isArray(d[key])) d[key] = [];
     });
+    if (RELEASE_TEMPLATES.indexOf(templateId) > -1) {
+      normalizeReleaseEditorData(templateId, d);
+    }
     return d;
   }
 
@@ -2381,6 +2494,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (!current()) return;
       var pending = pendingDocumentSaves[key];
       editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
+      if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, editorData);
+      if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
       var ready = Promise.resolve();
       if (templateId === 'fundingPackage') {
         if (saved && saved.sources && !editorData.legacyFundingSources) editorData.legacyFundingSources = JSON.parse(JSON.stringify(saved.sources));
@@ -2693,8 +2808,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else if (templateId === 'productionReport') {
       html = buildProductionReportHtml(d);
     } else if (templateId === 'talentAgreement') {
+      normalizeReleaseEditorData('talentAgreement', d);
       html = buildTalentAgreementHtml(d);
     } else if (templateId === 'locationAgreement') {
+      normalizeReleaseEditorData('locationAgreement', d);
       html = buildLocationAgreementHtml(d);
     } else if (templateId === 'kitRentalAgreement') {
       html = buildKitRentalAgreementHtml(d);
@@ -2724,6 +2841,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else if (templateId === 'storyboard') {
       html = buildStoryboardHtml(d);
     } else if (templateId === 'appearanceRelease') {
+      normalizeReleaseEditorData('appearanceRelease', d);
       html = buildAppearanceReleaseHtml(d);
     } else if (templateId === 'vendorInvoice') {
       html = buildVendorInvoiceHtml(d);
@@ -2742,6 +2860,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else if (templateId === 'groupMinorConsent') {
       html = buildGroupMinorConsentHtml(d);
     } else if (templateId === 'interviewQuestions') {
+      normalizeInterviewQuestionsEditorData(d);
       html = buildInterviewQuestionsHtml(d);
     } else if (templateId === 'equipmentChecklist') {
       html = buildEquipmentChecklistHtml(d);
@@ -3353,6 +3472,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   function buildTalentAgreementHtml(d) {
+    normalizeReleaseEditorData('talentAgreement', d);
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
@@ -3383,6 +3503,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   function buildLocationAgreementHtml(d) {
+    normalizeReleaseEditorData('locationAgreement', d);
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
@@ -4047,6 +4168,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* Phase 74B: Appearance Release editor */
   function buildAppearanceReleaseHtml(d) {
+    normalizeReleaseEditorData('appearanceRelease', d);
     var html = '';
     html += '<div class="ed-section"><div class="ed-section-hdr">Production</div>' +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
@@ -4324,12 +4446,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
 
   function buildInterviewQuestionsHtml(d) {
-    var html = '<div class="ed-section"><div class="ed-section-hdr">Interview Details</div>' +
+    normalizeInterviewQuestionsEditorData(d);
+    var html = '<div class="ed-section"><div class="ed-section-hdr" style="display:flex;justify-content:space-between;align-items:center;">Interview Details' +
+      '<button class="smart-btn" id="btn-load-interview-example" type="button" data-action="load-reference-example">Load reference example</button></div>' +
       '<div class="ed-row ed-2">' + fld('intervieweeName', 'Interviewee Name') + fld('intervieweeRole', 'Interviewee Role') + '</div>' +
       '<div class="ed-row ed-2">' + fld('fromLine', 'From') + fld('client', 'Client') + '</div>' +
       '<div class="ed-row ed-2">' + fld('projectName', 'Project Title') + fld('documentaryTitle', 'Documentary Title') + '</div>' +
       '<div class="ed-row ed-4">' + fld('shootDate', 'Shoot Date', 'date') + fld('projectLocation', 'Location') + fld('place', 'Specific Place') + fld('startTime', 'Start Time') + '</div>' +
       '<div class="ed-row ed-2">' + fld('meetingPlace', 'Meeting Place') + fld('subhead', 'Subhead') + '</div>' +
+      '<div class="ed-row">' + fld('durationLine', 'Duration Line (How we will film this)', null, true) + '</div>' +
       '<div class="ed-row">' + fld('footerNote', 'Footer / Source Note', 'textarea', true) + '</div></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Question Groups</div>' +
       '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th style="width:220px;">Group Heading</th><th>Questions (one per line)</th><th></th></tr></thead><tbody>';
@@ -4341,6 +4466,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         '<td><button class="ed-del" data-arr="questionGroups" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="questionGroups">+ Add Question Group</button></div>';
+    html += '<div class="ed-section"><div class="ed-section-hdr">Who Else Prompts</div>' +
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Prompt</th><th style="width:160px;">Write-in Label</th><th></th></tr></thead><tbody>';
+    (d.whoElse || []).forEach(function (p, i) {
+      var pText = typeof p === 'string' ? p : ((p && p.text) || '');
+      var pWriteIn = (p && typeof p === 'object' && p.writeIn) ? p.writeIn : 'Name';
+      html += '<tr>' +
+        '<td><input data-arr="whoElse" data-i="' + i + '" data-f="text" value="' + esc(pText) + '"></td>' +
+        '<td><input data-arr="whoElse" data-i="' + i + '" data-f="writeIn" value="' + esc(pWriteIn) + '"></td>' +
+        '<td><button class="ed-del" data-arr="whoElse" data-del="' + i + '">&times;</button></td></tr>';
+    });
+    html += '</tbody></table></div><button class="ed-add-btn" data-add="whoElse">+ Add Who-Else Prompt</button></div>';
     return html;
   }
 
@@ -4375,6 +4511,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (key) {
         afTyped(key.split('.')[0]);
         setEditorKeyVal(key, val);
+        if (key === 'durationLine' && Array.isArray(editorData.howWeFilm) && editorData.howWeFilm.length >= 7) {
+          editorData.howWeFilm[6] = val;
+        }
         saveEditorData();
         return;
       }
@@ -4386,7 +4525,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var list = getEditorArr(arr, false);
         if (list && list[idx] !== undefined) {
           if (typeof list[idx] === 'string') {
-            list[idx] = { item: list[idx], checked: false };
+            list[idx] = arr === 'whoElse' ? { text: list[idx], writeIn: 'Name' } : { item: list[idx], checked: false };
           }
           if (field.indexOf('.') > -1) {
             var fp = field.split('.');
@@ -4399,6 +4538,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           }
           if (arr === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(list));
           if (arr === 'scenes' && activeTemplateId === 'callSheet') editorData.schedule = JSON.parse(JSON.stringify(list));
+          if (arr === 'whoElse') delete editorData.whoElsePrompts;
           saveEditorData();
         }
       }
@@ -4419,6 +4559,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Add and delete row buttons */
     panel.addEventListener('click', function (e) {
+      var refBtn = e.target.closest && e.target.closest('[data-action="load-reference-example"], #btn-load-interview-example');
+      if (refBtn) {
+        loadInterviewReferenceExample();
+        var scrollYRef = panel.scrollTop;
+        buildEditor(activeTemplateId);
+        var freshPanelRef = dom.getElementById('editor-panel');
+        if (freshPanelRef) freshPanelRef.scrollTop = scrollYRef;
+        if (typeof activeTab !== 'undefined' && activeTab === 'preview' && typeof renderPreview === 'function') renderPreview();
+        return;
+      }
       var addBtn = e.target.closest('[data-add]');
       var delBtn = e.target.closest('[data-del]');
 
@@ -4429,6 +4579,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var listAdd = getEditorArr(arrName, true);
         listAdd.push(newItem);
         if (arrName === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(listAdd));
+        if (arrName === 'whoElse') delete editorData.whoElsePrompts;
+        delete editorData['_keepEmpty_' + arrName];
         saveEditorData();
         var scrollY = panel.scrollTop;
         buildEditor(activeTemplateId);
@@ -4448,6 +4600,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             if (removedSource && removedSource.id && fundingDeletes.indexOf(removedSource.id) < 0) fundingDeletes.push(removedSource.id);
           }
           listDel.splice(delIdx, 1);
+          if (arrN === 'whoElse') delete editorData.whoElsePrompts;
           if (arrN === 'schedule') {
             editorData.scenes = JSON.parse(JSON.stringify(listDel));
             if (listDel.length === 0) editorData._keepEmptySchedule = true;
@@ -4456,7 +4609,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           if (arrN === 'crew' && listDel.length === 0) editorData._keepEmptyCrew = true;
           if (arrN === 'interviewees' && listDel.length === 0) editorData._keepEmptyInterviewees = true;
           if (arrN.indexOf('contactsBlock.') === 0) editorData._keepEmptyContactsBlock = true;
-          if (['kit', 'paperwork', 'wrap'].indexOf(arrN) > -1 && listDel.length === 0) editorData['_keepEmpty_' + arrN] = true;
+          if (['kit', 'paperwork', 'wrap', 'questionGroups', 'whoElse'].indexOf(arrN) > -1 && listDel.length === 0) editorData['_keepEmpty_' + arrN] = true;
           saveEditorData();
           var scrollYDel = panel.scrollTop;
           buildEditor(activeTemplateId);
