@@ -187,7 +187,9 @@
         var match = s.match(/^(?:(J\$|JA\$|US\$|\$US|\$|JMD|USD|GBP|CAD|EUR|TTD|BBD|GYD|XCD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(JMD|USD|GBP|CAD|EUR|TTD|BBD|GYD|XCD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
         if (!match) return null;
         var currencyCode = paperCurrencyCode(currency);
+        var nonDollar = currencyCode === 'GBP' || currencyCode === 'EUR';
         if (currency !== undefined && [match[1], match[4]].some(function (marker) {
+            if (nonDollar && /^(?:\$|dollars?)$/i.test(marker)) return true;
             var code = /^Jamaican dollars?$/i.test(marker) ? 'JMD' : /^United States dollars?$/i.test(marker) ? 'USD' : paperCurrencyCode(marker);
             return code && code !== currencyCode;
         })) return null;
@@ -218,8 +220,17 @@
             /production|equipment|gear/i.test(String(name || ''));
     }
     function paperIsProducerRole(text) {
-        var role = String(text || '').replace(/\([^()]*\)/g, ' ').replace(/[\s\p{P}]+$/u, '');
-        return /\bproducer$/i.test(role) && !/\b(?:line\s+producer|assistant\s+to\s+the\s+producer)\b/i.test(role);
+        var role = paperWithoutParentheses(String(text || ''));
+        return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
+            if (/\b(?:line(?:\s+|-)producer|assistant\s+to\s+the\s+producer)\b/i.test(part)) return false;
+            return part.split(/(?<=\p{L})-(?=\p{L})/u).some(function (title) {
+                return /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(title.replace(/[\s\p{P}]+$/u, ''));
+            });
+        });
+    }
+    function paperWithoutParentheses(text) {
+        while (/\([^()]*\)/.test(text)) text = text.replace(/\([^()]*\)/g, ' ');
+        return text;
     }
     function paperPurposeNormalized(text) {
         // Comparison only: never print this folded copy. Keep the established width aliases.
@@ -5868,13 +5879,21 @@
                     var catalogMatch = catalog && desc.replace(/\p{P}/gu, '').trim() === catalog;
                     if ((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) return false;
 
-                    var gearNoun = kind && /\b(kit|package|rig|console|cart|monitor|recorder|case|stand)\b/.test(desc);
+                    var label = kind ? paperWithoutParentheses(desc).replace(/[\s\p{P}]+$/u, '') : '';
+                    var gearNoun = /(?<![\p{L}\p{M}\p{N}_])(?:kit|package|rig|console|cart|monitor|recorder|case|stand)$/u.test(label) &&
+                        !/\b(with|incl|own)\b|[+/]/.test(label);
                     var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
-                    var otherCrewRole = kind && !catalogMatch && /\b(gaffer|grip|dp|cinematographer|photographer|videographer|swinger|best boy)\b/.test(desc);
-                    if (!gearNoun && (crewRole || otherCrewRole)) return false;
+                    var taggedCrewRole = kind && (
+                        /\b(op|asst|tech|trainee|loader|crew|electrician|spark|ac|puller|dit|stand-in)\b/.test(desc) ||
+                        (!catalogMatch && /\b(gaffer|grip|dp|cinematographer|photographer|videographer|swinger|best boy)\b/.test(desc))
+                    );
+                    if (!gearNoun && (crewRole || taggedCrewRole)) return false;
 
                     if (['gear', 'equipment'].indexOf(secId) > -1) return true;
-                    return paperProductionSection(sec, name) && /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc);
+                    return paperProductionSection(sec, name) && (
+                        /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) ||
+                        (kind !== '' && /(?<![\p{L}\p{M}\p{N}\p{Pd}_])(?:rig|console|cart|cases?|stands?)(?![\p{L}\p{M}\p{N}\p{Pd}_])/u.test(desc))
+                    );
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;
