@@ -2100,7 +2100,8 @@
                             return { day: days[idx], index: idx };
                         }
                     }
-                    /* No dayId or shootDayIndex: leave call sheet defaults (R1 / J3b). */
+                    /* No dayId or shootDayIndex: first shoot day when any exist (D1 / J3d). */
+                    if (days.length > 0) return { day: days[0], index: 0 };
                     return null;
                 },
 
@@ -2142,7 +2143,9 @@
                             hospital: loc.nearestHospital || '',
                             hospitalDistance: '',
                             notes: '',
-                            tbc: !!loc.tbc
+                            tbc: !!loc.tbc,
+                            /* Marks shoot-day location rows so name/parish print; legacy rows stay unmarked. */
+                            _shootLeg: true
                         };
                     });
                     if (!data.shootingLocations.length) {
@@ -2770,7 +2773,11 @@
                     collectArrayTbc(d.cast, 'Cast', function (r) { return [r.character, r.actor, r.call].filter(Boolean).join(' / '); });
                     collectArrayTbc(d.background, 'Background', function (r) { return [r.quantity, r.description, r.callTime].filter(Boolean).join(' / '); });
                     collectArrayTbc(d.vehicles, 'Vehicle', function (r) { return [r.driver, r.type, r.pickupLocation, r.destination].filter(Boolean).join(' / '); });
-                    collectArrayTbc(d.shootingLocations, 'Location', function (r) { return [r.name, r.address, r.contact, r.notes].filter(Boolean).join(' / '); });
+                    collectArrayTbc(d.shootingLocations, 'Location', function (r) {
+                        return (r && r._shootLeg
+                            ? [r.name, r.address, r.contact, r.notes]
+                            : [r.address, r.contact, r.notes]).filter(Boolean).join(' / ');
+                    });
                     collectArrayTbc(d.kit, 'Kit', function (r) { return r.item || r.description || r.name || ''; });
                     collectArrayTbc(d.paperwork, 'Paperwork', function (r) { return r.item || r.description || r.name || ''; });
                     collectArrayTbc(d.wrap, 'Wrap', function (r) { return r.item || r.description || r.name || ''; });
@@ -2906,12 +2913,17 @@
                         '<div><b>Basecamp:</b> ' + fieldHtml('basecamp', d.basecamp) +
                         (d.basecampParking || fieldTbcMap.basecampParking ? ' (' + fieldHtml('basecampParking', d.basecampParking) + ')' : '') + '</div>' +
                         ((d.shootingLocations || []).map(function (loc) {
-                            var shootParts = [];
-                            if (loc.name) shootParts.push(writeIn(loc.name));
-                            if (loc.address) shootParts.push(writeIn(loc.address));
-                            var shootLine = shootParts.length ? shootParts.join(', ') : writeIn(loc.address);
+                            var shootLine;
+                            if (loc._shootLeg) {
+                                var shootParts = [];
+                                if (loc.name) shootParts.push(writeIn(loc.name));
+                                if (loc.address) shootParts.push(writeIn(loc.address));
+                                shootLine = shootParts.length ? shootParts.join(', ') : writeIn(loc.address);
+                            } else {
+                                shootLine = writeIn(loc.address);
+                            }
                             var parts = ['<div><b>Shooting:</b> ' + shootLine + tbcBadge(isRowTbc(loc))];
-                            if (loc.parish) parts.push(' | <b>Parish:</b> ' + esc(loc.parish));
+                            if (loc._shootLeg && loc.parish) parts.push(' | <b>Parish:</b> ' + esc(loc.parish));
                             if (loc.eta) parts.push(' | <b>ETA:</b> ' + esc(loc.eta));
                             if (loc.contact || loc.contactName) parts.push(' | <b>Contact:</b> ' + esc(loc.contact || loc.contactName) + (loc.contactPhone ? ' (' + esc(loc.contactPhone) + ')' : ''));
                             if (loc.hospital || loc.hospitalDistance) parts.push(' | <b>Hospital:</b> ' + esc([loc.hospital, loc.hospitalDistance].filter(Boolean).join(', ')));
