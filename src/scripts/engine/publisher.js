@@ -174,18 +174,21 @@
         if (!s) return '';
         var p = paperText(payee);
         if (p) {
-            if (s.toLowerCase() === p.toLowerCase()) return '';
             var escP = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            var leadParen = new RegExp('^' + escP + '\\s*\\(([^)]+)\\)\\s*$', 'i').exec(s);
-            if (leadParen) return leadParen[1].trim();
-            s = s
-                .replace(new RegExp('\\s*[\\(\\[]\\s*' + escP + '\\s*[\\)\\]]', 'gi'), '')
-                .replace(new RegExp('^' + escP + '(?:[\\s,\\-:;/|\\u2013\\u2014]+|$)', 'i'), '')
-                .replace(new RegExp('(?:^|[\\s,\\-:;/|\\u2013\\u2014]+)' + escP + '$', 'i'), '')
-                .trim();
+            // Remove the full name anywhere, including possessives, without matching inside a word.
+            s = s.replace(new RegExp('(^|[^\\p{L}\\p{N}_])' + escP + "(?:['\\u2019]s|['\\u2019])?(?=$|[^\\p{L}\\p{N}_])", 'giu'), '$1');
         }
-        s = s.replace(/\s*\([^)]*\)\s*$/, '').replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '').trim();
-        if (p && s.toLowerCase() === p.toLowerCase()) return '';
+        s = s.replace(/\(\s*\)|\[\s*\]/g, ' ').replace(/\s+/g, ' ')
+            .replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '').trim();
+        // Keep unrelated parentheticals (for example, Camera (rental)).
+        var wrapped = s.match(/^\(([^()]*)\)$|^\[([^\[\]]*)\]$/);
+        if (wrapped) s = (wrapped[1] || wrapped[2] || '').trim();
+        var parenthetical = s.match(/^(.*?)\s*[([]([^()[\]]+)[)\]]\s*$/);
+        if (parenthetical && parenthetical[1].trim().toLowerCase() === parenthetical[2].trim().toLowerCase()) s = parenthetical[1].trim();
+        var segments = s.split(/\s+[-\u2013\u2014:;/|]\s+|\s*[:;/|]\s*/);
+        if (segments.length > 1 && segments.every(function (part) { return part.trim().toLowerCase() === segments[0].trim().toLowerCase(); })) s = segments[0].trim();
+        // A payment label or stranded preposition alone supplies no purpose.
+        if (/^(?:(?:payment|for|to|of|by|the)\s*)+$/i.test(s)) return '';
         return s;
     }
     /* Producer, client and the configurable grantee line ("<producer> trading as moo, producer for <client>").

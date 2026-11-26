@@ -2326,15 +2326,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { producerName: d.producerName, clientName: d.clientName, client: d.client } }) || {};
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
     var overrides = (d._autofill && d._autofill.overrides) || {};
-    var currentGrantee = d.granteeLine == null ? '' : String(d.granteeLine).trim();
-    if (!currentGrantee || (!overrides.granteeLine && currentGrantee.indexOf('________') > -1 && defaults.granteeLine && defaults.granteeLine !== currentGrantee && (currentGrantee === blankDefaults.granteeLine || defaults.granteeLine.indexOf('________') === -1))) {
+    // Only exact generator defaults may be refreshed; write-ins also occur in custom text.
+    var currentGrantee = d.granteeLine == null ? '' : String(d.granteeLine);
+    if (!currentGrantee.trim() || (!overrides.granteeLine && (currentGrantee === blankDefaults.granteeLine || currentGrantee === defaults.granteeLine))) {
       d.granteeLine = defaults.granteeLine || '';
-    } else {
-      d.granteeLine = currentGrantee.replace(/\bmoo\.llc\b/gi, 'moo');
     }
-    var currentTerms = d.terms == null ? '' : String(d.terms).trim();
+    var currentTerms = d.terms == null ? '' : String(d.terms);
     var defsWithGrantee = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { granteeLine: d.granteeLine, producerName: d.producerName, clientName: d.clientName, client: d.client } }) || defaults;
-    if (!currentTerms || (!overrides.terms && (currentTerms === blankDefaults.terms || (currentTerms.indexOf('I hereby grant to ') === 0 && currentTerms.indexOf('________') > -1 && defsWithGrantee.terms && defsWithGrantee.terms !== currentTerms)))) {
+    if (!currentTerms.trim() || (!overrides.terms && (currentTerms === blankDefaults.terms || currentTerms === defaults.terms || currentTerms === defsWithGrantee.terms))) {
       d.terms = defsWithGrantee.terms || defaults.terms || '';
     }
     ['productionTitle', 'productionCompany', 'producerName', 'shootLocation', 'propertyAddress', 'filmingDates', 'startDate', 'endDate', 'guaranteedDays'].forEach(function (k) {
