@@ -253,6 +253,9 @@
             });
         }
         if (removed) {
+            // Judge newly exposed edge slashes before the edge trim can erase them.
+            if ((/^\s*\//.test(s) && !/^\//.test(original)) ||
+                (/\/\s*$/.test(s) && !/\/$/.test(original))) return '';
             s = s.replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '');
             // Unwrap one whole remaining bracket group, never brackets beside other text.
             if (/^[([{]/.test(s)) {
