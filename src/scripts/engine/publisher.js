@@ -82,7 +82,7 @@
             '<br><small>Missing exchange rate. This source is left out of totals in the budget currency.</small>';
     }
     function reportCompany(budget) {
-        return (budget && (budget.projectCompany || budget.company)) || '';
+        return paperBrand((budget && (budget.projectCompany || budget.company)) || '');
     }
     function typedReportDate(budget, field) {
         if (!budget || !field || budget[field] == null || budget[field] === '') return '';
@@ -105,7 +105,8 @@
         }
         return '';
     }
-    function paperBrand(text) { return String(text || '').replace(/\bmoo\.llc\b/gi, 'moo'); }
+    /* Company/office names only; preserve email domains and web addresses in the same text. */
+    function paperBrand(text) { return String(text || '').replace(/(^|[^\w@/])moo\.llc\b(?!\/)/gi, '$1moo'); }
     function paperContacts(b, opts) {
         var lists = [], seen = {}, out = [];
         opts = opts || {};
@@ -448,6 +449,30 @@
         '.pp-ol li, .pp-ul li { margin: 2px 0; }' +
         '.pp-group { font-weight: 700; font-size: 10pt; margin: 8px 0 2px 0; }' +
         '@media print { .pp-dual, .pp-table tr { page-break-inside: avoid; } }';
+
+    /* Fit the group/minor form and the ordinary gear list on one Letter sheet.
+       Other paperwork keeps its existing spacing. Body/labels stay at least 9pt,
+       gear table text at least 8pt, and print margins at least 0.4in. */
+    var PAPER_FIT_CSS =
+        '@page { margin: 0.4in; }' +
+        '.ts-page { max-width: 7.7in; }' +
+        '.pp-head { margin-bottom: 5px; }' +
+        '.pp-h2 { margin: 7px 0 4px; padding: 3px 0; }' +
+        '.pp-grid { gap: 4px 12px; margin: 4px 0 6px; }' +
+        '.pp-field, .pp-p { font-size: 9pt; line-height: 1.2; }' +
+        '.pp-p { margin: 3px 0 4px; }' +
+        '.pp-label, .pp-caption { font-size: 9pt; letter-spacing: normal; }' +
+        '.pp-value { min-height: 13px; padding: 1px 0; }' +
+        '.pp-dual { gap: 20px; margin: 6px 0 4px; }' +
+        '.pp-sig-row, .pp-ack .pp-sig-row { margin-top: 4px; }' +
+        '.pp-sig-line { min-height: 14px; font-size: 9pt; }' +
+        '.pp-line { height: 16px; }' +
+        '.pp-gear { margin: 4px 0 6px; font-size: 8pt; }' +
+        '.pp-gear th, .pp-gear td { font-size: 8pt; line-height: 1.15; padding: 3px 4px; }' +
+        '.pp-gear .pp-wi { min-width: 0; width: 100%; }' +
+        '.pp-gear .pp-row-blank td { height: 16px; }' +
+        '.pp-footer { margin-top: 6px; }' +
+        '.ts-footer { margin-top: 8px; padding-top: 4px; font-size: 9pt; }';
 
     function financialSummary(b) {
         var t = window.mBT_Finance.summary(b);
@@ -1543,7 +1568,7 @@
                     .replace(/border-bottom\s*:\s*[23]px\s+solid\s+#[0-9a-f]{3,6}/gi, 'border-bottom: 1px dashed #000');
             },
 
-            /* Wrap rendered body HTML in a full printable document */
+            /* Wrap rendered body HTML in a full printable document. Title is raw text: escape only here. */
             _wrapHtml: function (title, bodyHtml, extraCss) {
                 var o = this._currentOptions || {};
                 var brand = o.brand || {};
@@ -1559,7 +1584,7 @@
                     var logoSrc = safeAssetUrl(brand.logo);
                     var logoHtml = logoSrc ? '<img src="' + logoSrc + '" alt="" class="ts-brand-logo">' : '';
                     var textHtml = (brand.name || brand.address) ?
-                        '<div class="ts-brand-text"><div class="ts-brand-name">' + esc(brand.name || '') + '</div>' +
+                        '<div class="ts-brand-text"><div class="ts-brand-name">' + esc(paperBrand(brand.name || '')) + '</div>' +
                         (brand.address ? '<div class="ts-brand-addr">' + esc(brand.address) + '</div>' : '') + '</div>' : '';
                     brandHtml = '<div class="ts-brand">' + logoHtml + textHtml + '</div>';
                 }
@@ -2551,7 +2576,7 @@
                         '<div class="cs-kv"><b>Shooting Call:</b> ' + fieldHtml('shootingCall', d.shootingCall) + '</div>' +
                         '<div class="cs-kv"><b>Est. Lunch:</b> ' + fieldHtml('estimatedLunch', d.estimatedLunch) + '</div>' +
                         '<div class="cs-kv"><b>Est. Wrap:</b> ' + fieldHtml('estimatedWrap', d.estimatedWrap) + '</div>' +
-                        '<div class="cs-kv"><b>Office:</b> ' + fieldHtml('productionOffice', d.productionOffice) + '</div>' +
+                        '<div class="cs-kv"><b>Office:</b> ' + fieldHtml('productionOffice', paperBrand(d.productionOffice)) + '</div>' +
                         '</div></div>';
 
                     /* ---- TBC Box at the top ---- */
@@ -2843,7 +2868,7 @@
                     var footerHtml = '<div class="callsheet-block">' +
                         '<div class="cs-footer-row">' +
                         '<div><b>Walkie Channels:</b> ' + fieldHtml('walkieChannels', d.walkieChannels) + '</div>' +
-                        '<div><b>Production Office:</b> ' + fieldHtml('productionOffice', d.productionOffice) + '</div>' +
+                        '<div><b>Production Office:</b> ' + fieldHtml('productionOffice', paperBrand(d.productionOffice)) + '</div>' +
                         '</div>' +
                         ((d.safetyNotes || fieldTbcMap.safetyNotes) ? '<div style="padding:3px 10px 5px;font-size:7.5pt;color:#000;font-weight:700;">Safety: ' + fieldHtml('safetyNotes', d.safetyNotes) + '</div>' : '') +
                         '</div>';
@@ -3135,7 +3160,7 @@
                     var d = options.editorData || {};
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">CREW DEAL MEMO</div></div>';
 
@@ -3717,7 +3742,7 @@
                     var equipment = d.equipment || [];
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">KIT / EQUIPMENT RENTAL AGREEMENT</div></div>';
 
@@ -3968,7 +3993,7 @@
                         '</table></div>' : '';
 
                     /* Contact line */
-                    var contactParts = [d.productionCompany, d.contactName, d.contactEmail, d.contactPhone].filter(Boolean);
+                    var contactParts = [paperBrand(d.productionCompany), d.contactName, d.contactEmail, d.contactPhone].filter(Boolean);
                     var contactHtml = contactParts.length ? '<div class="fp-contact">' + contactParts.map(esc).join(' &nbsp;&bull;&nbsp; ') + '</div>' : '';
 
                     /* Funding sources table */
@@ -4024,7 +4049,7 @@
                         '.fp-surplus-row td{color:#16a34a;font-weight:800;}';
 
                     return engine._wrapHtml(
-                        esc(d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Package',
+                        (d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Package',
                         cover + crewHtml + contactHtml + fundingHdr + fundingTable,
                         css
                     );
@@ -4145,7 +4170,7 @@
                         '.fp-surplus-row td{color:#16a34a;font-weight:800;}';
 
                     return engine._wrapHtml(
-                        esc(d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Strategy',
+                        (d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Strategy',
                         coverHtml + narrative + sourcesTable + contactHtml,
                         css
                     );
@@ -4181,7 +4206,7 @@
                     var sB = d.snapshotB;
 
                     if (!sA || !sB) {
-                        return engine._wrapHtml(esc(d.compTitle || 'Budget Comparison'),
+                        return engine._wrapHtml((d.compTitle || 'Budget Comparison'),
                             '<div style="text-align:center;padding:60px 20px;color:#94a3b8;">' +
                             '<p style="font-size:14pt;font-weight:700;margin-bottom:8px;">Two snapshots required</p>' +
                             '<p style="font-size:9pt;">Load snapshots A and B using the editor panel, then preview again.</p></div>',
@@ -4240,7 +4265,7 @@
 
                     var css = '.bc-dec{color:#16a34a;font-weight:700;}.bc-inc{color:#dc2626;font-weight:700;}';
 
-                    return engine._wrapHtml(esc(d.compTitle || 'Budget Comparison'), header + table, css);
+                    return engine._wrapHtml((d.compTitle || 'Budget Comparison'), header + table, css);
                 }
             },
 
@@ -4256,7 +4281,7 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData();
-                    var title = esc(d.productionTitle || (budgetData && budgetData.projectName) || 'Script Breakdown');
+                    var title = d.productionTitle || (budgetData && budgetData.projectName) || 'Script Breakdown';
                     var CAT_COLORS = { cast: '#dbeafe', props: '#fef9c3', wardrobe: '#fce7f3', vehicles: '#dcfce7', fx: '#ffe4e6', notes: '#f3f4f6' };
                     var sceneRows = (d.scriptScenes || []).map(function (s, i) {
                         var bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
@@ -4279,7 +4304,7 @@
                             '</td></tr>';
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;text-align:left;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
-                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + title + '</h2>' +
+                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
                         '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + esc(d.director || '—') + ' &bull; Scenes: ' + (d.scriptScenes || []).length + '</p>' +
                         '<table><thead><tr><th>Sc#</th><th>I/E</th><th>D/N</th><th>Location</th><th>Description</th><th>Requirements</th></tr></thead><tbody>' + sceneRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
@@ -4298,7 +4323,7 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData();
-                    var title = esc(d.productionTitle || (budgetData && budgetData.projectName) || 'Shooting Schedule');
+                    var title = d.productionTitle || (budgetData && budgetData.projectName) || 'Shooting Schedule';
                     var dayRows = (d.shootDays || []).map(function (day, i) {
                         var bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
                         return '<tr style="background:' + bg + ';vertical-align:top;">' +
@@ -4313,7 +4338,7 @@
                             '<td>' + esc(day.notes) + '</td></tr>';
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
-                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + title + '</h2>' +
+                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
                         '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Director: ' + esc(d.director || '—') + ' &bull; Shoot Days: ' + (d.shootDays || []).length + '</p>' +
                         '<table><thead><tr><th>Day</th><th>Date</th><th>Location</th><th>Crew Call</th><th>Wrap</th><th>Scenes</th><th>Cast</th><th>Pages</th><th>Notes</th></tr></thead><tbody>' + dayRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
@@ -4368,7 +4393,7 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData(budgetData);
-                    var title = esc(d.productionTitle || (budgetData && budgetData.projectName) || 'Continuity Log');
+                    var title = d.productionTitle || (budgetData && budgetData.projectName) || 'Continuity Log';
                     var shotRows = (d.shots || []).map(function (s, i) {
                         var bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
                         return '<tr style="background:' + bg + ';vertical-align:top;">' +
@@ -4384,7 +4409,7 @@
                             '<td>' + esc(s.notes) + '</td></tr>';
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:8.5pt;}td{padding:4px 7px;border-bottom:1px solid #e2e8f0;font-size:8.5pt;}';
-                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + title + '</h2>' +
+                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
                         '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Supervisor: ' + esc(d.supervisor || '—') + ' &bull; Date: ' + esc(d.shootDate || '—') + '</p>' +
                         '<table><thead><tr><th>Sc</th><th>Shot</th><th>Take</th><th>TC</th><th>Description</th><th>Costume</th><th>Hair</th><th>Makeup</th><th>Props</th><th>Notes</th></tr></thead><tbody>' + shotRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
@@ -4472,7 +4497,7 @@
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData(budgetData);
-                    var title = esc(d.productionTitle || (budgetData && budgetData.projectName) || 'Movement Order');
+                    var title = d.productionTitle || (budgetData && budgetData.projectName) || 'Movement Order';
                     var bodyRows = (d.movementRows || []).map(function (r, i) {
                         var bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
                         return '<tr style="background:' + bg + ';vertical-align:top;">' +
@@ -4486,7 +4511,7 @@
                             '<td>' + esc(r.notes) + '</td></tr>';
                     }).join('');
                     var css = 'table{width:100%;border-collapse:collapse;}th{background:#0f172a;color:#fff;padding:5px 8px;font-size:9pt;}td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9pt;}';
-                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + title + '</h2>' +
+                    var body = '<h2 style="font-size:14pt;font-weight:900;margin:0 0 4px;">' + esc(title) + '</h2>' +
                         '<p style="color:#64748b;font-size:9pt;margin:0 0 12px;">Date: ' + esc(d.shootDate || '—') + ' &bull; Transport: ' + esc(d.transportCoordinator || '—') + ' &bull; Basecamp: ' + esc(d.basecamp || '—') + '</p>' +
                         '<table><thead><tr><th>Name</th><th>Role</th><th>Pickup Address</th><th>PU Time</th><th>Vehicle</th><th>Destination</th><th>ETA</th><th>Notes</th></tr></thead><tbody>' + bodyRows + '</tbody></table>';
                     return engine._wrapHtml(title, body, css);
@@ -4517,7 +4542,7 @@
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData(budgetData);
                     var brand = (options && options.brand) || {};
-                    var title = esc(d.projectTitle || (budgetData && budgetData.projectName) || 'Funding Pitch');
+                    var title = d.projectTitle || (budgetData && budgetData.projectName) || 'Funding Pitch';
                     var logoSrc = safeAssetUrl(brand.logo);
                     var logoHtml = logoSrc ? '<img src="' + logoSrc + '" style="max-height:48px;margin-bottom:8px;"><br>' : '';
                     function section(heading, content) {
@@ -4529,8 +4554,8 @@
                     var askLabel = (d._autofill && d._autofill.overrides && d._autofill.overrides.askAmount) ? 'Seeking (recipient amount entered in this document)' : 'Seeking';
                     var css = '.pitch-cover{background:#0f172a;color:#fff;padding:40px 48px 32px;margin-bottom:24px;} .pitch-title{font-size:28pt;font-weight:900;line-height:1.1;} .pitch-sub{font-size:10pt;color:#94a3b8;margin-top:8px;}';
                     var body = '<div class="pitch-cover">' + logoHtml +
-                        '<div class="pitch-title">' + title + '</div>' +
-                        (d.productionCompany ? '<div style="font-size:11pt;color:#cbd5e1;margin-top:4px;">' + esc(d.productionCompany) + '</div>' : '') +
+                        '<div class="pitch-title">' + esc(title) + '</div>' +
+                        (d.productionCompany ? '<div style="font-size:11pt;color:#cbd5e1;margin-top:4px;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="pitch-sub">' + (d.productionStage ? esc(d.productionStage) + ' &bull; ' : '') + esc(d.genre || '') + (d.format ? ' &bull; ' + esc(d.format) : '') + (d.runtime ? ' &bull; ' + esc(d.runtime) : '') + '</div></div>' +
                         section('Logline', esc(d.logline)) +
                         section('Synopsis', esc(d.synopsis)) +
@@ -4569,7 +4594,7 @@
                 renderHtml: function (budgetData, options, engine) {
                     var d = (options && options.editorData) || this.getDefaultData(budgetData);
                     var brand = (options && options.brand) || {};
-                    var title = esc(d.projectTitle || (budgetData && budgetData.projectName) || 'Storyboard');
+                    var title = d.projectTitle || (budgetData && budgetData.projectName) || 'Storyboard';
                     var perPage = parseInt(d.framesPerPage, 10) || 4;
                     if ([2, 4, 6].indexOf(perPage) === -1) perPage = 4;
                     var cols = perPage === 6 ? 3 : 2;
@@ -4607,7 +4632,7 @@
                         '</div>';
                     }).join('');
                     var body = '<div class="sb-header">' +
-                        '<div>' + logoHtml + '<strong style="font-size:11pt;">' + title + '</strong></div>' +
+                        '<div>' + logoHtml + '<strong style="font-size:11pt;">' + esc(title) + '</strong></div>' +
                         '<div style="text-align:right;font-size:8pt;color:#64748b;">' +
                             (d.director ? 'Director: ' + esc(d.director) : '') +
                         '</div>' +
@@ -4673,7 +4698,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.witnessName || '') + '</div></div></div>';
 
                     var body = header + info + terms + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + titleSep + 'Appearance Release', body, granteeLine ? '/*release-ink*/' : undefined);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + titleSep + 'Appearance Release', body, granteeLine ? '/*release-ink*/' : undefined);
                 }
             },
 
@@ -4703,7 +4728,7 @@
                     var or = function (v) { return v ? esc(v) : '\u2014'; };
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">VENDOR INVOICE</div></div>';
 
@@ -4756,7 +4781,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
 
                     var body = header + meta + table + notes + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Vendor Invoice', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Vendor Invoice', body);
                 }
             },
 
@@ -4789,7 +4814,7 @@
                     var or = function (v) { return v ? esc(v) : '\u2014'; };
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #dc2626;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;color:#dc2626;">INCIDENT / ACCIDENT REPORT</div></div>';
 
@@ -4836,7 +4861,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Injured Person Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.injuredPerson || '') + '</div></div></div>';
 
                     var body = header + meta + person + desc + action + witTable + medical + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Incident Report', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Incident Report', body);
                 }
             },
 
@@ -4866,12 +4891,12 @@
                     var or = function (v) { return v ? esc(v) : '\u2014'; };
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">NON-DISCLOSURE AGREEMENT</div></div>';
 
                     var parties = '<div class="dm-hdr">Parties</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
-                        '<div><div class="dm-lbl">Disclosing Party (Production)</div><div class="dm-name">' + or(d.productionCompany) + '</div>' +
+                        '<div><div class="dm-lbl">Disclosing Party (Production)</div><div class="dm-name">' + or(paperBrand(d.productionCompany)) + '</div>' +
                         (d.productionCompanyAddress ? '<div class="dm-sub">' + esc(d.productionCompanyAddress) + '</div>' : '') + '</div>' +
                         '<div><div class="dm-lbl">Receiving Party</div><div class="dm-name">' + or(d.recipientName) + '</div>' +
                         (d.recipientTitle ? '<div class="dm-sub">' + esc(d.recipientTitle) + '</div>' : '') +
@@ -4889,12 +4914,12 @@
                         '<div style="font-size:7.5pt;color:#475569;line-height:1.6;padding:8px 0;white-space:pre-wrap;">' + esc(d.terms || '') + '</div>';
 
                     var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px;">' +
-                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Disclosing Party Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.productionCompany || '') + '</div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Disclosing Party Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(paperBrand(d.productionCompany || '')) + '</div></div>' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Receiving Party Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.recipientName || '') + '</div></div></div>' +
                         '<div style="margin-top:16px;"><div class="dm-sig-line" style="max-width:300px;"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.witnessName || '') + '</div></div>';
 
                     var body = header + parties + dates + projDesc + terms + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — NDA', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — NDA', body);
                 }
             },
 
@@ -4976,7 +5001,7 @@
                     var or = function (v) { return v ? esc(v) : '\u2014'; };
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
                         '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">PRODUCTION WRAP REPORT</div></div>';
 
@@ -5013,7 +5038,7 @@
                     var sig = '<div style="margin-top:30px;"><div class="dm-sig-line" style="max-width:350px;"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.producerName || '') + '</div></div>';
 
                     var body = header + overview + financial + secTable + extras + notes + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Wrap Report', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Wrap Report', body);
                 }
             },
 
@@ -5084,7 +5109,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
 
                     var body = header + info + pay + sig;
-                    return engine._wrapHtml(esc(d.productionTitle || b.projectName || 'Production') + ' — Extras Voucher', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Extras Voucher', body);
                 }
             },
 
@@ -5122,7 +5147,7 @@
                     var rate = parseFloat((options && options.rate)) || 1;
                     var fmt = function (v) { return v === '' || v == null || !isFinite(Number(v)) ? 'Unknown' : fmtCurrency(v, currency, rate); };
                     var pct = function (v) { return isFinite(v) ? v.toFixed(1) + '%' : 'Unknown'; };
-                    var title = esc(d.productionTitle || b.projectName || 'Production');
+                    var title = d.productionTitle || b.projectName || 'Production';
                     var period = (d.periodStart && d.periodEnd) ? (esc(d.periodStart) + ' \u2013 ' + esc(d.periodEnd)) : 'All Periods';
 
                     /* Filter line items to period: items with no actualDate are always included (shows budget/committed) */
@@ -5150,8 +5175,8 @@
                     secOrder.forEach(function (k) { grandBudget += secMap[k].budget; grandCommitted += secMap[k].committed; grandActual += secMap[k].actual; grandEtc += secMap[k].etc; });
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
-                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(d.productionCompany) + '</div>' : '') +
-                        '<div style="font-size:16pt;font-weight:900;">' + title + '</div>' +
+                        (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
+                        '<div style="font-size:16pt;font-weight:900;">' + esc(title) + '</div>' +
                         '<div style="font-size:11pt;font-weight:700;letter-spacing:2px;margin-top:4px;">WEEKLY COST REPORT</div>' +
                         '<div style="font-size:8pt;color:#64748b;margin-top:6px;">Period: ' + period + ' &bull; Report Date: ' + esc(d.reportDate || '\u2014') +
                         (d.preparedBy ? ' &bull; Prepared by: ' + esc(d.preparedBy) : '') + '</div></div>';
@@ -5638,7 +5663,7 @@
                     for (var i = 0; i < extra; i++) {
                         body += '<div class="pp-page" data-doc="groupMinorConsent" data-part="B">' + head + self._partB(d) + '</div>';
                     }
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Group Filming Notice + Minor Consent', body, PAPER_CSS);
+                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Group Filming Notice + Minor Consent', body, PAPER_CSS + PAPER_FIT_CSS);
                 }
             },
 
@@ -5852,7 +5877,7 @@
                         issuedTo: crew ? paperText(crew.name) : '',
                         shootDates: dates.join(', '),
                         perKit: false,
-                        blankRows: 6,
+                        blankRows: 4,
                         gear: gear
                     };
                 },
@@ -5862,7 +5887,7 @@
                             '<td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td><td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td>' +
                             '<td></td><td></td><td>' + (paperText(r.notes) ? esc(paperText(r.notes)) : '') + '</td></tr>';
                     }).join('');
-                    var blank = Math.max(0, Math.min(60, parseInt(d.blankRows, 10) || 0));
+                    var blank = Math.max(4, Math.min(60, parseInt(d.blankRows, 10) || 0));
                     for (var i = 0; i < blank; i++) {
                         tbody += '<tr class="pp-row-blank"><td></td><td></td><td></td><td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td><td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td><td></td><td></td><td></td></tr>';
                     }
@@ -5896,7 +5921,7 @@
                     } else {
                         body = self._sheet(d, rows, d.kitName, d.ownerVendor, d.ownerPhone);
                     }
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Equipment Checklist', body, PAPER_CSS);
+                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Equipment Checklist', body, PAPER_CSS + PAPER_FIT_CSS);
                 }
             },
 
@@ -5969,7 +5994,7 @@
                     : (function () { try { return localStorage.getItem('mbt_easy_on_the_ink') === '1'; } catch (e) { return false; } })();
                 var brand = opts.brand || {};
                 var projectName = esc((budgetData && budgetData.projectName) || 'Untitled Production');
-                var company = esc(brand.name || (budgetData && budgetData.company) || '');
+                var company = esc(paperBrand(brand.name || (budgetData && budgetData.company) || ''));
                 var dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
                 var watermark = opts.watermark || '';
 
