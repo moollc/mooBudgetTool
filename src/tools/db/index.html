@@ -2325,7 +2325,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       : (Array.isArray(_docContacts) && _docContacts.length ? _docContacts : ((budget && Array.isArray(budget.contacts) && budget.contacts.length)
         ? budget.contacts
         : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : [])));
-    var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { producerName: d.producerName, clientName: d.clientName, client: d.client } }) || {};
+    var partyData = { producerName: d.producerName, clientName: d.clientName, client: d.client, _autofill: d._autofill };
+    var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: partyData }) || {};
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
     // Convert the brand only; preserve all other characters in custom release text.
     ['granteeLine', 'terms'].forEach(function (key) {
@@ -2345,12 +2346,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       recordGenerated('granteeLine');
     }
     var currentTerms = d.terms == null ? '' : String(d.terms);
-    var defsWithGrantee = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: { granteeLine: d.granteeLine, producerName: d.producerName, clientName: d.clientName, client: d.client } }) || defaults;
+    partyData.granteeLine = d.granteeLine;
+    var defsWithGrantee = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: partyData }) || defaults;
     if (!currentTerms.trim() || currentTerms === generated.terms || (!overrides.terms && (currentTerms === blankDefaults.terms || currentTerms === defaults.terms || currentTerms === defsWithGrantee.terms))) {
       d.terms = defsWithGrantee.terms || defaults.terms || '';
       recordGenerated('terms');
     }
-    ['productionTitle', 'productionCompany', 'producerName', 'shootLocation', 'propertyAddress', 'filmingDates', 'startDate', 'endDate', 'guaranteedDays'].forEach(function (k) {
+    ['productionTitle', 'productionCompany', 'shootLocation', 'propertyAddress', 'filmingDates', 'startDate', 'endDate', 'guaranteedDays'].forEach(function (k) {
       if ((d[k] == null || String(d[k]).trim() === '') && !overrides[k] && defaults[k]) {
         d[k] = defaults[k];
       }
@@ -2449,7 +2451,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return afProject(target).then(function (p) {
       _afProjection = p;
       if (review) return afReview(p, target);
-      var blank = Object.keys(p.values).filter(function (key) { return key !== 'sources' && afBlank(editorData[key]); });
+      var overrides = afMeta().overrides || {};
+      var keepProducerBlank = RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1 && overrides.producerName;
+      var blank = Object.keys(p.values).filter(function (key) { return key !== 'sources' && !(key === 'producerName' && keepProducerBlank) && afBlank(editorData[key]); });
       afApply(p, blank);
       if (RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1) {
         normalizeReleaseEditorData(activeTemplateId, editorData, p.contacts);
@@ -2519,6 +2523,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       _docContacts = Array.isArray(results[1]) ? results[1] : [];
       var pending = pendingDocumentSaves[key];
       editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
+      // Legacy agreements saved the producer field before grantee lines were generated.
+      if ((templateId === 'talentAgreement' || templateId === 'locationAgreement') && saved && !pending &&
+          saved.granteeLine === undefined && saved.producerName === '') afTyped('producerName');
       if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, editorData);
       if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
       var ready = Promise.resolve();

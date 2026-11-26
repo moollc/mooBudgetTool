@@ -111,14 +111,25 @@
     function paperContacts(b, opts) {
         var lists = [], seen = Object.create(null), out = [], linked = Object.create(null);
         var budgetContacts = b && Array.isArray(b.contacts) ? b.contacts : [];
-        function link(item) {
-            if (item && item.contactId != null && item.contactId !== '') linked[String(item.contactId)] = true;
+        function link(id) {
+            if (id != null && id !== '') linked[String(id)] = true;
         }
-        Object.keys((b && b.sections) || {}).forEach(function (name) { (((b.sections[name] || {}).items) || []).forEach(link); });
+        Object.keys((b && b.sections) || {}).forEach(function (name) {
+            ((b.sections[name] || {}).items || []).forEach(function (item) {
+                if (!item) return;
+                link(item.contactId);
+                link(item.contact_id);
+                link(item.crew && item.crew.contactId);
+            });
+        });
         var ledgers = (b && b.ledgers) || {};
-        (ledgers.pos || []).forEach(link);
-        (ledgers.pettyCash || []).forEach(function (fl) { if (fl) (fl.receipts || []).forEach(link); });
-        budgetContacts.forEach(function (c) { if (c && c.id != null && c.id !== '') linked[String(c.id)] = true; });
+        (ledgers.pos || []).forEach(function (po) { link(po && po.contactId); });
+        (ledgers.pettyCash || []).forEach(function (fl) {
+            if (!fl) return;
+            link(fl.contactId);
+            (fl.receipts || []).forEach(function (r) { link(r && r.contactId); });
+        });
+        budgetContacts.forEach(function (c) { link(c && c.id); });
         opts = opts || {};
         if (Array.isArray(opts.contacts)) lists.push(opts.contacts);
         if (opts.editorData && Array.isArray(opts.editorData.contacts)) lists.push(opts.editorData.contacts);
@@ -156,6 +167,12 @@
         }
         return null;
     }
+    function paperCurrencyCode(currency) {
+        var text = String(currency || '').trim().toUpperCase();
+        if (/^(J\$|JA\$|JMD)$/.test(text)) return 'JMD';
+        if (/^(US\$|USD|\$US)$/.test(text)) return 'USD';
+        return '';
+    }
     function paperAmount(v, currency) {
         if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
         // Stored numeric values are computed money; only typed text uses the strict grammar below.
@@ -169,9 +186,10 @@
         if (!s) return null;
         var match = s.match(/^(?:(J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
         if (!match) return null;
-        if (currency && [match[1], match[4]].some(function (marker) {
+        var currencyCode = paperCurrencyCode(currency);
+        if (currencyCode && [match[1], match[4]].some(function (marker) {
             var code = /^(J\$|JMD|Jamaican dollars?)$/i.test(marker || '') ? 'JMD' : /^(US\$|USD|United States dollars?)$/i.test(marker || '') ? 'USD' : '';
-            return code && code !== String(currency).toUpperCase();
+            return code && code !== currencyCode;
         })) return null;
         var n = Number(match[2].replace(/,/g, '') + (match[3] ? '.' + match[3] : ''));
         if (!isFinite(n) || n < 0 || n >= 1e12) return null;
@@ -320,13 +338,15 @@
     }
     /* Producer, client and the configurable grantee line ("<producer> trading as moo, producer for <client>").
        Order: document value, render option, budget.paperworkSettings, budget fields, then the linked producer line. */
-    function paperworkParty(b, opts) {
+    function paperworkParty(b, opts, allowBlankProducer) {
         b = b || {}; opts = opts || {};
         var ed = opts.editorData || {};
         var s = (b.paperworkSettings && typeof b.paperworkSettings === 'object') ? b.paperworkSettings : {};
         var contacts = paperContacts(b, opts);
-        var producer = paperFirst(ed.producerName, opts.producerName, s.producerName, b.producerName, b.producer);
-        if (!producer) {
+        var overrides = (ed._autofill && ed._autofill.overrides) || {};
+        var keepProducerBlank = allowBlankProducer && overrides.producerName && !paperText(ed.producerName);
+        var producer = keepProducerBlank ? '' : paperFirst(ed.producerName, opts.producerName, s.producerName, b.producerName, b.producer);
+        if (!keepProducerBlank && !producer) {
             Object.keys(b.sections || {}).some(function (k) {
                 return ((b.sections[k] || {}).items || []).some(function (item) {
                     if (!item || item.memoId || item.memoStatus) return false;
@@ -339,7 +359,7 @@
                 });
             });
         }
-        if (!producer) {
+        if (!keepProducerBlank && !producer) {
             contacts.some(function (c) {
                 if (c && (paperIsProducerRole(c.role) || paperIsProducerRole(c.title))) {
                     producer = paperText(c.name);
@@ -360,7 +380,7 @@
         return { producer: paperBrand(producer), client: paperBrand(client), line: paperBrand(line), brand: 'moo' };
     }
     function paperReleaseGrantee(b, opts, explicitLine) {
-        var party = paperworkParty(b, opts);
+        var party = paperworkParty(b, opts, true);
         var line = paperBrand(paperFirst(explicitLine, party.line));
         if (line) return line;
         return (party.producer || PAPER_BLANK) + ' trading as moo, producer for ' + (party.client || PAPER_BLANK);
@@ -3424,7 +3444,6 @@
                 getDefaultData: function (budget, options) {
                     var b = budget || {};
                     var sections = b.sections || {};
-                    var producer = '';
                     var performerLegalName = '';
                     var performerAddress = '';
                     var performerPhone = '';
@@ -3465,11 +3484,6 @@
                         if (secId !== 'atl' && secId !== 'cast') return;
                         (sec.items || []).forEach(function (item) {
                             if (item.memoId || item.memoStatus) return;
-                            var dl = itemLabel(item).toLowerCase();
-                            if (!producer && dl.indexOf('producer') > -1) {
-                                var crewName = item.crew && item.crew.name ? String(item.crew.name).trim() : '';
-                                producer = crewName || itemLabel(item);
-                            }
                             if (!performerLegalName && isCastLine(item, secId)) {
                                 seedPerformer(item);
                             }
@@ -3503,11 +3517,11 @@
                         }
                     }
 
-                    var party = paperworkParty(b, options);
+                    var party = paperworkParty(b, options, true);
                     return {
                         productionTitle: b.projectName || '',
                         productionCompany: paperBrand(b.projectCompany || b.company || ''),
-                        producerName: producer || party.producer,
+                        producerName: party.producer,
                         granteeLine: paperReleaseGrantee(b, options),
                         performerLegalName: performerLegalName, performerStageName: '', performerAddress: performerAddress, performerPhone: performerPhone,
                         agentName: '', agentPhone: '',
@@ -3579,7 +3593,7 @@
 
                     var sig = '<div class="ta-2col" style="margin-top:30px;">' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Performer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.performerLegalName || '') + '</div></div>' +
-                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.producerName || '') + '</div></div></div>' +
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(defs.producerName || PAPER_BLANK) + '</div></div></div>' +
                         '<div style="margin-top:16px;"><div class="dm-sig-line" style="max-width:300px;"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div></div>';
 
                     var css = (granteeLine ? '/*release-ink*/' : '') + '.ta-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;}' +
@@ -3607,28 +3621,6 @@
                 hasEditor: true,
                 getDefaultData: function (budget, options) {
                     var b = budget || {};
-                    var sections = b.sections || {};
-                    var producerFromCrew = '';
-                    var producerFromDesc = '';
-
-                    function itemLabel(item) {
-                        return String(item.description || item.label || item.name || '').trim();
-                    }
-
-                    Object.keys(sections).forEach(function (k) {
-                        var sec = sections[k];
-                        if ((sec.id || '').toLowerCase() !== 'atl') return;
-                        (sec.items || []).forEach(function (item) {
-                            if (item.memoId || item.memoStatus) return;
-                            var dl = itemLabel(item).toLowerCase();
-                            if (dl.indexOf('producer') === -1) return;
-                            var crewName = item.crew && item.crew.name ? String(item.crew.name).trim() : '';
-                            if (crewName && !producerFromCrew) producerFromCrew = crewName;
-                            if (!producerFromDesc) producerFromDesc = itemLabel(item);
-                        });
-                    });
-                    var producer = producerFromCrew || producerFromDesc;
-
                     var propertyAddress = b.projectLocation || b.location || b.basecamp || '';
 
                     var filmingDates = '';
@@ -3657,10 +3649,10 @@
                         }
                     }
 
-                    var party = paperworkParty(b, options);
+                    var party = paperworkParty(b, options, true);
                     return {
                         productionTitle: b.projectName || '', productionCompany: paperBrand(b.projectCompany || b.company || ''),
-                        producerName: producer || party.producer,
+                        producerName: party.producer,
                         granteeLine: paperReleaseGrantee(b, options),
                         ownerName: '', ownerAddress: '', ownerPhone: '', ownerEmail: '',
                         ownerRelationship: 'Owner',
@@ -3720,7 +3712,7 @@
 
                     var sig = '<div class="la-2col" style="margin-top:28px;">' +
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Location Owner / Agent Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.ownerName || '') + '</div></div>' +
-                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.producerName || '') + '</div></div></div>';
+                        '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(defs.producerName || PAPER_BLANK) + '</div></div></div>';
 
                     var css = (granteeLine ? '/*release-ink*/' : '') + '.la-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;}' +
                         '.dm-4col{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}' +
@@ -5568,6 +5560,7 @@
                     vouchers.forEach(function (v) {
                         v = v || {};
                         var currency = v.currency || d.currency || b.currency || 'JMD';
+                        currency = paperCurrencyCode(currency) || currency;
                         var money = function (n) { return n === null || n === undefined ? '' : fmtCurrency(n, currency, 1); };
                         var payee = paperText(v.payee);
                         var contact = paperLineContact(v, contacts);
@@ -5871,9 +5864,9 @@
                     var desc = String(item.description || '').toLowerCase();
                     if (/\bkit rental\b/.test(desc)) return true;
                     if (['gear', 'equipment'].indexOf(secId) > -1 && !/\b(recordist|operator|director|assistant|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc)) return true;
-                    if (!paperProductionSection(sec, name)) return false;
+                    if (kind === 'crew' || !paperProductionSection(sec, name)) return false;
                     return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) &&
-                        !/\b(pilot|operator|fee|deposit)\b/.test(desc);
+                        !/\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot|fee|deposit)\b/.test(desc);
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;
