@@ -5659,6 +5659,44 @@
                     var text = [item && item.description, item && item.role, item && item.crew && item.crew.role, contact && contact.role].join(' ').toLowerCase();
                     return /\b(extras?|background (actors?|talent|performers?|cast))\b/.test(text);
                 },
+                /* Prefer window.mBTPaidBy; when absent (vm harness without ShootSchedule.js),
+                   still normalise paidMethod / paidRef the same way. */
+                _paidByApi: function () {
+                    if (typeof window !== 'undefined' && window.mBTPaidBy
+                        && typeof window.mBTPaidBy.normalise === 'function') {
+                        return window.mBTPaidBy;
+                    }
+                    return {
+                        normalise: function (row) {
+                            var paidMethod = '';
+                            var paidRef = '';
+                            var method;
+                            var ok = { cash: 1, transfer: 1, wire: 1, cheque: 1, paypal: 1, wise: 1, payoneer: 1 };
+                            if (row && typeof row === 'object') {
+                                if (typeof row.paidMethod === 'string') {
+                                    method = row.paidMethod.trim().toLowerCase();
+                                    if (ok[method]) paidMethod = method;
+                                }
+                                if (typeof row.paidRef === 'string') paidRef = row.paidRef.trim().slice(0, 80);
+                            }
+                            return { paidMethod: paidMethod, paidRef: paidRef };
+                        }
+                    };
+                },
+                _poForItem: function (budget, itemId) {
+                    var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
+                    var id = itemId != null ? String(itemId) : '';
+                    var i;
+                    if (!id) return null;
+                    for (i = 0; i < pos.length; i++) {
+                        if (pos[i] && String(pos[i].itemId || '') === id) return pos[i];
+                    }
+                    return null;
+                },
+                _paidFields: function (row) {
+                    var n = this._paidByApi().normalise(row || null);
+                    return { paidMethod: n.paidMethod || '', paidRef: n.paidRef || '' };
+                },
                 /** Voucher data from Production and Travel crew or vendor lines and ledgers.pettyCash.
                     Every line with a payee gives one voucher; a deposit below the total gives a split pair. */
                 getDefaultData: function (budgetData, options) {
@@ -5686,6 +5724,7 @@
                                 paperStripName(contact && contact.role, payee, contact),
                                 paperStripName(contact && contact.title, payee, contact)
                             );
+                            var paid = self._paidFields(self._poForItem(b, item.id));
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
@@ -5693,6 +5732,8 @@
                                 total: paperLineTotal(item, currency),
                                 deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
+                                paidMethod: paid.paidMethod,
+                                paidRef: paid.paidRef,
                                 items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount, currency) }; }) : []
                             });
                         });
@@ -5701,7 +5742,7 @@
                     floats.forEach(function (fl) {
                         if (!fl) return;
                         if (paperText(fl.floatHolder)) {
-                            vouchers.push({ source: 'pettyCashFloat', floatId: fl.id || '', payee: paperText(fl.floatHolder), purpose: 'Petty cash float', total: paperAmount(fl.floatAmount, fl.currency || currency), deposit: null, currency: fl.currency || currency, items: [] });
+                            vouchers.push({ source: 'pettyCashFloat', floatId: fl.id || '', payee: paperText(fl.floatHolder), purpose: 'Petty cash float', total: paperAmount(fl.floatAmount, fl.currency || currency), deposit: null, currency: fl.currency || currency, paidMethod: '', paidRef: '', items: [] });
                         }
                         (fl.receipts || []).forEach(function (r) {
                             if (!r) return;
@@ -5713,7 +5754,8 @@
                                 paperStripName(c && c.role, rPayee, c),
                                 paperStripName(c && c.title, rPayee, c)
                             );
-                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: c && c.id != null ? String(c.id) : '', payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount, r.currency || fl.currency || currency), date: r.date || '', deposit: null, currency: r.currency || fl.currency || currency, items: [] });
+                            var paid = self._paidFields(r);
+                            vouchers.push({ source: 'pettyCashReceipt', floatId: fl.id || '', receiptId: r.id || '', contactId: c && c.id != null ? String(c.id) : '', payee: rPayee, purpose: rPurpose, total: paperAmount(r.amount, r.currency || fl.currency || currency), date: r.date || '', deposit: null, currency: r.currency || fl.currency || currency, paidMethod: paid.paidMethod, paidRef: paid.paidRef, items: [] });
                         });
                     });
                     var company = paperBrand(paperFirst(b.projectCompany, b.company));
@@ -5772,6 +5814,10 @@
                             paperStripName(v.description, payee, contact),
                             paperStripName(v.role, payee, contact)
                         );
+                        var paid = self._paidFields(v);
+                        var methodFill = paid.paidMethod === 'transfer' ? 'Bank transfer' : '';
+                        var methodWi = '<span class="cs-writein pp-wi">' + (methodFill ? paperEsc(methodFill) : PAPER_BLANK) + '</span>';
+                        var bankVal = paperWriteIn(paid.paidRef);
                         self._pages(v, currency).forEach(function (p) {
                             var number = numbered ? prefix + String(start + pageNo) : '';
                             pageNo += 1;
@@ -5805,7 +5851,8 @@
                                 paperField('DATE', paperWriteIn(paperDate(v.date) || docDate)) +
                                 paperField('PAID BY', paperWriteIn(d.paidBy)) +
                                 paperField('PAID TO', paperWriteIn(payee)) +
-                                paperField('METHOD', '<span class="pp-boxes">' + paperBox('Cash') + paperBox('Other') + paperWriteIn('') + '</span>') +
+                                paperField('METHOD', '<span class="pp-boxes">' + paperBox('Cash') + paperBox('Other') + methodWi + '</span>') +
+                                paperField('BANK REFERENCE', bankVal) +
                                 paperField('PURPOSE', paperWriteIn(purpose)) +
                                 '</div>' + table +
                                 '<div class="pp-grid">' +
