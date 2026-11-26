@@ -1087,33 +1087,85 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) { return []; }
   }
+  /* K1: marker only after local write resolves and (when embedded) the monolith ack. K3: show cap notice from ack.dropped. */
+  var savedDocsAckSeq = 0, savedDocsAcks = {};
+  window.addEventListener('message', function (e) {
+    var a, dropped, cap;
+    if (!e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'docs-saved-documents') return;
+    try { if (window.parent && e.source && e.source !== window.parent) return; } catch (eSrc) {}
+    try {
+      if (window.location && window.location.origin && e.origin && e.origin !== window.location.origin) return;
+    } catch (eOrig) {}
+    dropped = typeof e.data.dropped === 'number' ? e.data.dropped : 0;
+    if (dropped > 0) {
+      cap = (window.mBTSavedDocs && window.mBTSavedDocs.CAP) || 50;
+      afNotice(dropped + ' older saved document' + (dropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + cap + '.', 'Saved documents');
+    }
+    a = savedDocsAcks[e.data.requestId];
+    if (!a) return;
+    delete savedDocsAcks[e.data.requestId];
+    if (e.data.status === 'success') a.ok(); else a.fail(e.data.message);
+  });
   function persistBudgetSavedDocs(cb) {
-    var posted = false;
+    var embedded = false;
+    var requestId = null;
+    var localDone = false, localOk = false, ackDone = false, ackOk = false;
+    function maybeFinish() {
+      if (!cb) return;
+      if (!localDone) return;
+      if (!localOk) { cb(false); cb = null; return; }
+      if (embedded && !ackDone) return;
+      cb(!embedded || ackOk);
+      cb = null;
+    }
     try {
       if (window.parent && window.parent !== window) {
+        embedded = true;
+        savedDocsAckSeq += 1;
+        requestId = 'sd_' + savedDocsAckSeq + '_' + Date.now();
         var origin = '*';
         try { if (window.location && window.location.origin) origin = window.location.origin; } catch (eOrigin) {}
+        var timer = setTimeout(function () {
+          if (savedDocsAcks[requestId]) {
+            delete savedDocsAcks[requestId];
+            ackDone = true;
+            ackOk = false;
+            maybeFinish();
+          }
+        }, 20000);
+        savedDocsAcks[requestId] = {
+          ok: function () { clearTimeout(timer); ackDone = true; ackOk = true; maybeFinish(); },
+          fail: function () { clearTimeout(timer); ackDone = true; ackOk = false; maybeFinish(); }
+        };
         window.parent.postMessage({
           type: 'mbt:tool-action',
           action: 'docs-saved-documents',
           payload: {
+            requestId: requestId,
             projectKey: projectKey,
             savedDocs: (budget && Array.isArray(budget.savedDocs)) ? JSON.parse(JSON.stringify(budget.savedDocs)) : [],
             savedDocsDeleted: (budget && Array.isArray(budget.savedDocsDeleted)) ? JSON.parse(JSON.stringify(budget.savedDocsDeleted)) : []
           }
         }, origin);
-        posted = true;
       }
-    } catch (ePost) { /* ignore */ }
+    } catch (ePost) { embedded = false; }
     if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
       localforage.setItem(projectKey, budget).then(function () {
-        if (cb) cb(true);
+        localDone = true;
+        localOk = true;
+        maybeFinish();
       }, function () {
-        if (cb) cb(!!posted);
+        localDone = true;
+        localOk = false;
+        maybeFinish();
       });
       return;
     }
-    if (cb) cb(posted);
+    localDone = true;
+    localOk = true;
+    if (!embedded) { if (cb) { cb(false); cb = null; } return; }
+    maybeFinish();
   }
   function maybeMigrateSavedDocs() {
     if (!budget || !window.mBTSavedDocs) return;
