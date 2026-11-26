@@ -170,42 +170,68 @@
         return /\bproducer\b/.test(t) && !/\bline\s+producer\b/.test(t);
     }
     function paperPurposeNormalized(text) {
-        return paperText(text).normalize('NFKC').replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ');
+        // Comparison only: never print this folded copy. Keep the established width aliases.
+        return paperText(text).normalize('NFC').replace(/[\uff01-\uff5e]/g, function (ch) {
+            return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
+        }).replace(/[\u2018\u2019`]/g, "'").replace(/\s+/g, ' ');
     }
     function paperStripName(text, payee, contact) {
-        var original = paperText(text);
+        var original = paperText(text).normalize('NFC');
         if (!original) return '';
-        var s = paperPurposeNormalized(original), p = paperPurposeNormalized(payee);
+        var s = original, p = paperPurposeNormalized(payee);
         var removed = false;
         if (p) {
-            var escP = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            function literal(ch) { return ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+            var pattern = Array.from(p).map(function (ch) {
+                if (ch === ' ') return '\\s+';
+                if (ch === "'") return "['\u2018\u2019`]";
+                var n = ch.charCodeAt(0);
+                return n >= 0x21 && n <= 0x7e ? '(?:' + literal(ch) + '|' + String.fromCharCode(n + 0xfee0) + ')' : literal(ch);
+            }).join('');
             // A hyphen or apostrophe joining letters belongs to the name, not its boundary.
-            var name = new RegExp("(?<![\\p{L}\\p{M}\\p{N}_])(?<!\\p{L}[-'])" + escP + "(?:'s)?(?![\\p{L}\\p{M}\\p{N}_]|[-']\\p{L})", 'giu');
-            s = s.replace(name, function () { removed = true; return '\uE000'; });
+            var name = new RegExp("(?<![\\p{L}\\p{M}\\p{N}_])(?<!\\p{L}[-'\u2018\u2019`])" + pattern + "(?:['\u2018\u2019`]s)?(?![\\p{L}\\p{M}\\p{N}_]|[-'\u2018\u2019`]\\p{L})", 'giu');
+            // Locate names in the original, then work backwards so earlier offsets stay valid.
+            var matches = Array.from(original.matchAll(name));
+            matches.reverse().forEach(function (match) {
+                var left = s.slice(0, match.index), right = s.slice(match.index + match[0].length);
+                var governing = left.match(/(^|[^\p{L}\p{M}\p{N}_/'\u2018\u2019`-])(to|for|of|by|from|at|with|and|&|or)\s+$/iu);
+                // Only a separator or a coordinating word next to this name can join its span.
+                var separator = right.match(/^\s*[,;:]\s*/);
+                var coordinating = !separator && (governing || !left.trim()) && right.match(/^\s*(and|&|or)(?![\p{L}\p{M}\p{N}_])\s*/iu);
+                if (separator) right = right.slice(separator[0].length);
+                else if (coordinating) right = right.slice(coordinating[0].length);
+                if (governing) {
+                    // "for services", "for sound recordist" and "for tonight" keep their purpose preposition.
+                    var keepFor = /^for$/i.test(governing[2]) && /^\s*[\p{L}\p{N}]/u.test(right) &&
+                        !/^\s*(?:only|in|to|for|of|by|from|at|with|and|or)\b/i.test(right);
+                    if (!keepFor) left = left.slice(0, governing.index + governing[1].length);
+                }
+                // Remove a bracket pair only when this removal has made it empty.
+                var open = left.match(/\s*([([{])\s*$/), close = right.match(/^\s*([)\]}])/);
+                if (open && close && '([{'.indexOf(open[1]) === ')]}'.indexOf(close[1])) {
+                    left = left.slice(0, open.index);
+                    right = right.slice(close[0].length);
+                }
+                left = left.replace(/\s+$/, '');
+                right = right.replace(/^\s+/, '');
+                var join = left && right && !/[([{]$/.test(left) && !/^[,.;:!?)\]}]/.test(right) ? ' ' : '';
+                s = left + join + right;
+                removed = true;
+            });
         }
         if (removed) {
-            // Join the phrase across each removed name, discarding punctuation at that seam.
-            s = s.replace(/\s*\uE000\s*[,;:/|\-\u2013\u2014]*\s*/g, ' ');
-            var connective = '(?:to|for|of|by|from|at|with|and|&)';
-            var pair = new RegExp('(^|[^\\p{L}\\p{N}_])(' + connective + ')\\s+(' + connective + ')(?=$|[^\\p{L}\\p{N}_])', 'giu');
-            var dangling = new RegExp('(^|[^\\p{L}\\p{N}_])' + connective + '\\s*(?=$|[,.;:!?/|)\\]}' + '\\-\\u2013\\u2014])', 'giu');
-            var previous;
-            do {
-                previous = s;
-                // "to ... for sound" keeps "for"; "for ... and crew" keeps "for".
-                s = s.replace(pair, function (_, boundary, a, b) { return boundary + (/^(and|&)$/i.test(b) ? a : b); })
-                    .replace(dangling, '$1')
-                    .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, ' ')
-                    .replace(/([,;:/|.])\s*(?=[,;:/|.])/g, '')
-                    .replace(/\s+([,.;:!?)\]}])/g, '$1')
-                    .replace(/([([{])\s+/g, '$1')
-                    .replace(/^[\s,.!?\-:;/|\u2013\u2014]+|[\s,.!?\-:;/|\u2013\u2014]+$/g, '')
-                    .replace(/\s+/g, ' ').trim();
-            } while (s !== previous);
-            var wrapped = s.match(/^\(([^()]*)\)$|^\[([^\[\]]*)\]$/);
-            if (wrapped) s = (wrapped[1] || wrapped[2] || '').trim();
-        } else {
-            s = original;
+            s = s.replace(/^[\s,\-:;/|\u2013\u2014]+|[\s,\-:;/|\u2013\u2014]+$/g, '');
+            // Unwrap one whole remaining bracket group, never brackets beside other text.
+            if (/^[([{]/.test(s)) {
+                var brackets = [], wholeGroup = true;
+                for (var j = 0; j < s.length; j++) {
+                    var ch = s[j], closing = ')]}'.indexOf(ch);
+                    if ('([{'.indexOf(ch) !== -1) brackets.push(ch);
+                    else if (closing !== -1 && brackets.pop() !== '([{'[closing]) { wholeGroup = false; break; }
+                    if (!brackets.length && j < s.length - 1) { wholeGroup = false; break; }
+                }
+                if (wholeGroup && !brackets.length) s = s.slice(1, -1).trim();
+            }
         }
         // Repetition is redundant only for a known payee or that contact's role/title.
         var known = [p, contact && contact.role, contact && contact.title].map(function (v) { return paperPurposeNormalized(v).toLowerCase(); }).filter(Boolean);
@@ -218,7 +244,7 @@
         var segments = s.split(/\s+[-\u2013\u2014:;/|]\s+|\s*[:;/|]\s*/);
         if (segments.length > 1 && segments.every(function (part) { return knownRepeat(segments[0], part); })) s = segments[0].trim();
         // Label words alone supply no meaningful purpose.
-        if (/^(?:payment|payments|paid|fee|fees|pay|for|to|of|by|from|at|with|the|and|&)(?:\s+(?:payment|payments|paid|fee|fees|pay|for|to|of|by|from|at|with|the|and|&))*$/i.test(s)) return '';
+        if (!/[\p{L}\p{N}]/u.test(s) || /^(?:payment|payments|paid|pay|pays|fee|fees|for|to|of|by|the)(?:\s+(?:payment|payments|paid|pay|pays|fee|fees|for|to|of|by|the))*$/i.test(s)) return '';
         return s;
     }
     /* Producer, client and the configurable grantee line ("<producer> trading as moo, producer for <client>").
@@ -5345,8 +5371,11 @@
                     return '';
                 },
                 _isExtrasLine: function (item, contact) {
-                    var t = [item && item.description, item && item.role, item && item.crew && item.crew.role, contact && contact.role].join(' ').toLowerCase();
-                    return /\b(extras?|background (actors?|talent|performers?|cast))\b/.test(t);
+                    var roles = [item && item.role, item && item.crew && item.crew.role, contact && contact.role].join(' ').toLowerCase();
+                    var description = paperText(item && item.description).toLowerCase();
+                    // A description must start with the cast role; an incidental "extra" is purpose text.
+                    return /\b(extras?|background (actors?|talent|performers?|cast))\b/.test(roles) ||
+                        /^(extras?|background (actors?|talent|performers?|cast))\b/.test(description);
                 },
                 /** Voucher data from Production and Travel crew or vendor lines and ledgers.pettyCash.
                     Every line with a payee gives one voucher; a deposit below the total gives a split pair. */
