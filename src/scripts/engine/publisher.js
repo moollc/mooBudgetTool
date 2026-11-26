@@ -106,7 +106,8 @@
         return '';
     }
     /* Company/office names only; preserve email domains and web addresses in the same text. */
-    function paperBrand(text) { return String(text || '').replace(/(^|[^\w@/])moo\.llc\b(?!\/)/gi, '$1moo'); }
+    function paperBrand(text) { return String(text || '').replace(/(^|[^\p{L}\p{N}@/.])moo\.llc(?![\p{L}\p{N}/]|\.[\p{L}\p{N}])/giu, '$1moo'); }
+    function paperEsc(text) { return esc(paperBrand(text)); }
     function paperContacts(b, opts) {
         var lists = [], seen = {}, out = [];
         opts = opts || {};
@@ -149,22 +150,22 @@
         if (v == null || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
         var s = String(v).trim();
         if (!s) return null;
-        var cleaned = s.replace(/[^0-9.\-]/g, '');
-        if (!cleaned || !/[0-9]/.test(cleaned)) return null;
-        var n = Number(cleaned);
-        if (!isFinite(n) || n < 0) return null;
+        var match = s.match(/^(?:(?:J\$|JMD|\$|US\$|USD)\s*)?(\d+|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?(?:\s*(?:JMD|USD|dollars?|Jamaican dollars?|United States dollars?))?$/i);
+        if (!match) return null;
+        var n = Number(match[1].replace(/,/g, '') + (match[2] ? '.' + match[2] : ''));
+        if (!isFinite(n) || n < 0 || n >= 1e12) return null;
         return n === 0 ? 0 : n;
     }
     function paperLineTotal(item) {
         if (!item) return null;
-        var t = paperAmount(item.total);
-        if (t !== null) return t;
-        var a = paperAmount(item.amount);
-        if (a !== null) return a;
+        // A supplied total or amount is authoritative, including invalid text: never guess a replacement.
+        if (item.total !== undefined) return paperAmount(item.total);
+        if (item.amount !== undefined) return paperAmount(item.amount);
         var q = paperAmount(item.quantity), r = paperAmount(item.rate);
         if (q === null || r === null) return null;
         var m = (item.multiplier != null && item.multiplier !== '') ? paperAmount(item.multiplier) : 1;
-        return paperAmount(q * r * (m === null ? 1 : m));
+        if (m === null) return null;
+        return paperAmount(Math.round(q * r * m * 100) / 100);
     }
     function paperIsProducerRole(text) {
         var t = String(text || '').toLowerCase();
@@ -350,7 +351,7 @@
     function paperWords(n, currency) {
         if (n == null || typeof n === 'boolean' || (typeof n === 'string' && !n.trim())) return '';
         n = Number(n);
-        if (!isFinite(n) || n < 0) return '';
+        if (!isFinite(n) || n < 0 || n >= 1e12) return '';
         var ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
         var tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
         function under1000(x) {
@@ -369,35 +370,37 @@
             if (x > 0) out.push(under1000(x));
             return out.join(' ');
         }
-        var whole = Math.floor(n + 1e-9), cents = Math.round((n - whole) * 100);
+        var minor = Math.round(n * 100), whole = Math.floor(minor / 100), cents = minor % 100;
         if (cents === 100) { whole += 1; cents = 0; }
         var names = { JMD: 'Jamaican dollars', USD: 'United States dollars', GBP: 'pounds sterling', CAD: 'Canadian dollars', EUR: 'euros', TTD: 'Trinidad and Tobago dollars', BBD: 'Barbados dollars', GYD: 'Guyana dollars', XCD: 'Eastern Caribbean dollars', MXN: 'Mexican pesos' };
-        var words = spell(whole) + ' ' + (names[currency] || currency || '');
-        if (cents) words += ', ' + spell(cents) + ' cents';
+        var unit = names[currency] || currency || '';
+        if (whole === 1) unit = unit.replace(/dollars$/, 'dollar').replace(/euros$/, 'euro').replace(/pesos$/, 'peso').replace(/^pounds sterling$/, 'pound sterling');
+        var words = spell(whole) + ' ' + unit;
+        if (cents) words += ', ' + spell(cents) + (cents === 1 ? ' cent' : ' cents');
         words = words.replace(/\s+/g, ' ').trim();
         return words.charAt(0).toUpperCase() + words.slice(1);
     }
-    function paperWriteIn(v, wide) {
+    function paperWriteIn(v, wide, contactField) {
         var t = paperText(v);
-        return t ? esc(t) : '<span class="cs-writein pp-wi' + (wide ? ' pp-wi-wide' : '') + '">' + PAPER_BLANK + '</span>';
+        return t ? (contactField ? esc(t) : paperEsc(t)) : '<span class="cs-writein pp-wi' + (wide ? ' pp-wi-wide' : '') + '">' + PAPER_BLANK + '</span>';
     }
     function paperBox(label) {
-        return '<span class="pp-box-item"><input type="checkbox" class="cs-checkbox" aria-checked="false">' + esc(label) + '</span>';
+        return '<span class="pp-box-item"><input type="checkbox" class="cs-checkbox" aria-checked="false">' + paperEsc(label) + '</span>';
     }
     function paperField(label, valueHtml, wide) {
-        return '<div class="pp-field' + (wide ? ' pp-wide' : '') + '"><div class="pp-label">' + esc(label) + '</div><div class="pp-value">' + valueHtml + '</div></div>';
+        return '<div class="pp-field' + (wide ? ' pp-wide' : '') + '"><div class="pp-label">' + paperEsc(label) + '</div><div class="pp-value">' + valueHtml + '</div></div>';
     }
     function paperSig(title, printedName, extraCaption) {
         var rows = '<div class="pp-sig-row"><div class="pp-sig-line"></div><div class="pp-caption">SIGNATURE</div></div>' +
-            '<div class="pp-sig-row"><div class="pp-sig-line">' + (printedName ? esc(printedName) : '') + '</div><div class="pp-caption">PRINTED NAME</div></div>' +
+            '<div class="pp-sig-row"><div class="pp-sig-line">' + (printedName ? paperEsc(printedName) : '') + '</div><div class="pp-caption">PRINTED NAME</div></div>' +
             '<div class="pp-sig-row"><div class="pp-sig-line"></div><div class="pp-caption">DATE</div></div>';
-        if (extraCaption) rows += '<div class="pp-sig-row"><div class="pp-sig-line"></div><div class="pp-caption">' + esc(extraCaption) + '</div></div>';
-        return '<div class="pp-sig"><div class="pp-sig-title">' + esc(title) + '</div>' + rows + '</div>';
+        if (extraCaption) rows += '<div class="pp-sig-row"><div class="pp-sig-line"></div><div class="pp-caption">' + paperEsc(extraCaption) + '</div></div>';
+        return '<div class="pp-sig"><div class="pp-sig-title">' + paperEsc(title) + '</div>' + rows + '</div>';
     }
     function paperDual(left, right) { return '<div class="pp-dual">' + left + right + '</div>'; }
     function paperHeader(title, subParts) {
-        var sub = (subParts || []).map(paperText).filter(Boolean).map(esc).join(' &middot; ');
-        return '<div class="pp-head"><div class="cs-brand">moo</div><h1 class="pp-title">' + esc(title) + '</h1>' +
+        var sub = (subParts || []).map(paperText).filter(Boolean).map(paperEsc).join(' &middot; ');
+        return '<div class="pp-head"><div class="cs-brand">moo</div><h1 class="pp-title">' + paperEsc(title) + '</h1>' +
             (sub ? '<div class="pp-sub">' + sub + '</div>' : '') + '</div>';
     }
     function paperLines(count) {
@@ -1519,11 +1522,16 @@
                 '.ink-writein { white-space: nowrap; }'
             ].join('\n'),
 
-            /* Headings that the existing generators print in capitals; Easy On The Ink prints them in normal case. */
-            _inkCaps: ['PRODUCTION BUDGET &mdash; TOP SHEET', 'DAILY PRODUCTION REPORT — DAY', 'CREW LIST — CONFIDENTIAL', 'KIT / EQUIPMENT RENTAL AGREEMENT',
-                'EXTRAS / BACKGROUND VOUCHER', 'INCIDENT / ACCIDENT REPORT', 'BUDGET COMPARISON REPORT', 'NON-DISCLOSURE AGREEMENT', 'PRODUCTION WRAP REPORT',
-                'PERFORMER AGREEMENT', 'LOCATION AGREEMENT', 'APPEARANCE RELEASE', 'WEEKLY COST REPORT', 'PETTY CASH LOG', 'CREW DEAL MEMO', 'DAY OUT OF DAYS',
-                'VENDOR INVOICE', 'PURCHASE ORDER', 'DETAIL BUDGET', 'COST REPORT', 'GRAND TOTAL', 'SUMMARY', 'TOTAL'],
+            /* Only generator-owned heading captions enter this helper; user text never does. */
+            _inkHeading: function (text) {
+                return this._currentOptions && this._currentOptions.easyOnTheInk
+                    ? '<span class="ink-heading">' + this._inkTitle(text) + '</span>' : text;
+            },
+
+            /* Only the separator inserted by a generator changes; supplied title text stays verbatim. */
+            _titleSeparator: function () {
+                return this._currentOptions && this._currentOptions.easyOnTheInk ? ' - ' : ' \u2014 ';
+            },
 
             _inkTitle: function (text) {
                 var small = { of: 1, and: 1, the: 1, to: 1, for: 1 };
@@ -1532,8 +1540,7 @@
                 });
             },
 
-            /* Body changes for Easy On The Ink: empty-value em dashes become write-ins,
-               inline dark backgrounds and forced caps are cleared, and known capitalised headings print in normal case. */
+            /* Ink changes styles and exact dash placeholder nodes only. User text stays verbatim. */
             _inkBody: function (html) {
                 var self = this;
                 return String(html || '')
@@ -1541,24 +1548,8 @@
                         return 'style="' + self._inkStyle(s) + '"';
                     })
                     .replace(/>([^<>]*)</g, function (all, text) {
-                        if (/^\s*(?:\u2014|\u2013|&mdash;|&ndash;)\s*$/.test(text)) {
-                            return '>' + text.replace(/\u2014|\u2013|&mdash;|&ndash;/, '<span class="ink-writein">________</span>') + '<';
-                        }
-                        var out = text;
-                        var lead = out.match(/^\s*/)[0], rest = out.slice(lead.length);
-                        for (var i = 0; i < self._inkCaps.length; i++) {
-                            var cap = self._inkCaps[i];
-                            if (rest.indexOf(cap) === 0 && !/[A-Za-z]/.test(rest.charAt(cap.length))) {
-                                var tail = rest.slice(cap.length).replace(/^(\s+\S+)\s+OF\s+/i, '$1 of ');
-                                out = lead + self._inkTitle(cap) + tail;
-                                break;
-                            }
-                        }
-                        out = out
-                            .replace(/(:\s*)(?:\u2014|\u2013|&mdash;|&ndash;)(?=\s*(?:$|&bull;|&nbsp;|\)|<))/g, '$1<span class="ink-writein">________</span>')
-                            .replace(/^(\s*)(?:\u2014|\u2013|&mdash;|&ndash;)(?=\s*(?:$|&bull;|&nbsp;))/g, '$1<span class="ink-writein">________</span>')
-                            .replace(/\u2014|\u2013|&mdash;|&ndash;/g, '-');
-                        return '>' + out + '<';
+                        return /^\s*(?:\u2014|\u2013|&mdash;|&ndash;)\s*$/.test(text)
+                            ? '><span class="ink-writein">________</span><' : all;
                     });
             },
 
@@ -1613,7 +1604,6 @@
 
                 var styleCss = baseCss + brandCss + wmCss + themeCss + cleanExtraCss;
                 if (ink) {
-                    title = String(title || '').replace(/\u2014|\u2013|&mdash;|&ndash;/g, '-');
                     styleCss = this._inkStyle(styleCss) + '\n' + this._inkCss;
                     bodyHtml = this._inkBody(bodyHtml);
                 }
@@ -1646,7 +1636,7 @@
 
                     var header = '<div class="ts-header">' +
                         '<div class="ts-title">' + esc(b.projectName || 'Untitled Production') + '</div>' +
-                        '<div class="ts-subtitle">PRODUCTION BUDGET &mdash; TOP SHEET</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('PRODUCTION BUDGET &mdash; TOP SHEET') + '</div>' +
                         '<div class="ts-meta">' +
                         '<span>' + esc(reportCompany(b)) + '</span>' +
                         '<span>Prepared: ' + esc(typedReportDate(b, 'preparedDate')) + '</span>' +
@@ -1707,7 +1697,7 @@
                         tableRows += '<tr class="summary-row"><td>' + esc(row[0]) + '</td><td class="col-r" colspan="3">' + (row[1] < 0 ? '-' : '') + fmt(Math.abs(row[1])) + '</td></tr>';
                     });
                     var finalVariance = grandAct - grandTotal;
-                    tableRows += '<tr class="grand-total-row"><td>GRAND TOTAL</td><td class="col-r">' + fmt(grandTotal) + '</td><td class="col-r">' + fmt(grandAct) + '</td><td class="col-r">' + fmt(finalVariance) + '</td></tr>';
+                    tableRows += '<tr class="grand-total-row"><td>' + engine._inkHeading('GRAND TOTAL') + '</td><td class="col-r">' + fmt(grandTotal) + '</td><td class="col-r">' + fmt(grandAct) + '</td><td class="col-r">' + fmt(finalVariance) + '</td></tr>';
 
                     tableRows += '</tbody></table>';
 
@@ -1726,7 +1716,7 @@
                     }
 
                     return engine._wrapHtml(
-                        (b.projectName || 'Budget') + ' — Top Sheet',
+                        (b.projectName || 'Budget') + engine._titleSeparator() + 'Top Sheet',
                         header + tableRows + fundingHtml
                     );
                 }
@@ -1747,7 +1737,7 @@
                     var sections = b.sections || {};
                     var header = '<div class="ts-header">' +
                         '<div class="ts-title">' + esc(b.projectName || 'Untitled Production') + '</div>' +
-                        '<div class="ts-subtitle">DETAIL BUDGET</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('DETAIL BUDGET') + '</div>' +
                         '<div class="ts-meta"><span>' + esc(reportCompany(b)) + '</span><span>Date: ' + esc(typedReportDate(b, 'preparedDate')) + '</span><span>' + esc(currency) + '</span></div></div>';
 
                     /* One table per section — ensures page-break-before works reliably at print */
@@ -1807,10 +1797,10 @@
                     rows += '<p style="font-size:8pt;">Grand total includes the budget contingency, tax, scoped fringes, production fee and discount.</p>';
                     /* Grand total in its own table so it doesn't inherit section page-break */
                     rows += '<table style="margin-top:8px;"><tbody>' +
-                        '<tr class="grand-total-row"><td colspan="4">GRAND TOTAL</td><td class="col-r">' + fmt(detailGrandEst) + '</td><td class="col-r">' + fmt(detailGrandAct) + '</td><td class="col-r">' + fmt(detailGrandAct - detailGrandEst) + '</td></tr>' +
+                        '<tr class="grand-total-row"><td colspan="4">' + engine._inkHeading('GRAND TOTAL') + '</td><td class="col-r">' + fmt(detailGrandEst) + '</td><td class="col-r">' + fmt(detailGrandAct) + '</td><td class="col-r">' + fmt(detailGrandAct - detailGrandEst) + '</td></tr>' +
                         '</tbody></table>';
 
-                    return engine._wrapHtml((b.projectName || 'Budget') + ' — Detail Budget', header + rows);
+                    return engine._wrapHtml((b.projectName || 'Budget') + engine._titleSeparator() + 'Detail Budget', header + rows);
                 }
             },
 
@@ -2908,7 +2898,7 @@
                     var burnColor = burnPct > 100 ? '#dc2626' : burnPct > 85 ? '#f59e0b' : '#15803d';
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(b.projectName || 'Production') + '</div>' +
-                        '<div class="ts-subtitle">COST REPORT</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('COST REPORT') + '</div>' +
                         '<div class="ts-meta"><span>Generated: ' + esc(typedReportDate(b, 'generatedDate')) + '</span><span>Currency: ' + esc(currency) + '</span></div></div>';
 
                     var summary = '<div class="cr-summary">' +
@@ -2931,7 +2921,7 @@
                             '<td class="col-r ' + cls + '">' + (vari >= 0 ? '+' : '') + fmt(vari) + '</td>' +
                             '<td class="col-r ' + cls + '">' + (variPct >= 0 ? '+' : '') + variPct.toFixed(1) + '%</td></tr>';
                     });
-                    rows += '<tr class="grand-total-row"><td>GRAND TOTAL</td><td class="col-r">' + fmt(grandEst) + '</td><td class="col-r">' + fmt(grandAct) + '</td>' +
+                    rows += '<tr class="grand-total-row"><td>' + engine._inkHeading('GRAND TOTAL') + '</td><td class="col-r">' + fmt(grandEst) + '</td><td class="col-r">' + fmt(grandAct) + '</td>' +
                         '<td class="col-r">' + (grandAct >= grandEst ? '+' : '') + fmt(grandAct - grandEst) + '</td>' +
                         '<td class="col-r">' + (grandEst > 0 ? (((grandAct - grandEst) / grandEst) * 100).toFixed(1) : '0.0') + '%</td></tr>';
                     rows += '</tbody></table>';
@@ -2941,7 +2931,7 @@
                         '.cr-lbl{font-size:7.5pt;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:3px;}' +
                         '.cr-val{font-size:13pt;font-weight:900;color:#0f172a;}' +
                         '.cr-bar{height:4px;background:#e2e8f0;border-radius:2px;margin-top:5px;overflow:hidden;}';
-                    return engine._wrapHtml((b.projectName || 'Budget') + ' \u2014 Cost Report', header + summary + rows, css);
+                    return engine._wrapHtml((b.projectName || 'Budget') + engine._titleSeparator() + 'Cost Report', header + summary + rows, css);
                 }
             },
 
@@ -2980,7 +2970,7 @@
                     }, 0);
                     var taxAmt = subtotal * ((parseFloat(d.taxRate) || 0) / 100);
 
-                    var header = '<div class="po-head"><div><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div><div class="ts-subtitle">PURCHASE ORDER</div></div>' +
+                    var header = '<div class="po-head"><div><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div><div class="ts-subtitle">' + engine._inkHeading('PURCHASE ORDER') + '</div></div>' +
                         '<div class="po-meta"><div><b>PO #:</b> ' + esc(d.poNumber || '') + '</div><div><b>Date:</b> ' + esc(d.date || '') + '</div>' +
                         (d.budgetCategory ? '<div><b>Category:</b> ' + esc(d.budgetCategory) + '</div>' : '') + '</div></div>';
 
@@ -3000,7 +2990,7 @@
                     var totals = '<div class="po-totals">' +
                         '<div class="po-tr"><span>Subtotal</span><span>' + fmt(subtotal) + '</span></div>' +
                         (parseFloat(d.taxRate) > 0 ? '<div class="po-tr"><span>Tax (' + esc(d.taxRate) + '%)</span><span>' + fmt(taxAmt) + '</span></div>' : '') +
-                        '<div class="po-tr po-grand"><span>TOTAL</span><span>' + fmt(subtotal + taxAmt) + '</span></div></div>';
+                        '<div class="po-tr po-grand"><span>' + engine._inkHeading('TOTAL') + '</span><span>' + fmt(subtotal + taxAmt) + '</span></div></div>';
 
                     var terms = (d.paymentTerms || d.notes) ? '<div class="po-terms"><b>Payment Terms:</b> ' + esc(d.paymentTerms || '') +
                         (d.notes ? '<br><b>Notes:</b> ' + esc(d.notes) : '') + '</div>' : '';
@@ -3022,7 +3012,7 @@
                         '.po-sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;}' +
                         '.po-sig-line{border-bottom:1px solid #0f172a;height:30px;margin-bottom:4px;}' +
                         '.po-sig-lbl{font-size:7.5pt;color:#475569;}';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 ' + (d.poNumber || 'PO'), header + vendor + itemTable + totals + terms + sig, css);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + (d.poNumber || 'PO'), header + vendor + itemTable + totals + terms + sig, css);
                 }
             },
 
@@ -3050,7 +3040,7 @@
                     var entries = d.entries || [];
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div class="ts-subtitle">PETTY CASH LOG' + (d.department ? ' \u2014 ' + esc(d.department) : '') + '</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('PETTY CASH LOG') + (d.department ? ' \u2014 ' + esc(d.department) : '') + '</div>' +
                         '<div class="ts-meta"><span>Custodian: ' + esc(d.custodian || '\u2014') + '</span><span>Float: ' + fmt(floatAmt) + '</span>' +
                         (d.dateRange ? '<span>' + esc(d.dateRange) + '</span>' : '') + '</div></div>';
 
@@ -3066,13 +3056,13 @@
                     }).join('');
                     var table = '<table><thead><tr class="th-row"><th>Date</th><th>Description</th><th>Category</th><th class="col-r">Amount</th><th class="col-c">Receipt #</th><th class="col-r">Balance</th></tr></thead>' +
                         '<tbody>' + rowsHtml + '</tbody><tfoot>' +
-                        '<tr class="grand-total-row"><td colspan="3">SUMMARY</td><td class="col-r">' + fmt(totalSpent) + '</td><td></td><td class="col-r">' + fmt(floatAmt - totalSpent) + '</td></tr>' +
+                        '<tr class="grand-total-row"><td colspan="3">' + engine._inkHeading('SUMMARY') + '</td><td class="col-r">' + fmt(totalSpent) + '</td><td></td><td class="col-r">' + fmt(floatAmt - totalSpent) + '</td></tr>' +
                         '</tfoot></table>';
 
                     var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px;">' +
                         '<div><div style="border-bottom:1px solid #0f172a;height:30px;margin-bottom:4px;"></div><div style="font-size:7.5pt;color:#475569;">Custodian Signature &amp; Date</div></div>' +
                         '<div><div style="border-bottom:1px solid #0f172a;height:30px;margin-bottom:4px;"></div><div style="font-size:7.5pt;color:#475569;">Supervisor Approval &amp; Date</div></div></div>';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Petty Cash Log', header + table + sig, '');
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Petty Cash Log', header + table + sig, '');
                 }
             },
 
@@ -3165,7 +3155,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">CREW DEAL MEMO</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('CREW DEAL MEMO') + '</div></div>';
 
                     var empBlock = '<div class="dm-2col">' +
                         '<div><div class="dm-lbl">Employee</div><div class="dm-name">' + esc(d.employeeName || '\u2014') + '</div>' +
@@ -3213,7 +3203,7 @@
                         '.dm-kv b{color:#475569;display:inline-block;width:80px;}' +
                         '.dm-sig-line{border-bottom:1px solid #0f172a;height:35px;margin-bottom:4px;}' +
                         '.dm-sig-lbl{font-size:7.5pt;color:#475569;}';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Deal Memo: ' + (d.employeeName || ''), header + empBlock + compBlock + creditBlock + termsBlock + sig, css);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Deal Memo: ' + (d.employeeName || ''), header + empBlock + compBlock + creditBlock + termsBlock + sig, css);
                 }
             },
 
@@ -3257,7 +3247,7 @@
                     var crew = d.crew || [];
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div class="ts-subtitle">CREW LIST \u2014 CONFIDENTIAL</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('CREW LIST \u2014 CONFIDENTIAL') + '</div>' +
                         '<div class="ts-meta"><span>Date: ' + esc(d.date || '') + '</span><span>Total Crew: ' + crew.length + '</span></div></div>';
 
                     var byDept = {};
@@ -3280,7 +3270,7 @@
                     }).join('');
 
                     var footer = '<div style="margin-top:16px;font-size:7.5pt;color:#94a3b8;text-align:center;border-top:1px dashed #e2e8f0;padding-top:6px;">Confidential \u2014 do not distribute outside production.</div>';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Crew List', header + tables + footer, '');
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Crew List', header + tables + footer, '');
                 }
             },
 
@@ -3328,7 +3318,7 @@
                     var pct = totalPages > 0 ? Math.round((pagesShot / totalPages) * 100) : 0;
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div class="ts-subtitle">DAILY PRODUCTION REPORT \u2014 DAY ' + esc(d.shootDay || '?') + (d.totalDays ? ' OF ' + esc(d.totalDays) : '') + '</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('DAILY PRODUCTION REPORT \u2014 DAY') + ' ' + esc(d.shootDay || '?') + (d.totalDays ? (options.easyOnTheInk ? ' of ' : ' OF ') + esc(d.totalDays) : '') + '</div>' +
                         '<div class="ts-meta"><span>' + esc(d.date || '') + '</span>' +
                         (d.director ? '<span>Director: ' + esc(d.director) + '</span>' : '') +
                         (d.firstAd ? '<span>1st AD: ' + esc(d.firstAd) + '</span>' : '') +
@@ -3382,7 +3372,7 @@
                         '.dr-stat{text-align:center;}.dr-cum{grid-column:span 2;text-align:left;}' +
                         '.dr-bigval{font-size:12pt;font-weight:700;color:#0f172a;margin-top:2px;}' +
                         '.dr-sec-hdr{background:#334155;color:#e2e8f0;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:4px 8px;margin:12px 0 6px;border-radius:2px;}';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Production Report Day ' + (d.shootDay || '?'), header + times + progress + sceneTable + delayTable + notes + adv + sig, css);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Production Report Day ' + (d.shootDay || '?'), header + times + progress + sceneTable + delayTable + notes + adv + sig, css);
                 }
             },
 
@@ -3503,12 +3493,12 @@
                     var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
                     var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
-                    var titleSep = granteeLine ? ' - ' : ' \u2014 ';
+                    var titleSep = granteeLine ? ' - ' : engine._titleSeparator();
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">PERFORMER AGREEMENT</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('PERFORMER AGREEMENT') + '</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
 
                     var perfBlock = '<div class="ta-2col">' +
                         '<div><div class="dm-lbl">Performer (Legal Name)</div><div class="dm-name">' + esc(d.performerLegalName || emptyVal) + '</div>' +
@@ -3652,12 +3642,12 @@
                     var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
                     var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
-                    var titleSep = granteeLine ? ' - ' : ' \u2014 ';
+                    var titleSep = granteeLine ? ' - ' : engine._titleSeparator();
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">LOCATION AGREEMENT</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('LOCATION AGREEMENT') + '</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
 
                     var parties = '<div class="la-2col">' +
                         '<div><div class="dm-lbl">Location Owner / Agent</div><div class="dm-name">' + esc(d.ownerName || emptyVal) + '</div>' +
@@ -3747,7 +3737,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">KIT / EQUIPMENT RENTAL AGREEMENT</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('KIT / EQUIPMENT RENTAL AGREEMENT') + '</div></div>';
 
                     var parties = '<div class="kr-2col">' +
                         '<div><div class="dm-lbl">Equipment Owner</div><div class="dm-name">' + esc(d.ownerName || '\u2014') + '</div>' +
@@ -3795,7 +3785,7 @@
                         '.dm-kv b{color:#475569;display:inline-block;width:80px;}' +
                         '.dm-sig-line{border-bottom:1px solid #0f172a;height:35px;margin-bottom:4px;}' +
                         '.dm-sig-lbl{font-size:7.5pt;color:#475569;}';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Kit Rental: ' + (d.ownerName || ''), header + parties + equipTable + termsBlock + sig, css);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Kit Rental: ' + (d.ownerName || ''), header + parties + equipTable + termsBlock + sig, css);
                 }
             },
 
@@ -3868,7 +3858,7 @@
                     var statusColors = { 'SW': '#2563eb', 'W': '#15803d', 'WF': '#7c3aed', 'H': '#d97706', 'R': '#0891b2', 'T': '#64748b' };
 
                     var header = '<div class="ts-header"><div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div class="ts-subtitle">DAY OUT OF DAYS</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('DAY OUT OF DAYS') + '</div>' +
                         '<div class="ts-meta"><span>Total Shoot Days: ' + numDays + '</span>' +
                         (d.startDate ? '<span>Starting: ' + esc(d.startDate) + '</span>' : '') + '</div></div>';
 
@@ -3922,7 +3912,7 @@
                         '.dood-sum{width:35px;text-align:center;font-weight:700;background:#f8fafc;}' +
                         '.dood-foot{text-align:center;font-weight:700;background:#e2e8f0;}' +
                         '.dood-legend{margin-top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}';
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' \u2014 Day Out of Days', header + legend + grid, css);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Day Out of Days', header + legend + grid, css);
                 }
             },
 
@@ -4052,7 +4042,7 @@
                         '.fp-surplus-row td{color:#16a34a;font-weight:800;}';
 
                     return engine._wrapHtml(
-                        (d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Package',
+                        (d.productionTitle || (b && b.projectName) || 'Production') + engine._titleSeparator() + 'Funding Package',
                         cover + crewHtml + contactHtml + fundingHdr + fundingTable,
                         css
                     );
@@ -4173,7 +4163,7 @@
                         '.fp-surplus-row td{color:#16a34a;font-weight:800;}';
 
                     return engine._wrapHtml(
-                        (d.productionTitle || (b && b.projectName) || 'Production') + ' \u2014 Funding Strategy',
+                        (d.productionTitle || (b && b.projectName) || 'Production') + engine._titleSeparator() + 'Funding Strategy',
                         coverHtml + narrative + sourcesTable + contactHtml,
                         css
                     );
@@ -4226,7 +4216,7 @@
 
                     var header =
                         '<div class="ts-header"><div class="ts-title">' + esc(d.compTitle || 'Budget Comparison') + '</div>' +
-                        '<div class="ts-subtitle">BUDGET COMPARISON REPORT</div>' +
+                        '<div class="ts-subtitle">' + engine._inkHeading('BUDGET COMPARISON REPORT') + '</div>' +
                         '<div class="ts-meta"><span>' + esc(d.snapshotALabel || 'Version A') + ' vs ' + esc(d.snapshotBLabel || 'Version B') + '</span>' +
                         '<span>Generated: ' + new Date().toLocaleDateString() + '</span>' +
                         '<span>Currency: ' + esc(currency) + '</span></div></div>';
@@ -4641,7 +4631,7 @@
                         '</div>' +
                     '</div>' +
                     '<div class="sb-grid">' + frames + '</div>';
-                    return engine._wrapHtml(title + ' — Storyboard', body, css);
+                    return engine._wrapHtml(title + engine._titleSeparator() + 'Storyboard', body, css);
                 }
             },
 
@@ -4674,13 +4664,13 @@
                     var defs = this.getDefaultData(b, { contacts: options.contacts, editorData: { granteeLine: granteeLine } });
                     var termsText = paperText(d.terms) ? d.terms : defs.terms;
                     var emptyVal = granteeLine ? PAPER_BLANK : '\u2014';
-                    var titleSep = granteeLine ? ' - ' : ' — ';
+                    var titleSep = granteeLine ? ' - ' : engine._titleSeparator();
                     var or = function (v) { return v ? esc(v) : emptyVal; };
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">APPEARANCE RELEASE</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('APPEARANCE RELEASE') + '</div>' + (granteeLine ? '<div class="release-grantee" style="font-size:9pt;font-weight:600;margin-top:4px;">Production: ' + esc(granteeLine) + '</div>' : '') + '</div>';
 
                     var info = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
                         '<div><div class="dm-lbl">Name</div><div class="dm-name">' + or(d.releasorName) + '</div>' +
@@ -4733,7 +4723,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">VENDOR INVOICE</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('VENDOR INVOICE') + '</div></div>';
 
                     var meta = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
                         '<div><div class="dm-lbl">Vendor</div><div class="dm-name">' + or(d.vendorName) + '</div>' +
@@ -4774,7 +4764,7 @@
                         '<tbody>' + rows + '</tbody>' +
                         '<tfoot><tr style="border-top:1px solid #cbd5e1;"><td colspan="4" style="padding:4px 8px;text-align:right;font-weight:700;">Subtotal</td><td style="padding:4px 8px;text-align:right;">' + sub.toFixed(2) + '</td></tr>' +
                         '<tr><td colspan="4" style="padding:4px 8px;text-align:right;">Tax (' + taxRate + '%)</td><td style="padding:4px 8px;text-align:right;">' + tax.toFixed(2) + '</td></tr>' +
-                        '<tr style="border-top:2px solid #0f172a;"><td colspan="4" style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">TOTAL</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
+                        '<tr style="border-top:2px solid #0f172a;"><td colspan="4" style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + engine._inkHeading('TOTAL') + '</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
                         '</tfoot></table>';
 
                     var notes = d.notes ? '<div class="dm-hdr">Notes</div><div style="font-size:8pt;color:#475569;line-height:1.5;padding:4px 0;">' + esc(d.notes) + '</div>' : '';
@@ -4784,7 +4774,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
 
                     var body = header + meta + table + notes + sig;
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Vendor Invoice', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Vendor Invoice', body);
                 }
             },
 
@@ -4819,7 +4809,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #dc2626;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;color:#dc2626;">INCIDENT / ACCIDENT REPORT</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;color:#dc2626;">' + engine._inkHeading('INCIDENT / ACCIDENT REPORT') + '</div></div>';
 
                     var meta = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;border:1px solid #fecaca;padding:12px;border-radius:4px;background:#fef2f2;">' +
                         '<div><div class="dm-lbl">Date</div><div class="dm-val">' + or(d.incidentDate) + '</div></div>' +
@@ -4864,7 +4854,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Injured Person Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.injuredPerson || '') + '</div></div></div>';
 
                     var body = header + meta + person + desc + action + witTable + medical + sig;
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Incident Report', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Incident Report', body);
                 }
             },
 
@@ -4896,7 +4886,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">NON-DISCLOSURE AGREEMENT</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('NON-DISCLOSURE AGREEMENT') + '</div></div>';
 
                     var parties = '<div class="dm-hdr">Parties</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
                         '<div><div class="dm-lbl">Disclosing Party (Production)</div><div class="dm-name">' + or(paperBrand(d.productionCompany)) + '</div>' +
@@ -4922,7 +4912,7 @@
                         '<div style="margin-top:16px;"><div class="dm-sig-line" style="max-width:300px;"></div><div class="dm-sig-lbl">Witness Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.witnessName || '') + '</div></div>';
 
                     var body = header + parties + dates + projDesc + terms + sig;
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — NDA', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'NDA', body);
                 }
             },
 
@@ -5006,7 +4996,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">PRODUCTION WRAP REPORT</div></div>';
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('PRODUCTION WRAP REPORT') + '</div></div>';
 
                     var overview = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;">' +
                         '<div style="background:#eff6ff;padding:10px;border-radius:6px;text-align:center;"><div class="dm-lbl">Wrap Date</div><div class="dm-val" style="font-size:10pt;">' + or(d.wrapDate) + '</div></div>' +
@@ -5041,7 +5031,7 @@
                     var sig = '<div style="margin-top:30px;"><div class="dm-sig-line" style="max-width:350px;"></div><div class="dm-sig-lbl">Producer Signature &amp; Date</div><div style="font-size:8pt;font-weight:600;">' + esc(d.producerName || '') + '</div></div>';
 
                     var body = header + overview + financial + secTable + extras + notes + sig;
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Wrap Report', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Wrap Report', body);
                 }
             },
 
@@ -5072,7 +5062,7 @@
 
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         '<div class="ts-title">' + esc(d.productionTitle || b.projectName || 'Production') + '</div>' +
-                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">EXTRAS / BACKGROUND VOUCHER</div>' +
+                        '<div style="font-size:12pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('EXTRAS / BACKGROUND VOUCHER') + '</div>' +
                         (d.voucherNumber ? '<div style="font-size:9pt;color:#64748b;margin-top:2px;">Voucher #' + esc(d.voucherNumber) + '</div>' : '') + '</div>';
 
                     var info = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;border:1px solid #e2e8f0;padding:12px;border-radius:4px;">' +
@@ -5104,7 +5094,7 @@
                         '<table style="width:100%;max-width:400px;border-collapse:collapse;font-size:8.5pt;margin-bottom:14px;">' +
                         '<tr><td style="padding:4px 8px;">Base Pay</td><td style="padding:4px 8px;text-align:right;font-weight:700;">' + base.toFixed(2) + '</td></tr>' +
                         adjRows +
-                        '<tr style="border-top:2px solid #0f172a;"><td style="padding:6px 8px;font-size:10pt;font-weight:900;">TOTAL</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
+                        '<tr style="border-top:2px solid #0f172a;"><td style="padding:6px 8px;font-size:10pt;font-weight:900;">' + engine._inkHeading('TOTAL') + '</td><td style="padding:6px 8px;text-align:right;font-size:10pt;font-weight:900;">' + total.toFixed(2) + '</td></tr>' +
                         '</table>';
 
                     var sig = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px;">' +
@@ -5112,7 +5102,7 @@
                         '<div><div class="dm-sig-line"></div><div class="dm-sig-lbl">Authorized by (Production) &amp; Date</div></div></div>';
 
                     var body = header + info + pay + sig;
-                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + ' — Extras Voucher', body);
+                    return engine._wrapHtml((d.productionTitle || b.projectName || 'Production') + engine._titleSeparator() + 'Extras Voucher', body);
                 }
             },
 
@@ -5180,7 +5170,7 @@
                     var header = '<div style="text-align:center;border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">' +
                         (d.productionCompany ? '<div style="font-size:10pt;font-weight:700;color:#475569;">' + esc(paperBrand(d.productionCompany)) + '</div>' : '') +
                         '<div style="font-size:16pt;font-weight:900;">' + esc(title) + '</div>' +
-                        '<div style="font-size:11pt;font-weight:700;letter-spacing:2px;margin-top:4px;">WEEKLY COST REPORT</div>' +
+                        '<div style="font-size:11pt;font-weight:700;letter-spacing:2px;margin-top:4px;">' + engine._inkHeading('WEEKLY COST REPORT') + '</div>' +
                         '<div style="font-size:8pt;color:#64748b;margin-top:6px;">Period: ' + period + ' &bull; Report Date: ' + esc(d.reportDate || '\u2014') +
                         (d.preparedBy ? ' &bull; Prepared by: ' + esc(d.preparedBy) : '') + '</div></div>';
 
@@ -5237,7 +5227,7 @@
                     });
 
                     tableHtml += '<tr class="grand">' +
-                        '<td colspan="2">GRAND TOTAL</td>' +
+                        '<td colspan="2">' + engine._inkHeading('GRAND TOTAL') + '</td>' +
                         '<td style="text-align:right;">' + fmt(grandBudget) + '</td>' +
                         '<td style="text-align:right;">' + fmt(grandCommitted) + '</td>' +
                         '<td style="text-align:right;">' + fmt(grandActual) + '</td>' +
@@ -5250,7 +5240,7 @@
                     var notes = d.notes ? '<div style="margin-top:12px;font-size:8pt;color:#475569;line-height:1.5;"><strong>Notes:</strong> ' + esc(d.notes) + '</div>' : '';
                     if (d.committedNote) notes += '<div style="margin-top:8px;font-size:8pt;color:#b45309;line-height:1.5;">' + esc(d.committedNote) + '</div>';
                     var sig = d.approvedBy ? '<div style="margin-top:24px;"><div style="display:inline-block;border-top:1px solid #0f172a;padding-top:4px;font-size:8pt;min-width:240px;"><strong>Approved by: ' + esc(d.approvedBy) + '</strong></div></div>' : '';
-                    return engine._wrapHtml(title + ' \u2014 Weekly Cost Report', header + summary + tableHtml + notes + sig, css);
+                    return engine._wrapHtml(title + engine._titleSeparator() + 'Weekly Cost Report', header + summary + tableHtml + notes + sig, css);
                 },
 
                 /* Native jsPDF + autoTable path — called by toPdf() instead of html2pdf to avoid
@@ -5468,7 +5458,7 @@
                                 payee: payee,
                                 purpose: purpose,
                                 total: paperLineTotal(item),
-                                deposit: paperAmount(item.deposit != null ? item.deposit : item.depositAmount),
+                                deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
                                 items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount) }; }) : []
                             });
@@ -5513,16 +5503,15 @@
                 _pages: function (v) {
                     var total = paperAmount(v.total), dep = paperAmount(v.deposit);
                     var bal = paperAmount(v.balanceAfter != null ? v.balanceAfter : (v.balanceRemaining != null ? v.balanceRemaining : v.balance));
-                    if (total === null && dep !== null && dep > 0 && bal !== null) {
-                        total = dep + bal;
-                    }
+                    var invalidDeposit = v.deposit != null && (dep === null || (total !== null && dep > total));
                     if (total !== null && dep !== null && dep > 0 && dep < total) {
+                        var remainder = Math.round((total - dep) * 100) / 100;
                         return [
-                            { type: 'Deposit', amount: dep, balanceAfter: total - dep, total: total, split: true, deposit: dep },
-                            { type: 'Balance', amount: total - dep, balanceAfter: 0, total: total, split: true, deposit: dep }
+                            { type: 'Deposit', amount: dep, balanceAfter: remainder, total: total, split: true, deposit: dep },
+                            { type: 'Balance', amount: remainder, balanceAfter: 0, total: total, split: true, deposit: dep }
                         ];
                     }
-                    return [{ type: 'Full', amount: total, balanceAfter: bal, total: total, split: false, deposit: null }];
+                    return [{ type: 'Full', amount: total, balanceAfter: invalidDeposit ? null : bal, total: total, split: false, deposit: null, depositWriteIn: invalidDeposit }];
                 },
                 renderHtml: function (budgetData, options, engine) {
                     var self = this;
@@ -5553,24 +5542,28 @@
                             pageNo += 1;
                             var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount) !== null); }) : [];
                             var table = '';
-                            if (items.length || p.split) {
+                            if (items.length || p.split || p.depositWriteIn) {
                                 var rows = (items.length ? items : [{ description: purpose || 'Agreed total', amount: p.total }]).map(function (r) {
                                     var rAmt = paperAmount(r.amount);
-                                    return '<tr><td>' + paperWriteIn(r.description) + '</td><td class="col-r">' + (rAmt !== null ? esc(money(rAmt)) : paperWriteIn('')) + '</td></tr>';
+                                    return '<tr><td>' + paperWriteIn(r.description) + '</td><td class="col-r">' + (rAmt !== null ? paperEsc(money(rAmt)) : paperWriteIn('')) + '</td></tr>';
                                 }).join('');
                                 if (p.split) {
-                                    rows += '<tr><td>Deposit</td><td class="col-r">' + esc(money(p.deposit)) + '</td></tr>' +
-                                        '<tr><td>Balance</td><td class="col-r">' + esc(money(p.total - p.deposit)) + '</td></tr>' +
-                                        '<tr><td><b>Total</b></td><td class="col-r"><b>' + esc(money(p.total)) + '</b> (' + esc(paperWords(p.total, currency)) + ')</td></tr>';
+                                    rows += '<tr><td>Deposit</td><td class="col-r">' + paperEsc(money(p.deposit)) + '</td></tr>' +
+                                        '<tr><td>Balance</td><td class="col-r">' + paperEsc(money(p.balanceAfter || p.amount)) + '</td></tr>' +
+                                        '<tr><td><b>Total</b></td><td class="col-r"><b>' + paperEsc(money(p.total)) + '</b> (' + paperEsc(paperWords(p.total, currency)) + ')</td></tr>';
+                                }
+                                if (p.depositWriteIn) {
+                                    rows += '<tr><td>Deposit</td><td class="col-r">' + paperWriteIn('') + '</td></tr>' +
+                                        '<tr><td>Balance</td><td class="col-r">' + paperWriteIn('') + '</td></tr>';
                                 }
                                 table = '<table class="pp-table pp-items"><thead><tr><th>DESCRIPTION</th><th class="col-r">AMOUNT</th></tr></thead><tbody>' + rows + '</tbody></table>';
                             }
                             var amt = paperAmount(p.amount);
                             var balAfter = paperAmount(p.balanceAfter);
-                            var figures = amt !== null ? esc(money(amt)) : paperWriteIn('');
-                            var words = amt !== null ? esc(paperWords(amt, currency)) : paperWriteIn('', true);
+                            var figures = amt !== null ? paperEsc(money(amt)) : paperWriteIn('');
+                            var words = amt !== null ? paperEsc(paperWords(amt, currency)) : paperWriteIn('', true);
                             var footer = d.footerWithPayee && payee ? 'Payment for ' + payee + '. Each party keeps a signed copy.' : 'Each party keeps a signed copy.';
-                            pages.push('<div class="pp-page" data-doc="cashPaymentVoucher" data-payment-type="' + esc(p.type) + '">' +
+                            pages.push('<div class="pp-page" data-doc="cashPaymentVoucher" data-payment-type="' + paperEsc(p.type) + '">' +
                                 paperHeader('Cash Payment Voucher', [d.projectName || b.projectName, d.projectLocation, paperDate(d.shootDate)]) +
                                 '<div class="pp-grid">' +
                                 paperField('VOUCHER NO.', paperWriteIn(number)) +
@@ -5584,15 +5577,15 @@
                                 paperField('AMOUNT IN FIGURES (THIS PAYMENT)', figures) +
                                 paperField('PAYMENT TYPE', '<span class="pp-boxes">' + paperBox('Deposit') + paperBox('Balance') + paperBox('Full') + '</span>') +
                                 paperField('AMOUNT IN WORDS', words, true) +
-                                paperField('BALANCE REMAINING AFTER THIS PAYMENT', balAfter !== null ? esc(money(balAfter)) : paperWriteIn('')) +
+                                paperField('BALANCE REMAINING AFTER THIS PAYMENT', balAfter !== null ? paperEsc(money(balAfter)) : paperWriteIn('')) +
                                 '</div>' +
                                 '<p class="pp-p pp-ack-text">I acknowledge receipt of the amount stated above. Each party keeps a signed copy.</p>' +
                                 paperDual(paperSig('Received by (payee)', payee), paperSig('Paid by (moo)', paperText(d.producerName))) +
-                                '<div class="pp-footer">' + esc(footer) + '</div>' +
+                                '<div class="pp-footer">' + paperEsc(footer) + '</div>' +
                                 '</div>');
                         });
                     });
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Cash Payment Voucher', pages.join(''), PAPER_CSS);
+                    return engine._wrapHtml(paperBrand((d.projectName || b.projectName || 'Production') + ' - Cash Payment Voucher'), pages.join(''), PAPER_CSS);
                 }
             },
 
@@ -5640,7 +5633,7 @@
                     options = options || {};
                     var d = paperMerge(self.getDefaultData(b, options), options.editorData);
                     var place = paperText(d.projectLocation)
-                        ? esc(paperText(d.projectLocation)) + (paperText(d.specificPlace) ? ', ' + esc(paperText(d.specificPlace)) : ' ' + paperWriteIn(''))
+                        ? paperEsc(paperText(d.projectLocation)) + (paperText(d.specificPlace) ? ', ' + paperEsc(paperText(d.specificPlace)) : ' ' + paperWriteIn(''))
                         : paperWriteIn(d.specificPlace);
                     var head = paperHeader('Group Filming Notice + Minor Consent', [d.projectName || b.projectName]) +
                         '<div class="pp-grid">' +
@@ -5649,7 +5642,7 @@
                         paperField('PLACE', place) +
                         '</div>';
                     var organiserVal = paperFirst(d.organiserName, d.organiser, d.sessionOrganiser);
-                    var organiser = organiserVal ? esc(organiserVal) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
+                    var organiser = organiserVal ? paperEsc(organiserVal) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
                     var partA = '<h2 class="pp-h2">A. Group and background filming notice</h2>' +
                         '<p class="pp-p">A documentary crew is filming today for the Producer and EFJ. People in the background of group activity may appear in the film. Anyone who does not wish to be clearly shown should tell the crew. They can stand aside or be avoided in featured shots.</p>' +
                         '<p class="pp-p">This notice is not a substitute for a signed appearance release if someone is interviewed or clearly featured.</p>' +
@@ -5666,7 +5659,7 @@
                     for (var i = 0; i < extra; i++) {
                         body += '<div class="pp-page" data-doc="groupMinorConsent" data-part="B">' + head + self._partB(d) + '</div>';
                     }
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Group Filming Notice + Minor Consent', body, PAPER_CSS + PAPER_FIT_CSS);
+                    return engine._wrapHtml(paperBrand((d.projectName || b.projectName || 'Production') + ' - Group Filming Notice + Minor Consent'), body, PAPER_CSS + PAPER_FIT_CSS);
                 }
             },
 
@@ -5679,7 +5672,7 @@
                 hasEditor: true,
                 _defaultDurationLine: 'About 20 minutes for Collett, about 10 minutes for others.',
                 _howWeFilm: function (durationLine) {
-                    var line = paperText(durationLine) || this._defaultDurationLine;
+                    var line = durationLine === undefined ? this._defaultDurationLine : paperText(durationLine);
                     return [
                         'One camera, seated or walking, in a place that shows the work.',
                         'Open questions that start with how, what, or tell me about. No yes or no questions.',
@@ -5727,12 +5720,10 @@
                     var docTitle = b.workingTitle || b.projectName || '';
                     var projTitle = b.projectName || b.workingTitle || '';
                     var durName = paperFirst(ed.durationName, opts.durationName);
-                    var durationLine = paperFirst(
-                        ed.durationLine,
-                        opts.durationLine,
-                        durName ? ('About 20 minutes for ' + durName + ', about 10 minutes for others.') : '',
-                        this._defaultDurationLine
-                    );
+                    var durationLine = ed.durationLine !== undefined ? paperText(ed.durationLine)
+                        : opts.durationLine !== undefined ? paperText(opts.durationLine)
+                        : durName ? ('About 20 minutes for ' + durName + ', about 10 minutes for others.')
+                        : this._defaultDurationLine;
                     var d = {
                         intervieweeName: name,
                         intervieweeRole: person ? paperFirst(person.role, person.title) : '',
@@ -5755,7 +5746,7 @@
                     if (opts.example === 'reference' || opts.loadReferenceExample || opts.includeExampleQuestions || ed.loadReferenceExample || ed.includeExampleQuestions) {
                         var ex = this.referenceExample();
                         Object.keys(ex).forEach(function (k) { d[k] = ex[k]; });
-                        if (paperFirst(ed.durationLine, opts.durationLine, durName)) {
+                        if (ed.durationLine !== undefined || opts.durationLine !== undefined || durName) {
                             d.durationLine = durationLine;
                             d.howWeFilm = this._howWeFilm(durationLine);
                         }
@@ -5768,24 +5759,28 @@
                     options = options || {};
                     var d = paperMerge(self.getDefaultData(b, options), options.editorData);
                     var forLine = paperText(d.intervieweeName)
-                        ? esc(paperText(d.intervieweeName)) + (paperText(d.intervieweeRole) ? ', ' + esc(paperText(d.intervieweeRole)) : '')
+                        ? paperEsc(paperText(d.intervieweeName)) + (paperText(d.intervieweeRole) ? ', ' + paperEsc(paperText(d.intervieweeRole)) : '')
                         : paperWriteIn('');
-                    var shootBits = [paperText(d.shootDate), paperText(d.projectLocation)].filter(Boolean).map(esc).join(', ');
+                    var shootBits = [paperText(d.shootDate), paperText(d.projectLocation)].filter(Boolean).map(paperEsc).join(', ');
                     var shoot = (shootBits || paperWriteIn('')) +
                         '<br>Start time: ' + paperWriteIn(d.startTime) + ' &nbsp; Meeting place: ' + paperWriteIn(d.meetingPlace);
                     var title = paperText(d.documentaryTitle);
-                    var consent = 'This interview will be recorded for the documentary \'' + (title ? esc(title) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>') + '\'. You may decline any question or stop the interview at any time. A separate release form will be signed before filming.';
-                    var bullets = paperList(d.howWeFilm);
-                    if (paperText(d.durationLine) && !(options.editorData && options.editorData.howWeFilm && options.editorData.durationLine === undefined)) {
-                        if (bullets.length >= 7) bullets[6] = paperText(d.durationLine);
+                    var consent = 'This interview will be recorded for the documentary \'' + (title ? paperEsc(title) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>') + '\'. You may decline any question or stop the interview at any time. A separate release form will be signed before filming.';
+                    var defaults = self._howWeFilm(d.durationLine);
+                    var savedBullets = Array.isArray(d.howWeFilm) ? d.howWeFilm : [];
+                    var bullets = defaults.map(function (line, i) {
+                        return savedBullets[i] !== undefined ? paperText(savedBullets[i]) : line;
+                    });
+                    if (!(options.editorData && options.editorData.howWeFilm && options.editorData.durationLine === undefined)) {
+                        bullets[6] = paperText(d.durationLine);
                     }
                     var groups = (Array.isArray(d.questionGroups) ? d.questionGroups : []).filter(function (g) { return g && (paperFirst(g.heading, g.title) || paperList(g.questions).length); });
                     var n = 1, qHtml = '';
                     groups.forEach(function (g) {
                         var gHead = paperFirst(g.heading, g.title);
                         var qs = paperList(g.questions);
-                        qHtml += '<div class="pp-qgroup">' + (gHead ? '<div class="pp-group">' + esc(gHead) + '</div>' : '') +
-                            (qs.length ? '<ol class="pp-ol" start="' + n + '">' + qs.map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '') + '</div>';
+                        qHtml += '<div class="pp-qgroup">' + (gHead ? '<div class="pp-group">' + paperEsc(gHead) + '</div>' : '') +
+                            (qs.length ? '<ol class="pp-ol" start="' + n + '">' + qs.map(function (q) { return '<li>' + paperEsc(q) + '</li>'; }).join('') + '</ol>' : '') + '</div>';
                         n += qs.length;
                     });
                     if (!groups.length) {
@@ -5798,7 +5793,7 @@
                     var whoHtml = prompts.length
                         ? '<ul class="pp-ul">' + prompts.map(function (p) {
                             var label = paperText(p.writeIn) || 'Name';
-                            return '<li>' + esc(paperText(p.text || p)) + '<div class="pp-p">' + esc(label) + ': ' + paperWriteIn('') + '</div></li>';
+                            return '<li>' + paperEsc(paperText(p.text || p)) + '<div class="pp-p">' + paperEsc(label) + ': ' + paperWriteIn('') + '</div></li>';
                         }).join('') + '</ul>'
                         : '<ul class="pp-ul"><li>Name and role: ' + paperWriteIn('') + '</li><li>Name and role: ' + paperWriteIn('') + '</li></ul>';
                     var footerText = paperFirst(d.footerNote, d.footer, d.sourceNote, d.includeCollettFooter ? self.referenceExample().footerNote : '');
@@ -5813,13 +5808,13 @@
                         paperField('PLACE', paperWriteIn(d.place)) +
                         '</div>' +
                         '<h2 class="pp-h2">Informed Consent</h2><p class="pp-p">' + consent + '</p>' +
-                        '<h2 class="pp-h2">How we will film this</h2><ul class="pp-ul">' + bullets.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
+                        '<h2 class="pp-h2">How we will film this</h2><ul class="pp-ul">' + bullets.map(function (t) { return '<li>' + paperWriteIn(t) + '</li>'; }).join('') + '</ul>' +
                         '<h2 class="pp-h2">Questions</h2>' + qHtml +
                         '<h2 class="pp-h2">Who else we would like to speak with</h2>' +
                         '<p class="pp-p">If you can, please add names. We would like a short conversation (about 10 minutes) with:</p>' + whoHtml +
-                        (footerText ? '<div class="pp-footer">' + esc(footerText) + '</div>' : '') +
+                        (footerText ? '<div class="pp-footer">' + paperEsc(footerText) + '</div>' : '') +
                         '</div>';
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Interview Question Sheet', body, PAPER_CSS);
+                    return engine._wrapHtml(paperBrand((d.projectName || b.projectName || 'Production') + ' - Interview Question Sheet'), body, PAPER_CSS);
                 }
             },
 
@@ -5888,7 +5883,7 @@
                     var tbody = rows.map(function (r) {
                         return '<tr class="pp-row-item"><td class="col-c">' + paperWriteIn(r.qty) + '</td><td>' + paperWriteIn(r.description) + '</td><td>' + paperWriteIn(r.serial) + '</td>' +
                             '<td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td><td class="col-c"><input type="checkbox" class="cs-checkbox" aria-checked="false"></td>' +
-                            '<td></td><td></td><td>' + (paperText(r.notes) ? esc(paperText(r.notes)) : '') + '</td></tr>';
+                            '<td></td><td></td><td>' + (paperText(r.notes) ? paperEsc(paperText(r.notes)) : '') + '</td></tr>';
                     }).join('');
                     var blank = Math.max(4, Math.min(60, parseInt(d.blankRows, 10) || 0));
                     for (var i = 0; i < blank; i++) {
@@ -5899,7 +5894,7 @@
                         '<div class="pp-grid">' +
                         paperField('KIT OR PACKAGE NAME', paperWriteIn(kitName), true) +
                         paperField('OWNER OR VENDOR', paperWriteIn(vendor)) +
-                        paperField('PHONE', paperWriteIn(vendorPhone)) +
+                        paperField('PHONE', paperWriteIn(vendorPhone, false, true)) +
                         paperField('ISSUED TO / CREW RESPONSIBLE', paperWriteIn(d.issuedTo)) +
                         paperField('SHOOT DATES OR DAY COUNT', paperWriteIn(d.shootDates)) +
                         '</div>' +
@@ -5924,11 +5919,13 @@
                     } else {
                         body = self._sheet(d, rows, d.kitName, d.ownerVendor, d.ownerPhone);
                     }
-                    return engine._wrapHtml((d.projectName || b.projectName || 'Production') + ' - Equipment Checklist', body, PAPER_CSS + PAPER_FIT_CSS);
+                    return engine._wrapHtml(paperBrand((d.projectName || b.projectName || 'Production') + ' - Equipment Checklist'), body, PAPER_CSS + PAPER_FIT_CSS);
                 }
             },
 
             /* ---- PUBLIC API ---- */
+
+            paperBrand: paperBrand,
 
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {

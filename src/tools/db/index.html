@@ -2327,7 +2327,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
     // Convert the brand only; preserve all other characters in custom release text.
     ['granteeLine', 'terms'].forEach(function (key) {
-      if (typeof d[key] === 'string') d[key] = d[key].replace(/moo\.llc/gi, 'moo');
+      if (typeof d[key] === 'string') d[key] = pub.templates.paperBrand(d[key]);
     });
     var overrides = (d._autofill && d._autofill.overrides) || {};
     // Only exact generator defaults may be refreshed; write-ins also occur in custom text.
@@ -2353,13 +2353,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var tmpl = pub && pub.templates && pub.templates.interviewQuestions;
     var defaults = tmpl && typeof tmpl.getDefaultData === 'function' ? tmpl.getDefaultData(budget || {}) : {};
     var defaultDur = (tmpl && tmpl._defaultDurationLine) || defaults.durationLine || 'About 20 minutes for Collett, about 10 minutes for others.';
-    if (d.durationLine == null || String(d.durationLine).trim() === '') {
+    if (d.durationLine === undefined) {
       d.durationLine = (Array.isArray(d.howWeFilm) && d.howWeFilm[6]) ? d.howWeFilm[6] : defaultDur;
     }
     if (!Array.isArray(d.howWeFilm) || d.howWeFilm.length < 7) {
       d.howWeFilm = Array.isArray(defaults.howWeFilm) ? JSON.parse(JSON.stringify(defaults.howWeFilm)) : [];
     }
-    if (d.howWeFilm.length >= 7 && d.durationLine) {
+    if (d.howWeFilm.length >= 7) {
       d.howWeFilm[6] = d.durationLine;
     }
     if (!Array.isArray(d.questionGroups)) {
@@ -2397,12 +2397,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     editorData.questionGroups = JSON.parse(JSON.stringify(ex.questionGroups || []));
     editorData.whoElse = JSON.parse(JSON.stringify(ex.whoElse || []));
     editorData.footerNote = ex.footerNote || '';
-    if (!editorData.durationLine && (ex.durationLine || (Array.isArray(ex.howWeFilm) && ex.howWeFilm[6]))) {
+    if (editorData.durationLine === undefined && (ex.durationLine || (Array.isArray(ex.howWeFilm) && ex.howWeFilm[6]))) {
       editorData.durationLine = ex.durationLine || ex.howWeFilm[6];
     }
     if (Array.isArray(ex.howWeFilm) && ex.howWeFilm.length) {
       editorData.howWeFilm = JSON.parse(JSON.stringify(ex.howWeFilm));
-      if (editorData.durationLine && editorData.howWeFilm.length >= 7) {
+      if (editorData.howWeFilm.length >= 7) {
         editorData.howWeFilm[6] = editorData.durationLine;
       }
     }
@@ -2421,6 +2421,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var defs = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget) : {};
       var overrides = (editorData._autofill && editorData._autofill.overrides) || {};
       Object.keys(defs).forEach(function (k) {
+        if (activeTemplateId === 'interviewQuestions' && k === 'durationLine' && editorData[k] !== undefined) return;
         if (!review && (overrides[k] || editorData['_keepEmpty_' + k])) return;
         if (afBlank(editorData[k])) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
       });
