@@ -5863,10 +5863,10 @@
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
                     if (/\bkit rental\b/.test(desc)) return true;
-                    if (['gear', 'equipment'].indexOf(secId) > -1 && !/\b(recordist|operator|director|assistant|driver|producer|editor|coordinator|manager|technician|designer|artist|writer)\b/.test(desc)) return true;
+                    var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot|fee|deposit)\b/.test(desc);
+                    if (kind !== 'crew' && ['gear', 'equipment'].indexOf(secId) > -1 && !crewRole) return true;
                     if (kind === 'crew' || !paperProductionSection(sec, name)) return false;
-                    return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) &&
-                        !/\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot|fee|deposit)\b/.test(desc);
+                    return /\b(equipment|package|kit|camera|lens|lenses|tripod|gimbal|drone|lighting|lights|monitor|recorder|microphones?|mics?|batteries|media cards?)\b/.test(desc) && !crewRole;
                 },
                 getDefaultData: function (budgetData, options) {
                     var self = this;
