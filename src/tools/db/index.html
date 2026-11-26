@@ -1851,6 +1851,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var o = { currency: currency, rate: conversionRate, brand: brand, watermark: watermark, theme: docTheme, easyOnTheInk: inkOn };
     if ((PAPERWORK_TEMPLATES.indexOf(activeTemplateId) > -1 || RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1) && Array.isArray(_docContacts)) o.contacts = _docContacts;
     if (editorData) { o.callSheetData = editorData; o.editorData = editorData; }
+    if (editorData && editorData.dayId) o.dayId = editorData.dayId;
     if (activeTemplateId === 'storyboard') o.storyboardFrame = dom.getElementById('storyboard-frame').value;
     o.fundingRates = {};
     ((budget && budget.fundingSources) || []).forEach(function (source) {
@@ -2684,11 +2685,72 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return '<div class="ed-field"' + cls + '><label>' + esc(label) + tbcToggle + '</label><input type="' + (type || 'text') + '" data-key="' + esc(key) + '" value="' + esc(v) + '"' + ph + '></div>';
   }
 
+  /* Normalised shootSchedule days for the call sheet day picker (empty when absent). */
+  function callSheetShootDays(b) {
+    if (!b || !Object.prototype.hasOwnProperty.call(b, 'shootSchedule')) return [];
+    var api = (typeof window !== 'undefined' && window.mBTShootSchedule) ? window.mBTShootSchedule : null;
+    if (api && typeof api.normalise === 'function') return api.normalise(b) || [];
+    return Array.isArray(b.shootSchedule) ? b.shootSchedule.filter(function (d) {
+      return d && typeof d === 'object' && !Array.isArray(d);
+    }) : [];
+  }
+
+  function callSheetDayTitle(day, index, total) {
+    var api = (typeof window !== 'undefined' && window.mBTShootSchedule) ? window.mBTShootSchedule : null;
+    if (api && typeof api.dayTitle === 'function') return api.dayTitle(day, index, total);
+    var label = day && day.label != null ? String(day.label).trim() : '';
+    if (label) return label;
+    var n = (day && typeof day.dayNum === 'number' && day.dayNum >= 1) ? day.dayNum : (index + 1);
+    var title = 'Day ' + n;
+    if (typeof total === 'number' && total >= n) title += ' of ' + total;
+    return title;
+  }
+
+  /* Refresh call sheet editor fields from the selected shoot day (empty dayId = first day). */
+  function applyCallSheetDaySelection(dayId) {
+    if (!editorData || typeof editorData !== 'object') return;
+    editorData.dayId = dayId != null ? String(dayId) : '';
+    var days = callSheetShootDays(budget);
+    if (!days.length) return;
+    var csTmpl = pub && pub.templates && pub.templates.callSheet;
+    if (!csTmpl || typeof csTmpl.getDefaultData !== 'function') return;
+    var opts = { contacts: _docContacts };
+    if (editorData.dayId) opts.dayId = editorData.dayId;
+    var defs = csTmpl.getDefaultData(budget || {}, opts) || {};
+    ['date', 'dayOf', 'schedule', 'scenes', 'shootingLocations', 'interviewees'].forEach(function (k) {
+      if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
+    });
+    if (defs.dayOfTbc) editorData.dayOfTbc = true;
+    else delete editorData.dayOfTbc;
+    delete editorData._keepEmptySchedule;
+    delete editorData._keepEmptyLocations;
+    delete editorData._keepEmptyInterviewees;
+  }
+
+  function callSheetDayPickerHtml(d) {
+    var days = callSheetShootDays(budget);
+    if (!days.length) return '';
+    var selected = (d && d.dayId != null) ? String(d.dayId) : '';
+    var html = '<div class="ed-row"><div class="ed-field"><label>Shoot day</label>' +
+      '<select id="cs-day-picker" data-key="dayId">' +
+      '<option value=""' + (selected === '' ? ' selected' : '') + '></option>';
+    days.forEach(function (day, i) {
+      var id = day && day.id != null ? String(day.id) : '';
+      var title = callSheetDayTitle(day, i, days.length);
+      html += '<option value="' + esc(id) + '"' + (selected && selected === id ? ' selected' : '') + '>' + esc(title) + '</option>';
+    });
+    html += '</select></div></div>';
+    return html;
+  }
+
   function normalizeCallSheetEditorData(d) {
     if (!d || typeof d !== 'object') return;
     var csTmpl = pub && pub.templates && pub.templates.callSheet;
-    var defaults = csTmpl && csTmpl.getDefaultData ? csTmpl.getDefaultData(budget || {}) : {};
+    var defOpts = {};
+    if (d.dayId) defOpts.dayId = d.dayId;
+    var defaults = csTmpl && csTmpl.getDefaultData ? csTmpl.getDefaultData(budget || {}, defOpts) : {};
     var overrides = (d._autofill && d._autofill.overrides) || {};
+    if (d.dayId == null) d.dayId = '';
 
     ['productionTitle', 'director', 'producers', 'dp', 'upm', 'firstAd', 'secondAd', 'productionOffice', 'dayOf', 'date'].forEach(function (k) {
       if ((d[k] == null || d[k] === '') && !overrides[k] && defaults[k]) {
@@ -3062,6 +3124,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<button class="smart-btn" id="btn-load-budget" type="button">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>' +
       ' Load from Budget</button></div>' +
+      callSheetDayPickerHtml(d) +
       '<div class="ed-row">' + fldCs('productionTitle', 'Production Title', null, true) + '</div>' +
       '<div class="ed-row ed-3">' + fldCs('date', 'Date', 'date') + fldCs('dayOf', 'Day Of') + fldCs('productionOffice', 'Production Office') + '</div>' +
       '<div class="ed-row ed-3">' + fldCs('director', 'Director') + fldCs('producers', 'Producers') + fldCs('dp', 'DP') + '</div>' +
@@ -4550,6 +4613,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
         if (key === 'durationLine' && Array.isArray(editorData.howWeFilm) && editorData.howWeFilm.length >= 7) {
           editorData.howWeFilm[6] = val;
+        }
+        if (key === 'dayId' && activeTemplateId === 'callSheet') {
+          applyCallSheetDaySelection(val);
+          saveEditorData();
+          buildEditor('callSheet');
+          return;
         }
         saveEditorData();
         return;
