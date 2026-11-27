@@ -5021,7 +5021,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           if (arrN === 'crew' && listDel.length === 0) editorData._keepEmptyCrew = true;
           if (arrN === 'interviewees' && listDel.length === 0) editorData._keepEmptyInterviewees = true;
           if (arrN.indexOf('contactsBlock.') === 0) editorData._keepEmptyContactsBlock = true;
-          if (['kit', 'paperwork', 'wrap', 'questionGroups', 'whoElse'].indexOf(arrN) > -1 && listDel.length === 0) editorData['_keepEmpty_' + arrN] = true;
+          if (['kit', 'paperwork', 'wrap', 'questionGroups', 'whoElse', 'vouchers', 'gear'].indexOf(arrN) > -1 && listDel.length === 0) editorData['_keepEmpty_' + arrN] = true;
           saveEditorData();
           var scrollYDel = panel.scrollTop;
           buildEditor(activeTemplateId);

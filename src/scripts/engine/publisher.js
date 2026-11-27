@@ -222,10 +222,15 @@
     }
     function paperProductionSection(sec, name) {
         var id = String((sec && sec.id) || '').toLowerCase();
+        var n = String(name || '');
+        /* J2q R3 / J12 Y1: atl, post, dep-post, development and publicity stay out; a post-production
+           name (or the bare word "post") is not production-like whatever else the name contains. */
+        if (['atl', 'post', 'dep-post', 'development', 'publicity'].indexOf(id) > -1) return false;
+        if (/\bpost[\s-]*production\b|\bpostproduction\b|\bpost\b/i.test(n)) return false;
         return ['prod', 'btl', 'btl_prod', 'tech', 'gear', 'conn', 'equipment',
             'dep-camera', 'dep-sound', 'dep-electrical', 'dep-grip', 'dep-art', 'dep-wardrobe', 'dep-makeup',
             'dep-production', 'dep-location', 'dep-transport', 'dep-catering', 'dep-live', 'dep-equipment'].indexOf(id) > -1 ||
-            /production|equipment|gear/i.test(String(name || ''));
+            /production|equipment|gear/i.test(n);
     }
     function paperIsProducerRole(text) {
         var role = paperWithoutParentheses(String(text || ''));
@@ -370,8 +375,9 @@
                 return ((b.sections[k] || {}).items || []).some(function (item) {
                     if (!item || item.memoId || item.memoStatus) return false;
                     var c = paperLineContact(item, contacts);
-                    var roles = [c && c.role, c && c.title, item.crew && item.crew.role, item.role];
-                    if (!c) roles.push(item.description);
+                    /* J12 Y2 / T4: the line description is the job. A generic Contacts role ("Film Professional")
+                       must not blank a producer who is assigned on a producer-described line. */
+                    var roles = [item.description, c && c.role, c && c.title, item.crew && item.crew.role, item.role];
                     var name = c ? paperText(c.name) : paperText(item.crew && item.crew.name);
                     if (name && roles.some(paperIsProducerRole)) { producer = name; return true; }
                     return false;
