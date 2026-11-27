@@ -132,7 +132,6 @@
             </button>
         </div>
         <div id="stages-header-right" class="flex items-center gap-3 min-w-0 shrink-0 relative z-10 ml-auto">
-            <span id="unsaved-indicator" style="opacity:0;transition:opacity 0.2s;" class="text-[8px] font-black text-amber-600 uppercase tracking-widest shrink-0">&#9679; Unsaved</span>
             <span id="active-project-name" class="text-slate-900 text-[13px] font-black uppercase tracking-tight truncate max-w-[160px] bg-slate-100/90 px-1 rounded relative z-10">—</span>
         </div>
     </div>
@@ -577,7 +576,7 @@
             return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
         }
 
-        /* Phase 195: IO helpers — debounced save + unsaved state indicator */
+        /* Phase 195: IO helpers: debounced save only */
         var _mBTStagesSaveTimeout = null;
         var _mBTStagesFollowStageKeys = [];
         function _mBTStagesQueueFollow(stageKey) {
@@ -591,12 +590,8 @@
         function _mBTStagesDebouncedSave(stageKey) {
             if (stageKey) _mBTStagesQueueFollow(stageKey);
             if (_mBTStagesSaveTimeout) clearTimeout(_mBTStagesSaveTimeout);
-            var indicator = document.getElementById('unsaved-indicator');
-            if (indicator) indicator.style.opacity = '1';
             _mBTStagesSaveTimeout = setTimeout(function () {
                 mBTStages.save();
-                var ind = document.getElementById('unsaved-indicator');
-                if (ind) ind.style.opacity = '0';
             }, 500);
         }
 
@@ -1718,6 +1713,63 @@
                 return { id: '', date: '', dayNum: null, label: '', tbc: false, locations: [], legs: [], interviews: [] };
             },
 
+            _stagesContacts: function () {
+                var list = [];
+                try {
+                    if (window.parent && window.parent !== window && window.parent.mBTOG && Array.isArray(window.parent.mBTOG.contacts)) {
+                        list = window.parent.mBTOG.contacts;
+                    } else if (window.mBTOG && Array.isArray(window.mBTOG.contacts)) {
+                        list = window.mBTOG.contacts;
+                    }
+                } catch (err) { list = []; }
+                if ((!list || !list.length) && this.state && this.state.project && Array.isArray(this.state.project.contacts)) {
+                    list = this.state.project.contacts;
+                }
+                return Array.isArray(list) ? list : [];
+            },
+
+            _stagesContactDatalistHtml: function (listId) {
+                var contacts = this._stagesContacts();
+                var html = '<datalist id="' + esc(listId) + '">';
+                var i, c, name;
+                for (i = 0; i < contacts.length; i++) {
+                    c = contacts[i] || {};
+                    name = c.name != null ? String(c.name) : '';
+                    if (!name) continue;
+                    html += '<option value="' + esc(name) + '"></option>';
+                }
+                return html + '</datalist>';
+            },
+
+            _applySiteContactName: function (loc, typed, locEl) {
+                var needle = String(typed == null ? '' : typed).trim().toLowerCase();
+                var contacts = this._stagesContacts();
+                var i, c, cName, phone, phoneEl;
+                var hit = null;
+                if (needle) {
+                    for (i = 0; i < contacts.length; i++) {
+                        c = contacts[i] || {};
+                        cName = c.name != null ? String(c.name).trim() : '';
+                        if (cName && cName.toLowerCase() === needle) { hit = c; break; }
+                    }
+                }
+                if (hit) {
+                    loc.siteContactId = hit.id != null ? String(hit.id) : '';
+                    loc.siteContactName = hit.name != null ? String(hit.name) : '';
+                    phone = hit.phone != null ? String(hit.phone).trim() : '';
+                    if (phone && !String(loc.siteContactPhone || '').trim()) {
+                        loc.siteContactPhone = phone;
+                        if (locEl && locEl.querySelector) {
+                            phoneEl = locEl.querySelector('.sd-loc-site-phone');
+                            if (phoneEl) phoneEl.value = phone;
+                        }
+                    }
+                } else {
+                    loc.siteContactId = '';
+                    loc.siteContactName = typed == null ? '' : String(typed);
+                }
+            },
+
             _blankLoc: function () {
                 var loc = { id: '', name: '', address: '', parish: '', siteContactId: '', siteContactName: '', siteContactPhone: '', nearestHospital: '', tbc: false };
                 /* Assign the location id at add time so leg/interview dropdowns hold a real value before save. */
@@ -1847,6 +1899,11 @@
                             '<input type="text" class="sd-loc-address border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Address" value="' + esc(loc.address || '') + '">' +
                             '<input type="text" class="sd-loc-parish border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Parish" value="' + esc(loc.parish || '') + '">' +
                             '<input type="text" class="sd-loc-hospital border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="Hospital" value="' + esc(loc.nearestHospital || '') + '">' +
+                            '<label class="text-[9px] font-bold text-slate-500 flex flex-col gap-0.5">Site contact' +
+                            '<input type="text" class="sd-loc-site-contact border border-slate-200 rounded-lg px-2 py-1 text-[11px]" list="sd-site-contacts-' + di + '-' + li + '" value="' + esc(loc.siteContactName || '') + '"></label>' +
+                            '<label class="text-[9px] font-bold text-slate-500 flex flex-col gap-0.5">Site phone' +
+                            '<input type="text" class="sd-loc-site-phone border border-slate-200 rounded-lg px-2 py-1 text-[11px]" value="' + esc(loc.siteContactPhone || '') + '"></label>' +
+                            self._stagesContactDatalistHtml('sd-site-contacts-' + di + '-' + li) +
                             '<label class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1"><input type="checkbox" class="sd-loc-tbc"' + (loc.tbc ? ' checked' : '') + '> TBC</label>' +
                             '<button type="button" class="sd-remove text-[9px] font-black uppercase tracking-widest text-rose-600">Remove</button>' +
                         '</div>';
@@ -2005,6 +2062,8 @@
                         else if (t.classList.contains('sd-loc-address')) loc.address = t.value || '';
                         else if (t.classList.contains('sd-loc-parish')) loc.parish = t.value || '';
                         else if (t.classList.contains('sd-loc-hospital')) loc.nearestHospital = t.value || '';
+                        else if (t.classList.contains('sd-loc-site-contact')) this._applySiteContactName(loc, t.value || '', locEl);
+                        else if (t.classList.contains('sd-loc-site-phone')) loc.siteContactPhone = t.value || '';
                         else if (t.classList.contains('sd-loc-tbc')) loc.tbc = !!t.checked;
                     } else if (legEl) {
                         var leg = day.legs[parseInt(legEl.getAttribute('data-leg-index'), 10)];
