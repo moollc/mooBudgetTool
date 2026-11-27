@@ -705,6 +705,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     okBtn.addEventListener('click', dismiss);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) dismiss(); });
     okBtn.focus();
+    return overlay;
   }
   function dbConfirm(message, onConfirm, title) {
     _dbRemoveDialog();
@@ -1090,6 +1091,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   var savedDocsSaveSeq = 0;
   var savedDocsConfirmedSeq = 0;
+  var savedDocsPendingSeq = 0;
   var savedDocsAcks = Object.create(null);
   var standaloneSavedDocsWrites = Promise.resolve();
   var _ackedSavedDocsSnap = null;
@@ -1130,6 +1132,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* M1: capture the Save button base label once while a restore timer is pending. */
   var saveDocBtnBaseHtml = null, saveDocBtnRestoreTimer = null;
+  function showSavedDocButton() {
+    var btn = dom.getElementById('btn-save-doc');
+    if (!btn) return;
+    if (!saveDocBtnRestoreTimer) saveDocBtnBaseHtml = btn.innerHTML;
+    btn.innerHTML = String(saveDocBtnBaseHtml).replace('Save', 'Saved ✓');
+    if (saveDocBtnRestoreTimer) clearTimeout(saveDocBtnRestoreTimer);
+    saveDocBtnRestoreTimer = setTimeout(function () {
+      btn.innerHTML = saveDocBtnBaseHtml;
+      saveDocBtnRestoreTimer = null;
+      saveDocBtnBaseHtml = null;
+    }, 1200);
+  }
   window.addEventListener('message', function (e) {
     var data = e.data;
     if (!data || data.type !== 'mbt:tool-ack' || data.action !== 'docs-saved-documents') return;
@@ -1148,18 +1162,39 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function persistBudgetSavedDocs(cb, opts) {
     ensureAckedSavedDocsSnap();
     var seq = ++savedDocsSaveSeq;
+    savedDocsPendingSeq = seq;
     var sourceBudget = budget;
     var key = projectKey;
     var sent = savedDocsFields(budget);
+    var docs = window.mBTSavedDocs;
+    var outgoing = opts && opts.candidates || sent.savedDocs || [];
+    var payload = {
+      projectKey: key,
+      savedDocs: outgoing,
+      savedDocsDeleted: sent.savedDocsDeleted || [],
+      changedDocIds: docs.changedIds(_ackedSavedDocsSnap && _ackedSavedDocsSnap.savedDocs, outgoing)
+    };
     var embedded = window.parent && window.parent !== window;
-    function finish(ok, msg, result) {
+    function finish(ok, msg, result, timedOut, late) {
       var merged = result && Array.isArray(result.savedDocs);
-      var current = budget === sourceBudget && seq === savedDocsSaveSeq;
-      if (ok && budget === sourceBudget && seq > savedDocsConfirmedSeq) {
+      var latest = seq === savedDocsSaveSeq;
+      var current = budget === sourceBudget && latest;
+      var newlyConfirmed = ok && budget === sourceBudget && seq > savedDocsConfirmedSeq;
+      if (latest) savedDocsPendingSeq = 0;
+      var before = _ackedSavedDocsSnap;
+      if (newlyConfirmed) {
         _ackedSavedDocsSnap = merged ? savedDocsFields(result) : sent;
         savedDocsConfirmedSeq = seq;
       }
       if (current && budget && _ackedSavedDocsSnap) applySavedDocsFields(_ackedSavedDocsSnap);
+      else if (late && newlyConfirmed) {
+        /* Keep the newer optimistic edit visible until its own acknowledgement. */
+        applySavedDocsFields(savedDocsPendingSeq ? docs.mergeSave(_ackedSavedDocsSnap, {
+          savedDocs: budget.savedDocs,
+          savedDocsDeleted: budget.savedDocsDeleted,
+          changedDocIds: docs.changedIds(before && before.savedDocs, budget.savedDocs)
+        }) : _ackedSavedDocsSnap);
+      }
 
       var duplicates = result && result.duplicates || 0;
       var capDropped = (result && result.dropped || 0) - duplicates;
@@ -1168,33 +1203,33 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           afNotice(notice, 'Saved documents');
         });
       }
-      if (cb) cb(ok, msg || '', capDropped, duplicates);
-      if (ok && merged && current) buildSavedDocsList();
+      if (ok && (late ? key === projectKey : opts && opts.showSavedButton)) showSavedDocButton();
+      var notice = cb && cb(ok, msg || '', capDropped, duplicates, timedOut);
+      if (ok && ((merged && current) || (late && key === projectKey))) buildSavedDocsList();
+      return notice;
     }
 
     if (embedded) {
       var requestId = 'sd_' + seq + '_' + Date.now();
+      var timedOut = false;
+      var timeoutNotice;
       var timer = setTimeout(function () {
-        delete savedDocsAcks[requestId];
-        finish(false, '');
+        timedOut = true;
+        timeoutNotice = finish(false, '', null, true);
       }, 20000);
       savedDocsAcks[requestId] = function (result) {
         clearTimeout(timer);
-        if (result.status === 'success') finish(true, '', result);
-        else finish(false, result.message);
+        if (result.status === 'success') {
+          if (timeoutNotice && timeoutNotice === _dbDialogEl) _dbRemoveDialog();
+          finish(true, '', result, false, timedOut);
+        } else if (!timedOut) finish(false, result.message);
       };
       try {
-        var outgoing = opts && opts.candidates || sent.savedDocs || [];
+        payload.requestId = requestId;
         window.parent.postMessage({
           type: 'mbt:tool-action',
           action: 'docs-saved-documents',
-          payload: {
-            requestId: requestId,
-            projectKey: key,
-            savedDocs: outgoing,
-            savedDocsDeleted: sent.savedDocsDeleted || [],
-            changedDocIds: window.mBTSavedDocs.changedIds(_ackedSavedDocsSnap && _ackedSavedDocsSnap.savedDocs, outgoing)
-          }
+          payload: payload
         }, window.location.origin);
       } catch (err) {
         clearTimeout(timer);
@@ -1208,16 +1243,25 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       finish(false, 'No project is open, so nothing was saved.');
       return;
     }
-    standaloneSavedDocsWrites = standaloneSavedDocsWrites.then(function () {
-      return localforage.getItem(key);
-    }).then(function (stored) {
-      var updated = Object.assign({}, stored || { projectName: sourceBudget.projectName }, {
-        savedDocs: sent.savedDocs || [],
-        savedDocsDeleted: sent.savedDocsDeleted || []
+    function writeSavedDocs() {
+      return localforage.getItem(key).then(function (stored) {
+        var base = stored || { projectName: sourceBudget.projectName };
+        var result = docs.mergeSave(base, payload);
+        var updated = Object.assign({}, base, {
+          savedDocs: result.savedDocs,
+          savedDocsDeleted: result.savedDocsDeleted
+        });
+        return localforage.setItem(key, updated).then(function () { return result; });
       });
-      return localforage.setItem(key, updated);
-    }).then(function () {
-      finish(true, '');
+    }
+    var write = standaloneSavedDocsWrites.then(function () {
+      var locks = window.navigator && window.navigator.locks;
+      /* Hold the project lock from the storage read through the committed write. */
+      return locks ? locks.request('mbt-saved-docs:' + key, writeSavedDocs) : writeSavedDocs();
+    });
+    standaloneSavedDocsWrites = write.catch(function () {});
+    write.then(function (result) {
+      finish(true, '', result);
     }, function (err) {
       finish(false, err && err.message);
     });
@@ -1249,21 +1293,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var settle;
     var pending = new Promise(function (resolve) { settle = resolve; });
     publishPendingSavedDocsMigration(pending);
-    persistBudgetSavedDocs(function (ok, msg, capDropped, duplicates) {
-      savedDocsMigrationInFlight = false;
+    persistBudgetSavedDocs(function (ok, msg, capDropped, duplicates, timedOut) {
       var parts = result.changed ? ['Saved documents from other browsers are not migrated.'] : [];
       parts = parts.concat(savedDocsNotices(
         Math.max(result.dropped - result.duplicates, capDropped),
         result.duplicates + duplicates
       ));
-      if (!ok && !embedded) parts.push(msg ? 'The change was not saved: ' + msg : 'The change was not saved.');
+      if (!ok && (!embedded || timedOut)) parts.push(msg ? 'The change was not saved: ' + msg : 'The change was not saved.');
       else if (msg) parts.push(String(msg));
-      if (parts.length) afNotice(parts.join('\n'), 'Saved documents');
       if (ok) {
         try { localStorage.setItem(markerKey, '1'); } catch (eSet) {}
       }
       settle();
-      if (__mbtPendingSavedDocsMigration === pending) publishPendingSavedDocsMigration(null);
+      if (__mbtPendingSavedDocsMigration === pending) {
+        savedDocsMigrationInFlight = false;
+        publishPendingSavedDocsMigration(null);
+      }
+      if (parts.length) return afNotice(parts.join('\n'), 'Saved documents');
     }, { migration: true });
   }
   function getSavedDocs() {
@@ -1294,35 +1340,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       editorData: editorData ? JSON.parse(JSON.stringify(editorData)) : null
     };
     ensureAckedSavedDocsSnap();
-    var result = window.mBTSavedDocs.add(budget, doc, window.parent !== window);
+    var result = window.mBTSavedDocs.add(budget, doc, true);
     if (result && result.dropped) {
       afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
         ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
     }
     buildSavedDocsList();
     persistBudgetSavedDocs(function (ok, msg) {
-      var btn = dom.getElementById('btn-save-doc');
       if (ok) {
-        if (btn) {
-          if (!saveDocBtnRestoreTimer) saveDocBtnBaseHtml = btn.innerHTML;
-          btn.innerHTML = String(saveDocBtnBaseHtml).replace('Save', 'Saved ✓');
-          if (saveDocBtnRestoreTimer) clearTimeout(saveDocBtnRestoreTimer);
-          saveDocBtnRestoreTimer = setTimeout(function () {
-            btn.innerHTML = saveDocBtnBaseHtml;
-            saveDocBtnRestoreTimer = null;
-            saveDocBtnBaseHtml = null;
-          }, 1200);
-        }
         if (msg) afNotice(String(msg), 'Saved documents');
         return;
       }
       buildSavedDocsList();
       if (msg === 'No project is open, so nothing was saved.') {
-        afNotice(msg, 'Saved documents');
-      } else {
-        afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
+        return afNotice(msg, 'Saved documents');
       }
-    }, { candidates: result.candidates, previewedCapDrops: result.dropped });
+      return afNotice(msg ? 'The document was not saved: ' + msg : 'The document was not saved.', 'Saved documents');
+    }, { candidates: result.candidates, previewedCapDrops: result.dropped, showSavedButton: true });
   }
   function buildSavedDocsList() {
     var savedList = dom.getElementById('saved-list');
@@ -1388,7 +1422,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
                 return;
               }
               buildSavedDocsList();
-              afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+              return afNotice(msg ? 'The change was not saved: ' + msg : 'The change was not saved.', 'Saved documents');
             });
           } else {
             buildSavedDocsList();
@@ -1407,7 +1441,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         clone.date = new Date().toISOString();
         clone.title = orig.title + ' (Copy)';
         ensureAckedSavedDocsSnap();
-        var result = window.mBTSavedDocs.add(budget, clone, window.parent !== window);
+        var result = window.mBTSavedDocs.add(budget, clone, true);
         if (result && result.dropped) {
           afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
             ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
@@ -1419,7 +1453,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             return;
           }
           buildSavedDocsList();
-          afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          return afNotice(msg ? 'The change was not saved: ' + msg : 'The change was not saved.', 'Saved documents');
         }, { candidates: result.candidates, previewedCapDrops: result.dropped });
       });
     });
@@ -1442,7 +1476,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             return;
           }
           buildSavedDocsList();
-          afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          return afNotice(msg ? 'The change was not saved: ' + msg : 'The change was not saved.', 'Saved documents');
         });
       });
     });
@@ -2343,7 +2377,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function afTarget() { return { template: activeTemplateId, key: storageKey(activeTemplateId), data: editorData, epoch: _afEpoch }; }
   function afCurrent(t) { return t.template === activeTemplateId && t.key === storageKey(activeTemplateId) && t.data === editorData && t.epoch === _afEpoch; }
   var _afRateNoticeKey = '';
-  function afNotice(message, title) { dbAlert(message, title || 'Autofill'); }
+  function afNotice(message, title) { return dbAlert(message, title || 'Autofill'); }
   function afMeta() { return editorData._autofill || (editorData._autofill = { sources: {}, overrides: {}, selections: {} }); }
   function afBlank(v) { return v == null || v === '' || Array.isArray(v) && !v.length; }
   function afEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
