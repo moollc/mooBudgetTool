@@ -5727,19 +5727,65 @@
                         }
                     };
                 },
+                _poIsPaid: function (po) {
+                    return !!(po && String(po.status || '').toLowerCase() === 'paid');
+                },
+                _poAmountMatch: function (po, target) {
+                    if (!po || target == null || !isFinite(Number(target))) return false;
+                    var want = Math.round(Number(target) * 100);
+                    var keys = ['amount', 'paidAmount'];
+                    var i, n;
+                    for (i = 0; i < keys.length; i++) {
+                        if (po[keys[i]] == null || po[keys[i]] === '') continue;
+                        n = Number(po[keys[i]]);
+                        if (isFinite(n) && Math.round(n * 100) === want) return true;
+                    }
+                    return false;
+                },
+                /* Prefer a Paid PO for the line; drafts and other statuses are not a payment made. */
                 _poForItem: function (budget, itemId) {
                     var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
                     var id = itemId != null ? String(itemId) : '';
                     var i;
                     if (!id) return null;
                     for (i = 0; i < pos.length; i++) {
-                        if (pos[i] && String(pos[i].itemId || '') === id) return pos[i];
+                        if (pos[i] && String(pos[i].itemId || '') === id && this._poIsPaid(pos[i])) return pos[i];
+                    }
+                    return null;
+                },
+                /* Payment details for one voucher page: match itemId and this page's amount, Paid only. */
+                _poForPayment: function (budget, itemId, pageAmount) {
+                    var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
+                    var id = itemId != null ? String(itemId) : '';
+                    var i;
+                    if (!id) return null;
+                    for (i = 0; i < pos.length; i++) {
+                        if (pos[i] && String(pos[i].itemId || '') === id
+                            && this._poIsPaid(pos[i])
+                            && this._poAmountMatch(pos[i], pageAmount)) {
+                            return pos[i];
+                        }
                     }
                     return null;
                 },
                 _paidFields: function (row) {
                     var n = this._paidByApi().normalise(row || null);
                     return { paidMethod: n.paidMethod || '', paidRef: n.paidRef || '' };
+                },
+                _methodFillHtml: function (paidMethod) {
+                    var label = '';
+                    var api = this._paidByApi();
+                    if (paidMethod === 'transfer' || paidMethod === 'cash') {
+                        label = (api && typeof api.label === 'function') ? api.label(paidMethod) : '';
+                        if (!label) label = paidMethod === 'transfer' ? 'Bank transfer' : 'Cash';
+                    }
+                    if (label) return paperEsc(label);
+                    return '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
+                },
+                _bankRefHtml: function (paidRef) {
+                    var t = paperText(paidRef);
+                    /* Bank references print as stored; company-name branding does not rewrite them. */
+                    return t ? esc(t) : '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
                 },
                 /** Voucher data from Production and Travel crew or vendor lines and ledgers.pettyCash.
                     Every line with a payee gives one voucher; a deposit below the total gives a split pair. */
@@ -5858,11 +5904,13 @@
                             paperStripName(v.description, payee, contact),
                             paperStripName(v.role, payee, contact)
                         );
-                        var paid = self._paidFields(v);
-                        var methodFill = paid.paidMethod === 'transfer' ? 'Bank transfer' : '';
-                        var methodWi = '<span class="cs-writein pp-wi">' + (methodFill ? paperEsc(methodFill) : PAPER_BLANK) + '</span>';
-                        var bankVal = paperWriteIn(paid.paidRef);
                         self._pages(v, currency).forEach(function (p) {
+                            var paidRow = (v.itemId != null && String(v.itemId) !== '')
+                                ? self._poForPayment(b, v.itemId, p.amount)
+                                : v;
+                            var paid = self._paidFields(paidRow);
+                            var methodWi = self._methodFillHtml(paid.paidMethod);
+                            var bankVal = self._bankRefHtml(paid.paidRef);
                             var number = numbered ? prefix + String(start + pageNo) : '';
                             pageNo += 1;
                             var items = Array.isArray(v.items) ? v.items.filter(function (r) { return r && (paperText(r.description) || paperAmount(r.amount, currency) !== null); }) : [];
