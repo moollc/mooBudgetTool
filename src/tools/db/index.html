@@ -400,6 +400,7 @@
           </select>
         </div>
         <label><input type="checkbox" id="easy-on-ink"> Easy On The Ink</label>
+        <label id="hide-empty-wrap" style="display:none"><input type="checkbox" id="hide-empty-fields"> Hide empty fields</label>
         <span id="preflight-badge"></span>
         <div id="rate-wrap">
           <label for="opt-rate">Rate</label>
@@ -1845,6 +1846,27 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       });
     }
 
+    function syncHideEmptyUi(templateId) {
+      var wrap = dom.getElementById('hide-empty-wrap');
+      var box = dom.getElementById('hide-empty-fields');
+      if (!wrap || !box) return;
+      var show = templateId === 'callSheet';
+      wrap.style.display = show ? 'inline-flex' : 'none';
+      if (!show) return;
+      box.checked = !!(editorData && editorData.hideEmpty);
+    }
+    function syncHideEmptyFromUi() {
+      var box = dom.getElementById('hide-empty-fields');
+      if (!box || activeTemplateId !== 'callSheet' || !editorData) return;
+      editorData.hideEmpty = !!box.checked;
+      saveEditorData();
+      if (activeTab === 'preview') renderPreview();
+    }
+    var hideEmptyToggle = dom.getElementById('hide-empty-fields');
+    if (hideEmptyToggle) {
+      hideEmptyToggle.addEventListener('change', syncHideEmptyFromUi);
+    }
+
     /* Logo wiring */
     loadLogo(function () {
       if (activeTab === 'preview' && activeTemplateId) renderPreview();
@@ -2114,6 +2136,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       tabBar.style.display = 'inline-flex';
       loadEditorData(tmplMeta.id, function () {
         buildEditor(tmplMeta.id);
+        if (typeof syncHideEmptyUi === 'function') syncHideEmptyUi(tmplMeta.id);
         setActiveTab('edit');
         updatePreflight();
       });
@@ -2123,6 +2146,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       editor.style.display = 'none';
       dom.getElementById('preview-frame-wrap').style.display = 'flex';
       activeTab = 'preview';
+      if (typeof syncHideEmptyUi === 'function') syncHideEmptyUi(tmplMeta.id);
       updatePreflight();
       renderPreview();
     }
@@ -3264,6 +3288,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!d.deptNotes || typeof d.deptNotes !== 'object') {
       d.deptNotes = { camera: '', ge: '', artProps: '', wardrobeFx: '' };
     }
+
+    /* hideEmpty is a document option: default false (write-in blanks print as before). */
+    if (d.hideEmpty == null) d.hideEmpty = false;
+    else d.hideEmpty = !!d.hideEmpty;
   }
 
   /* ======== Build Editor (dispatcher) ======== */

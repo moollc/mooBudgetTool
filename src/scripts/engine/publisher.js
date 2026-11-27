@@ -1559,7 +1559,9 @@
                 '@media print { .callsheet-block { page-break-inside: avoid; } table { page-break-inside: avoid; } .cs-header, .cs-meta-grid, .cs-sched-grid { page-break-inside: avoid; } }'
             ].join('\n'),
 
-            /* Scoped ink-friendly CSS used only by callSheet so all other 28 generators remain byte-identical */
+            /* Scoped ink-friendly CSS shared by callSheet and PAPER_CSS paperwork (cs-ink marker).
+               Keep this block stable for paperwork byte identity. Call sheet page-fit overrides live in
+               _callSheetFitCss and are appended only from callSheet.renderHtml. */
             _callSheetCss: [
                 '@page { size: letter portrait; margin: 0.65in; }',
                 'body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; background: white; margin: 0; }',
@@ -1606,6 +1608,49 @@
                 '.cs-advance { padding: 6px 10px; font-size: 8.5pt; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #000; }',
                 '.cs-footer-row { display: grid; grid-template-columns: 1fr 1fr; padding: 5px 10px; font-size: 8pt; color: #000; border-top: 1px dashed #000; }',
                 '@media print { .callsheet-block { page-break-inside: avoid; } table { page-break-inside: avoid; } .cs-header, .cs-meta-grid, .cs-sched-grid { page-break-inside: avoid; } .cs-tbc-box { page-break-inside: avoid; } }'
+            ].join('\n'),
+
+            /* J30D call sheet only: tighter fit (no font below 8pt), tables may break, rows stay whole. */
+            _callSheetFitCss: [
+                '@page { size: letter portrait; margin: 0.4in; }',
+                'body { font-size: 8.5pt; line-height: 1.25; }',
+                '.ts-page { max-width: 7.5in; }',
+                'td, th { padding: 2px 5px; }',
+                '.ts-footer { margin-top: 8px; font-size: 8pt; padding-top: 4px; }',
+                '.callsheet-block { margin-bottom: 4px; page-break-inside: auto; }',
+                '.callsheet-block h3 { margin: 4px 0 2px 0; padding: 2px 0; font-size: 8.5pt; page-break-after: avoid; break-after: avoid-page; }',
+                '.callsheet-block table { page-break-inside: auto; }',
+                '.callsheet-block th, .callsheet-block td { padding: 2px 5px; }',
+                '.callsheet-block .th-row, .callsheet-block .th-row th { font-size: 8pt; letter-spacing: 0.3px; }',
+                '.callsheet-block thead { display: table-header-group; }',
+                '.callsheet-block tr, .callsheet-block table tr { page-break-inside: avoid; break-inside: avoid; }',
+                '.cs-brand { font-size: 9pt; margin-bottom: 1px; }',
+                '.cs-doc-label { font-size: 12pt; margin: 0 0 1px 0; }',
+                '.cs-header { margin-bottom: 4px; }',
+                '.cs-header-left, .cs-header-right { padding: 4px 6px; }',
+                '.cs-title { font-size: 11pt; margin: 0 0 2px 0; }',
+                '.cs-day { font-size: 8.5pt; margin-bottom: 3px; }',
+                '.cs-kv { font-size: 8pt; line-height: 1.3; }',
+                '.cs-kv b { min-width: 68px; }',
+                '.cs-tbc-box { padding: 4px 6px; margin: 0 0 4px 0; font-size: 8pt; line-height: 1.3; }',
+                '.cs-tbc-tag { padding: 0 3px; font-size: 8pt; }',
+                '.cs-writein { min-width: 50px; }',
+                '.cs-checklist-grid { gap: 1px 10px; padding: 1px 0; font-size: 8pt; }',
+                '.cs-checklist-item { gap: 3px; line-height: 1.25; padding: 1px 0; }',
+                '.cs-checklists-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 4px; }',
+                '.cs-checklists-row .callsheet-block { margin-bottom: 0; }',
+                '.cs-meta-grid { margin-bottom: 4px; }',
+                '.cs-meta-cell { padding: 3px 6px; font-size: 8pt; }',
+                '.cs-meta-cell h4 { margin: 0 0 2px 0; padding-bottom: 1px; }',
+                '.cs-sched-grid { margin-bottom: 4px; }',
+                '.cs-sched-cell { padding: 3px 6px; font-size: 8pt; }',
+                '.cs-sched-cell b { font-size: 8pt; margin-bottom: 1px; }',
+                '.cs-sched-cell span { font-size: 9pt; }',
+                '.cs-dept-item { padding: 2px 6px; font-size: 8pt; }',
+                '.cs-dept-label { font-size: 8pt; }',
+                '.cs-advance { padding: 3px 6px; font-size: 8pt; gap: 4px; }',
+                '.cs-footer-row { padding: 3px 6px; }',
+                '@media print { .callsheet-block { page-break-inside: auto; } .callsheet-block table { page-break-inside: auto; } .callsheet-block tr, .callsheet-block table tr { page-break-inside: avoid; break-inside: avoid; } .callsheet-block h3 { page-break-after: avoid; break-after: avoid-page; } .cs-header, .cs-meta-grid, .cs-sched-grid { page-break-inside: avoid; } .cs-tbc-box { page-break-inside: avoid; } .cs-checklists-row { page-break-inside: avoid; } }'
             ].join('\n'),
 
             /* Easy On The Ink: global print setting (options.easyOnTheInk) for every generator.
@@ -2865,6 +2910,18 @@
                         return writeIn(val, customWriteIn) + tbcBadge(isTbc);
                     };
 
+                    /* hideEmpty: document option (editorData.hideEmpty). Call sheet only.
+                       When true, omit blank labelled header role lines and contact/crew rows with blank names. */
+                    var hideEmpty = Boolean((rawD && rawD.hideEmpty) || (options && options.hideEmpty));
+                    var roleKv = function (label, key, val, alwaysOmitBlank) {
+                        var s = val != null ? String(val).trim() : '';
+                        var tbc = Boolean(fieldTbcMap[key]);
+                        if (alwaysOmitBlank || hideEmpty) {
+                            if (!s && !tbc) return '';
+                        }
+                        return '<div class="cs-kv"><b>' + label + ':</b> ' + fieldHtml(key, val) + '</div>';
+                    };
+
                     /* ---- Brand & Top Header (No General Call box, no forced caps) ---- */
                     var titleText = d.productionTitle || b.workingTitle || b.projectTitle || b.projectName || '';
                     var brandHeader = '<div class="cs-brand">moo</div>' +
@@ -2874,12 +2931,12 @@
                         '<div class="cs-header-left">' +
                         '<div class="cs-title">' + fieldHtml('productionTitle', titleText) + '</div>' +
                         '<div class="cs-day">Day: ' + fieldHtml('dayOf', d.dayOf) + ' &nbsp;|&nbsp; Date: ' + fmtDate(d.date) + tbcBadge(fieldTbcMap.date) + '</div>' +
-                        '<div class="cs-kv"><b>Director:</b> ' + fieldHtml('director', d.director) + '</div>' +
-                        '<div class="cs-kv"><b>Producers:</b> ' + fieldHtml('producers', d.producers) + '</div>' +
-                        ((d.dp || fieldTbcMap.dp) ? '<div class="cs-kv"><b>DP:</b> ' + fieldHtml('dp', d.dp) + '</div>' : '') +
-                        '<div class="cs-kv"><b>UPM:</b> ' + fieldHtml('upm', d.upm) + '</div>' +
-                        '<div class="cs-kv"><b>1st AD:</b> ' + fieldHtml('firstAd', d.firstAd) + '</div>' +
-                        '<div class="cs-kv"><b>2nd AD:</b> ' + fieldHtml('secondAd', d.secondAd) + '</div>' +
+                        roleKv('Director', 'director', d.director, false) +
+                        roleKv('Producers', 'producers', d.producers, false) +
+                        roleKv('DP', 'dp', d.dp, true) +
+                        roleKv('UPM', 'upm', d.upm, false) +
+                        roleKv('1st AD', 'firstAd', d.firstAd, false) +
+                        roleKv('2nd AD', 'secondAd', d.secondAd, false) +
                         '</div>' +
                         '<div class="cs-header-right">' +
                         '<div class="cs-kv"><b>Crew Call:</b> ' + fieldHtml('crewCall', d.crewCall) + '</div>' +
@@ -2969,10 +3026,15 @@
                     }
 
                     function renderContactCatRows(categoryLabel, items) {
-                        if (!items || items.length === 0) {
+                        var rows = Array.isArray(items) ? items.slice() : [];
+                        if (hideEmpty) {
+                            rows = rows.filter(function (c) { return c && String(c.name || '').trim() !== ''; });
+                        }
+                        if (rows.length === 0) {
+                            if (hideEmpty) return '';
                             return '<tr><td>' + esc(categoryLabel) + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td></tr>';
                         }
-                        return items.map(function (c) {
+                        return rows.map(function (c) {
                             var contactDetails = [c.phone, c.email, c.address].filter(Boolean).join(', ');
                             return '<tr>' +
                                 '<td>' + esc(categoryLabel) + '</td>' +
@@ -3023,7 +3085,10 @@
                         '</div></div>';
 
                     /* ---- Crew Table (from all budget sections via linked contacts) ---- */
-                    var crewList = d.crew || [];
+                    var crewList = Array.isArray(d.crew) ? d.crew.slice() : [];
+                    if (hideEmpty) {
+                        crewList = crewList.filter(function (m) { return m && String(m.name || '').trim() !== ''; });
+                    }
                     var crewBody = crewList.length > 0 ? crewList.map(function (m) {
                         var phoneText = [m.phone, m.email].filter(Boolean).join(', ');
                         return '<tr class="sec-row">' +
@@ -3031,7 +3096,7 @@
                             '<td>' + writeIn(m.name) + tbcBadge(isRowTbc(m)) + '</td>' +
                             '<td>' + writeIn(phoneText || m.phone) + '</td>' +
                             '<td>' + writeIn(m.call) + '</td></tr>';
-                    }).join('') : '<tr class="sec-row"><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td></tr>';
+                    }).join('') : (hideEmpty ? '' : '<tr class="sec-row"><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td></tr>');
 
                     var crewTable = '<div class="callsheet-block" data-section="crew"><h3>Crew</h3>' +
                         '<table><thead><tr class="th-row"><th>Role</th><th>Name</th><th>Phone</th><th>Call</th></tr></thead>' +
@@ -3165,23 +3230,22 @@
                         renderChecklistItems(routeChecklist) +
                         '</div>';
 
-                    /* ---- Kit Checklist Section ---- */
+                    /* ---- Kit / Paperwork / Wrap checklists (two-column item grids, three blocks side by side) ---- */
                     var kitItemsList = Array.isArray(d.kit) ? d.kit : defaults.kit;
                     var kitHtml = '<div class="callsheet-block" data-section="kit"><h3>Kit Checklist</h3>' +
                         renderChecklistItems(kitItemsList) +
                         '</div>';
 
-                    /* ---- Paperwork on Set Section ---- */
                     var paperworkList = Array.isArray(d.paperwork) ? d.paperwork : defaults.paperwork;
                     var paperworkHtml = '<div class="callsheet-block" data-section="paperwork"><h3>Paperwork on Set</h3>' +
                         renderChecklistItems(paperworkList) +
                         '</div>';
 
-                    /* ---- Wrap Checklist Section ---- */
                     var wrapList = Array.isArray(d.wrap) ? d.wrap : defaults.wrap;
                     var wrapHtml = '<div class="callsheet-block" data-section="wrap"><h3>Wrap Checklist</h3>' +
                         renderChecklistItems(wrapList) +
                         '</div>';
+                    var checklistsRow = '<div class="cs-checklists-row">' + kitHtml + paperworkHtml + wrapHtml + '</div>';
 
                     /* ---- Optional Background / Department Notes / Advance ---- */
                     var bg = d.background || [];
@@ -3227,8 +3291,8 @@
 
                     return engine._wrapHtml(
                         (titleText || 'Production') + ' : Call Sheet',
-                        header + tbcBoxHtml + contactsHtml + wx + crewTable + sceneTable + intervieweesTable + castTable + mealsHtml + routeHtml + kitHtml + paperworkHtml + wrapHtml + bgHtml + notesHtml + advHtml + footerHtml,
-                        '/*cs-ink*/'
+                        header + tbcBoxHtml + contactsHtml + wx + crewTable + sceneTable + intervieweesTable + castTable + mealsHtml + routeHtml + checklistsRow + bgHtml + notesHtml + advHtml + footerHtml,
+                        '/*cs-ink*/' + (engine._callSheetFitCss || '')
                     );
                 }
             },
