@@ -1251,14 +1251,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.')
       : '';
     if (result && result.changed) {
-      /* N11: show both notices; cap notice last so it is not replaced by the other-browser notice. */
-      afNotice('Saved documents from other browsers are not migrated.', 'Saved documents');
-      if (capNotice) afNotice(capNotice, 'Saved documents');
+      /* T1: one combined notice after the save result (migration lines first, then R1 or shell error). */
       savedDocsMigrationInFlight = true;
       persistBudgetSavedDocs(function (ok, msg) {
         savedDocsMigrationInFlight = false;
-        /* R1 / S1: shell ack with a local-only warning still tells the user, same as save/delete/dup/rename. */
-        if (ok && msg) afNotice(String(msg), 'Saved documents');
+        var parts = ['Saved documents from other browsers are not migrated.'];
+        if (capNotice) parts.push(capNotice);
+        if (msg) parts.push(String(msg));
+        afNotice(parts.join('\n'), 'Saved documents');
         /* Marker only on a clean ack (no local-only warning), so a local failure can remigrate on reopen. */
         if (ok && !msg) {
           try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
