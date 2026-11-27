@@ -679,33 +679,65 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function esc(str) { return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
   var _dbDialogEl = null;
+  var _dbDialogNotice = null;
+  var _dbNoticeQueue = [];
   function _dbRemoveDialog() {
     if (_dbDialogEl && _dbDialogEl.parentNode) {
       _dbDialogEl.parentNode.removeChild(_dbDialogEl);
-      _dbDialogEl = null;
     }
+    _dbDialogEl = null;
+    _dbDialogNotice = null;
   }
-  function dbAlert(message, title) {
-    _dbRemoveDialog();
-    title = title || 'Notice';
+  function _dbClearNotices() {
+    _dbNoticeQueue.length = 0;
+    if (_dbDialogNotice) _dbRemoveDialog();
+  }
+  function _dbDismissNotice(notice) {
+    var index = _dbNoticeQueue.indexOf(notice);
+    if (index < 0) return;
+    _dbNoticeQueue.splice(index, 1);
+    if (_dbDialogNotice === notice) _dbRemoveDialog();
+    _dbShowNextNotice();
+  }
+  function _dbShowNextNotice() {
+    if (_dbDialogEl || !_dbNoticeQueue.length) return;
+    var notice = _dbNoticeQueue[0];
     var overlay = document.createElement('div');
     overlay.id = 'db-dialog-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;';
     overlay.innerHTML =
       '<div role="dialog" aria-modal="true" style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px 18px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(15,23,42,.2);font-family:inherit;">' +
-      '<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:8px;">' + esc(title) + '</div>' +
-      '<div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:16px;">' + esc(message) + '</div>' +
+      '<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:8px;">' + esc(notice.title) + '</div>' +
+      '<div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:16px;">' + esc(notice.message) + '</div>' +
       '<div style="display:flex;justify-content:flex-end;">' +
       '<button type="button" id="db-dialog-ok" style="padding:6px 16px;border-radius:4px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;min-height:32px;">OK</button>' +
       '</div></div>';
     document.body.appendChild(overlay);
     _dbDialogEl = overlay;
+    _dbDialogNotice = notice;
     var okBtn = overlay.querySelector('#db-dialog-ok');
-    function dismiss() { _dbRemoveDialog(); }
+    function dismiss() { if (_dbDialogEl === overlay) _dbDismissNotice(notice); }
     okBtn.addEventListener('click', dismiss);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) dismiss(); });
     okBtn.focus();
-    return overlay;
+  }
+  function dbAlert(message, title) {
+    var last = _dbNoticeQueue[_dbNoticeQueue.length - 1];
+    var notice = _dbDialogNotice && _dbDialogNotice.message === message ? _dbDialogNotice : null;
+    if (!notice && last && last.message === message) notice = last;
+    if (!notice) {
+      notice = { message: message, title: title || 'Notice', requests: 0 };
+      _dbNoticeQueue.push(notice);
+    }
+    notice.requests++;
+    _dbShowNextNotice();
+    /* A save can retract its timeout after a late acknowledgement, even while it waits. */
+    var withdrawn = false;
+    return function () {
+      if (withdrawn) return;
+      withdrawn = true;
+      if (--notice.requests === 0) _dbDismissNotice(notice);
+    };
   }
   function dbConfirm(message, onConfirm, title) {
     _dbRemoveDialog();
@@ -725,13 +757,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     _dbDialogEl = overlay;
     var cancelBtn = overlay.querySelector('#db-dialog-cancel');
     var confirmBtn = overlay.querySelector('#db-dialog-confirm');
-    function dismiss() { _dbRemoveDialog(); }
-    cancelBtn.addEventListener('click', dismiss);
+    function dismiss(callback) {
+      if (_dbDialogEl !== overlay) return;
+      _dbRemoveDialog();
+      try {
+        if (typeof callback === 'function') callback();
+      } finally {
+        _dbShowNextNotice();
+      }
+    }
+    cancelBtn.addEventListener('click', function () { dismiss(); });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) dismiss(); });
-    confirmBtn.addEventListener('click', function () {
-      dismiss();
-      if (typeof onConfirm === 'function') onConfirm();
-    });
+    confirmBtn.addEventListener('click', function () { dismiss(onConfirm); });
     confirmBtn.focus();
   }
 
@@ -889,12 +926,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       }).then(function () {
         if (backEpoch !== _afEpoch) return;
         hasUnsaved = false;
+        _dbClearNotices();
         window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
       }).catch(fundingError);
       return;
     }
     flushDocumentSaves().then(function () {
     if (backEpoch !== _afEpoch) return;
+    _dbClearNotices();
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
     } else {
@@ -1220,7 +1259,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       savedDocsAcks[requestId] = function (result) {
         clearTimeout(timer);
         if (result.status === 'success') {
-          if (timeoutNotice && timeoutNotice === _dbDialogEl) _dbRemoveDialog();
+          if (typeof timeoutNotice === 'function') timeoutNotice();
           finish(true, '', result, false, timedOut);
         } else if (!timedOut) finish(false, result.message);
       };
@@ -1358,6 +1397,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return afNotice(msg ? 'The document was not saved: ' + msg : 'The document was not saved.', 'Saved documents');
     }, { candidates: result.candidates, previewedCapDrops: result.dropped, showSavedButton: true });
   }
+  function savedVoucherNeedsPaymentNotice(data) {
+    if (!Array.isArray(data.vouchers)) return false;
+    var template = pub.templates.cashPaymentVoucher;
+    var usedPaymentIds = Object.create(null);
+    return data.vouchers.some(function (row) {
+      if (!row || row.itemId == null || String(row.itemId) === '') return false;
+      var missingDetails = row.source === 'line' && !String(row.paidMethod || '').trim() && !String(row.paidRef || '').trim();
+      var rowCurrency = row.currency || data.currency || (budget && budget.currency) || 'JMD';
+      return template._pages(row, rowCurrency).some(function (page) {
+        var po = template._poForPayment(budget, row.itemId, page.amount, rowCurrency, usedPaymentIds);
+        return !!po && missingDetails;
+      });
+    });
+  }
   function buildSavedDocsList() {
     var savedList = dom.getElementById('saved-list');
     if (!savedList) return;
@@ -1405,6 +1458,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
         setActiveTab('edit');
         switchPickerView('templates');
+        if (activeTemplateId === 'cashPaymentVoucher' && savedVoucherNeedsPaymentNotice(editorData)) {
+          afNotice('This saved voucher has no payment details. Press Reset to Defaults to refill them from the budget.', 'Saved documents');
+        }
       });
     });
     savedList.querySelectorAll('.saved-item-del').forEach(function (btn) {
@@ -2320,6 +2376,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   window.addEventListener('beforeunload', function (e) {
     if (hasUnsaved) { e.preventDefault(); e.returnValue = ''; }
   });
+  window.addEventListener('pagehide', _dbClearNotices);
 
   /* ======== Editor Data Persistence ======== */
   var STAGE_PHASE_LABELS = { dev: 'Development', pre: 'Pre-Production', prod: 'Production', post: 'Post-Production', dist: 'Distribution' };
