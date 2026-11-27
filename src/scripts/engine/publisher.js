@@ -503,6 +503,7 @@
         '.pp-label { font-size: 7.5pt; font-weight: 700; letter-spacing: 0.4px; color: #000; margin-bottom: 1px; }' +
         '.pp-value { min-height: 14px; padding: 1px 0 2px 0; }' +
         '.pp-wi { min-width: 150px; }' +
+        '.cs-writein.pp-filled { color: #000; }' +
         '.pp-wi-wide { display: block; width: 100%; }' +
         '.pp-p { font-size: 10pt; line-height: 1.45; margin: 4px 0 6px 0; color: #000; }' +
         '.pp-boxes { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }' +
@@ -5809,12 +5810,12 @@
                             else if (method === 'wire') label = 'Wire';
                             else if (method === 'wise') label = 'Wise';
                             else if (method === 'cheque') label = 'Cheque';
-                            else if (method === 'paypal') label = 'PayPal';
+                            else if (method === 'paypal') label = 'Paypal';
                             else if (method === 'payoneer') label = 'Payoneer';
                             else label = method;
                         }
                     }
-                    if (label) return paperEsc(label);
+                    if (label) return '<span class="cs-writein pp-wi pp-filled">' + paperEsc(label) + '</span>';
                     return '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
                 },
                 _bankRefHtml: function (paidRef) {

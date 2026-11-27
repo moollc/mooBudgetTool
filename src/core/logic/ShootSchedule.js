@@ -363,7 +363,7 @@
         if (id === 'wire') return 'Wire';
         if (id === 'wise') return 'Wise';
         if (id === 'cheque') return 'Cheque';
-        if (id === 'paypal') return 'PayPal';
+        if (id === 'paypal') return 'Paypal';
         if (id === 'payoneer') return 'Payoneer';
         if (typeof id === 'string' && PAID_OK[id] && LEGACY.indexOf(id) >= 0) {
             return id.charAt(0).toUpperCase() + id.slice(1);

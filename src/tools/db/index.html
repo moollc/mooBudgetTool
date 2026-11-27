@@ -1289,6 +1289,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       date: new Date().toISOString(),
       editorData: editorData ? JSON.parse(JSON.stringify(editorData)) : null
     };
+    ensureAckedSavedDocsSnap();
     var result = window.mBTSavedDocs.add(budget, doc);
     if (result && result.dropped) {
       afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
@@ -1310,6 +1311,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
         return;
       }
+      buildSavedDocsList();
       afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
     });
   }
