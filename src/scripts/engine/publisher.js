@@ -2075,21 +2075,12 @@
                             }
                             return out;
                         },
-                        dayTitle: function (day, index, total) {
-                            var label = day && typeof day === 'object' && day.label != null
-                                ? String(day.label).trim() : '';
-                            if (label) return label;
-                            var n = null;
-                            if (day && typeof day.dayNum === 'number' && isFinite(day.dayNum)
-                                && Math.floor(day.dayNum) === day.dayNum && day.dayNum >= 1) {
-                                n = day.dayNum;
-                            }
-                            if (n == null) n = (typeof index === 'number' && isFinite(index) ? Math.floor(index) : 0) + 1;
-                            var title = 'Day ' + n;
-                            if (typeof total === 'number' && isFinite(total) && Math.floor(total) === total && total >= n) {
-                                title += ' of ' + total;
-                            }
-                            return title;
+                        dayTitle: function (day, index, shootDayCount, productionDays) {
+                            if (!day || !Number.isInteger(index) || index < 0 || index >= shootDayCount) return '';
+                            var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : 0;
+                            var total = Number.isFinite(planned) && planned > 0 ? planned
+                                : (Number.isInteger(shootDayCount) && shootDayCount >= 2 ? shootDayCount : 0);
+                            return total ? 'Day ' + (index + 1) + ' of ' + total : '';
                         },
                         sortedLegs: function (day) {
                             if (!day || typeof day !== 'object' || !Array.isArray(day.legs)) return [];
@@ -2128,7 +2119,7 @@
                         var want = String(dayId).trim();
                         for (i = 0; i < days.length; i++) {
                             if (days[i] && String(days[i].id || '') === want) {
-                                return { day: days[i], index: i };
+                                return { day: days[i], index: i, selected: true };
                             }
                         }
                     }
@@ -2136,11 +2127,11 @@
                     if (idxRaw != null && idxRaw !== '') {
                         var idx = parseInt(idxRaw, 10);
                         if (!isNaN(idx) && idx >= 0 && idx < days.length) {
-                            return { day: days[idx], index: idx };
+                            return { day: days[idx], index: idx, selected: true };
                         }
                     }
-                    /* No dayId or shootDayIndex: first shoot day when any exist (D1 / J3d). */
-                    if (days.length > 0) return { day: days[0], index: 0 };
+                    /* The first day's details remain the default when the picker is blank. */
+                    if (days.length > 0) return { day: days[0], index: 0, selected: false };
                     return null;
                 },
 
@@ -2169,8 +2160,8 @@
                         return c && c.name ? String(c.name).trim() : '';
                     }
                     data.date = day.date != null ? String(day.date) : '';
-                    data.dayOf = api.dayTitle(day, dayIndex, days.length);
-                    if (day.tbc) data.dayOfTbc = true;
+                    data.dayOf = picked.selected ? api.dayTitle(day, dayIndex, days.length, b.productionDays) : '';
+                    if (picked.selected && day.tbc) data.dayOfTbc = day.label || true;
                     data.shootingLocations = paperDayLocations(day).map(function (loc) {
                         var siteId = loc && loc.siteContactId != null && String(loc.siteContactId) !== ''
                             ? String(loc.siteContactId) : '';
@@ -2618,6 +2609,11 @@
                         Object.keys(rawD).forEach(function (k) {
                             if (rawD[k] !== undefined) d[k] = rawD[k];
                         });
+                        var meta = rawD._autofill;
+                        if (meta && meta.generated && typeof meta.generated.dayOf === 'string' &&
+                            rawD.dayOf === meta.generated.dayOf && !(meta.overrides && meta.overrides.dayOf)) {
+                            d.dayOf = defaults.dayOf;
+                        }
                         if (Array.isArray(rawD.crew) && rawD.crew.length === 0 && defaults.crew && defaults.crew.length > 0 && !rawD._keepEmptyCrew) {
                             d.crew = defaults.crew;
                         }
@@ -2919,26 +2915,52 @@
                             });
                         }
                     });
-                    var hospList = (cb.hospitals || []).slice();
-                    if (d.hospitalName || d.hospitalAddress || d.hospitalPhone || fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone) {
-                        hospList.unshift({
+                    var hospList = [];
+                    var hospitalsByName = Object.create(null);
+                    function addHospital(row) {
+                        if (!row) return;
+                        var nameKey = String(row.name || '').trim().toLowerCase();
+                        var match = nameKey && hospitalsByName[nameKey];
+                        if (match) {
+                            ['role', 'phone', 'email', 'address', 'distance'].forEach(function (key) {
+                                if (!String(match[key] || '').trim() && String(row[key] || '').trim()) match[key] = row[key];
+                            });
+                            if (isRowTbc(row)) match.tbc = true;
+                            return;
+                        }
+                        var copy = Object.assign({}, row);
+                        hospList.push(copy);
+                        if (nameKey) hospitalsByName[nameKey] = copy;
+                    }
+                    var hospitalTbc = Boolean(fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone || fieldTbcMap.hospitalDistance);
+                    var nearestHospital = hospitalTbc || [d.hospitalName, d.hospitalAddress, d.hospitalPhone, d.hospitalDistance].some(function (value) {
+                        return String(value || '').trim() !== '';
+                    });
+                    if (nearestHospital) {
+                        addHospital({
                             name: d.hospitalName || '',
-                            role: 'Nearest Hospital' + (d.hospitalDistance ? ' (' + d.hospitalDistance + ')' : ''),
+                            role: 'Nearest Hospital',
                             phone: d.hospitalPhone || '',
                             address: d.hospitalAddress || '',
-                            tbc: Boolean(fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone)
+                            distance: d.hospitalDistance || '',
+                            tbc: hospitalTbc
                         });
                     }
+                    (cb.hospitals || []).forEach(addHospital);
                     (d.shootingLocations || []).forEach(function (loc) {
                         if (loc && (loc.hospital || loc.hospitalDistance)) {
-                            hospList.push({
+                            addHospital({
                                 name: loc.hospital || '',
                                 role: (loc.address ? loc.address + ' hospital' : 'Site hospital') + (loc.hospitalDistance ? ' (' + loc.hospitalDistance + ')' : ''),
                                 phone: loc.hospitalPhone || '',
-                                address: loc.hospitalAddress || ''
+                                address: loc.hospitalAddress || '',
+                                distance: loc.hospitalDistance || ''
                             });
                         }
                     });
+                    if (nearestHospital && String(hospList[0].distance).trim()) {
+                        hospList[0].role += ' (' + String(hospList[0].distance).trim() + ')';
+                    }
                     var otherContactList = (cb.other || []).slice();
                     if (!rawD || !rawD.contactsBlock) {
                         (Array.isArray(d.contacts) ? d.contacts : []).forEach(function (c) {

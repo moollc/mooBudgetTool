@@ -1855,6 +1855,15 @@ window.mBTRouter = (function () {
         /* --- Phase 121 Bug Fix: #projectName on change (not input) --- */
         document.body.addEventListener('change', function (e) {
             if (e.target.id === 'projectName') _ctx.handleProjectNameChange(e);
+            if (e.target.id === 'workingTitle') {
+                var budget = _ctx.getBudget();
+                if (!budget) return;
+                var title = e.target.value.trim().slice(0, 120).trim();
+                e.target.value = title;
+                if ((budget.workingTitle || '') === title) return;
+                budget.workingTitle = title;
+                window.saveBudget();
+            }
         });
 
         window.addEventListener('online',  function () { resolveConnectivityStatus(); if (window.mBTExchange && typeof window.mBTExchange.refresh === 'function') window.mBTExchange.refresh(); });

@@ -31,7 +31,11 @@
                 : '';
             return '<header class="mb-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3">' +
                 '    <div class="flex items-center gap-4 w-full md:w-auto flex-grow min-w-0">' +
-                '        <input type="text" id="projectName" value="' + esc(budget.projectName) + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent min-w-0 flex-grow focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
+                '      <div class="min-w-0 flex-grow">' +
+                '        <input type="text" id="projectName" value="' + esc(budget.projectName) + '" class="text-xl sm:text-2xl md:text-3xl font-black uppercase text-slate-900 bg-transparent w-full min-w-0 focus:outline-none focus:bg-white p-2 rounded-xl transition-all tracking-tighter truncate" />' +
+                '        <label for="workingTitle" class="block px-2 text-xs font-semibold text-slate-700">Working title</label>' +
+                '        <input type="text" id="workingTitle" maxlength="120" value="' + esc(budget.workingTitle) + '" class="w-full min-w-0 rounded-lg bg-white px-2 py-1 text-sm text-slate-900" />' +
+                '      </div>' +
                 reviewPill +
                 '        <button id="loginBtn" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all shadow-xl flex-shrink-0 active:scale-90"></button>' +
                 '        <div id="presence-bar" class="flex items-center gap-1 flex-shrink-0" title="Live collaborators"></div>' +
@@ -166,6 +170,10 @@
             var projNameInput = document.getElementById('projectName');
             if (projNameInput && document.activeElement !== projNameInput) {
                 projNameInput.value = budget.projectName;
+            }
+            var workingTitleInput = document.getElementById('workingTitle');
+            if (workingTitleInput && document.activeElement !== workingTitleInput) {
+                workingTitleInput.value = budget.workingTitle || '';
             }
 
             // 2. Update Summaries

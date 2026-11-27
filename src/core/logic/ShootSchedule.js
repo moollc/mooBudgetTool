@@ -249,16 +249,12 @@
         return budget;
     }
 
-    function dayTitle(day, index, total) {
-        var label = day && typeof day === 'object' ? asText(day.label) : '';
-        if (label) return label;
-        var n = day && typeof day === 'object' ? dayNumOf(day.dayNum) : null;
-        if (n == null) n = (typeof index === 'number' && isFinite(index) ? Math.floor(index) : 0) + 1;
-        var title = 'Day ' + n;
-        if (typeof total === 'number' && isFinite(total) && Math.floor(total) === total && total >= n) {
-            title += ' of ' + total;
-        }
-        return title;
+    function dayTitle(day, index, shootDayCount, productionDays) {
+        if (!day || !Number.isInteger(index) || index < 0 || index >= shootDayCount) return '';
+        var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : 0;
+        var total = Number.isFinite(planned) && planned > 0 ? planned
+            : (Number.isInteger(shootDayCount) && shootDayCount >= 2 ? shootDayCount : 0);
+        return total ? 'Day ' + (index + 1) + ' of ' + total : '';
     }
 
     function sortedLegs(day) {

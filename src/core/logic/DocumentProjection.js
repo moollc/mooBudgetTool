@@ -209,7 +209,8 @@
             var a = select(r, unique, 'Choose assigned ' + r);
             if (a) put(key, a.contact.name || '', 'Contacts[' + a.contact.id + '].name via budget item ' + a.item.id);
         }
-        put('productionTitle', budget.projectName || '', 'budget.projectName');
+        var callSheetWorkingTitle = id === 'callSheet' && budget.workingTitle;
+        put('productionTitle', callSheetWorkingTitle || budget.projectName || '', callSheetWorkingTitle ? 'budget.workingTitle' : 'budget.projectName');
         put('projectTitle', budget.projectName || '', 'budget.projectName');
         put('productionCompany', budget.projectCompany || budget.company || '', 'budget.projectCompany / budget.company');
         put('currency', base, 'budget.currency');

@@ -3048,38 +3048,44 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }) : [];
   }
 
-  function callSheetDayTitle(day, index, total) {
-    var api = (typeof window !== 'undefined' && window.mBTShootSchedule) ? window.mBTShootSchedule : null;
-    if (api && typeof api.dayTitle === 'function') return api.dayTitle(day, index, total);
-    var label = day && day.label != null ? String(day.label).trim() : '';
-    if (label) return label;
-    var n = (day && typeof day.dayNum === 'number' && day.dayNum >= 1) ? day.dayNum : (index + 1);
-    var title = 'Day ' + n;
-    if (typeof total === 'number' && total >= n) title += ' of ' + total;
-    return title;
+  function applyCallSheetDayTitle(d, title) {
+    var meta = d._autofill;
+    if (meta && meta.overrides && meta.overrides.dayOf) return;
+    var generated = meta && meta.generated;
+    if (d.dayOf && (!generated || d.dayOf !== generated.dayOf)) return;
+    d.dayOf = title;
+    if (!title && !generated) return;
+    if (!meta) meta = d._autofill = { sources: {}, overrides: {}, selections: {} };
+    if (!generated) generated = meta.generated = {};
+    generated.dayOf = title;
   }
 
   /* Refresh call sheet editor fields from the selected shoot day (empty dayId = first day). */
   function applyCallSheetDaySelection(dayId) {
     if (!editorData || typeof editorData !== 'object') return;
     editorData.dayId = dayId != null ? String(dayId) : '';
-    var days = callSheetShootDays(budget);
-    if (!days.length) return;
     var csTmpl = pub && pub.templates && pub.templates.callSheet;
     if (!csTmpl || typeof csTmpl.getDefaultData !== 'function') return;
-    var opts = { contacts: _docContacts };
-    if (editorData.dayId) opts.dayId = editorData.dayId;
+    if (!callSheetShootDays(budget).length) {
+      applyCallSheetDayTitle(editorData, '');
+      return;
+    }
+    var opts = { contacts: _docContacts, dayId: editorData.dayId };
     var defs = csTmpl.getDefaultData(budget || {}, opts) || {};
     /* Day-specific fields from the chosen day. Weather, sunrise/sunset and call times reset even when blank.
        contactsBlock keeps previous values: unrestricted store contacts must not replace the project client (P3). */
-    ['date', 'dayOf', 'schedule', 'scenes', 'shootingLocations', 'interviewees',
+    ['date', 'schedule', 'scenes', 'shootingLocations', 'interviewees',
       'hospitalName', 'hospitalAddress', 'hospitalPhone', 'hospitalDistance',
       'weatherHigh', 'weatherLow', 'weatherConditions', 'sunrise', 'sunset',
       'crewCall', 'shootingCall', 'estimatedLunch', 'estimatedWrap'].forEach(function (k) {
       if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
     });
-    if (defs.dayOfTbc) editorData.dayOfTbc = true;
-    else delete editorData.dayOfTbc;
+    applyCallSheetDayTitle(editorData, defs.dayOf || '');
+    var overrides = editorData._autofill && editorData._autofill.overrides;
+    if (!overrides || !overrides.dayOfTbc) {
+      if (defs.dayOfTbc) editorData.dayOfTbc = defs.dayOfTbc;
+      else delete editorData.dayOfTbc;
+    }
     delete editorData._keepEmptySchedule;
     delete editorData._keepEmptyLocations;
     delete editorData._keepEmptyInterviewees;
@@ -3088,13 +3094,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function callSheetDayPickerHtml(d) {
     var days = callSheetShootDays(budget);
     if (!days.length) return '';
+    var api = pub.templates.callSheet._shootScheduleApi();
     var selected = (d && d.dayId != null) ? String(d.dayId) : '';
     var html = '<div class="ed-row"><div class="ed-field"><label>Shoot day</label>' +
       '<select id="cs-day-picker" data-key="dayId">' +
       '<option value=""' + (selected === '' ? ' selected' : '') + '></option>';
     days.forEach(function (day, i) {
       var id = day && day.id != null ? String(day.id) : '';
-      var title = callSheetDayTitle(day, i, days.length);
+      var title = api.dayTitle(day, i, days.length, budget.productionDays);
       html += '<option value="' + esc(id) + '"' + (selected && selected === id ? ' selected' : '') + '>' + esc(title) + '</option>';
     });
     html += '</select></div></div>';
@@ -3132,11 +3139,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var overrides = (d._autofill && d._autofill.overrides) || {};
     if (d.dayId == null) d.dayId = '';
 
-    ['productionTitle', 'director', 'producers', 'dp', 'upm', 'firstAd', 'secondAd', 'productionOffice', 'dayOf', 'date'].forEach(function (k) {
+    ['productionTitle', 'director', 'producers', 'dp', 'upm', 'firstAd', 'secondAd', 'productionOffice', 'date'].forEach(function (k) {
       if ((d[k] == null || d[k] === '') && !overrides[k] && defaults[k]) {
         d[k] = defaults[k];
       }
     });
+    var generated = (d._autofill && d._autofill.generated) || {};
+    if (defaults.dayOf || typeof generated.dayOf === 'string') applyCallSheetDayTitle(d, defaults.dayOf || '');
     if (!d.crewCall && d.generalCall != null) d.crewCall = d.generalCall;
     delete d.generalCall;
     if (String(d.productionOffice || '').trim().toLowerCase() === 'independent') d.productionOffice = '';
@@ -3247,12 +3256,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Checklists: kit, paperwork, wrap (unticked by default) */
     ['kit', 'paperwork', 'wrap'].forEach(function (sec) {
-      if ((!Array.isArray(d[sec]) || d[sec].length === 0) && !d['_keepEmpty_' + sec]) {
+      if (!Array.isArray(d[sec]) && !d['_keepEmpty_' + sec]) {
         d[sec] = Array.isArray(defaults[sec]) ? JSON.parse(JSON.stringify(defaults[sec])) : [];
       }
-      (d[sec] || []).forEach(function (entry) {
-        if (entry && typeof entry === 'object' && entry.checked == null) entry.checked = false;
-      });
     });
 
     if (!d.deptNotes || typeof d.deptNotes !== 'object') {
