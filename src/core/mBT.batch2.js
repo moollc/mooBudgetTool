@@ -182,6 +182,22 @@
         }
         return { department: department, label: label, section: name, created: created, needsChoice: false };
     }
+    /* Default display title for a budget-part section id (prod/dev/post...). */
+    function defaultPartTitle(id) {
+        var key;
+        for (key in partIds) {
+            if (partIds[key].indexOf(id) !== -1) return parts[key];
+        }
+        return null;
+    }
+    /* Renamed base part (not dep-*): key differs from the default title for its id. */
+    function isRenamedOpenedBase(budget, preferred) {
+        if (!preferred || !budget || !budget.sections || !budget.sections[preferred]) return false;
+        var id = budget.sections[preferred].id;
+        if (!id || String(id).indexOf('dep-') === 0) return false;
+        var def = defaultPartTitle(id);
+        return !!def && preferred !== def;
+    }
     function section(budget, item, preferred, chosen) {
         var department = validDepartment(chosen) || classify(item);
         if (!department) {
@@ -194,7 +210,9 @@
         var sections = budget.sections || (budget.sections = {});
         var found;
         if (deptSectionsOn(budget)) {
-            found = deptSection(budget, department);
+            /* Add-from-section on a renamed base part stays in that opened section. */
+            if (isRenamedOpenedBase(budget, preferred)) found = preferred;
+            else found = deptSection(budget, department);
         } else {
             var names = Object.keys(sections);
             found = names.filter(function (name) {

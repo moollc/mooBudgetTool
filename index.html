@@ -2634,27 +2634,56 @@
 
         duplicate: function (newName) {
             if (!budget) return;
-            var copy = JSON.parse(JSON.stringify(budget));
-            /* The Assistant passes the name it was asked for; a button click passes none. */
-            copy.projectName = (typeof newName === 'string' && newName) ? newName : copy.projectName + ' (Copy)';
-            copy._historyBudgetId = mBTBatch2.uuid();
-            if (copy.exchangeRateState) {
-                copy.exchangeRateState.createdAt = new Date().toISOString();
-                copy.exchangeRateState.updatedAt = copy.exchangeRateState.createdAt;
-                copy.exchangeRateState.live = false;
-                copy.exchangeRateState.legacy = false;
-                copy.exchangeRateState.noticeShown = true;
-            }
-            var shootDays = copy.productionDays;
-            if (!shootDays && copy.targetLock && copy.targetLock.stages && copy.targetLock.stages.prod) {
-                shootDays = copy.targetLock.stages.prod.days;
-            }
-            this._applyDayQtyFromShootDays(copy.sections, shootDays);
-            budget = mBT.data.state.wrap(copy);
+            /* Ignore a second File > Duplicate while the previous copy is still saving. */
+            if (this._duplicating) return;
             var self = this;
-            if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
-            return self.save().then(function () {
-                if (typeof render === 'function') render();
+            var assistantName = (typeof newName === 'string' && newName) ? newName : null;
+            var copy = JSON.parse(JSON.stringify(budget));
+            function uniqueCopyName(sourceName, existing) {
+                var base = String(sourceName == null ? '' : sourceName).trim() || 'Untitled budget';
+                var candidate = base + ' (Copy)';
+                var names = existing || [];
+                if (names.indexOf(candidate) === -1) return candidate;
+                var n = 2;
+                while (names.indexOf(base + ' (Copy ' + n + ')') !== -1) n++;
+                return base + ' (Copy ' + n + ')';
+            }
+            function finishCopy(chosenName) {
+                copy.projectName = chosenName;
+                copy._historyBudgetId = mBTBatch2.uuid();
+                if (copy.exchangeRateState) {
+                    copy.exchangeRateState.createdAt = new Date().toISOString();
+                    copy.exchangeRateState.updatedAt = copy.exchangeRateState.createdAt;
+                    copy.exchangeRateState.live = false;
+                    copy.exchangeRateState.legacy = false;
+                    copy.exchangeRateState.noticeShown = true;
+                }
+                var shootDays = copy.productionDays;
+                if (!shootDays && copy.targetLock && copy.targetLock.stages && copy.targetLock.stages.prod) {
+                    shootDays = copy.targetLock.stages.prod.days;
+                }
+                self._applyDayQtyFromShootDays(copy.sections, shootDays);
+                budget = mBT.data.state.wrap(copy);
+                if (typeof mBTLE !== 'undefined' && typeof mBTLE.reconcile === 'function') mBTLE.reconcile();
+                return self.save().then(function () {
+                    if (typeof render === 'function') render();
+                });
+            }
+            self._duplicating = true;
+            /* The Assistant passes the name it was asked for; a button click picks a unique (Copy). */
+            var naming = assistantName
+                ? Promise.resolve(assistantName)
+                : self.getList().then(function (names) {
+                    return uniqueCopyName(copy.projectName, names);
+                });
+            return naming.then(function (chosenName) {
+                return finishCopy(chosenName);
+            }).then(function (result) {
+                self._duplicating = false;
+                return result;
+            }, function (err) {
+                self._duplicating = false;
+                throw err;
             });
         },
 
