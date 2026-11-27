@@ -133,6 +133,11 @@
                 var legId = e.id + '_legacy';
                 /* A prior migrate already kept the browser copy: never add a third. */
                 if (byId[legId]) continue;
+                /* L2: a deleted legacy copy must not come back. */
+                if (deleted[legId]) {
+                    skippedDeleted++;
+                    continue;
+                }
                 var copy = hostData(e);
                 copy.id = legId;
                 copy.title = (typeof e.title === 'string' ? e.title : '') + ' (from this browser)';

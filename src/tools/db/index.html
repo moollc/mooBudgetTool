@@ -1111,12 +1111,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var embedded = false;
     var requestId = null;
     var localDone = false, localOk = false, ackDone = false, ackOk = false;
+    var failMsg = '';
     function maybeFinish() {
       if (!cb) return;
       if (!localDone) return;
-      if (!localOk) { cb(false); cb = null; return; }
+      if (!localOk) { cb(false, failMsg); cb = null; return; }
       if (embedded && !ackDone) return;
-      cb(!embedded || ackOk);
+      cb(!embedded || ackOk, (!embedded || ackOk) ? '' : failMsg);
       cb = null;
     }
     try {
@@ -1131,12 +1132,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             delete savedDocsAcks[requestId];
             ackDone = true;
             ackOk = false;
+            failMsg = '';
             maybeFinish();
           }
         }, 20000);
         savedDocsAcks[requestId] = {
-          ok: function () { clearTimeout(timer); ackDone = true; ackOk = true; maybeFinish(); },
-          fail: function () { clearTimeout(timer); ackDone = true; ackOk = false; maybeFinish(); }
+          ok: function () { clearTimeout(timer); ackDone = true; ackOk = true; failMsg = ''; maybeFinish(); },
+          fail: function (msg) { clearTimeout(timer); ackDone = true; ackOk = false; failMsg = msg ? String(msg) : ''; maybeFinish(); }
         };
         window.parent.postMessage({
           type: 'mbt:tool-action',
@@ -1155,16 +1157,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         localDone = true;
         localOk = true;
         maybeFinish();
-      }, function () {
+      }, function (err) {
         localDone = true;
         localOk = false;
+        failMsg = (err && err.message) ? String(err.message) : '';
         maybeFinish();
       });
       return;
     }
     localDone = true;
     localOk = true;
-    if (!embedded) { if (cb) { cb(false); cb = null; } return; }
+    if (!embedded) { if (cb) { cb(false, ''); cb = null; } return; }
     maybeFinish();
   }
   function maybeMigrateSavedDocs() {
@@ -1220,10 +1223,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
         ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
     }
-    persistBudgetSavedDocs();
     buildSavedDocsList();
-    var btn = dom.getElementById('btn-save-doc');
-    if (btn) { var orig = btn.innerHTML; btn.innerHTML = orig.replace('Save', 'Saved ✓'); setTimeout(function () { btn.innerHTML = orig; }, 1200); }
+    persistBudgetSavedDocs(function (ok, msg) {
+      var btn = dom.getElementById('btn-save-doc');
+      if (ok) {
+        if (btn) { var orig = btn.innerHTML; btn.innerHTML = orig.replace('Save', 'Saved ✓'); setTimeout(function () { btn.innerHTML = orig; }, 1200); }
+        return;
+      }
+      afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
+    });
   }
   function buildSavedDocsList() {
     var savedList = dom.getElementById('saved-list');
@@ -1280,7 +1288,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         dbConfirm('Delete this saved document?', function () {
           if (window.mBTSavedDocs && budget) {
             window.mBTSavedDocs.remove(budget, id);
-            persistBudgetSavedDocs();
+            persistBudgetSavedDocs(function (ok, msg) {
+              if (!ok) {
+                afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+              }
+            });
           }
           buildSavedDocsList();
         });
@@ -1301,8 +1313,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
             ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
         }
-        persistBudgetSavedDocs();
         buildSavedDocsList();
+        persistBudgetSavedDocs(function (ok, msg) {
+          if (!ok) {
+            afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          }
+        });
       });
     });
   }
