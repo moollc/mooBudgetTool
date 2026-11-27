@@ -2870,7 +2870,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var opts = { contacts: _docContacts };
     if (editorData.dayId) opts.dayId = editorData.dayId;
     var defs = csTmpl.getDefaultData(budget || {}, opts) || {};
-    ['date', 'dayOf', 'schedule', 'scenes', 'shootingLocations', 'interviewees'].forEach(function (k) {
+    /* Day-specific fields, including hospital and contacts block, always come from the chosen day. */
+    ['date', 'dayOf', 'schedule', 'scenes', 'shootingLocations', 'interviewees',
+      'hospitalName', 'hospitalAddress', 'hospitalPhone', 'hospitalDistance', 'contactsBlock'].forEach(function (k) {
       if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
     });
     if (defs.dayOfTbc) editorData.dayOfTbc = true;

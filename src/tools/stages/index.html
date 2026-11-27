@@ -620,6 +620,17 @@
             });
         }
 
+        /* After save mints shoot-day ids, re-seal open undo snapshots so Undo does not see a false field change. */
+        function stagesResealAfterIdMint() {
+            function touch(snap) {
+                if (!snap || !snap.after) return;
+                if (snap.projectKey !== (mBTStages.state._projectKey || '')) return;
+                snap.after = JSON.parse(JSON.stringify(mBTStages.state.project));
+            }
+            stagesUndoStack.forEach(touch);
+            if (stagesUndoBurstSnap) touch(stagesUndoBurstSnap);
+        }
+
         function stagesUndoProjection(project, other) {
             var copy = JSON.parse(JSON.stringify(project));
             if (!copy.projectName) copy.projectName = copy.name || copy.id || mBTStages.state._projectKey || 'Stages';
@@ -1018,7 +1029,8 @@
             if (cur.startDate !== base.startDate) d.startDate = cur.startDate;
             if (cur.deliveryDate !== base.deliveryDate) d.deliveryDate = cur.deliveryDate;
             /* Overseer ruling: send shootSchedule when the tool holds days, or when the base had
-               days and the tool now holds none (explicit clear). Omit only when there is nothing to clear. */
+               days and the tool now holds none (explicit clear, including a missing key after Undo).
+               Omit only when there is nothing to clear. */
             (function () {
                 var curHas = Object.prototype.hasOwnProperty.call(cur, 'shootSchedule');
                 var baseHas = Object.prototype.hasOwnProperty.call(base, 'shootSchedule');
@@ -1031,7 +1043,7 @@
                     if (JSON.stringify(curDays) !== JSON.stringify(baseList || null)) {
                         d.shootSchedule = stagesCopy(curDays);
                     }
-                } else if (curEmpty && baseHadDays) {
+                } else if ((!curHas || curEmpty) && baseHadDays) {
                     d.shootSchedule = JSON.parse('[]');
                 }
             })();
@@ -1701,7 +1713,29 @@
             },
 
             _blankLoc: function () {
-                return { id: '', name: '', address: '', parish: '', siteContactId: '', siteContactName: '', siteContactPhone: '', nearestHospital: '', tbc: false };
+                var loc = { id: '', name: '', address: '', parish: '', siteContactId: '', siteContactName: '', siteContactPhone: '', nearestHospital: '', tbc: false };
+                /* Assign the location id at add time so leg/interview dropdowns hold a real value before save. */
+                var api = this._shootScheduleApi();
+                if (api && typeof api.ensureIds === 'function') {
+                    var seen = { shootSchedule: [] };
+                    var b = this.state && this.state.project;
+                    if (b && Array.isArray(b.shootSchedule)) {
+                        b.shootSchedule.forEach(function (d) {
+                            if (!d) return;
+                            var copy = { id: d.id || '', locations: [], legs: [], interviews: [] };
+                            (d.locations || []).forEach(function (r) { copy.locations.push({ id: (r && r.id) || '' }); });
+                            (d.legs || []).forEach(function (r) { copy.legs.push({ id: (r && r.id) || '' }); });
+                            (d.interviews || []).forEach(function (r) { copy.interviews.push({ id: (r && r.id) || '' }); });
+                            seen.shootSchedule.push(copy);
+                        });
+                    }
+                    if (!seen.shootSchedule.length) {
+                        seen.shootSchedule.push({ id: 'day_shell', locations: [], legs: [], interviews: [] });
+                    }
+                    seen.shootSchedule[0].locations.push(loc);
+                    api.ensureIds(seen);
+                }
+                return loc;
             },
 
             _blankLeg: function () {
@@ -1994,6 +2028,7 @@
                 if (!Array.isArray(b.shootSchedule)) return;
                 b.shootSchedule = api.normalise({ shootSchedule: b.shootSchedule });
                 api.ensureIds(b);
+                if (typeof stagesResealAfterIdMint === 'function') stagesResealAfterIdMint();
             },
 
             /* --- Sliders --- */

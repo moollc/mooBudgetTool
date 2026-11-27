@@ -130,6 +130,15 @@
             (fl.receipts || []).forEach(function (r) { link(r && r.contactId); });
         });
         budgetContacts.forEach(function (c) { link(c && c.id); });
+        /* Shoot-day site contacts (and leg/interview people) count as linked to this budget. */
+        if (b && Object.prototype.hasOwnProperty.call(b, 'shootSchedule') && Array.isArray(b.shootSchedule)) {
+            b.shootSchedule.forEach(function (day) {
+                if (!day || typeof day !== 'object') return;
+                (day.locations || []).forEach(function (loc) { if (loc) link(loc.siteContactId); });
+                (day.legs || []).forEach(function (leg) { if (leg) link(leg.contactId); });
+                (day.interviews || []).forEach(function (row) { if (row) link(row.contactId); });
+            });
+        }
         opts = opts || {};
         if (Array.isArray(opts.contacts)) lists.push(opts.contacts);
         if (opts.editorData && Array.isArray(opts.editorData.contacts)) lists.push(opts.editorData.contacts);
@@ -2133,13 +2142,22 @@
                     data.dayOf = api.dayTitle(day, dayIndex, days.length);
                     if (day.tbc) data.dayOfTbc = true;
                     data.shootingLocations = (day.locations || []).map(function (loc) {
+                        var siteId = loc && loc.siteContactId != null && String(loc.siteContactId) !== ''
+                            ? String(loc.siteContactId) : '';
+                        var site = siteId && contactById ? contactById[siteId] : null;
+                        var siteName = loc && loc.siteContactName ? String(loc.siteContactName) : '';
+                        var sitePhone = loc && loc.siteContactPhone ? String(loc.siteContactPhone) : '';
+                        if (site) {
+                            if (!siteName) siteName = site.name ? String(site.name).trim() : '';
+                            if (!sitePhone) sitePhone = site.phone ? String(site.phone).trim() : '';
+                        }
                         return {
                             name: loc.name || '',
                             address: loc.address || '',
                             parish: loc.parish || '',
-                            contact: loc.siteContactName || '',
-                            contactName: loc.siteContactName || '',
-                            contactPhone: loc.siteContactPhone || '',
+                            contact: siteName,
+                            contactName: siteName,
+                            contactPhone: sitePhone,
                             hospital: loc.nearestHospital || '',
                             hospitalDistance: '',
                             notes: '',
@@ -2387,6 +2405,18 @@
                     });
 
                     keyCrew.producers = producerNames.join(', ');
+
+                    /* Shoot-day site contacts count as linked (J2q R1 / J5a N5). */
+                    if (Object.prototype.hasOwnProperty.call(b, 'shootSchedule') && Array.isArray(b.shootSchedule)) {
+                        b.shootSchedule.forEach(function (day) {
+                            if (!day || typeof day !== 'object') return;
+                            (day.locations || []).forEach(function (loc) {
+                                if (loc && loc.siteContactId != null && String(loc.siteContactId) !== '') {
+                                    linkedContactIds[String(loc.siteContactId)] = true;
+                                }
+                            });
+                        });
+                    }
 
                     /* Contacts block: client, locations, hospitals, other */
                     var contactsBlock = { client: [], locations: [], hospitals: [], other: [] };
