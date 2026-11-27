@@ -1397,20 +1397,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return afNotice(msg ? 'The document was not saved: ' + msg : 'The document was not saved.', 'Saved documents');
     }, { candidates: result.candidates, previewedCapDrops: result.dropped, showSavedButton: true });
   }
-  function savedVoucherNeedsPaymentNotice(data) {
-    if (!Array.isArray(data.vouchers)) return false;
-    var template = pub.templates.cashPaymentVoucher;
-    var usedPaymentIds = Object.create(null);
-    return data.vouchers.some(function (row) {
-      if (!row || row.itemId == null || String(row.itemId) === '') return false;
-      var missingDetails = row.source === 'line' && !String(row.paidMethod || '').trim() && !String(row.paidRef || '').trim();
-      var rowCurrency = row.currency || data.currency || (budget && budget.currency) || 'JMD';
-      return template._pages(row, rowCurrency).some(function (page) {
-        var po = template._poForPayment(budget, row.itemId, page.amount, rowCurrency, usedPaymentIds);
-        return !!po && missingDetails;
-      });
-    });
-  }
   function buildSavedDocsList() {
     var savedList = dom.getElementById('saved-list');
     if (!savedList) return;
@@ -1458,9 +1444,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
         setActiveTab('edit');
         switchPickerView('templates');
-        if (activeTemplateId === 'cashPaymentVoucher' && savedVoucherNeedsPaymentNotice(editorData)) {
-          afNotice('This saved voucher has no payment details. Press Reset to Defaults to refill them from the budget.', 'Saved documents');
-        }
       });
     });
     savedList.querySelectorAll('.saved-item-del').forEach(function (btn) {
