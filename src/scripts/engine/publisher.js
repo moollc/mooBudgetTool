@@ -3978,6 +3978,111 @@
             },
 
             /* ---- TEMPLATE: LOCATION AGREEMENT ---- */
+            sitePermission: {
+                id: 'sitePermission',
+                name: 'Site Permission',
+                description: 'Short one-page site permission: place, parish, dates, owner or authorised person, access times, and signature.',
+                formats: ['pdf', 'html', 'print'],
+                hasEditor: true,
+                _filmingDates: function (b) {
+                    var filmingDates = '';
+                    var startDate = b.startDate || (b.production && b.production.startDate) || '';
+                    if (!startDate) return filmingDates;
+                    filmingDates = paperDate(startDate);
+                    var prodDays = 0;
+                    if (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod) {
+                        prodDays = parseInt(b.targetLock.stages.prod.days, 10) || 0;
+                    }
+                    if (!prodDays) prodDays = parseInt(b.productionDays, 10) || 0;
+                    if (prodDays > 1) {
+                        var parts = String(startDate).split('-');
+                        if (parts.length === 3) {
+                            var endDt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                            if (!isNaN(endDt.getTime())) {
+                                endDt.setDate(endDt.getDate() + prodDays - 1);
+                                var endDate = endDt.getFullYear() + '-' +
+                                    String(endDt.getMonth() + 1).replace(/^(\d)$/, '0$1') + '-' +
+                                    String(endDt.getDate()).replace(/^(\d)$/, '0$1');
+                                filmingDates = paperDate(startDate) + ' to ' + paperDate(endDate);
+                            }
+                        }
+                    }
+                    return filmingDates;
+                },
+                _firstShootLocation: function (b) {
+                    var days = Array.isArray(b.shootSchedule) ? b.shootSchedule : [];
+                    var i, locs, loc;
+                    for (i = 0; i < days.length; i++) {
+                        locs = paperDayLocations(days[i]);
+                        if (locs.length) {
+                            loc = locs[0] || {};
+                            return {
+                                placeName: paperText(loc.name),
+                                address: paperText(loc.address),
+                                parish: paperText(loc.parish),
+                                ownerName: paperText(loc.siteContactName)
+                            };
+                        }
+                    }
+                    return { placeName: '', address: '', parish: '', ownerName: '' };
+                },
+                getDefaultData: function (budget, options) {
+                    var b = budget || {};
+                    var party = paperworkParty(b, options, true);
+                    var shootLoc = this._firstShootLocation(b);
+                    var address = paperFirst(shootLoc.address, b.projectLocation, b.location, b.basecamp);
+                    return {
+                        productionTitle: b.workingTitle || b.projectName || '',
+                        productionCompany: paperBrand(b.projectCompany || b.company || ''),
+                        producerName: party.producer,
+                        granteeLine: paperReleaseGrantee(b, options),
+                        placeName: shootLoc.placeName,
+                        address: address,
+                        parish: shootLoc.parish,
+                        filmingDates: this._filmingDates(b),
+                        ownerName: shootLoc.ownerName,
+                        role: '',
+                        phone: '',
+                        accessFrom: '',
+                        accessTo: '',
+                        insuranceAmount: '',
+                        permissionSentence: 'The owner or authorised person named above gives permission for the production named above to film at this property on the dates and at the access times set out above.',
+                        dateSigned: ''
+                    };
+                },
+                renderHtml: function (budgetData, options, engine) {
+                    var self = this;
+                    var b = budgetData || {};
+                    options = options || {};
+                    var d = paperMerge(self.getDefaultData(b, options), options.editorData);
+                    var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
+                    var insurance = paperText(d.insuranceAmount);
+                    var body = '<div class="pp-page" data-doc="sitePermission">' +
+                        paperHeader('Site Permission', [d.productionTitle || b.projectName]) +
+                        '<div class="pp-grid">' +
+                        '<div class="pp-wide">Production: ' + paperWriteIn(granteeLine) + '</div>' +
+                        paperField('PROPERTY OR PLACE NAME', paperWriteIn(d.placeName, false, true)) +
+                        paperField('ADDRESS', paperWriteIn(d.address, true, true), true) +
+                        paperField('PARISH', paperWriteIn(d.parish, false, true)) +
+                        paperField('FILMING DATE OR DATES', paperWriteIn(paperDate(d.filmingDates) || d.filmingDates)) +
+                        paperField('OWNER OR AUTHORISED PERSON', paperWriteIn(d.ownerName, false, true)) +
+                        paperField('ROLE', paperWriteIn(d.role, false, true)) +
+                        paperField('PHONE', paperWriteIn('')) +
+                        paperField('ACCESS FROM', paperWriteIn(d.accessFrom)) +
+                        paperField('ACCESS TO', paperWriteIn(d.accessTo)) +
+                        (insurance ? paperField('INSURANCE', esc(insurance)) : '') +
+                        '</div>' +
+                        '<p class="pp-p">' + esc(paperText(d.permissionSentence) || 'The owner or authorised person named above gives permission for the production named above to film at this property on the dates and at the access times set out above.') + '</p>' +
+                        paperDual(
+                            paperSig('Owner or authorised person', paperText(d.ownerName)),
+                            paperSig('For the production', paperText(d.producerName))
+                        ) +
+                        '<div class="pp-grid">' + paperField('DATE SIGNED', paperWriteIn(paperDate(d.dateSigned) || d.dateSigned)) + '</div>' +
+                        '</div>';
+                    return engine._wrapHtml(paperBrand((d.productionTitle || b.projectName || 'Production') + ' - Site Permission'), body, PAPER_CSS + PAPER_FIT_CSS);
+                }
+            },
+
             locationAgreement: {
                 id: 'locationAgreement',
                 name: 'Location Agreement',
@@ -6061,7 +6166,12 @@
                             var paidRow = (v.itemId != null && String(v.itemId) !== '')
                                 ? self._poForPayment(b, v.itemId, p.amount, currency, usedPaymentIds)
                                 : v;
-                            var paid = self._paidFields(paidRow);
+                            /* Full page with a voucher method set: print the voucher fields.
+                               Deposit/Balance split pages keep amount-matched Paid PO pairing. */
+                            var voucherPaid = self._paidFields(v);
+                            var paid = (!p.split && voucherPaid.paidMethod)
+                                ? voucherPaid
+                                : self._paidFields(paidRow);
                             var methodWi = self._methodFillHtml(paid.paidMethod);
                             var bankVal = self._bankRefHtml(paid.paidRef);
                             var number = numbered ? prefix + String(start + pageNo) : '';
@@ -6362,11 +6472,13 @@
                     var catalogWordBreak = /[^\p{L}\p{Nd}]+/gu;
                     var catalog = typeof item.catalogDescription === 'string' ? item.catalogDescription.toLowerCase().replace(catalogWordBreak, ' ').trim() : '';
                     var catalogMatch = catalog && desc.replace(catalogWordBreak, ' ').trim() === catalog;
-                    if ((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) return false;
-
                     var label = kind ? paperWithoutParentheses(desc).replace(/[\s\p{P}]+$/u, '') : '';
                     var gearNoun = /(?<![\p{L}\p{M}\p{N}_])(?:kit|package|rig|console|cart|monitor|recorder|case|stand)$/u.test(label) &&
                         !/\b(with|incl|own)\b|[+/]/.test(label);
+                    /* Package/kit/rig still count when catalog adoption stamped crew (E2b). */
+                    var packageNoun = /(?<![\p{L}\p{M}\p{N}_])(?:kit|package|rig)$/u.test(label) &&
+                        !/\b(with|incl|own)\b|[+/]/.test(label);
+                    if (((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) && !packageNoun) return false;
                     var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
                     // AC also appears in gear voltage descriptions.
                     var acLabel = kind ? desc.replace(/^[\s\p{Cf}]+|[\s\p{P}\p{Cf}]+$/gu, '') : '';
@@ -6483,7 +6595,7 @@
             /** Returns metadata for all templates (no render functions — safe to pass to UI) */
             getAll: function () {
                 var self = this;
-                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'fundingStrategy', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher', 'weeklyCostReport', 'cashPaymentVoucher', 'groupMinorConsent', 'interviewQuestions', 'equipmentChecklist'].map(function (key) {
+                return ['topSheet', 'detailBudget', 'callSheet', 'costReport', 'purchaseOrder', 'pettyCash', 'crewDealMemo', 'crewList', 'productionReport', 'talentAgreement', 'sitePermission', 'locationAgreement', 'kitRentalAgreement', 'dood', 'fundingPackage', 'fundingStrategy', 'budgetComparison', 'scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'pitchDeck', 'storyboard', 'appearanceRelease', 'vendorInvoice', 'incidentReport', 'nda', 'wrapReport', 'extrasVoucher', 'weeklyCostReport', 'cashPaymentVoucher', 'groupMinorConsent', 'interviewQuestions', 'equipmentChecklist'].map(function (key) {
                     var t = self[key];
                     return { id: t.id, name: t.name, description: t.description, formats: t.formats, hasEditor: !!t.hasEditor };
                 });
@@ -6778,21 +6890,35 @@
                 /* Route templates with a native autoTable renderer directly through jsPDF.
                    This bypasses html2canvas entirely, preventing memory crashes on large tables. */
                 /* Use the same HTML as Print for every document. */
-                if (typeof window.html2pdf === 'undefined') {
-                    notify('Error', 'PDF export engine (html2pdf) not loaded.');
-                    return Promise.reject(new Error('html2pdf not loaded'));
+                var self = this;
+                function exportNow() {
+                    var html = self.render(templateId, budgetData, options);
+                    var fname = slugify((budgetData && budgetData.projectName) || templateId) + '_' + templateId + '.pdf';
+                    var parts = self._extractHtmlParts(html);
+                    var container = self._mountExportContainer(parts.css, parts.body);
+                    return self._runHtml2pdf(container, self._html2pdfOptions(fname, container), 'save')
+                        .catch(function (err) {
+                            notify('PDF Error', 'Export failed. Try Print instead.');
+                            console.error('[mBTPublisher toPdf]', err);
+                            throw err;
+                        });
                 }
-                var html = this.render(templateId, budgetData, options);
-                var fname = slugify((budgetData && budgetData.projectName) || templateId) + '_' + templateId + '.pdf';
-                var parts = this._extractHtmlParts(html);
-                var container = this._mountExportContainer(parts.css, parts.body);
-
-                return this._runHtml2pdf(container, this._html2pdfOptions(fname, container), 'save')
-                    .catch(function (err) {
-                        notify('PDF Error', 'Export failed. Try Print instead.');
-                        console.error('[mBTPublisher toPdf]', err);
-                        throw err;
-                    });
+                if (typeof window.html2pdf !== 'undefined') return exportNow();
+                /* Wait briefly for a late script load before the existing missing-library error. */
+                return new Promise(function (resolve, reject) {
+                    var waited = 0;
+                    var timer = setInterval(function () {
+                        waited += 100;
+                        if (typeof window.html2pdf !== 'undefined') {
+                            clearInterval(timer);
+                            resolve(exportNow());
+                        } else if (waited >= 3000) {
+                            clearInterval(timer);
+                            try { notify('Error', 'PDF export engine (html2pdf) not loaded.'); } catch (err) { /* harness may lack alert */ }
+                            reject(new Error('html2pdf not loaded'));
+                        }
+                    }, 100);
+                });
             },
 
             /** Build a PDF Blob for share pipelines (same capture path as toPdf).

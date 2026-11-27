@@ -1,7 +1,7 @@
 {
   "metadata": {
     "scope": "Maps each document template field to the budget data it can be loaded from.",
-    "templateCount": 29,
+    "templateCount": 30,
     "defaultFunctionCount": 26,
     "sourceHashes": {
       "src/scripts/engine/publisher.js": "b3fa0c5a4c143a31f578d7eb15317e8144c096eb370231c73f88e008ec50ae63",
@@ -13,7 +13,7 @@
       "missingMasterData": "No verified authoritative structured source or link for this fact was found. It can exist as text or another saved document. This is not a claim about real user data.",
       "pathNotation": "[] represents a repeating row; {shootDay} represents a dynamic day key. computed names describe printed projections, not new stored keys. Proposed subject IDs and document links are not claimed to exist today."
     },
-    "fieldCount": 628
+    "fieldCount": 644
   },
   "sources": [
     {
@@ -4698,6 +4698,270 @@
           "evidence": [
             "src/scripts/engine/publisher.js:2018",
             "src/tools/db/index.html:2859"
+          ]
+        }
+      ]
+    },
+    {
+      "template": "sitePermission",
+      "name": "Site Permission",
+      "hasEditor": true,
+      "defaultLine": 0,
+      "fields": [
+        {
+          "template": "sitePermission",
+          "field": "productionTitle",
+          "meaning": "Title of this production.",
+          "source": "budget.workingTitle or budget.projectName",
+          "rule": "Copy the active project title.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "productionCompany",
+          "meaning": "Legal production company.",
+          "source": "budget.projectCompany or budget.company",
+          "rule": "Use the verified production company.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "producerName",
+          "meaning": "Producer named for the signature block.",
+          "source": "Contacts producer role or budget producer fields",
+          "rule": "Match producer role aliases. Leave blank when unknown.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": false,
+          "confidence": "likely",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "granteeLine",
+          "meaning": "Configurable grantee line for the permission.",
+          "source": "paperReleaseGrantee from producer and company",
+          "rule": "Reuse the location agreement grantee logic.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "placeName",
+          "meaning": "Property or place name.",
+          "source": "shootSchedule[].locations[].name",
+          "rule": "First shoot day location name when present.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": false,
+          "confidence": "likely",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "address",
+          "meaning": "Property address.",
+          "source": "shootSchedule location address or budget.projectLocation",
+          "rule": "Prefer shoot location address, else project location.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "parish",
+          "meaning": "Parish of the property.",
+          "source": "shootSchedule[].locations[].parish",
+          "rule": "Copy parish when recorded on the shoot day location. Leave blank when unknown.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": false,
+          "confidence": "likely",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "filmingDates",
+          "meaning": "Filming date or dates.",
+          "source": "budget.startDate and productionDays",
+          "rule": "Same date range fill as the location agreement.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "ownerName",
+          "meaning": "Owner or authorised person.",
+          "source": "shootSchedule location siteContactName",
+          "rule": "Copy site contact name when present. Never invent.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": false,
+          "confidence": "likely",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "role",
+          "meaning": "Role of the signing person.",
+          "source": "editor write-in",
+          "rule": "Owner, manager, or authorised person write-in. Blank by default.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "phone",
+          "meaning": "Phone write-in blank.",
+          "source": "none",
+          "rule": "Never filled from data. Leave blank for handwriting or editor write-in.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "accessFrom",
+          "meaning": "Access time from.",
+          "source": "editor write-in",
+          "rule": "Blank write-in by default.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "accessTo",
+          "meaning": "Access time to.",
+          "source": "editor write-in",
+          "rule": "Blank write-in by default.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "insuranceAmount",
+          "meaning": "Optional insurance amount.",
+          "source": "editor write-in",
+          "rule": "Blank by default. Never invent. Print only when set.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "permissionSentence",
+          "meaning": "Plain permission sentence.",
+          "source": "template default",
+          "rule": "Use the short permission sentence. Escaped plain text.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
+          ]
+        },
+        {
+          "template": "sitePermission",
+          "field": "dateSigned",
+          "meaning": "Date signed.",
+          "source": "editor write-in",
+          "rule": "Blank write-in by default.",
+          "today": "Blank default. Editor write-in. Never invent.",
+          "correct": true,
+          "confidence": "sure",
+          "missingMasterData": false,
+          "editorField": true,
+          "evidence": [
+            "src/scripts/engine/publisher.js:sitePermission",
+            "src/tools/db/index.html:buildSitePermissionHtml"
           ]
         }
       ]

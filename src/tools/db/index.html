@@ -572,7 +572,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     { label: 'Pre-Prod', ids: ['interviewQuestions'] },
     { label: 'Production', ids: ['callSheet', 'productionReport', 'crewList', 'dood', 'incidentReport', 'wrapReport', 'cashPaymentVoucher', 'equipmentChecklist'] },
     { label: 'Scheduling', ids: ['scriptBreakdown', 'shootingSchedule', 'continuityLog', 'movementOrder', 'storyboard'] },
-    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'groupMinorConsent', 'nda'] }
+    { label: 'Legal', ids: ['crewDealMemo', 'talentAgreement', 'sitePermission', 'locationAgreement', 'kitRentalAgreement', 'appearanceRelease', 'groupMinorConsent', 'nda'] }
   ];
 
   /* Required fields per template for preflight check */
@@ -584,6 +584,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     productionReport: ['date', 'director'],
     talentAgreement: ['performerLegalName', 'characterName', 'rate'],
     locationAgreement: ['ownerName', 'propertyAddress', 'filmingDates'],
+    sitePermission: ['placeName', 'address', 'filmingDates'],
     kitRentalAgreement: ['ownerName', 'startDate'],
     dood: ['productionTitle', 'shootDays'],
     fundingPackage: ['productionTitle', 'logline'],
@@ -2244,17 +2245,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     else fresh();
   }
 
+  var pdfExporting = false;
   dom.getElementById('btn-pdf').addEventListener('click', function () {
-    if (!activeTemplateId) return;
+    if (!activeTemplateId || pdfExporting) return;
     var btn = this;
     var origHtml = btn.innerHTML;
+    pdfExporting = true;
     btn.disabled = true;
     btn.innerHTML = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Exporting\u2026';
-    var done = function () { btn.disabled = false; btn.innerHTML = origHtml; };
+    var done = function () { pdfExporting = false; btn.disabled = false; btn.innerHTML = origHtml; };
     withFreshBudget(function () {
       var p = pub.templates.toPdf(activeTemplateId, budget, getExportOpts());
-      if (p && typeof p.then === 'function') { p.then(done, function (err) { done(); dbAlert(err.message || 'PDF export failed. Use Print instead.', 'Export PDF'); }); }
-      else { setTimeout(done, 4000); }
+      if (p && typeof p.then === 'function') {
+        Promise.resolve(p).then(function () {}, function (err) {
+          dbAlert(err.message || 'PDF export failed. Use Print instead.', 'Export PDF');
+        }).finally(function () { done(); });
+      } else { setTimeout(done, 4000); }
     }, done);
   });
 
@@ -2685,7 +2691,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     });
   }
   var PAPERWORK_TEMPLATES = ['cashPaymentVoucher', 'groupMinorConsent', 'interviewQuestions', 'equipmentChecklist'];
-  var RELEASE_TEMPLATES = ['appearanceRelease', 'talentAgreement', 'locationAgreement'];
+  var RELEASE_TEMPLATES = ['appearanceRelease', 'talentAgreement', 'sitePermission', 'locationAgreement'];
 
   function normalizeReleaseEditorData(templateId, d, contactsList) {
     if (!d || typeof d !== 'object' || RELEASE_TEMPLATES.indexOf(templateId) === -1) return d;
@@ -3316,6 +3322,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else if (templateId === 'talentAgreement') {
       normalizeReleaseEditorData('talentAgreement', d);
       html = buildTalentAgreementHtml(d);
+    } else if (templateId === 'sitePermission') {
+      normalizeReleaseEditorData('sitePermission', d);
+      html = buildSitePermissionHtml(d);
     } else if (templateId === 'locationAgreement') {
       normalizeReleaseEditorData('locationAgreement', d);
       html = buildLocationAgreementHtml(d);
@@ -4007,6 +4016,32 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-row">' + fld('terms', 'Terms & Conditions', 'textarea', true) + '</div>' +
       '</div>';
     return html;
+  }
+
+  function buildSitePermissionHtml(d) {
+    normalizeReleaseEditorData('sitePermission', d);
+    var role = d.role || '';
+    var roleOpts = ['', 'Owner', 'Manager', 'Authorised person'];
+    var roleSelect = '<div class="ed-field"><label>Role</label><select data-key="role">';
+    roleOpts.forEach(function (opt) {
+      roleSelect += '<option value="' + esc(opt) + '"' + (role === opt ? ' selected' : '') + '>' + (opt || 'Not set') + '</option>';
+    });
+    if (role && roleOpts.indexOf(role) === -1) {
+      roleSelect += '<option value="' + esc(role) + '" selected>' + esc(role) + '</option>';
+    }
+    roleSelect += '</select></div>';
+    return '<div class="ed-section"><div class="ed-section-hdr">Site Permission</div>' +
+      '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
+      '<div class="ed-row">' + fld('producerName', 'Producer Name (for signature)', null, true) + '</div>' +
+      '<div class="ed-row">' + fld('granteeLine', 'Production / Grantee Line', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('placeName', 'Property or Place Name') + fld('parish', 'Parish') + '</div>' +
+      '<div class="ed-row">' + fld('address', 'Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fld('filmingDates', 'Filming Date or Dates') + fld('dateSigned', 'Date Signed') + '</div>' +
+      '<div class="ed-row ed-2">' + fld('ownerName', 'Owner or Authorised Person') + roleSelect + '</div>' +
+      '<div class="ed-row ed-3">' + fld('phone', 'Phone (write-in)') + fld('accessFrom', 'Access From') + fld('accessTo', 'Access To') + '</div>' +
+      '<div class="ed-row">' + fld('insuranceAmount', 'Insurance Amount (optional)') + '</div>' +
+      '<div class="ed-row">' + fld('permissionSentence', 'Permission Sentence', 'textarea', true) + '</div>' +
+      '</div>';
   }
 
   function buildLocationAgreementHtml(d) {
@@ -4931,13 +4966,24 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<div class="ed-row ed-3">' + fld('voucherPrefix', 'Voucher Prefix') + fld('startNumber', 'Start Number') + fld('currency', 'Currency') + '</div>' +
       '<div class="ed-row ed-2">' + fld('paidBy', 'Paid By') + fld('producerName', 'Producer Name') + '</div></div>';
     html += '<div class="ed-section"><div class="ed-section-hdr">Payees / Vouchers</div>' +
-      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Payee</th><th>Purpose</th><th style="width:110px;">Total</th><th style="width:110px;">Deposit (optional)</th><th></th></tr></thead><tbody>';
+      '<div class="ed-tbl-wrap"><table class="ed-tbl"><thead><tr><th>Payee</th><th>Purpose</th><th style="width:110px;">Total</th><th style="width:110px;">Deposit (optional)</th><th style="width:130px;">Paid by</th><th style="width:140px;">Bank reference</th><th></th></tr></thead><tbody>';
     (d.vouchers || []).forEach(function (v, i) {
+      var method = v.paidMethod || '';
+      var showRef = method === 'transfer';
       html += '<tr>' +
         '<td><input data-arr="vouchers" data-i="' + i + '" data-f="payee" value="' + esc(v.payee || '') + '"></td>' +
         '<td><input data-arr="vouchers" data-i="' + i + '" data-f="purpose" value="' + esc(v.purpose || '') + '"></td>' +
         '<td><input data-arr="vouchers" data-i="' + i + '" data-f="total" value="' + esc(v.total == null ? '' : v.total) + '"></td>' +
         '<td><input data-arr="vouchers" data-i="' + i + '" data-f="deposit" value="' + esc(v.deposit == null ? '' : v.deposit) + '"></td>' +
+        '<td><select data-arr="vouchers" data-i="' + i + '" data-f="paidMethod">' +
+          '<option value=""' + (method === '' ? ' selected' : '') + '>Not recorded</option>' +
+          '<option value="cash"' + (method === 'cash' ? ' selected' : '') + '>Cash</option>' +
+          '<option value="transfer"' + (method === 'transfer' ? ' selected' : '') + '>Bank transfer</option>' +
+        '</select></td>' +
+        '<td>' + (showRef
+          ? '<input data-arr="vouchers" data-i="' + i + '" data-f="paidRef" maxlength="60" value="' + esc(v.paidRef || '') + '">'
+          : '<input data-arr="vouchers" data-i="' + i + '" data-f="paidRef" maxlength="60" value="" style="display:none;" disabled>') +
+        '</td>' +
         '<td><button class="ed-del" data-arr="vouchers" data-del="' + i + '">&times;</button></td></tr>';
     });
     html += '</tbody></table></div><button class="ed-add-btn" data-add="vouchers">+ Add Voucher</button></div>';
@@ -5055,6 +5101,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             list[idx][field] = val;
             if (arr === 'schedule' && field === 'activity') list[idx].description = val;
             if (arr === 'schedule' && field === 'people') list[idx].cast = val;
+            if (arr === 'vouchers' && field === 'paidMethod') {
+              if (val !== 'transfer') list[idx].paidRef = '';
+              saveEditorData();
+              var scrollYMethod = panel.scrollTop;
+              buildEditor(activeTemplateId);
+              var freshMethod = dom.getElementById('editor-panel');
+              if (freshMethod) freshMethod.scrollTop = scrollYMethod;
+              return;
+            }
+            if (arr === 'vouchers' && field === 'paidRef') {
+              list[idx].paidRef = String(val == null ? '' : val).trim().slice(0, 60);
+            }
           }
           if (arr === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(list));
           if (arr === 'scenes' && activeTemplateId === 'callSheet') editorData.schedule = JSON.parse(JSON.stringify(list));
@@ -5172,7 +5230,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       shots: { scene: '', shot: '', take: '', tc: '', description: '', costume: '', hair: '', makeup: '', props: '', timeOfDay: '', notes: '' },
       movementRows: { name: '', role: '', pickup: '', pickupTime: '', vehicle: '', destination: '', arrivalTime: '', notes: '' },
       frames: { num: '', intExt: 'INT', description: '', shotType: '', camera: '' },
-      vouchers: { payee: '', purpose: '', total: '', deposit: '' },
+      vouchers: { payee: '', purpose: '', total: '', deposit: '', paidMethod: '', paidRef: '' },
       questionGroups: { heading: '', questions: '' },
       whoElse: { text: '', writeIn: 'Name' },
       gear: { qty: '', description: '', serial: '', notes: '' }
