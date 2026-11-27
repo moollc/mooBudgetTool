@@ -1119,16 +1119,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* M1: capture the Save button base label once while a restore timer is pending; never recapture "Saved ✓". */
   var saveDocBtnBaseHtml = null, saveDocBtnRestoreTimer = null;
   window.addEventListener('message', function (e) {
-    var a, dropped, cap;
+    var a, dropped, duplicates, capDropped, cap;
     if (!e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'docs-saved-documents') return;
     try { if (window.parent && e.source && e.source !== window.parent) return; } catch (eSrc) {}
     try {
       if (window.location && window.location.origin && e.origin && e.origin !== window.location.origin) return;
     } catch (eOrig) {}
     dropped = typeof e.data.dropped === 'number' ? e.data.dropped : 0;
-    if (dropped > 0) {
+    duplicates = typeof e.data.duplicates === 'number' ? e.data.duplicates : 0;
+    /* H2: duplicate merges use their own notice; remaining dropped stay the cap sentence. */
+    if (duplicates > 0) {
+      afNotice(duplicates + ' duplicate saved documents were merged', 'Saved documents');
+    }
+    capDropped = dropped - duplicates;
+    if (capDropped > 0) {
       cap = (window.mBTSavedDocs && window.mBTSavedDocs.CAP) || 50;
-      afNotice(dropped + ' older saved document' + (dropped === 1 ? ' was' : 's were') +
+      afNotice(capDropped + ' older saved document' + (capDropped === 1 ? ' was' : 's were') +
         ' dropped to keep the list at ' + cap + '.', 'Saved documents');
     }
     a = savedDocsAcks[e.data.requestId];
@@ -1260,10 +1266,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     ensureAckedSavedDocsSnap();
     var result = window.mBTSavedDocs.migrate(budget, legacy);
     var dropped = (result && result.dropped) ? result.dropped : 0;
-    var capNotice = dropped
-      ? (dropped + ' older saved document' + (dropped === 1 ? ' was' : 's were') +
-        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.')
-      : '';
+    var duplicates = (result && result.duplicates) ? result.duplicates : 0;
+    var capDropped = dropped - duplicates;
+    var migNotices = [];
+    if (duplicates > 0) migNotices.push(duplicates + ' duplicate saved documents were merged');
+    if (capDropped > 0) {
+      migNotices.push(capDropped + ' older saved document' + (capDropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.');
+    }
+    var capNotice = migNotices.join('\n');
     if (result && result.changed) {
       /* T1: one combined notice after the save result (migration lines first, then R1 or shell error). */
       savedDocsMigrationInFlight = true;

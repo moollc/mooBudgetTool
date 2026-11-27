@@ -1209,14 +1209,15 @@ window.mBTRouter = (function () {
         /* --- docs-saved-documents: Docs writes budget.savedDocs / savedDocsDeleted, then the main window saves --- */
         } else if (action === 'docs-saved-documents') {
             (function () {
-                function ack(status, message, dropped) {
+                function ack(status, message, dropped, duplicates) {
                     _safePostMessage(e.source, {
                         type: 'mbt:tool-ack',
                         action: action,
                         status: status,
                         message: message || '',
                         requestId: payload && payload.requestId,
-                        dropped: typeof dropped === 'number' ? dropped : 0
+                        dropped: typeof dropped === 'number' ? dropped : 0,
+                        duplicates: typeof duplicates === 'number' ? duplicates : 0
                     });
                 }
                 if (!budget || !budget.projectName) { ack('error', 'No budget is open.'); return; }
@@ -1230,16 +1231,23 @@ window.mBTRouter = (function () {
                 var incomingDeleted = Object.prototype.hasOwnProperty.call(payload, 'savedDocsDeleted')
                     ? (Array.isArray(payload.savedDocsDeleted) ? payload.savedDocsDeleted : [])
                     : storedDeleted.slice();
-                var tombSet = {};
+                /* H1: null-prototype lookup so property-name ids are not treated as present. */
+                var tombSet = Object.create(null);
                 var union = [];
                 var i, id, d;
                 for (i = 0; i < storedDeleted.length; i++) {
                     id = storedDeleted[i];
-                    if (typeof id === 'string' && id !== '' && !tombSet[id]) { tombSet[id] = 1; union.push(id); }
+                    if (typeof id === 'string' && id !== '' && !Object.prototype.hasOwnProperty.call(tombSet, id)) {
+                        tombSet[id] = 1;
+                        union.push(id);
+                    }
                 }
                 for (i = 0; i < incomingDeleted.length; i++) {
                     id = incomingDeleted[i];
-                    if (typeof id === 'string' && id !== '' && !tombSet[id]) { tombSet[id] = 1; union.push(id); }
+                    if (typeof id === 'string' && id !== '' && !Object.prototype.hasOwnProperty.call(tombSet, id)) {
+                        tombSet[id] = 1;
+                        union.push(id);
+                    }
                 }
                 var incomingDocs = Object.prototype.hasOwnProperty.call(payload, 'savedDocs')
                     ? (Array.isArray(payload.savedDocs) ? payload.savedDocs : [])
@@ -1248,16 +1256,18 @@ window.mBTRouter = (function () {
                 for (i = 0; i < incomingDocs.length; i++) {
                     d = incomingDocs[i];
                     if (!d || typeof d.id !== 'string' || d.id === '') continue;
-                    if (tombSet[d.id]) continue;
+                    if (Object.prototype.hasOwnProperty.call(tombSet, d.id)) continue;
                     filtered.push(d);
                 }
                 /* K3: cap through SavedDocs.merge (or the same 50-entry rule); report dropped in the ack. */
                 var dropped = 0;
+                var duplicates = 0;
                 var nextList;
                 if (window.mBTSavedDocs && typeof window.mBTSavedDocs.merge === 'function') {
                     var merged = window.mBTSavedDocs.merge(filtered, [], []);
                     nextList = merged.list;
                     dropped = merged.dropped || 0;
+                    duplicates = merged.duplicates || 0;
                 } else {
                     var CAP = 50;
                     filtered = filtered.slice().sort(function (a, b) {
@@ -1268,10 +1278,23 @@ window.mBTRouter = (function () {
                         if (!da && db) return 1;
                         return 0;
                     });
+                    var seenFallback = Object.create(null);
+                    var dedupedFallback = [];
+                    for (i = 0; i < filtered.length; i++) {
+                        d = filtered[i];
+                        if (Object.prototype.hasOwnProperty.call(seenFallback, d.id)) {
+                            duplicates++;
+                            continue;
+                        }
+                        seenFallback[d.id] = 1;
+                        dedupedFallback.push(d);
+                    }
+                    filtered = dedupedFallback;
                     if (filtered.length > CAP) {
-                        dropped = filtered.length - CAP;
+                        dropped = duplicates + (filtered.length - CAP);
                         nextList = filtered.slice(0, CAP);
                     } else {
+                        dropped = duplicates;
                         nextList = filtered;
                     }
                 }
@@ -1287,7 +1310,7 @@ window.mBTRouter = (function () {
                 budget.savedDocs = JSON.parse(JSON.stringify(nextList));
                 budget.savedDocsDeleted = JSON.parse(JSON.stringify(union));
                 Promise.resolve().then(function () { return window.saveBudget(true); }).then(function () {
-                    ack('success', '', dropped);
+                    ack('success', '', dropped, duplicates);
                 }, function (err) {
                     /* P1: a failed write must not roll back a later acknowledged list still live on the budget. */
                     var stillThisWrite = JSON.stringify(budget.savedDocs) === JSON.stringify(nextList)
