@@ -2573,15 +2573,21 @@ window.mBTAIModule = {
         });
     },
 
-    /* Switch the display currency through the same click path the currency
-       menu uses, then check it took. Returns an error string or null. */
+    /* Switch the display currency with explicit convert mode (same stored
+       result as today's currency switch). Returns an error string or null. */
     _doCurrency: function (code) {
-        var btn = document.createElement('button');
         code = String(code || '').toUpperCase();
-        btn.setAttribute('data-currency-code', code);
-        btn.style.display = 'none';
-        document.body.appendChild(btn);
-        try { btn.click(); } finally { if (btn.parentNode) btn.parentNode.removeChild(btn); }
+        if (typeof window.mBTSwitchCurrency === 'function') {
+            window.mBTSwitchCurrency(code, 'convert');
+        } else if (window.mBTRouter && typeof mBTRouter.switchCurrency === 'function') {
+            mBTRouter.switchCurrency(code, 'convert');
+        } else {
+            var btn = document.createElement('button');
+            btn.setAttribute('data-currency-code', code);
+            btn.style.display = 'none';
+            document.body.appendChild(btn);
+            try { btn.click(); } finally { if (btn.parentNode) btn.parentNode.removeChild(btn); }
+        }
         if (window.displayCurrency !== code) {
             return 'Amounts stay in ' + window.displayCurrency + ' because this budget has no exchange rate for ' + code + '. Add the rate in the currency menu, Edit exchange rates, then ask again.';
         }

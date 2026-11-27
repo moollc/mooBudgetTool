@@ -1644,12 +1644,9 @@
                        reorder, apply preset) push their own snapshots directly. */
                     mBT.data.save().then(function () {
                         if (window.mBT && window.mBT.state) window.mBT.state.isDirty = false;
-                        var statusMsg = document.getElementById('statusBarMessage');
-                        if (statusMsg) {
-                            var originalText = statusMsg.textContent;
-                            statusMsg.textContent = 'Saved to disk.';
-                            setTimeout(function () { statusMsg.textContent = originalText; }, 2000);
-                        }
+                        if (window.mBTSaveStatus) mBTSaveStatus.set(true);
+                    }).catch(function (err) {
+                        if (window.mBTSaveStatus) mBTSaveStatus.set(false, (err && err.message) || 'storage error');
                     });
                 }, 1000);
             },
@@ -2193,12 +2190,15 @@
                     pushCollabIfShared();
                     if (window.mBTHistory) mBTHistory.record(cleanData).catch(function (err) { console.warn('[History]', err.message); });
                     if (!collabId && window.mBTOG && mBTOG.contributeBudget) mBTOG.contributeBudget(cleanData).catch(function (err) { console.warn('[OpenGate]', err.message); });
+                    if (window.mBTSaveStatus) mBTSaveStatus.set(true);
                 }).catch(function (e) {
                     console.error('Save Failed:', e);
+                    if (window.mBTSaveStatus) mBTSaveStatus.set(false, (e && e.message) || 'storage error');
                     throw e;
                 });
             } catch (e) {
                 console.error('Save Failed (JSON stringify):', e);
+                if (window.mBTSaveStatus) mBTSaveStatus.set(false, (e && e.message) || 'storage error');
                 return Promise.reject(e);
             }
         },
@@ -3061,6 +3061,31 @@
     window.mBTState = mBT.data.state;
     /* Budget persistence (localforage/OPFS). IndexedDB contacts live on window.mBT.storage / window.mBTStorage from storage.js */
     window.mBTBudgetStorage = mBT.data.storage;
+    /* History save light: green "Saved" by default; red "Storage error" only after a write fails. */
+    window.mBTSaveStatus = {
+        _ok: true,
+        _error: '',
+        get: function () { return { ok: this._ok, error: this._error || '' }; },
+        set: function (ok, error) {
+            this._ok = !!ok;
+            this._error = ok ? '' : String(error || 'storage error');
+            this.paint();
+        },
+        paint: function () {
+            var el = document.getElementById('mbt-save-status');
+            if (!el) return;
+            var ok = this._ok;
+            var err = this._error || '';
+            el.className = 'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ' +
+                (ok ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50');
+            el.title = ok ? 'Everything auto saves' : err;
+            el.setAttribute('aria-label', ok ? 'Saved' : 'Storage error');
+            el.innerHTML = '<span class="inline-flex h-2.5 w-2.5 rounded-full ' + (ok ? 'bg-emerald-500' : 'bg-rose-500') + '" aria-hidden="true"></span>' +
+                '<span class="text-[9px] font-black uppercase tracking-widest ' + (ok ? 'text-emerald-700' : 'text-rose-700') + '">' +
+                (ok ? 'Saved' : 'Storage error') + '</span>';
+        }
+    };
+
     window.saveBudget = function (silent) {
         if (!silent && typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
         var result = mBT.data.save.apply(mBT.data, arguments);
@@ -3072,6 +3097,13 @@
                 });
             }
         } catch (lx) { /* ledger failure must never block saves */ }
+        if (result && typeof result.then === 'function') {
+            result.then(function () {
+                if (window.mBTSaveStatus) mBTSaveStatus.set(true);
+            }).catch(function (err) {
+                if (window.mBTSaveStatus) mBTSaveStatus.set(false, (err && err.message) || 'storage error');
+            });
+        }
         return result;
     };
     window.loadBudget = function () {
@@ -8087,22 +8119,35 @@
                     '</div>';
             }).join('') : RenderEngine.ui.emptyState({ icon: mBTAssets.list, message: 'No Activity Recorded' });
 
+            var saveOk = !(window.mBTSaveStatus && mBTSaveStatus.get && mBTSaveStatus.get().ok === false);
+            var saveErr = (window.mBTSaveStatus && mBTSaveStatus.get && mBTSaveStatus.get().error) || '';
+            var saveLight = '<div id="mbt-save-status" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ' +
+                (saveOk ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50') +
+                '" title="' + mBT.ui.render.esc(saveOk ? 'Everything auto saves' : saveErr) + '" role="status" aria-label="' +
+                (saveOk ? 'Saved' : 'Storage error') + '">' +
+                '<span class="inline-flex h-2.5 w-2.5 rounded-full ' + (saveOk ? 'bg-emerald-500' : 'bg-rose-500') + '" aria-hidden="true"></span>' +
+                '<span class="text-[9px] font-black uppercase tracking-widest ' + (saveOk ? 'text-emerald-700' : 'text-rose-700') + '">' +
+                (saveOk ? 'Saved' : 'Storage error') + '</span></div>';
+
             var content = '<div class="flex flex-col h-[500px] bg-slate-50">' +
-                '<div class="p-4 bg-white border-b border-slate-100 shrink-0 flex justify-between items-center shadow-sm z-10">' +
-                '<div>' +
+                '<div class="p-4 bg-white border-b border-slate-100 shrink-0 flex justify-between items-center shadow-sm z-10 gap-2">' +
+                '<div class="min-w-0">' +
                 '<h3 class="text-xs font-black uppercase tracking-widest text-slate-800">Project Audit Log</h3>' +
                 '<p class="text-[9px] text-slate-500 font-bold mt-0.5">' + logs.length + ' Events</p>' +
                 '</div>' +
+                '<div class="flex items-center gap-2 shrink-0">' +
+                saveLight +
                 '<button onclick="mBT.features.history.export()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-[9px] font-black uppercase tracking-widest">' +
                 (mBTAssets.save || "") + ' Export CSV' +
                 '</button>' +
-                '</div>' +
+                '</div></div>' +
                 '<div class="flex-grow overflow-y-auto no-scrollbar">' +
                 listHtml +
                 '</div>' +
                 '</div>';
 
             mBTME.open('activityLog', 'History', content, 'max-w-md', { hideHeader: true, noPadding: true });
+            if (window.mBTSaveStatus && typeof mBTSaveStatus.paint === 'function') mBTSaveStatus.paint();
         },
 
         export: function () {

@@ -1807,9 +1807,189 @@ window.mBTRouter = (function () {
        INIT — accepts ctx object, binds all event listeners
        ============================================================ */
 
-    function init(ctx) {
+    function setContext(ctx) {
         _ctx = ctx;
+        if (typeof window !== 'undefined') {
+            window.mBTSwitchCurrency = switchCurrency;
+        }
+    }
+
+    function init(ctx) {
+        setContext(ctx);
         _bindListeners();
+    }
+
+    /* ============================================================
+       Currency switch: Convert rates (= today's display switch),
+       Relabel only (budget.currency + label, numbers untouched), Cancel.
+       ============================================================ */
+
+    function moneyFieldsSnapshot(budget) {
+        var out = {
+            currency: budget ? budget.currency : null,
+            totalCap: budget ? budget.totalCap : null,
+            rates: budget && budget.exchangeRateState && budget.exchangeRateState.rates
+                ? JSON.parse(JSON.stringify(budget.exchangeRateState.rates))
+                : null,
+            items: [],
+            funding: []
+        };
+        if (!budget || !budget.sections) return out;
+        Object.keys(budget.sections).forEach(function (sk) {
+            var items = (budget.sections[sk] && budget.sections[sk].items) || [];
+            items.forEach(function (it) {
+                if (!it) return;
+                out.items.push({
+                    id: it.id,
+                    rate: it.rate,
+                    quantity: it.quantity,
+                    multiplier: it.multiplier,
+                    actual: it.actual,
+                    baseRate: it.baseRate,
+                    rateCurrency: it.rateCurrency
+                });
+            });
+        });
+        (budget.fundingSources || []).forEach(function (f) {
+            if (!f) return;
+            out.funding.push({ id: f.id, amount: f.amount, currency: f.currency, cashInBank: f.cashInBank });
+        });
+        return out;
+    }
+
+    function _firstBudgetLine(budget) {
+        if (!budget || !budget.sections) return null;
+        var keys = Object.keys(budget.sections);
+        var i, items, it;
+        for (i = 0; i < keys.length; i++) {
+            items = (budget.sections[keys[i]] && budget.sections[keys[i]].items) || [];
+            if (items.length) {
+                it = items[0];
+                return {
+                    rate: Number(it.rate) || 0,
+                    description: it.description || 'line',
+                    currency: budget.currency || 'JMD'
+                };
+            }
+        }
+        return null;
+    }
+
+    function _moneyExampleFigure(n) {
+        var x = Math.round(Number(n) || 0);
+        return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    function buildCurrencySwitchDialog(fromCode, toCode, exampleLine) {
+        var from = fromCode || 'JMD';
+        var to = toCode || 'USD';
+        var amt = exampleLine && exampleLine.rate != null ? Number(exampleLine.rate) : 1000;
+        var converted = amt;
+        var budget = _ctx && _ctx.getBudget ? _ctx.getBudget() : (typeof window !== 'undefined' ? window.budget : null);
+        if (budget && window.mBT && mBT.le && typeof mBT.le.convertCurrencyOrNull === 'function' && from !== to) {
+            var c = mBT.le.convertCurrencyOrNull(amt, from, to, budget, true);
+            if (c != null && isFinite(c)) converted = c;
+        } else if (from !== to && budget && budget.exchangeRateState && budget.exchangeRateState.rates) {
+            var table = budget.exchangeRateState.rates;
+            if (table[from] > 0 && table[to] > 0) converted = amt * (table[to] / table[from]);
+        }
+        var convertEx = _moneyExampleFigure(amt) + ' ' + from + ' becomes ' + _moneyExampleFigure(converted) + ' ' + to;
+        var relabelEx = _moneyExampleFigure(amt) + ' stays ' + _moneyExampleFigure(amt) + ' and is labelled ' + to;
+        var esc = (window.mBT && mBT.ui && mBT.ui.render && mBT.ui.render.esc)
+            ? mBT.ui.render.esc
+            : function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+        return '<div class="p-6 space-y-4" id="currencySwitchDialog">' +
+            '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800">Switch currency to ' + esc(to) + '</h3>' +
+            '<p class="text-xs text-slate-600 font-bold leading-relaxed">Convert rates turns amounts into ' + esc(to) + ' at the current exchange rate (example: ' + esc(convertEx) + '). Relabel only keeps every stored number and labels it ' + esc(to) + ' (example: ' + esc(relabelEx) + ').</p>' +
+            '<div class="space-y-2">' +
+            '<button type="button" data-currency-mode="convert" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all">Convert rates</button>' +
+            '<button type="button" data-currency-mode="relabel" class="w-full py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Relabel only</button>' +
+            '<button type="button" data-currency-mode="cancel" class="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+            '</div></div>';
+    }
+
+    /* Convert = today's currency switch: displayCurrency only, stored amounts untouched. */
+    function applyCurrencyConvert(wantedCode) {
+        if (!_ctx) return;
+        var code = String(wantedCode || '').toUpperCase();
+        localStorage.setItem(_ctx.storageKeyPrefix + 'currency', code);
+        var shownCode = (typeof window.resolveDisplayCurrency === 'function')
+            ? window.resolveDisplayCurrency(window.budget, code)
+            : code;
+        _ctx.setDisplayCurrency(shownCode);
+        if (shownCode !== code && window.mBTME) {
+            window.mBTME.alert('Exchange rate needed', 'This budget has no exchange rate for ' + code + ', so amounts stay in ' + shownCode + '. Open the currency menu, choose Edit exchange rates and add a rate for ' + code + '; ' + code + ' will then show.');
+        }
+        if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
+        if (window.render) render();
+        if (_ctx.renderCurrencyBtn) _ctx.renderCurrencyBtn();
+    }
+
+    /* Relabel: change budget.currency and the display label; every stored number stays bit identical. */
+    function applyCurrencyRelabel(wantedCode) {
+        if (!_ctx) return;
+        var code = String(wantedCode || '').toUpperCase();
+        var budget = _ctx.getBudget ? _ctx.getBudget() : window.budget;
+        if (!budget) return;
+        budget.currency = code;
+        localStorage.setItem(_ctx.storageKeyPrefix + 'currency', code);
+        if (typeof window.resolveDisplayCurrency === 'function') {
+            window.resolveDisplayCurrency(budget, code);
+        }
+        window.displayNoRate = '';
+        _ctx.setDisplayCurrency(code);
+        if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
+        if (window.render) render();
+        if (_ctx.renderCurrencyBtn) _ctx.renderCurrencyBtn();
+        if (typeof window.saveBudget === 'function') window.saveBudget(true);
+    }
+
+    function applyCurrencyMode(wantedCode, mode) {
+        var m = String(mode || '').toLowerCase();
+        if (m === 'cancel') return;
+        if (m === 'relabel') {
+            applyCurrencyRelabel(wantedCode);
+            return;
+        }
+        /* convert, or any other explicit mode that means "do today's switch" */
+        applyCurrencyConvert(wantedCode);
+    }
+
+    function switchCurrency(wantedCode, mode) {
+        var code = String(wantedCode || '').toUpperCase();
+        if (!code) return;
+        if (mode !== undefined && mode !== null && mode !== '') {
+            applyCurrencyMode(code, mode);
+            return;
+        }
+        var budget = _ctx && _ctx.getBudget ? _ctx.getBudget() : window.budget;
+        var from = (budget && budget.currency) || (_ctx && _ctx.getDisplayCurrency ? _ctx.getDisplayCurrency() : 'JMD') || 'JMD';
+        var html = buildCurrencySwitchDialog(from, code, _firstBudgetLine(budget));
+        window._mbtCurrencySwitchPending = code;
+        window._mbtCurrencySwitchAct = function (action) {
+            var pending = window._mbtCurrencySwitchPending;
+            window._mbtCurrencySwitchPending = null;
+            if (window.mBTME) mBTME.close('currency-switchModal');
+            if (action === 'cancel' || !pending) return;
+            applyCurrencyMode(pending, action);
+        };
+        if (window.mBTME && mBTME.open) {
+            mBTME.open('currency-switch', 'Switch currency', html, 'max-w-sm', { hideHeader: true, noPadding: true });
+            setTimeout(function () {
+                var root = document.getElementById('currencySwitchDialog');
+                if (!root) return;
+                var cancelBtn = root.querySelector('[data-currency-mode="cancel"]');
+                if (cancelBtn && typeof cancelBtn.focus === 'function') cancelBtn.focus();
+                root.addEventListener('click', function (ev) {
+                    var hit = ev.target.closest('[data-currency-mode]');
+                    if (!hit) return;
+                    var act = hit.getAttribute('data-currency-mode');
+                    if (window._mbtCurrencySwitchAct) window._mbtCurrencySwitchAct(act);
+                });
+            }, 0);
+        } else {
+            applyCurrencyMode(code, 'convert');
+        }
     }
 
     /* ============================================================
@@ -1827,15 +2007,8 @@ window.mBTRouter = (function () {
 
             if (choice) {
                 var wantedCode = choice.dataset.currencyCode;
-                localStorage.setItem(_ctx.storageKeyPrefix + 'currency', wantedCode);
-                /* Amounts are shown in the wanted currency only when this budget has a rate for it; otherwise they stay in the budget's own. */
-                var shownCode = (typeof window.resolveDisplayCurrency === 'function') ? window.resolveDisplayCurrency(window.budget, wantedCode) : wantedCode;
-                _ctx.setDisplayCurrency(shownCode);
-                if (shownCode !== wantedCode && window.mBTME) window.mBTME.alert('Exchange rate needed', 'This budget has no exchange rate for ' + wantedCode + ', so amounts stay in ' + shownCode + '. Open the currency menu, choose Edit exchange rates and add a rate for ' + wantedCode + '; ' + wantedCode + ' will then show.');
-                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
-                if (window.render) render();
-                _ctx.renderCurrencyBtn();
                 if (popover) popover.classList.add('hidden');
+                switchCurrency(wantedCode);
                 return;
             }
 
@@ -2126,6 +2299,7 @@ window.mBTRouter = (function () {
 
     return {
         init:                      init,
+        setContext:                setContext,
         applyFundingOperations:    applyFundingOperations,
         resolveConnectivityStatus: resolveConnectivityStatus,
         showCoffeeWidget:          showCoffeeWidget,
@@ -2133,7 +2307,13 @@ window.mBTRouter = (function () {
         showCoffeeHome:            showCoffeeHome,
         handleLogin:               handleLogin,
         injectFooterIcons:         injectFooterIcons,
-        applyContactRate:          _applyContactRate
+        applyContactRate:          _applyContactRate,
+        switchCurrency:            switchCurrency,
+        applyCurrencyMode:         applyCurrencyMode,
+        applyCurrencyConvert:      applyCurrencyConvert,
+        applyCurrencyRelabel:      applyCurrencyRelabel,
+        moneyFieldsSnapshot:       moneyFieldsSnapshot,
+        buildCurrencySwitchDialog: buildCurrencySwitchDialog
     };
 
 })();
