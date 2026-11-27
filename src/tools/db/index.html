@@ -1088,163 +1088,142 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) { return []; }
   }
-  /* K1: marker only after local write resolves and (when embedded) the monolith ack. K3: show cap notice from ack.dropped. */
-  var savedDocsAckSeq = 0, savedDocsAcks = {};
-  /* P1: last shell-acknowledged saved list; a rejected write restores here so later sends omit the change. */
+  var savedDocsSaveSeq = 0;
+  var savedDocsConfirmedSeq = 0;
+  var savedDocsAcks = Object.create(null);
+  var standaloneSavedDocsWrites = Promise.resolve();
   var _ackedSavedDocsSnap = null;
-  function takeAckedSavedDocsSnap() {
-    if (!budget) return;
-    _ackedSavedDocsSnap = {
-      hadDocs: Object.prototype.hasOwnProperty.call(budget, 'savedDocs'),
-      docs: Object.prototype.hasOwnProperty.call(budget, 'savedDocs')
-        ? JSON.parse(JSON.stringify(budget.savedDocs)) : undefined,
-      hadDeleted: Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted'),
-      deleted: Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted')
-        ? JSON.parse(JSON.stringify(budget.savedDocsDeleted)) : undefined
-    };
+
+  function savedDocsFields(data) {
+    return JSON.parse(JSON.stringify({
+      savedDocs: data && data.savedDocs,
+      savedDocsDeleted: data && data.savedDocsDeleted
+    }));
   }
+
+  function takeAckedSavedDocsSnap() {
+    if (budget) _ackedSavedDocsSnap = savedDocsFields(budget);
+  }
+
   function ensureAckedSavedDocsSnap() {
     if (!_ackedSavedDocsSnap) takeAckedSavedDocsSnap();
   }
-  function restoreAckedSavedDocsSnap() {
-    if (!budget || !_ackedSavedDocsSnap) return;
-    if (_ackedSavedDocsSnap.hadDocs) budget.savedDocs = JSON.parse(JSON.stringify(_ackedSavedDocsSnap.docs));
-    else delete budget.savedDocs;
-    if (_ackedSavedDocsSnap.hadDeleted) {
-      budget.savedDocsDeleted = JSON.parse(JSON.stringify(_ackedSavedDocsSnap.deleted));
-    } else {
-      delete budget.savedDocsDeleted;
-    }
+
+  function applySavedDocsFields(data) {
+    var fields = savedDocsFields(data);
+    ['savedDocs', 'savedDocsDeleted'].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(fields, key)) budget[key] = fields[key];
+      else delete budget[key];
+    });
   }
-  /* M1: capture the Save button base label once while a restore timer is pending; never recapture "Saved ✓". */
+
+  function savedDocsNotices(capDropped, duplicates) {
+    var notices = [];
+    if (duplicates > 0) notices.push(duplicates + ' duplicate saved documents were merged');
+    if (capDropped > 0) {
+      var cap = (window.mBTSavedDocs && window.mBTSavedDocs.CAP) || 50;
+      notices.push(capDropped + ' older saved document' + (capDropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + cap + '.');
+    }
+    return notices;
+  }
+
+  /* M1: capture the Save button base label once while a restore timer is pending. */
   var saveDocBtnBaseHtml = null, saveDocBtnRestoreTimer = null;
   window.addEventListener('message', function (e) {
-    var a, dropped, duplicates, capDropped, cap;
-    if (!e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'docs-saved-documents') return;
-    try { if (window.parent && e.source && e.source !== window.parent) return; } catch (eSrc) {}
-    try {
-      if (window.location && window.location.origin && e.origin && e.origin !== window.location.origin) return;
-    } catch (eOrig) {}
-    dropped = typeof e.data.dropped === 'number' ? e.data.dropped : 0;
-    duplicates = typeof e.data.duplicates === 'number' ? e.data.duplicates : 0;
-    /* H2: duplicate merges use their own notice; remaining dropped stay the cap sentence. */
-    if (duplicates > 0) {
-      afNotice(duplicates + ' duplicate saved documents were merged', 'Saved documents');
+    var data = e.data;
+    if (!data || data.type !== 'mbt:tool-ack' || data.action !== 'docs-saved-documents') return;
+    if (e.source !== window.parent || e.origin !== window.location.origin) return;
+    var ack = savedDocsAcks[data.requestId];
+    if (ack) {
+      delete savedDocsAcks[data.requestId];
+      ack(data);
+    } else if (data.status === 'success') {
+      savedDocsNotices((data.dropped || 0) - (data.duplicates || 0), data.duplicates || 0).forEach(function (notice) {
+        afNotice(notice, 'Saved documents');
+      });
     }
-    capDropped = dropped - duplicates;
-    if (capDropped > 0) {
-      cap = (window.mBTSavedDocs && window.mBTSavedDocs.CAP) || 50;
-      afNotice(capDropped + ' older saved document' + (capDropped === 1 ? ' was' : 's were') +
-        ' dropped to keep the list at ' + cap + '.', 'Saved documents');
-    }
-    a = savedDocsAcks[e.data.requestId];
-    if (!a) return;
-    delete savedDocsAcks[e.data.requestId];
-    if (e.data.status === 'success') a.ok(); else a.fail(e.data.message);
   });
+
   function persistBudgetSavedDocs(cb, opts) {
-    var embedded = false;
-    var requestId = null;
-    var localDone = false, localOk = false, ackDone = false, ackOk = false;
-    var failMsg = '';
-    var finished = false;
-    /* Z1: migration restores the last acknowledged list on any failed write, including local-only warnings. */
-    var restoreOnLocalWarning = !!(opts && opts.restoreOnLocalWarning);
     ensureAckedSavedDocsSnap();
-    function finish(ok, msg) {
-      if (finished) return;
-      finished = true;
-      if (!ok) restoreAckedSavedDocsSnap();
-      else if (msg && restoreOnLocalWarning) restoreAckedSavedDocsSnap();
-      else takeAckedSavedDocsSnap();
-      if (cb) { cb(!!ok, msg || ''); cb = null; }
-    }
-    function maybeFinish() {
-      if (finished) return;
-      if (embedded) {
-        if (!ackDone) return;
-        if (!ackOk) { finish(false, failMsg); return; }
-        /* K1 / P1: after a successful shell ack, write local package; never write on a rejected ack. */
-        if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
-          if (!localDone) {
-            localforage.setItem(projectKey, budget).then(function () {
-              localDone = true;
-              localOk = true;
-              maybeFinish();
-            }, function (err) {
-              localDone = true;
-              localOk = false;
-              failMsg = (err && err.message) ? String(err.message) : '';
-              maybeFinish();
-            });
-            return;
-          }
-          /* R1: shell already acknowledged; report the local failure. Migration (Z1) still restores. */
-          if (!localOk) {
-            finish(true, "Saved in the budget. This browser's copy could not be written: " + failMsg);
-            return;
-          }
-        }
-        finish(true, '');
-        return;
+    var seq = ++savedDocsSaveSeq;
+    var sourceBudget = budget;
+    var key = projectKey;
+    var sent = savedDocsFields(budget);
+    var embedded = window.parent && window.parent !== window;
+    function finish(ok, msg, result) {
+      var merged = result && Array.isArray(result.savedDocs);
+      var current = budget === sourceBudget && seq === savedDocsSaveSeq;
+      if (ok && budget === sourceBudget && seq > savedDocsConfirmedSeq) {
+        _ackedSavedDocsSnap = merged ? savedDocsFields(result) : sent;
+        savedDocsConfirmedSeq = seq;
       }
-      if (!localDone) return;
-      if (!localOk) { finish(false, failMsg); return; }
-      finish(true, '');
+      if (current && budget && _ackedSavedDocsSnap) applySavedDocsFields(_ackedSavedDocsSnap);
+
+      var duplicates = result && result.duplicates || 0;
+      var capDropped = (result && result.dropped || 0) - duplicates;
+      if (!opts || !opts.migration) {
+        savedDocsNotices(capDropped - (opts && opts.previewedCapDrops || 0), duplicates).forEach(function (notice) {
+          afNotice(notice, 'Saved documents');
+        });
+      }
+      if (cb) cb(ok, msg || '', capDropped, duplicates);
+      if (ok && merged && current) buildSavedDocsList();
     }
-    try {
-      if (window.parent && window.parent !== window) {
-        embedded = true;
-        savedDocsAckSeq += 1;
-        requestId = 'sd_' + savedDocsAckSeq + '_' + Date.now();
-        var origin = '*';
-        try { if (window.location && window.location.origin) origin = window.location.origin; } catch (eOrigin) {}
-        var timer = setTimeout(function () {
-          if (savedDocsAcks[requestId]) {
-            delete savedDocsAcks[requestId];
-            ackDone = true;
-            ackOk = false;
-            failMsg = '';
-            maybeFinish();
-          }
-        }, 20000);
-        savedDocsAcks[requestId] = {
-          ok: function () { clearTimeout(timer); ackDone = true; ackOk = true; failMsg = ''; maybeFinish(); },
-          fail: function (msg) { clearTimeout(timer); ackDone = true; ackOk = false; failMsg = msg ? String(msg) : ''; maybeFinish(); }
-        };
+
+    if (embedded) {
+      var requestId = 'sd_' + seq + '_' + Date.now();
+      var timer = setTimeout(function () {
+        delete savedDocsAcks[requestId];
+        finish(false, '');
+      }, 20000);
+      savedDocsAcks[requestId] = function (result) {
+        clearTimeout(timer);
+        if (result.status === 'success') finish(true, '', result);
+        else finish(false, result.message);
+      };
+      try {
+        var outgoing = opts && opts.candidates || sent.savedDocs || [];
         window.parent.postMessage({
           type: 'mbt:tool-action',
           action: 'docs-saved-documents',
           payload: {
             requestId: requestId,
-            projectKey: projectKey,
-            savedDocs: (budget && Array.isArray(budget.savedDocs)) ? JSON.parse(JSON.stringify(budget.savedDocs)) : [],
-            savedDocsDeleted: (budget && Array.isArray(budget.savedDocsDeleted)) ? JSON.parse(JSON.stringify(budget.savedDocsDeleted)) : []
+            projectKey: key,
+            savedDocs: outgoing,
+            savedDocsDeleted: sent.savedDocsDeleted || [],
+            changedDocIds: window.mBTSavedDocs.changedIds(_ackedSavedDocsSnap && _ackedSavedDocsSnap.savedDocs, outgoing)
           }
-        }, origin);
+        }, window.location.origin);
+      } catch (err) {
+        clearTimeout(timer);
+        delete savedDocsAcks[requestId];
+        finish(false, err.message);
       }
-    } catch (ePost) { embedded = false; }
-    if (!embedded) {
-      if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
-        localforage.setItem(projectKey, budget).then(function () {
-          localDone = true;
-          localOk = true;
-          maybeFinish();
-        }, function (err) {
-          localDone = true;
-          localOk = false;
-          failMsg = (err && err.message) ? String(err.message) : '';
-          maybeFinish();
-        });
-        return;
-      }
-      /* R2: no project key and no embedding parent: nothing was persisted. */
+      return;
+    }
+
+    if (!key || typeof localforage === 'undefined' || !localforage.getItem || !localforage.setItem) {
       finish(false, 'No project is open, so nothing was saved.');
       return;
     }
-    maybeFinish();
+    standaloneSavedDocsWrites = standaloneSavedDocsWrites.then(function () {
+      return localforage.getItem(key);
+    }).then(function (stored) {
+      var updated = Object.assign({}, stored || { projectName: sourceBudget.projectName }, {
+        savedDocs: sent.savedDocs || [],
+        savedDocsDeleted: sent.savedDocsDeleted || []
+      });
+      return localforage.setItem(key, updated);
+    }).then(function () {
+      finish(true, '');
+    }, function (err) {
+      finish(false, err && err.message);
+    });
   }
-  /* N6: while a migration write is in flight, later reads reuse the pending in-memory result and never set the marker. */
+
+  /* Keep the migration in flight until the applicable storage path confirms it. */
   var savedDocsMigrationInFlight = false;
   var __mbtPendingSavedDocsMigration = null;
   function publishPendingSavedDocsMigration(promise) {
@@ -1255,49 +1234,37 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } catch (eParent) {}
   }
   function maybeMigrateSavedDocs() {
-    if (!budget || !window.mBTSavedDocs) return;
+    if (!budget || !window.mBTSavedDocs || savedDocsMigrationInFlight) return;
+    var markerKey = savedDocsMigratedKey();
     var marker = null;
-    try { marker = localStorage.getItem(savedDocsMigratedKey()); } catch (eM) { marker = null; }
+    try { marker = localStorage.getItem(markerKey); } catch (eM) { marker = null; }
     if (marker === '1') return;
-    if (savedDocsMigrationInFlight) return;
     var legacy = readLegacySavedDocs();
     if (!legacy.length) return;
-    /* Capture the pre-migration list before mutate so a failed write can restore it (Z1). */
+
     ensureAckedSavedDocsSnap();
     var result = window.mBTSavedDocs.migrate(budget, legacy);
-    var dropped = (result && result.dropped) ? result.dropped : 0;
-    var duplicates = (result && result.duplicates) ? result.duplicates : 0;
-    var capDropped = dropped - duplicates;
-    var migNotices = [];
-    if (duplicates > 0) migNotices.push(duplicates + ' duplicate saved documents were merged');
-    if (capDropped > 0) {
-      migNotices.push(capDropped + ' older saved document' + (capDropped === 1 ? ' was' : 's were') +
-        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.');
-    }
-    var capNotice = migNotices.join('\n');
-    if (result && result.changed) {
-      /* T1: one combined notice after the save result (migration lines first, then R1 or shell error). */
-      savedDocsMigrationInFlight = true;
-      var settle;
-      var pending = new Promise(function (resolve) { settle = resolve; });
-      publishPendingSavedDocsMigration(pending);
-      persistBudgetSavedDocs(function (ok, msg) {
-        savedDocsMigrationInFlight = false;
-        var parts = ['Saved documents from other browsers are not migrated.'];
-        if (capNotice) parts.push(capNotice);
-        if (msg) parts.push(String(msg));
-        afNotice(parts.join('\n'), 'Saved documents');
-        /* Marker only on a clean ack (no local-only warning), so a local failure can remigrate on reopen. */
-        if (ok && !msg) {
-          try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
-        }
-        settle();
-        if (__mbtPendingSavedDocsMigration === pending) publishPendingSavedDocsMigration(null);
-      }, { restoreOnLocalWarning: true });
-    } else {
-      if (capNotice) afNotice(capNotice, 'Saved documents');
-      try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet2) {}
-    }
+    var embedded = window.parent && window.parent !== window;
+    savedDocsMigrationInFlight = true;
+    var settle;
+    var pending = new Promise(function (resolve) { settle = resolve; });
+    publishPendingSavedDocsMigration(pending);
+    persistBudgetSavedDocs(function (ok, msg, capDropped, duplicates) {
+      savedDocsMigrationInFlight = false;
+      var parts = result.changed ? ['Saved documents from other browsers are not migrated.'] : [];
+      parts = parts.concat(savedDocsNotices(
+        Math.max(result.dropped - result.duplicates, capDropped),
+        result.duplicates + duplicates
+      ));
+      if (!ok && !embedded) parts.push(msg ? 'The change was not saved: ' + msg : 'The change was not saved.');
+      else if (msg) parts.push(String(msg));
+      if (parts.length) afNotice(parts.join('\n'), 'Saved documents');
+      if (ok) {
+        try { localStorage.setItem(markerKey, '1'); } catch (eSet) {}
+      }
+      settle();
+      if (__mbtPendingSavedDocsMigration === pending) publishPendingSavedDocsMigration(null);
+    }, { migration: true });
   }
   function getSavedDocs() {
     ensureAckedSavedDocsSnap();
@@ -1308,6 +1275,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Writes budget.savedDocs only. Never writes or removes the legacy localStorage key. */
   function setSavedDocs(docs) {
     if (!budget) return;
+    ensureAckedSavedDocsSnap();
     budget.savedDocs = Array.isArray(docs) ? docs : [];
     persistBudgetSavedDocs();
   }
@@ -1326,7 +1294,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       editorData: editorData ? JSON.parse(JSON.stringify(editorData)) : null
     };
     ensureAckedSavedDocsSnap();
-    var result = window.mBTSavedDocs.add(budget, doc);
+    var result = window.mBTSavedDocs.add(budget, doc, window.parent !== window);
     if (result && result.dropped) {
       afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
         ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
@@ -1354,7 +1322,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       } else {
         afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
       }
-    });
+    }, { candidates: result.candidates, previewedCapDrops: result.dropped });
   }
   function buildSavedDocsList() {
     var savedList = dom.getElementById('saved-list');
@@ -1439,7 +1407,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         clone.date = new Date().toISOString();
         clone.title = orig.title + ' (Copy)';
         ensureAckedSavedDocsSnap();
-        var result = window.mBTSavedDocs.add(budget, clone);
+        var result = window.mBTSavedDocs.add(budget, clone, window.parent !== window);
         if (result && result.dropped) {
           afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
             ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
@@ -1452,7 +1420,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           }
           buildSavedDocsList();
           afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
-        });
+        }, { candidates: result.candidates, previewedCapDrops: result.dropped });
       });
     });
     /* N12: Rename beside Duplicate and Delete; same failure notice; tombstone and cap rules unchanged. */
@@ -1922,6 +1890,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function applyLoadedBudget(data) {
     if (!data) return false;
     budget = data;
+    takeAckedSavedDocsSnap();
     if (!afCurrencyChosen && data.currency) {
       currency = data.currency;
       var currencySelect = dom.getElementById('opt-currency');

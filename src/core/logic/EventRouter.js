@@ -902,6 +902,68 @@ window.mBTRouter = (function () {
         });
     }
 
+    var _savedDocsWrites = Promise.resolve();
+
+    function _applySavedDocs(source, payload) {
+        function ack(status, message, result) {
+            var reply = {
+                type: 'mbt:tool-ack',
+                action: 'docs-saved-documents',
+                status: status,
+                message: message || '',
+                requestId: payload.requestId,
+                dropped: result ? result.dropped : 0,
+                duplicates: result ? result.duplicates : 0
+            };
+            if (result) {
+                reply.savedDocs = _safeSerialize(result.savedDocs);
+                reply.savedDocsDeleted = result.savedDocsDeleted;
+            }
+            _safePostMessage(source, reply);
+        }
+
+        var budget = _ctx.getBudget();
+        if (!budget || !budget.projectName) { ack('error', 'No budget is open.'); return; }
+        if (payload.projectKey !== _ctx.storageKeyPrefix + budget.projectName) {
+            ack('error', 'Another budget is open now (' + budget.projectName + ').');
+            return;
+        }
+        if (!window.saveBudget || !window.mBTSavedDocs) {
+            ack('error', 'The budget cannot be saved right now.');
+            return;
+        }
+        var result;
+        try {
+            result = _safeSerialize(window.mBTSavedDocs.mergeSave(budget, payload));
+            if (!Array.isArray(result.savedDocs)) throw new Error('The saved documents could not be read.');
+        } catch (err) {
+            ack('error', err.message);
+            return;
+        }
+        var hadDocs = Object.prototype.hasOwnProperty.call(budget, 'savedDocs');
+        var hadDeleted = Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted');
+        var prevDocs = budget.savedDocs;
+        var prevDeleted = budget.savedDocsDeleted;
+        budget.savedDocs = _safeSerialize(result.savedDocs);
+        budget.savedDocsDeleted = _safeSerialize(result.savedDocsDeleted);
+        return Promise.resolve().then(function () {
+            return window.saveBudget(true);
+        }).then(function () {
+            ack('success', '', result);
+        }, function (err) {
+            /* Leave intervening changes in place if this write no longer owns the live fields. */
+            var stillThisWrite = JSON.stringify(budget.savedDocs) === JSON.stringify(result.savedDocs) &&
+                JSON.stringify(budget.savedDocsDeleted) === JSON.stringify(result.savedDocsDeleted);
+            if (stillThisWrite) {
+                if (hadDocs) budget.savedDocs = prevDocs;
+                else delete budget.savedDocs;
+                if (hadDeleted) budget.savedDocsDeleted = prevDeleted;
+                else delete budget.savedDocsDeleted;
+            }
+            ack('error', (err && err.message) || 'save failed');
+        });
+    }
+
     /* --- Phase 133: centralized postMessage dispatcher extracted from inline listener --- */
     function _handleToolAction(e) {
         if (!e.data || e.data.type !== 'mbt:tool-action') return;
@@ -1206,124 +1268,17 @@ window.mBTRouter = (function () {
         } else if (action === 'docs-memo-line') {
             _applyDocsMemoLine(e.source, action, payload, budget);
 
-        /* --- docs-saved-documents: Docs writes budget.savedDocs / savedDocsDeleted, then the main window saves --- */
+        /* --- docs-saved-documents: merge the Docs fields into the live project, save, answer --- */
         } else if (action === 'docs-saved-documents') {
-            (function () {
-                function ack(status, message, dropped, duplicates) {
-                    _safePostMessage(e.source, {
-                        type: 'mbt:tool-ack',
-                        action: action,
-                        status: status,
-                        message: message || '',
-                        requestId: payload && payload.requestId,
-                        dropped: typeof dropped === 'number' ? dropped : 0,
-                        duplicates: typeof duplicates === 'number' ? duplicates : 0
-                    });
-                }
-                if (!budget || !budget.projectName) { ack('error', 'No budget is open.'); return; }
-                if (!payload || !payload.projectKey || payload.projectKey !== _ctx.storageKeyPrefix + budget.projectName) {
-                    ack('error', 'Another budget is open now (' + (budget.projectName || '') + ').');
-                    return;
-                }
-                if (!window.saveBudget) { ack('error', 'The budget cannot be saved right now.'); return; }
-                /* K2: tombstones are the union of stored and incoming; drop any incoming doc id in that union. */
-                var storedDeleted = Array.isArray(budget.savedDocsDeleted) ? budget.savedDocsDeleted : [];
-                var incomingDeleted = Object.prototype.hasOwnProperty.call(payload, 'savedDocsDeleted')
-                    ? (Array.isArray(payload.savedDocsDeleted) ? payload.savedDocsDeleted : [])
-                    : storedDeleted.slice();
-                /* H1: null-prototype lookup so property-name ids are not treated as present. */
-                var tombSet = Object.create(null);
-                var union = [];
-                var i, id, d;
-                for (i = 0; i < storedDeleted.length; i++) {
-                    id = storedDeleted[i];
-                    if (typeof id === 'string' && id !== '' && !Object.prototype.hasOwnProperty.call(tombSet, id)) {
-                        tombSet[id] = 1;
-                        union.push(id);
-                    }
-                }
-                for (i = 0; i < incomingDeleted.length; i++) {
-                    id = incomingDeleted[i];
-                    if (typeof id === 'string' && id !== '' && !Object.prototype.hasOwnProperty.call(tombSet, id)) {
-                        tombSet[id] = 1;
-                        union.push(id);
-                    }
-                }
-                var incomingDocs = Object.prototype.hasOwnProperty.call(payload, 'savedDocs')
-                    ? (Array.isArray(payload.savedDocs) ? payload.savedDocs : [])
-                    : (Array.isArray(budget.savedDocs) ? budget.savedDocs : []);
-                var filtered = [];
-                for (i = 0; i < incomingDocs.length; i++) {
-                    d = incomingDocs[i];
-                    if (!d || typeof d.id !== 'string' || d.id === '') continue;
-                    if (Object.prototype.hasOwnProperty.call(tombSet, d.id)) continue;
-                    filtered.push(d);
-                }
-                /* K3: cap through SavedDocs.merge (or the same 50-entry rule); report dropped in the ack. */
-                var dropped = 0;
-                var duplicates = 0;
-                var nextList;
-                if (window.mBTSavedDocs && typeof window.mBTSavedDocs.merge === 'function') {
-                    var merged = window.mBTSavedDocs.merge(filtered, [], []);
-                    nextList = merged.list;
-                    dropped = merged.dropped || 0;
-                    duplicates = merged.duplicates || 0;
-                } else {
-                    var CAP = 50;
-                    filtered = filtered.slice().sort(function (a, b) {
-                        var da = (a && typeof a.date === 'string' && a.date !== '') ? a.date : null;
-                        var db = (b && typeof b.date === 'string' && b.date !== '') ? b.date : null;
-                        if (da && db) { if (da > db) return -1; if (da < db) return 1; return 0; }
-                        if (da && !db) return -1;
-                        if (!da && db) return 1;
-                        return 0;
-                    });
-                    var seenFallback = Object.create(null);
-                    var dedupedFallback = [];
-                    for (i = 0; i < filtered.length; i++) {
-                        d = filtered[i];
-                        if (Object.prototype.hasOwnProperty.call(seenFallback, d.id)) {
-                            duplicates++;
-                            continue;
-                        }
-                        seenFallback[d.id] = 1;
-                        dedupedFallback.push(d);
-                    }
-                    filtered = dedupedFallback;
-                    if (filtered.length > CAP) {
-                        dropped = duplicates + (filtered.length - CAP);
-                        nextList = filtered.slice(0, CAP);
-                    } else {
-                        dropped = duplicates;
-                        nextList = filtered;
-                    }
-                }
-                /* N7: remember live list/tombstones so a rejected write cannot leave a later unrelated save committing them. */
-                var prevDocs = Object.prototype.hasOwnProperty.call(budget, 'savedDocs')
-                    ? JSON.parse(JSON.stringify(budget.savedDocs))
-                    : undefined;
-                var prevDeleted = Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted')
-                    ? JSON.parse(JSON.stringify(budget.savedDocsDeleted))
-                    : undefined;
-                var hadDocs = Object.prototype.hasOwnProperty.call(budget, 'savedDocs');
-                var hadDeleted = Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted');
-                budget.savedDocs = JSON.parse(JSON.stringify(nextList));
-                budget.savedDocsDeleted = JSON.parse(JSON.stringify(union));
-                Promise.resolve().then(function () { return window.saveBudget(true); }).then(function () {
-                    ack('success', '', dropped, duplicates);
-                }, function (err) {
-                    /* P1: a failed write must not roll back a later acknowledged list still live on the budget. */
-                    var stillThisWrite = JSON.stringify(budget.savedDocs) === JSON.stringify(nextList)
-                        && JSON.stringify(budget.savedDocsDeleted) === JSON.stringify(union);
-                    if (stillThisWrite) {
-                        if (hadDocs) budget.savedDocs = prevDocs;
-                        else delete budget.savedDocs;
-                        if (hadDeleted) budget.savedDocsDeleted = prevDeleted;
-                        else delete budget.savedDocsDeleted;
-                    }
-                    ack('error', (err && err.message) || 'save failed');
+            if (Array.isArray(payload.changedDocIds)) {
+                /* Read the confirmed result of the preceding Docs save before merging the next one. */
+                _savedDocsWrites = _savedDocsWrites.then(function () {
+                    return _applySavedDocs(e.source, payload);
                 });
-            })();
+            } else {
+                /* Older Docs instances submit a full list without change information. */
+                _applySavedDocs(e.source, payload);
+            }
 
         /* --- stages-update: the Stages tool's changes only, applied to the open budget, saved, answered --- */
         } else if (action === 'stages-update') {

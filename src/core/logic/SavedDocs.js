@@ -97,6 +97,58 @@
         return { list: out, duplicates: duplicates };
     }
 
+    function changedIds(before, after) {
+        var previous = Object.create(null);
+        dedupeByIdNewest(before).list.forEach(function (entry) { previous[entry.id] = entry; });
+        return dedupeByIdNewest(after).list.filter(function (entry) {
+            var prior = previous[entry.id];
+            return !prior || prior.title !== entry.title || prior.date !== entry.date ||
+                prior.templateId !== entry.templateId || prior.templateName !== entry.templateName ||
+                !sameContent(prior.editorData, entry.editorData);
+        }).map(function (entry) { return entry.id; });
+    }
+
+    function mergeSave(stored, incoming) {
+        var tombstones = Object.create(null);
+        var deleted = [];
+        [stored.savedDocsDeleted, incoming.savedDocsDeleted].forEach(function (list) {
+            if (!Array.isArray(list)) return;
+            list.forEach(function (id) {
+                if (!nonEmptyString(id) || tombstones[id]) return;
+                tombstones[id] = true;
+                deleted.push(id);
+            });
+        });
+        function eligible(list) {
+            return dedupeByIdNewest(Array.isArray(list) ? list.filter(function (entry) {
+                return validEntry(entry) && !tombstones[entry.id];
+            }) : []);
+        }
+        var existing = eligible(stored.savedDocs);
+        var received = eligible(incoming.savedDocs);
+        var changed = null;
+        if (Array.isArray(incoming.changedDocIds)) {
+            changed = Object.create(null);
+            incoming.changedDocIds.forEach(function (id) { if (nonEmptyString(id)) changed[id] = true; });
+        }
+        var byId = Object.create(null);
+        existing.list.forEach(function (entry) { byId[entry.id] = entry; });
+        var result = received.list.map(function (entry) {
+            var prior = byId[entry.id];
+            delete byId[entry.id];
+            return prior && changed && !changed[entry.id] ? prior : entry;
+        });
+        existing.list.forEach(function (entry) { if (byId[entry.id]) result.push(entry); });
+        var sorted = sortByDateDesc(result);
+        var duplicates = existing.duplicates + received.duplicates;
+        return {
+            savedDocs: sorted.slice(0, CAP),
+            savedDocsDeleted: deleted,
+            dropped: Math.max(0, sorted.length - CAP) + duplicates,
+            duplicates: duplicates
+        };
+    }
+
     function list(budget) {
         if (!isPlain(budget) || !Array.isArray(budget.savedDocs)) return hostList();
         var kept = hostList();
@@ -186,7 +238,7 @@
         return copy;
     }
 
-    function add(budget, entry) {
+    function add(budget, entry, includeCandidates) {
         if (!isPlain(budget)) return hostData({ dropped: 0, rejected: true });
         if (!validEntry(entry)) return hostData({ dropped: 0, rejected: true });
         if (!Array.isArray(budget.savedDocs)) budget.savedDocs = hostList();
@@ -207,7 +259,9 @@
             sorted = sorted.slice(0, CAP);
         }
         budget.savedDocs = sorted;
-        return hostData({ dropped: dropped });
+        var result = { dropped: dropped };
+        if (includeCandidates && dropped) result.candidates = next;
+        return hostData(result);
     }
 
     function remove(budget, id) {
@@ -296,6 +350,8 @@
         CAP: CAP,
         list: list,
         merge: merge,
+        changedIds: changedIds,
+        mergeSave: mergeSave,
         add: add,
         remove: remove,
         rename: rename,
