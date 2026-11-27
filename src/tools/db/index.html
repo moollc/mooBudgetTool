@@ -1089,6 +1089,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   /* K1: marker only after local write resolves and (when embedded) the monolith ack. K3: show cap notice from ack.dropped. */
   var savedDocsAckSeq = 0, savedDocsAcks = {};
+  /* M1: capture the Save button base label once while a restore timer is pending; never recapture "Saved ✓". */
+  var saveDocBtnBaseHtml = null, saveDocBtnRestoreTimer = null;
   window.addEventListener('message', function (e) {
     var a, dropped, cap;
     if (!e.data || e.data.type !== 'mbt:tool-ack' || e.data.action !== 'docs-saved-documents') return;
@@ -1227,7 +1229,16 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     persistBudgetSavedDocs(function (ok, msg) {
       var btn = dom.getElementById('btn-save-doc');
       if (ok) {
-        if (btn) { var orig = btn.innerHTML; btn.innerHTML = orig.replace('Save', 'Saved ✓'); setTimeout(function () { btn.innerHTML = orig; }, 1200); }
+        if (btn) {
+          if (!saveDocBtnRestoreTimer) saveDocBtnBaseHtml = btn.innerHTML;
+          btn.innerHTML = String(saveDocBtnBaseHtml).replace('Save', 'Saved ✓');
+          if (saveDocBtnRestoreTimer) clearTimeout(saveDocBtnRestoreTimer);
+          saveDocBtnRestoreTimer = setTimeout(function () {
+            btn.innerHTML = saveDocBtnBaseHtml;
+            saveDocBtnRestoreTimer = null;
+            saveDocBtnBaseHtml = null;
+          }, 1200);
+        }
         return;
       }
       afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
