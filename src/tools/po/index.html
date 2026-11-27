@@ -297,6 +297,8 @@
                 if (empty) empty.classList.add('hidden');
                 var html = '';
                 l.pos.forEach(function(po) {
+                    var paidMethodLabel = po.status === 'Paid' ? paidByLabel(po.paidMethod) : '';
+                    var refSeparator = po.paidMethod === 'cash' || po.paidMethod === 'transfer' ? ', ref ' : ' · ';
                     html += '<li class="bg-white px-4 py-3 flex flex-wrap sm:flex-nowrap items-start gap-3 group">' +
                         '<div class="flex-1 min-w-0">' +
                             '<div class="flex items-center gap-2 flex-wrap">' +
@@ -306,10 +308,10 @@
                             '</div>' +
                             '<p class="text-[12px] font-semibold text-slate-800 truncate mt-0.5">' + esc(po.vendor || '—') + '</p>' +
                             (po.description ? '<p class="text-[10px] text-slate-400 truncate">' + esc(po.description) + '</p>' : '') +
-                            (po.status === 'Paid' && (paidByLabel(po.paidMethod) || po.paidRef)
+                            (po.status === 'Paid' && (paidMethodLabel || po.paidRef)
                                 ? '<p class="text-[10px] text-slate-500 mt-0.5">' +
-                                    (paidByLabel(po.paidMethod) ? esc(paidByLabel(po.paidMethod)) : '') +
-                                    (po.paidRef ? (paidByLabel(po.paidMethod) ? ' · ' : '') + esc(po.paidRef) : '') +
+                                    esc(paidMethodLabel) +
+                                    (po.paidRef ? (paidMethodLabel ? refSeparator : '') + esc(po.paidRef) : '') +
                                   '</p>'
                                 : '') +
                             (po.itemId ? '' : '<p class="po-no-line text-[10px] font-bold text-amber-700 mt-1">No budget line yet: this order is not counted against any line of the budget. Choose Edit to link it.</p>') +

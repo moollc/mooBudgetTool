@@ -787,12 +787,20 @@ var mBTContacts = (function () {
                         if (PAYMENT_SERVICES[si2].id === po.paidMethod) { svc2 = PAYMENT_SERVICES[si2]; break; }
                     }
                 }
+                var paymentDetails = esc(po.paidDate || '');
+                var methodLabel = paymentChoiceLabel(po.paidMethod);
+                if (methodLabel) {
+                    paymentDetails += (paymentDetails ? ' &bull; ' : '') + esc(methodLabel) +
+                        (po.paidRef ? ', ref ' + esc(po.paidRef) : '');
+                } else if (po.paidRef) {
+                    paymentDetails += ' &bull; Ref: ' + esc(po.paidRef);
+                }
                 html += '<div class="flex items-center justify-between p-2 bg-slate-50 rounded-xl mb-1 gap-2">' +
                     '<div class="flex items-center gap-2">' +
                         (svc2 ? '<span class="text-slate-500 shrink-0">' + svc2.icon + '</span>' : '') +
                         '<div>' +
                             '<div class="text-[9px] font-black text-slate-700">' + esc(po.poNumber) + '</div>' +
-                            '<div class="text-[8px] text-slate-400">' + esc(po.paidDate || '') + (po.paidRef ? ' &bull; Ref: ' + esc(po.paidRef) : '') + '</div>' +
+                            '<div class="text-[8px] text-slate-400">' + paymentDetails + '</div>' +
                         '</div>' +
                     '</div>' +
                     '<div class="text-right">' +
@@ -849,6 +857,15 @@ var mBTContacts = (function () {
     }
 
     /* --- Payment form modal --- */
+    var PAYMENT_REFERENCE_MAX_LENGTH = 80;
+    var REQUIRED_PAYMENT_REFERENCE = 'Reference # is required';
+
+    function paymentChoiceLabel(id) {
+        if (id === 'cash') return 'Cash';
+        if (id === 'transfer') return 'Bank transfer';
+        return '';
+    }
+
     function openPaymentForm(poId, contact) {
         var po = null;
         for (var i = 0; i < state.pos.length; i++) {
@@ -860,7 +877,7 @@ var mBTContacts = (function () {
         if (typeof PAYMENT_SERVICES !== 'undefined') {
             PAYMENT_SERVICES.forEach(function(s) {
                 var sel = (contact.walletType && s.id === contact.walletType) ? ' selected' : '';
-                serviceOpts += '<option value="' + esc(s.id) + '"' + sel + '>' + esc(s.label) + '</option>';
+                serviceOpts += '<option value="' + esc(s.id) + '"' + sel + '>' + esc(paymentChoiceLabel(s.id) || s.label) + '</option>';
             });
         }
 
@@ -887,11 +904,12 @@ var mBTContacts = (function () {
                     '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Amount (' + esc(poCurrency(po)) + ')</label>' +
                     '<input type="number" id="pay-amount" step="0.01" min="0" value="' + esc(po.amount) + '" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[13px] font-black text-white outline-none focus:border-emerald-500 transition-colors font-mono"></div>' +
                     /* Method */
-                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Method</label>' +
+                    '<div><label for="pay-service" class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Payment Method</label>' +
                     '<select id="pay-service" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-emerald-500 transition-colors">' + serviceOpts + '</select></div>' +
                     /* Reference */
-                    '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Reference # <span class="text-rose-400">*</span></label>' +
-                    '<input type="text" id="pay-ref" placeholder="Check #, Wire ID, transaction ref" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-emerald-500 transition-colors"></div>' +
+                    '<div><label for="pay-ref" class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">' +
+                        '<span id="pay-ref-label"></span><span id="pay-ref-required" class="text-rose-400" aria-hidden="true"> *</span></label>' +
+                    '<input type="text" id="pay-ref" maxlength="' + PAYMENT_REFERENCE_MAX_LENGTH + '" placeholder="Check #, Wire ID, transaction ref" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-emerald-500 transition-colors"></div>' +
                     /* Date */
                     '<div><label class="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Date</label>' +
                     '<input type="date" id="pay-date" value="' + new Date().toISOString().split('T')[0] + '" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-[11px] text-white outline-none focus:border-emerald-500 transition-colors"></div>' +
@@ -906,6 +924,24 @@ var mBTContacts = (function () {
             '</div>';
 
         document.body.appendChild(modal);
+        var methodInput = document.getElementById('pay-service');
+        var refInput = document.getElementById('pay-ref');
+        var refLabel = document.getElementById('pay-ref-label');
+        var refMarker = document.getElementById('pay-ref-required');
+        var paymentError = document.getElementById('pay-error');
+        function updateReferenceField() {
+            var method = methodInput.value;
+            refLabel.textContent = method === 'transfer' || method === 'wire' ? 'Bank reference' : 'Reference';
+            refInput.required = method !== 'cash';
+            refMarker.classList.toggle('hidden', !refInput.required);
+            if (!refInput.required && paymentError.textContent === REQUIRED_PAYMENT_REFERENCE) {
+                paymentError.textContent = '';
+                paymentError.classList.add('hidden');
+            }
+        }
+        methodInput.addEventListener('change', updateReferenceField);
+        updateReferenceField();
+
         modal.querySelectorAll('.pay-modal-close').forEach(function(btn) {
             btn.addEventListener('click', function() { var m = document.getElementById('payment-modal'); if (m) m.remove(); });
         });
@@ -918,7 +954,7 @@ var mBTContacts = (function () {
     function submitPayment(poId, contact) {
         var amount = parseFloat((document.getElementById('pay-amount') || {}).value) || 0;
         var service = (document.getElementById('pay-service') || {}).value || '';
-        var ref = ((document.getElementById('pay-ref') || {}).value || '').trim();
+        var ref = ((document.getElementById('pay-ref') || {}).value || '').slice(0, PAYMENT_REFERENCE_MAX_LENGTH).trim();
         var date = (document.getElementById('pay-date') || {}).value || new Date().toISOString().split('T')[0];
 
         function showError(msg) {
@@ -928,7 +964,7 @@ var mBTContacts = (function () {
         }
 
         if (amount <= 0) { showError('Enter a valid amount'); return; }
-        if (!ref) { showError('Reference # is required'); return; }
+        if (service !== 'cash' && !ref) { showError(REQUIRED_PAYMENT_REFERENCE); return; }
         if (!state.projectKey) { showError('No project loaded'); return; }
 
         /* Close modal immediately */
