@@ -1257,6 +1257,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       savedDocsMigrationInFlight = true;
       persistBudgetSavedDocs(function (ok, msg) {
         savedDocsMigrationInFlight = false;
+        /* R1 / S1: shell ack with a local-only warning still tells the user, same as save/delete/dup/rename. */
+        if (ok && msg) afNotice(String(msg), 'Saved documents');
         /* Marker only on a clean ack (no local-only warning), so a local failure can remigrate on reopen. */
         if (ok && !msg) {
           try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
