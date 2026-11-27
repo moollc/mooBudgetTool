@@ -1078,6 +1078,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Saved Documents ======== */
   /* List lives on budget.savedDocs (travels in the .moo). Legacy localStorage key is read-only backup. */
   function savedDocsKey() { return 'mbtdb_saved_docs_' + (projectKey || 'default'); }
+
+  /* C1: stamp each voucher row when Save, duplicate, rename or a voucher draft save persists it. */
+  function stampVoucherSavedRows(data) {
+    if (!data || !Array.isArray(data.vouchers)) return;
+    var i, row;
+    for (i = 0; i < data.vouchers.length; i++) {
+      row = data.vouchers[i];
+      if (row && typeof row === 'object') row.savedRow = true;
+    }
+  }
+
   /* J4-R2: marker must NOT start with mbtdb_saved_docs_ (harness treats that prefix as legacy writes). */
   function savedDocsMigratedKey() { return 'mbtdb_sd_migrated_' + (projectKey || 'default'); }
   function readLegacySavedDocs() {
@@ -1305,6 +1316,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!window.mBTSavedDocs) return;
     var tmpl = pub.templates[activeTemplateId];
     var title = (editorData && editorData.productionTitle) || (budget && budget.projectName) || activeTemplateId;
+    stampVoucherSavedRows(editorData);
     var doc = {
       id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
       templateId: activeTemplateId,
@@ -1426,6 +1438,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         clone.id = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         clone.date = new Date().toISOString();
         clone.title = orig.title + ' (Copy)';
+        stampVoucherSavedRows(clone.editorData);
         ensureAckedSavedDocsSnap();
         var result = window.mBTSavedDocs.add(budget, clone);
         if (result && result.dropped) {
@@ -1455,6 +1468,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (nextTitle == null) return;
         ensureAckedSavedDocsSnap();
         if (!window.mBTSavedDocs.rename(budget, id, nextTitle)) return;
+        stampVoucherSavedRows(current.editorData);
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
           if (ok) {
@@ -4970,6 +4984,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           if (arr === 'schedule') editorData.scenes = JSON.parse(JSON.stringify(list));
           if (arr === 'scenes' && activeTemplateId === 'callSheet') editorData.schedule = JSON.parse(JSON.stringify(list));
           if (arr === 'whoElse') delete editorData.whoElsePrompts;
+          if (arr === 'vouchers') stampVoucherSavedRows(editorData);
           saveEditorData();
         }
       }

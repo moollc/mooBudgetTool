@@ -233,16 +233,14 @@
     }
     function paperIsProducerRole(text) {
         var role = paperWithoutParentheses(String(text || ''));
-        /* B2: lowercase, non-letter/non-digit runs to one space, trim; then gate on the first word. */
-        var normalised = String(role || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-        var headWords = normalised.split(/\s+/).filter(Boolean);
-        if (headWords.length && (headWords[0] === 'asst' || headWords[0] === 'assistant')) {
-            return false;
-        }
-        /* Line Producer stays excluded under any spacing or hyphen (normalised to "line producer"). */
-        if (/\bline producer\b/.test(normalised)) return false;
+        /* C2: split compound roles first; first-word asst/assistant, line producer exclusion and
+           last-word producer test run on each part; the role counts when any part passes all three. */
         return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
-            if (/\b(?:line(?:\s+|-)producer|assistant\s+to\s+the\s+producer)\b/i.test(part)) return false;
+            var normalised = String(part || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            var headWords = normalised.split(/\s+/).filter(Boolean);
+            if (!headWords.length) return false;
+            if (headWords[0] === 'asst' || headWords[0] === 'assistant') return false;
+            if (/\bline producer\b/.test(normalised)) return false;
             var folded = String(part || '').replace(/(?<=\p{L})-(?=\p{L})/gu, ' ');
             var foldWords = folded.replace(/[\s\p{P}]+$/u, '').trim().split(/\s+/).filter(Boolean);
             if (foldWords.length >= 2) {
@@ -5861,8 +5859,8 @@
                     if (sawForeign) return 'foreign';
                     return 'orphan';
                 },
-                /* B1: reopened rows keep exactly the saved payment (placed on the matching page only, never filled
-                   from a PO). Fresh vouchers still pair each page from paid POs (J6 P5). */
+                /* C1: rows with savedRow keep exactly the saved payment (placed on the matching page only, never
+                   filled from a PO). Unmarked rows and fresh vouchers pair each page from paid POs (J6 P5). */
                 _paidForPage: function (budget, itemId, pageAmount, pageCurrency, paidSaved, usedPaymentIds, savedState) {
                     var hasSaved = !!(paidSaved && (paidSaved.paidMethod || paidSaved.paidRef));
                     var placed;
@@ -5949,8 +5947,8 @@
                                 paperStripName(contact && contact.role, payee, contact),
                                 paperStripName(contact && contact.title, payee, contact)
                             );
-                            /* Fresh defaults leave paid fields blank so a fresh render (no editorData.vouchers)
-                               fills each page from paid POs (J6 P5). B1: a reopened editor row never fills from a PO. */
+                            /* Fresh defaults leave paid fields blank and omit savedRow so unmarked editor rows
+                               and a fresh render both fill each page from paid POs (J6 P5 / C1). */
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
@@ -6042,10 +6040,11 @@
                             paperStripName(v.role, payee, contact)
                         );
                         var paidSaved = self._paidFields(v);
-                        /* B1: editorData.vouchers means a reopened (or editor) row: never fill paid fields from a PO. */
+                        /* C1: fromSavedDoc only when this row carries savedRow (stamped on Save / duplicate /
+                           rename / draft save of an edited row). Unmarked rows pair from paid POs. */
                         var savedState = {
                             used: false,
-                            fromSavedDoc: !!(options.editorData && Array.isArray(options.editorData.vouchers))
+                            fromSavedDoc: !!v.savedRow
                         };
                         self._pages(v, currency).forEach(function (p) {
                             var paid = self._paidForPage(b, v.itemId, p.amount, currency, paidSaved, usedPaymentIds, savedState);
