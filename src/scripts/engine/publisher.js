@@ -233,21 +233,29 @@
     }
     function paperIsProducerRole(text) {
         var role = paperWithoutParentheses(String(text || ''));
-        /* D2: normalise the whole role; if it starts with asst or assistant it is never the producing
-           party. Then split on / & , and spaced hyphen; each part excludes line producer and requires
-           last word producer; the role counts when any part passes. */
+        /* E1: whole-text asst/assistant gate first (J17 D2). Then the live 2044b36 compound
+           separators on the raw text (/ & , : spaced hyphen, letter-hyphen-letter). Co-producer
+           and line-producer stay one title before the letter-hyphen split. Per title: exclude
+           line producer, require last word producer. */
         var whole = String(role || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
         var wholeWords = whole.split(/\s+/).filter(Boolean);
         if (!wholeWords.length) return false;
         if (wholeWords[0] === 'asst' || wholeWords[0] === 'assistant') return false;
         /* Spaced hyphen splits compounds (Executive Producer - Jay Moo); a digit after the
            hyphen is a duration suffix (Producer - 5 days), not a compound separator. */
-        return role.split(/[\/&,]|\s+-\s+(?!\s*\d)/).some(function (part) {
-            var normalised = String(part || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-            var words = normalised.split(/\s+/).filter(Boolean);
-            if (!words.length) return false;
-            if (/\bline producer\b/.test(normalised)) return false;
-            return words[words.length - 1] === 'producer';
+        return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
+            if (/\b(?:line(?:\s+|-)producer)\b/i.test(part)) return false;
+            var marked = String(part || '').replace(/\b((?:co|line)[- ]producer)\b/gi, function (unit) {
+                return unit.replace(/-/g, '\uE000');
+            });
+            return marked.split(/(?<=\p{L})-(?=\p{L})/u).some(function (title) {
+                var unit = title.replace(/\uE000/g, '-');
+                var normalised = String(unit || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+                var words = normalised.split(/\s+/).filter(Boolean);
+                if (!words.length) return false;
+                if (/\bline producer\b/.test(normalised)) return false;
+                return words[words.length - 1] === 'producer';
+            });
         });
     }
     /* Z4: location collections may arrive as a plain object; renderers always walk an array. */
