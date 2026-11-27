@@ -1314,9 +1314,18 @@
                     '.text-right { text-align: right; } .text-center { text-align: center; } .font-bold { font-weight: bold; }' +
                     '</style>';
 
+                var regionHint = (options && (options.region || (options.budget && options.budget.region))) ||
+                    (d.region) || (meta.region) ||
+                    (typeof window !== 'undefined' && window.mBTHospitalLookup && window.mBTHospitalLookup.projectRegion
+                        ? window.mBTHospitalLookup.projectRegion(options && options.budget, window.mBTOG)
+                        : '') ||
+                    (typeof window !== 'undefined' && window.mBTOG && mBTOG.settings && mBTOG.settings.location) || '';
+                var emergencyFallback = (typeof window !== 'undefined' && window.mBTHospitalLookup && window.mBTHospitalLookup.jamaicaEmergencyLine)
+                    ? window.mBTHospitalLookup.jamaicaEmergencyLine(regionHint)
+                    : (/^jamaica$/i.test(String(regionHint).trim()) ? 'Ambulance and Fire 110, Police 119' : 'Dial 911');
                 var locsHtml = locs.map(function (l, i) {
                     return '<div style="margin-bottom:5px;"><strong>LOC ' + (i + 1) + ':</strong> ' + esc(l.name) + '<br>' +
-                        esc(l.address) + '<br><em style="font-size:7pt">Nearest Hosp: ' + esc(l.hospital || 'Dial 911') + '</em></div>';
+                        esc(l.address) + '<br><em style="font-size:7pt">Nearest Hosp: ' + esc(l.hospital || emergencyFallback) + '</em></div>';
                 }).join('');
 
                 var scheduleHtml = schedule.map(function (row) {
@@ -3035,7 +3044,11 @@
                             return '<tr><td>' + esc(categoryLabel) + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td><td>' + writeIn('') + '</td></tr>';
                         }
                         return rows.map(function (c) {
-                            var contactDetails = [c.phone, c.email, c.address].filter(Boolean).join(', ');
+                            var phoneVal = c.phone;
+                            if (categoryLabel === 'Hospitals' && !String(phoneVal || '').trim()) {
+                                phoneVal = 'phone to confirm';
+                            }
+                            var contactDetails = [phoneVal, c.email, c.address].filter(Boolean).join(', ');
                             return '<tr>' +
                                 '<td>' + esc(categoryLabel) + '</td>' +
                                 '<td>' + writeIn(c.name) + tbcBadge(isRowTbc(c)) + '</td>' +
@@ -3045,13 +3058,16 @@
                         }).join('');
                     }
 
+                    var hospitalConfirmNote = hospList.length
+                        ? '<p style="font-size:8pt;margin:4px 0 0;color:#334155;">Confirm hospital phone numbers and the route before the shoot. Distances are straight line.</p>'
+                        : '';
                     var contactsHtml = '<div class="callsheet-block" data-section="contacts"><h3>Contacts (Client, Locations, Hospitals, Other)</h3>' +
                         '<table><thead><tr class="th-row"><th>Category</th><th>Name</th><th>Role / Site</th><th>Phone / Contact / Address</th></tr></thead><tbody>' +
                         renderContactCatRows('Client', clientList) +
                         renderContactCatRows('Locations', locContactList) +
                         renderContactCatRows('Hospitals', hospList) +
                         renderContactCatRows('Other', otherContactList) +
-                        '</tbody></table></div>';
+                        '</tbody></table>' + hospitalConfirmNote + '</div>';
 
                     /* ---- Weather & Locations ---- */
                     var wx = '<div class="cs-meta-grid">' +

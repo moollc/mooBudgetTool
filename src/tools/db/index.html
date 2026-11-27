@@ -26,6 +26,8 @@
 
   <!-- Tier 4: Publisher Engine (templates live here) -->
   <script src="../../core/finance.engine.js"></script>
+  <script src="../../scripts/engine/hospital-fallback.js"></script>
+  <script src="../../scripts/engine/hospital-lookup.js"></script>
   <script src="../../scripts/engine/publisher.js"></script>
   <script src="../../core/logic/DocumentProjection.js"></script>
   <script src="../../core/logic/ShootSchedule.js"></script>
@@ -3654,11 +3656,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       ' Fetch from Address</button></div>' +
       '<div class="smart-bar"><span id="weather-status"></span></div>' +
       '<div id="hospital-picker"></div>' +
+      '<div style="font-size:10px;color:var(--muted);padding:2px 10px 6px;">Looking up a hospital or the weather sends the location address to OpenStreetMap and the coordinates to Open-Meteo and Overpass. No budget, cast or project details are sent.</div>' +
       '<div class="ed-row ed-2">' + fldCs('basecamp', 'Basecamp Address') + fldCs('basecampParking', 'Parking Notes') + '</div>' +
       '<div class="ed-row ed-3">' + fldCs('weatherHigh', 'High') + fldCs('weatherLow', 'Low') + fldCs('weatherConditions', 'Conditions') + '</div>' +
       '<div class="ed-row ed-2">' + fldCs('sunrise', 'Sunrise', 'time') + fldCs('sunset', 'Sunset', 'time') + '</div>' +
       '<div class="ed-row ed-2">' + fldCs('hospitalName', 'Hospital Name') + fldCs('hospitalPhone', 'Hospital Phone') + '</div>' +
-      '<div class="ed-row">' + fldCs('hospitalAddress', 'Hospital Address', null, true) + '</div>' +
+      '<div class="ed-row ed-2">' + fldCs('hospitalAddress', 'Hospital Address', null, true) + fldCs('hospitalDistance', 'Hospital Distance') + '</div>' +
       '</div>';
 
     if (d.locationForecasts && d.locationForecasts.length > 0) {
@@ -5125,6 +5128,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* Simple and array field inputs (data-key, data-arr) */
     panel.addEventListener('input', function (e) {
       applyControlChange(e.target);
+      var el = e.target;
+      if (!el) return;
+      if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
+        scheduleHospitalLookupFromAddresses();
+      }
+      if (el.getAttribute('data-key') === 'hospitalName') {
+        editorData.hospitalSource = 'typed';
+        fillHospitalPhoneFromName(el.value, true).then(function () {
+          saveEditorData();
+        });
+      }
+      if (el.getAttribute('data-key') === 'hospitalPhone' || el.getAttribute('data-key') === 'hospitalAddress' || el.getAttribute('data-key') === 'hospitalDistance') {
+        editorData.hospitalSource = 'typed';
+      }
     });
 
     /* Handle select and checkbox changes */
@@ -5565,7 +5582,219 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return tryNext(0);
   }
 
-  /* Fetch weather (3-day, all shooting locations) + nearest hospitals (first location) */
+  var hospitalLookupTimer = null;
+  var hospitalLookupController = null;
+
+  function hospitalLookupApi() {
+    return (typeof window !== 'undefined' && window.mBTHospitalLookup) ? window.mBTHospitalLookup : null;
+  }
+
+  function sharedContactsGetter() {
+    if (typeof window !== 'undefined' && window.mBTOG && typeof window.mBTOG.getSharedContacts === 'function') {
+      return function () { return window.mBTOG.getSharedContacts(); };
+    }
+    return function () { return Promise.resolve([]); };
+  }
+
+  function applyHospitalFields(target, hospital, asTyped) {
+    var api = hospitalLookupApi();
+    if (!target || !hospital) return;
+    var source = asTyped ? 'typed' : (hospital.source || 'live');
+    var retrievedAt = hospital.retrievedAt || new Date().toISOString();
+    var curSource = target.hospitalSource || '';
+    function can(key) {
+      if (!api) return !String(target[key] || '').trim();
+      return api.canAutoFillValue(target[key], curSource) || asTyped;
+    }
+    function setIf(key, value) {
+      if (value == null) return;
+      var v = String(value);
+      if (!v.trim() && key !== 'hospitalPhone') return;
+      if (can(key) || !String(target[key] || '').trim()) target[key] = v;
+    }
+    var isTop = (target === editorData);
+    if (isTop) {
+      setIf('hospitalName', hospital.name);
+      setIf('hospitalAddress', hospital.address);
+      setIf('hospitalPhone', hospital.phone);
+      setIf('hospitalDistance', hospital.distance);
+      if (can('hospitalName') || asTyped || !String(target.hospitalSource || '').trim()) {
+        target.hospitalSource = source;
+        target.hospitalRetrievedAt = retrievedAt;
+      }
+    } else {
+      setIf('hospital', hospital.name);
+      setIf('hospitalAddress', hospital.address);
+      setIf('hospitalPhone', hospital.phone);
+      setIf('hospitalDistance', hospital.distance);
+      if (can('hospital') || asTyped || !String(target.hospitalSource || '').trim()) {
+        target.hospitalSource = source;
+        target.hospitalRetrievedAt = retrievedAt;
+      }
+    }
+  }
+
+  function renderHospitalPicker(hospitals, statusEl) {
+    var hospPicker = dom.getElementById('hospital-picker');
+    if (!hospPicker) return;
+    var top = (hospitals || []).slice(0, 5);
+    if (!top.length) {
+      hospPicker.style.display = 'none';
+      hospPicker.innerHTML = '';
+      hospPicker.onclick = null;
+      return;
+    }
+    var pickerHtml = '<p>Select nearest hospital:</p>';
+    top.forEach(function (h, hi) {
+      pickerHtml += '<div class="hosp-item" data-hi="' + hi + '" data-name="' + esc(h.name) + '" data-addr="' + esc(h.address || '') +
+        '" data-phone="' + esc(h.phone || '') + '" data-distance="' + esc(h.distance || '') + '">' +
+        '<div><div class="hosp-item-name">' + esc(h.name) + '</div>' +
+        (h.address ? '<div style="font-size:9px;color:#64748b;">' + esc(h.address) + '</div>' : '') +
+        (h.distance ? '<div style="font-size:9px;color:#64748b;">' + esc(h.distance) + '</div>' : '') +
+        '</div><div class="hosp-item-phone">' + esc(h.phone || 'phone to confirm') + '</div></div>';
+    });
+    hospPicker.innerHTML = pickerHtml;
+    hospPicker.style.display = 'block';
+    hospPicker.onclick = function (e) {
+      var item = e.target.closest('.hosp-item');
+      if (!item) return;
+      dbPushUndoImmediate();
+      var picked = {
+        name: item.getAttribute('data-name'),
+        address: item.getAttribute('data-addr'),
+        phone: item.getAttribute('data-phone'),
+        distance: item.getAttribute('data-distance'),
+        source: 'typed',
+        retrievedAt: new Date().toISOString()
+      };
+      applyHospitalFields(editorData, picked, true);
+      var locs = editorData.shootingLocations || [];
+      if (locs[0]) applyHospitalFields(locs[0], picked, true);
+      fillHospitalPhoneFromName(picked.name, true);
+      hospPicker.style.display = 'none';
+      hospPicker.onclick = null;
+      if (statusEl) {
+        statusEl.textContent = 'Hospital selected.';
+        setTimeout(function () { if (statusEl.textContent === 'Hospital selected.') statusEl.textContent = ''; }, 2000);
+      }
+      saveEditorData();
+      buildEditor('callSheet');
+    };
+  }
+
+  function fillHospitalPhoneFromName(name, allowOverwriteEmptyOnly) {
+    var api = hospitalLookupApi();
+    if (!api || !name) return Promise.resolve();
+    if (allowOverwriteEmptyOnly !== false && String(editorData.hospitalPhone || '').trim()) return Promise.resolve();
+    return api.resolveHospitalPhone({
+      livePhone: '',
+      hospitalName: name,
+      getSharedContacts: sharedContactsGetter()
+    }).then(function (got) {
+      if (!got || !got.phone) return;
+      if (String(editorData.hospitalPhone || '').trim()) return;
+      editorData.hospitalPhone = got.phone;
+      if (!editorData.hospitalSource || editorData.hospitalSource === 'typed') {
+        /* keep typed name source; phone may come from opengate/fallback */
+      }
+      saveEditorData();
+    }).catch(function () {});
+  }
+
+  function lookupHospitalsForLocations(geoList, signal, statusEl) {
+    var api = hospitalLookupApi();
+    if (!api) return Promise.resolve({ hospitalsByAddress: {}, firstRanked: [], error: 'Hospital lookup unavailable' });
+    var online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (!online) return Promise.resolve({ hospitalsByAddress: {}, firstRanked: [], error: 'offline' });
+
+    var tasks = (geoList || []).map(function (g) {
+      return api.fetchOverpassHospitals(g.lat, g.lon, fetch, signal).then(function (ranked) {
+        var within = ranked.filter(function (h) { return h.distanceKm <= 30; });
+        return { geo: g, ranked: within, error: within.length ? null : 'nothing within 30 km' };
+      }).catch(function (err) {
+        if (err && err.name === 'AbortError') throw err;
+        return { geo: g, ranked: [], error: (err && err.message) || 'lookup failed' };
+      });
+    });
+
+    return Promise.all(tasks).then(function (results) {
+      var hospitalsByAddress = {};
+      var firstRanked = [];
+      var errors = [];
+      var phoneJobs = results.map(function (r, idx) {
+        hospitalsByAddress[r.geo.address] = r.ranked;
+        if (idx === 0) firstRanked = r.ranked;
+        if (r.error) errors.push(r.error);
+        var nearest = r.ranked[0];
+        if (!nearest) return Promise.resolve(null);
+        var livePhone = nearest.phone || '';
+        var retrievedAt = new Date().toISOString();
+        return api.resolveHospitalPhone({
+          livePhone: livePhone,
+          hospitalName: nearest.name,
+          retrievedAt: retrievedAt,
+          getSharedContacts: sharedContactsGetter()
+        }).then(function (phoneGot) {
+          nearest.phone = (phoneGot && phoneGot.phone) || '';
+          nearest.phoneSource = (phoneGot && phoneGot.source) || '';
+          nearest.source = 'live';
+          nearest.retrievedAt = retrievedAt;
+          var locs = editorData.shootingLocations || [];
+          for (var li = 0; li < locs.length; li++) {
+            if (String(locs[li].address || '').trim() === String(r.geo.address || '').trim()) {
+              applyHospitalFields(locs[li], nearest, false);
+            }
+          }
+          if (idx === 0) applyHospitalFields(editorData, nearest, false);
+          return nearest;
+        });
+      });
+      return Promise.all(phoneJobs).then(function () {
+        var errMsg = '';
+        if (!firstRanked.length && errors.length) errMsg = errors[0];
+        return { hospitalsByAddress: hospitalsByAddress, firstRanked: firstRanked, error: errMsg };
+      });
+    });
+  }
+
+  function scheduleHospitalLookupFromAddresses() {
+    if (hospitalLookupTimer) clearTimeout(hospitalLookupTimer);
+    hospitalLookupTimer = setTimeout(function () {
+      hospitalLookupTimer = null;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      var collected = collectWeatherAddresses();
+      if (!collected.locations.length) return;
+      if (hospitalLookupController) hospitalLookupController.abort();
+      hospitalLookupController = new AbortController();
+      var signal = hospitalLookupController.signal;
+      var statusEl = dom.getElementById('weather-status');
+      Promise.all(collected.locations.map(function (address) {
+        return geocodeAddressCascade(address, signal).catch(function (err) {
+          if (err && err.name === 'AbortError') throw err;
+          return null;
+        });
+      })).then(function (geos) {
+        var valid = geos.filter(Boolean);
+        if (!valid.length) {
+          if (statusEl) statusEl.textContent = 'Could not look up a hospital: address not found. Type one in.';
+          return;
+        }
+        return lookupHospitalsForLocations(valid, signal, statusEl).then(function (res) {
+          if (res.error && statusEl) {
+            statusEl.textContent = 'Could not look up a hospital: ' + res.error + '. Type one in.';
+          }
+          renderHospitalPicker(res.firstRanked, statusEl);
+          saveEditorData();
+          buildEditor('callSheet');
+        });
+      }).catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        if (statusEl) statusEl.textContent = 'Could not look up a hospital: ' + ((err && err.message) || 'error') + '. Type one in.';
+      });
+    }, 1500);
+  }
+
+  /* Fetch weather (3-day, all shooting locations) + nearest hospitals (every location) */
   function fetchWeatherAndHospitals() {
     var collected = collectWeatherAddresses();
     var locations = collected.locations;
@@ -5588,7 +5817,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     weatherFetchController = new AbortController();
     var signal = weatherFetchController.signal;
 
-    /* Geocode each location in parallel; cascade is serial per address */
     Promise.all(locations.map(function (address) {
       return geocodeAddressCascade(address, signal).catch(function (err) {
         if (err.name === 'AbortError') throw err;
@@ -5610,10 +5838,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
       if (validGeo.length === 0) {
         if (httpFails > 0 && httpFails === geoResults.length) {
-          statusEl.textContent = 'Geocode request failed \u2014 check connection and try again.';
+          statusEl.textContent = 'Geocode request failed. Check connection and try again.';
         } else {
           statusEl.textContent = 'Could not geocode address(es). Try City, Country (e.g. Kingston, Jamaica).';
         }
+        statusEl.textContent = (statusEl.textContent.indexOf('Could not geocode') === 0)
+          ? 'Could not look up a hospital: geocode miss. Type one in.'
+          : statusEl.textContent;
         return;
       }
       if (validGeo.length < locations.length) {
@@ -5622,7 +5853,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         statusEl.textContent = (sourceNote || '') + 'Fetching weather for ' + validGeo.length + ' location(s)\u2026';
       }
 
-      /* Fetch 3-day forecast for each geocoded location — isolate failures per-location */
       var weatherFetches = validGeo.map(function (g) {
         var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + g.lat + '&longitude=' + g.lon +
           '&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto&forecast_days=3';
@@ -5636,103 +5866,72 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           });
       });
 
-      /* Hospitals for the first valid location only */
-      var firstGeo = validGeo[0];
-      var overpassQuery = '[out:json][timeout:25];(node["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + ');way["amenity"="hospital"](around:20000,' + firstGeo.lat + ',' + firstGeo.lon + '););out center 5;';
-      var overpassFetch = fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery), { signal: signal })
-        .then(function (r) { return r.json(); })
-        .catch(function (err) {
-          if (err.name === 'AbortError') throw err;
-          console.warn('[mBTDB hospitals] Overpass fetch failed', err);
-          return { elements: [] }; /* return empty on failure so forecast still displays */
-        });
+      var hospitalPromise = lookupHospitalsForLocations(validGeo, signal, statusEl).catch(function (err) {
+        if (err && err.name === 'AbortError') throw err;
+        return { hospitalsByAddress: {}, firstRanked: [], error: (err && err.message) || 'lookup failed' };
+      });
 
-      Promise.all(weatherFetches.concat([overpassFetch])).then(function (results) {
-        var hospitalData = results[results.length - 1] || { elements: [] };
-        var weatherResults = results.slice(0, -1).filter(Boolean);
+      Promise.all([Promise.all(weatherFetches), hospitalPromise]).then(function (pair) {
+        var weatherResults = (pair[0] || []).filter(Boolean);
+        var hospitalRes = pair[1] || { firstRanked: [], error: '' };
 
-        if (weatherResults.length === 0) {
-          statusEl.textContent = 'Weather fetch failed. Try again or enter data manually.';
+        if (weatherResults.length === 0 && hospitalRes.error) {
+          statusEl.textContent = 'Weather fetch failed. Could not look up a hospital: ' + hospitalRes.error + '. Type one in.';
           return;
         }
 
-        /* Build locationForecasts: [{address, days:[{date,high,low,conditions,sunrise,sunset}]}] */
         dbPushUndoImmediate();
-        editorData.locationForecasts = weatherResults.map(function (wr) {
-          var d = wr.weather.daily || {};
-          var days = (d.time || []).map(function (date, i) {
-            return {
-              date: date,
-              high: d.temperature_2m_max[i] !== undefined ? Math.round(d.temperature_2m_max[i]) + '\u00b0C' : '',
-              low:  d.temperature_2m_min[i] !== undefined ? Math.round(d.temperature_2m_min[i]) + '\u00b0C' : '',
-              conditions: WMO_DESC[d.weathercode[i]] || ('Code ' + d.weathercode[i]),
-              sunrise: (d.sunrise && d.sunrise[i]) ? (d.sunrise[i].indexOf('T') > -1 ? d.sunrise[i].split('T')[1].slice(0,5) : d.sunrise[i]) : '',
-              sunset:  (d.sunset  && d.sunset[i])  ? (d.sunset[i].indexOf('T')  > -1 ? d.sunset[i].split('T')[1].slice(0,5)  : d.sunset[i])  : ''
-            };
+        if (weatherResults.length > 0) {
+          editorData.locationForecasts = weatherResults.map(function (wr) {
+            var d = wr.weather.daily || {};
+            var days = (d.time || []).map(function (date, i) {
+              return {
+                date: date,
+                high: d.temperature_2m_max[i] !== undefined ? Math.round(d.temperature_2m_max[i]) + '\u00b0C' : '',
+                low:  d.temperature_2m_min[i] !== undefined ? Math.round(d.temperature_2m_min[i]) + '\u00b0C' : '',
+                conditions: WMO_DESC[d.weathercode[i]] || ('Code ' + d.weathercode[i]),
+                sunrise: (d.sunrise && d.sunrise[i]) ? (d.sunrise[i].indexOf('T') > -1 ? d.sunrise[i].split('T')[1].slice(0,5) : d.sunrise[i]) : '',
+                sunset:  (d.sunset  && d.sunset[i])  ? (d.sunset[i].indexOf('T')  > -1 ? d.sunset[i].split('T')[1].slice(0,5)  : d.sunset[i])  : ''
+              };
+            });
+            return { address: wr.geo.address, days: days };
           });
-          return { address: wr.geo.address, days: days };
-        });
-
-        /* Backward compat: single-day fields from first location day 0 */
-        if (editorData.locationForecasts.length > 0 && editorData.locationForecasts[0].days.length > 0) {
-          var first = editorData.locationForecasts[0].days[0];
-          editorData.weatherHigh       = first.high;
-          editorData.weatherLow        = first.low;
-          editorData.weatherConditions = first.conditions;
-          if (first.sunrise) editorData.sunrise = first.sunrise;
-          if (first.sunset)  editorData.sunset  = first.sunset;
+          if (editorData.locationForecasts.length > 0 && editorData.locationForecasts[0].days.length > 0) {
+            var first = editorData.locationForecasts[0].days[0];
+            editorData.weatherHigh = first.high;
+            editorData.weatherLow = first.low;
+            editorData.weatherConditions = first.conditions;
+            if (first.sunrise) editorData.sunrise = first.sunrise;
+            if (first.sunset) editorData.sunset = first.sunset;
+          }
         }
 
-        /* Hospital picker (first location) */
-        var hosps = ((hospitalData.elements || []).filter(function (el) {
-          return el.tags && el.tags.name;
-        })).slice(0, 5);
-        if (hosps.length > 0 && hospPicker) {
-          var pickerHtml = '<p>Select nearest hospital:</p>';
-          hosps.forEach(function (h, hi) {
-            var name  = h.tags.name || 'Hospital';
-            var phone = h.tags.phone || h.tags['contact:phone'] || '';
-            var addrParts = [h.tags['addr:street'], h.tags['addr:city'] || h.tags['addr:town']].filter(Boolean);
-            var addr = addrParts.join(', ');
-            pickerHtml += '<div class="hosp-item" data-hi="' + hi + '" data-name="' + esc(name) + '" data-addr="' + esc(addr) + '" data-phone="' + esc(phone) + '">' +
-              '<div><div class="hosp-item-name">' + esc(name) + '</div>' +
-              (addr ? '<div style="font-size:9px;color:#64748b;">' + esc(addr) + '</div>' : '') + '</div>' +
-              '<div class="hosp-item-phone">' + esc(phone) + '</div></div>';
-          });
-          hospPicker.innerHTML = pickerHtml;
-          hospPicker.style.display = 'block';
-          hospPicker.onclick = function (e) {
-            var item = e.target.closest('.hosp-item');
-            if (!item) return;
-            dbPushUndoImmediate();
-            editorData.hospitalName    = item.getAttribute('data-name');
-            editorData.hospitalAddress = item.getAttribute('data-addr');
-            editorData.hospitalPhone   = item.getAttribute('data-phone');
-            hospPicker.style.display = 'none';
-            hospPicker.onclick = null;
-            statusEl.textContent = 'Hospital selected.';
-            setTimeout(function () { statusEl.textContent = ''; }, 2000);
-            saveEditorData();
-            buildEditor('callSheet');
-          };
-        }
+        renderHospitalPicker(hospitalRes.firstRanked || [], statusEl);
 
         saveEditorData();
         buildEditor('callSheet');
         var doneNote = '';
         if (addrSource === 'basecamp') doneNote = ' (via Basecamp)';
         else if (addrSource === 'project') doneNote = ' (via project location)';
-        statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' + doneNote +
-          (hosps.length > 0 ? ' \u2014 select a hospital above.' : '.');
-        setTimeout(function () { if (statusEl.textContent.indexOf('select') < 0) statusEl.textContent = ''; }, 3000);
+        var parts = [];
+        if (weatherResults.length > 0) parts.push('Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' + doneNote);
+        else parts.push('Weather fetch failed');
+        if (hospitalRes.error) parts.push('Could not look up a hospital: ' + hospitalRes.error + '. Type one in.');
+        else if ((hospitalRes.firstRanked || []).length) parts.push('nearest hospital filled (pick another above if needed)');
+        statusEl.textContent = parts.join('. ') + '.';
+        setTimeout(function () {
+          if (statusEl.textContent.indexOf('Type one in') >= 0) return;
+          if (statusEl.textContent.indexOf('pick another') >= 0) return;
+          statusEl.textContent = '';
+        }, 4000);
       }).catch(function (err) {
         if (err.name === 'AbortError') return;
-        statusEl.textContent = 'Network error \u2014 check connection.';
+        statusEl.textContent = 'Network error. Check connection.';
         console.error('[mBTDB weather]', err);
       });
     }).catch(function (err) {
       if (err.name === 'AbortError') return;
-      statusEl.textContent = 'Geocoding failed \u2014 check connection.';
+      statusEl.textContent = 'Geocoding failed. Check connection.';
       console.error('[mBTDB geocode]', err);
     });
   }

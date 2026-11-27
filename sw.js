@@ -42,6 +42,8 @@ var PRECACHE_ASSETS = [
     './src/scripts/engine/opengate.js',
     './src/scripts/engine/opengate-api.js',
     './src/scripts/engine/opfs.js',
+    './src/scripts/engine/hospital-fallback.js',
+    './src/scripts/engine/hospital-lookup.js',
     './src/scripts/engine/publisher.js',
     './src/core/logic/DocumentProjection.js',
     './src/core/logic/ShootSchedule.js',
