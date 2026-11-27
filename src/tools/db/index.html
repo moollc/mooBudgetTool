@@ -1172,26 +1172,35 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!embedded) { if (cb) { cb(false, ''); cb = null; } return; }
     maybeFinish();
   }
+  /* N6: while a migration write is in flight, later reads reuse the pending in-memory result and never set the marker. */
+  var savedDocsMigrationInFlight = false;
   function maybeMigrateSavedDocs() {
     if (!budget || !window.mBTSavedDocs) return;
     var marker = null;
     try { marker = localStorage.getItem(savedDocsMigratedKey()); } catch (eM) { marker = null; }
     if (marker === '1') return;
+    if (savedDocsMigrationInFlight) return;
     var legacy = readLegacySavedDocs();
     if (!legacy.length) return;
     var result = window.mBTSavedDocs.migrate(budget, legacy);
-    if (result && result.dropped) {
-      afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
-        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
-    }
+    var dropped = (result && result.dropped) ? result.dropped : 0;
+    var capNotice = dropped
+      ? (dropped + ' older saved document' + (dropped === 1 ? ' was' : 's were') +
+        ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.')
+      : '';
     if (result && result.changed) {
+      /* N11: show both notices; cap notice last so it is not replaced by the other-browser notice. */
       afNotice('Saved documents from other browsers are not migrated.', 'Saved documents');
+      if (capNotice) afNotice(capNotice, 'Saved documents');
+      savedDocsMigrationInFlight = true;
       persistBudgetSavedDocs(function (ok) {
+        savedDocsMigrationInFlight = false;
         if (ok) {
           try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
         }
       });
     } else {
+      if (capNotice) afNotice(capNotice, 'Saved documents');
       try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet2) {}
     }
   }
@@ -1258,12 +1267,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return '<div class="saved-item" data-saved-id="' + esc(d.id) + '">' +
         '<div class="saved-item-title">' + esc(d.title) + '</div>' +
         '<div class="saved-item-meta"><span>' + esc(d.templateName) + ' &middot; ' + esc(dateStr) + '</span>' +
+        '<button class="saved-item-rename" data-rename-id="' + esc(d.id) + '" title="Rename">Rename</button>' +
         '<button class="saved-item-dup" data-dup-id="' + esc(d.id) + '" title="Duplicate">⊕</button>' +
         '<button class="saved-item-del" data-del-id="' + esc(d.id) + '" title="Delete">&times;</button></div></div>';
     }).join('');
     savedList.querySelectorAll('.saved-item').forEach(function (item) {
       item.addEventListener('click', function (e) {
-        if (e.target.closest('.saved-item-del') || e.target.closest('.saved-item-dup')) return;
+        if (e.target.closest('.saved-item-del') || e.target.closest('.saved-item-dup') || e.target.closest('.saved-item-rename')) return;
         var id = item.getAttribute('data-saved-id');
         var d = getSavedDocs().find(function (x) { return x.id === id; });
         if (!d) return;
@@ -1324,6 +1334,25 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
             ' dropped to keep the list at ' + window.mBTSavedDocs.CAP + '.', 'Saved documents');
         }
+        buildSavedDocsList();
+        persistBudgetSavedDocs(function (ok, msg) {
+          if (!ok) {
+            afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          }
+        });
+      });
+    });
+    /* N12: Rename beside Duplicate and Delete; same failure notice; tombstone and cap rules unchanged. */
+    savedList.querySelectorAll('.saved-item-rename').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute('data-rename-id');
+        if (!window.mBTSavedDocs || !budget || !id) return;
+        var current = getSavedDocs().find(function (x) { return x.id === id; });
+        if (!current) return;
+        var nextTitle = prompt('Rename document:', current.title || '');
+        if (nextTitle == null) return;
+        if (!window.mBTSavedDocs.rename(budget, id, nextTitle)) return;
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
           if (!ok) {
@@ -1854,6 +1883,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function loadBudget() {
     refreshBudget(function () {
+      /* N8: migrate once when the budget arrives so a .moo export right after opening includes legacy documents. */
+      maybeMigrateSavedDocs();
       refreshAiFillButton();
       if (activeTemplateId && activeTab === 'preview') paintPreview();
     });

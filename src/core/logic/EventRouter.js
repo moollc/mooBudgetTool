@@ -1275,11 +1275,24 @@ window.mBTRouter = (function () {
                         nextList = filtered;
                     }
                 }
+                /* N7: remember live list/tombstones so a rejected write cannot leave a later unrelated save committing them. */
+                var prevDocs = Object.prototype.hasOwnProperty.call(budget, 'savedDocs')
+                    ? JSON.parse(JSON.stringify(budget.savedDocs))
+                    : undefined;
+                var prevDeleted = Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted')
+                    ? JSON.parse(JSON.stringify(budget.savedDocsDeleted))
+                    : undefined;
+                var hadDocs = Object.prototype.hasOwnProperty.call(budget, 'savedDocs');
+                var hadDeleted = Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted');
                 budget.savedDocs = JSON.parse(JSON.stringify(nextList));
                 budget.savedDocsDeleted = JSON.parse(JSON.stringify(union));
                 Promise.resolve().then(function () { return window.saveBudget(true); }).then(function () {
                     ack('success', '', dropped);
                 }, function (err) {
+                    if (hadDocs) budget.savedDocs = prevDocs;
+                    else delete budget.savedDocs;
+                    if (hadDeleted) budget.savedDocsDeleted = prevDeleted;
+                    else delete budget.savedDocsDeleted;
                     ack('error', (err && err.message) || 'save failed');
                 });
             })();
@@ -1311,12 +1324,30 @@ window.mBTRouter = (function () {
 
         /* --- load-budget: AI-generated .moo payload from Oracle iframe --- */
         } else if (action === 'load-budget' && payload.budgetData) {
-            function sanitizeBudgetNode(node) {
-                if (typeof node === 'string') return node.replace(/<[^>]*>/g, '').substring(0, 500);
-                if (Array.isArray(node)) return node.map(sanitizeBudgetNode);
+            function sanitizeBudgetNode(node, opts) {
+                if (typeof node === 'string') {
+                    if (opts && opts.preserve) return node;
+                    return node.replace(/<[^>]*>/g, '').substring(0, 500);
+                }
+                if (Array.isArray(node)) {
+                    return node.map(function (item) { return sanitizeBudgetNode(item, opts); });
+                }
                 if (node && typeof node === 'object') {
                     var c = {};
-                    Object.keys(node).forEach(function (k) { c[k] = sanitizeBudgetNode(node[k]); });
+                    Object.keys(node).forEach(function (k) {
+                        /* N9: savedDocs editorData strings stay intact (same as .moo restore); every other field still sanitizes. */
+                        if (opts && opts.inSavedDoc && k === 'editorData') {
+                            c[k] = sanitizeBudgetNode(node[k], { preserve: true });
+                        } else if (!opts && k === 'savedDocs') {
+                            c[k] = sanitizeBudgetNode(node[k], { inSavedDoc: true });
+                        } else if (opts && opts.preserve) {
+                            c[k] = sanitizeBudgetNode(node[k], opts);
+                        } else if (opts && opts.inSavedDoc) {
+                            c[k] = sanitizeBudgetNode(node[k], opts);
+                        } else {
+                            c[k] = sanitizeBudgetNode(node[k]);
+                        }
+                    });
                     return c;
                 }
                 return node;

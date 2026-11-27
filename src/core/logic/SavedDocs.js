@@ -187,12 +187,14 @@
             if (e && e.id === stored.id) continue;
             next.push(e);
         }
+        /* N10: keep the newest CAP by date regardless of stored array order. */
+        var sorted = sortByDateDesc(next);
         var dropped = 0;
-        if (next.length > CAP) {
-            dropped = next.length - CAP;
-            next.length = CAP;
+        if (sorted.length > CAP) {
+            dropped = sorted.length - CAP;
+            sorted = sorted.slice(0, CAP);
         }
-        budget.savedDocs = next;
+        budget.savedDocs = sorted;
         return hostData({ dropped: dropped });
     }
 
@@ -259,7 +261,8 @@
         var beforeJson = JSON.stringify(before);
         var afterJson = JSON.stringify(r.list);
         if (beforeJson === afterJson) {
-            return hostData({ changed: false, added: 0, conflicts: 0, dropped: 0 });
+            /* N11: still report drops when a legacy entry was considered but did not change the capped list. */
+            return hostData({ changed: false, added: 0, conflicts: 0, dropped: r.dropped });
         }
         budget.savedDocs = r.list;
         return hostData({
