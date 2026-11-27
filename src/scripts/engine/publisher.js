@@ -233,35 +233,21 @@
     }
     function paperIsProducerRole(text) {
         var role = paperWithoutParentheses(String(text || ''));
-        /* C2: split compound roles first; first-word asst/assistant, line producer exclusion and
-           last-word producer test run on each part; the role counts when any part passes all three. */
-        return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
+        /* D2: normalise the whole role; if it starts with asst or assistant it is never the producing
+           party. Then split on / & , and spaced hyphen; each part excludes line producer and requires
+           last word producer; the role counts when any part passes. */
+        var whole = String(role || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        var wholeWords = whole.split(/\s+/).filter(Boolean);
+        if (!wholeWords.length) return false;
+        if (wholeWords[0] === 'asst' || wholeWords[0] === 'assistant') return false;
+        /* Spaced hyphen splits compounds (Executive Producer - Jay Moo); a digit after the
+           hyphen is a duration suffix (Producer - 5 days), not a compound separator. */
+        return role.split(/[\/&,]|\s+-\s+(?!\s*\d)/).some(function (part) {
             var normalised = String(part || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-            var headWords = normalised.split(/\s+/).filter(Boolean);
-            if (!headWords.length) return false;
-            if (headWords[0] === 'asst' || headWords[0] === 'assistant') return false;
+            var words = normalised.split(/\s+/).filter(Boolean);
+            if (!words.length) return false;
             if (/\bline producer\b/.test(normalised)) return false;
-            var folded = String(part || '').replace(/(?<=\p{L})-(?=\p{L})/gu, ' ');
-            var foldWords = folded.replace(/[\s\p{P}]+$/u, '').trim().split(/\s+/).filter(Boolean);
-            if (foldWords.length >= 2) {
-                var foldHead = foldWords[0].replace(/\.$/u, '');
-                if ((/^assistant$/i.test(foldWords[0]) || /^asst$/i.test(foldHead))
-                    && /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(foldWords[foldWords.length - 1])) {
-                    return false;
-                }
-            }
-            return part.split(/(?<=\p{L})-(?=\p{L})/u).some(function (title) {
-                var cleaned = title.replace(/[\s\p{P}]+$/u, '').trim();
-                var words = cleaned.split(/\s+/).filter(Boolean);
-                if (words.length >= 2) {
-                    var head = words[0].replace(/\.$/u, '');
-                    if ((/^assistant$/i.test(words[0]) || /^asst$/i.test(head))
-                        && /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(words[words.length - 1])) {
-                        return false;
-                    }
-                }
-                return /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(cleaned);
-            });
+            return words[words.length - 1] === 'producer';
         });
     }
     /* Z4: location collections may arrive as a plain object; renderers always walk an array. */
@@ -5834,67 +5820,6 @@
                     }
                     return { paidMethod: paidMethod, paidRef: paidRef };
                 },
-                /* B1: where a saved paid ref belongs. "here" = this page; "elsewhere" = another local page;
-                   "foreign" = only a wrong-currency PO carries it; "orphan" = no PO carries it. */
-                _savedPaidPageMatch: function (budget, itemId, pageAmount, pageCurrency, paidSaved) {
-                    var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
-                    var id = itemId != null ? String(itemId) : '';
-                    var i, po, fields, sawForeign = false, sawLocal = false, matchHere = false;
-                    if (!id || !paidSaved || !(paidSaved.paidMethod || paidSaved.paidRef)) return 'none';
-                    for (i = 0; i < pos.length; i++) {
-                        po = pos[i];
-                        if (!po || String(po.itemId || '') !== id) continue;
-                        fields = this._paidFields(po);
-                        if ((paidSaved.paidRef || '') !== (fields.paidRef || '')) continue;
-                        if (paidSaved.paidMethod && fields.paidMethod && paidSaved.paidMethod !== fields.paidMethod) continue;
-                        if (this._poCurrencyMatch(po, pageCurrency, budget)) {
-                            sawLocal = true;
-                            if (this._poAmountMatch(po, pageAmount)) matchHere = true;
-                        } else {
-                            sawForeign = true;
-                        }
-                    }
-                    if (matchHere) return 'here';
-                    if (sawLocal) return 'elsewhere';
-                    if (sawForeign) return 'foreign';
-                    return 'orphan';
-                },
-                /* C1: rows with savedRow keep exactly the saved payment (placed on the matching page only, never
-                   filled from a PO). Unmarked rows and fresh vouchers pair each page from paid POs (J6 P5). */
-                _paidForPage: function (budget, itemId, pageAmount, pageCurrency, paidSaved, usedPaymentIds, savedState) {
-                    var hasSaved = !!(paidSaved && (paidSaved.paidMethod || paidSaved.paidRef));
-                    var placed;
-                    if (savedState && savedState.fromSavedDoc) {
-                        if (!hasSaved || savedState.used) {
-                            return { paidMethod: '', paidRef: '' };
-                        }
-                        placed = this._savedPaidPageMatch(budget, itemId, pageAmount, pageCurrency, paidSaved);
-                        if (placed === 'here') {
-                            savedState.used = true;
-                            return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
-                        }
-                        if (placed === 'foreign') {
-                            savedState.used = true;
-                            return { paidMethod: '', paidRef: '' };
-                        }
-                        if (placed === 'orphan') {
-                            savedState.used = true;
-                            return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
-                        }
-                        /* elsewhere / none: leave this page blank; wait for the matching page. */
-                        return { paidMethod: '', paidRef: '' };
-                    }
-                    var fromPo = (itemId != null && String(itemId) !== '')
-                        ? this._poForPayment(budget, itemId, pageAmount, pageCurrency, usedPaymentIds)
-                        : null;
-                    if (fromPo) return this._paidFields(fromPo);
-                    /* Fresh path: a row that already carries payment (petty-cash receipt defaults) prints once. */
-                    if (!savedState.used && hasSaved) {
-                        savedState.used = true;
-                        return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
-                    }
-                    return { paidMethod: '', paidRef: '' };
-                },
                 _methodFillHtml: function (paidMethod) {
                     var label = '';
                     var api = this._paidByApi();
@@ -5947,8 +5872,7 @@
                                 paperStripName(contact && contact.role, payee, contact),
                                 paperStripName(contact && contact.title, payee, contact)
                             );
-                            /* Fresh defaults leave paid fields blank and omit savedRow so unmarked editor rows
-                               and a fresh render both fill each page from paid POs (J6 P5 / C1). */
+                            var paid = self._paidFields(self._poForItem(b, item.id));
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
@@ -5956,8 +5880,8 @@
                                 total: paperLineTotal(item, currency),
                                 deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
-                                paidMethod: '',
-                                paidRef: '',
+                                paidMethod: paid.paidMethod,
+                                paidRef: paid.paidRef,
                                 items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount, currency) }; }) : []
                             });
                         });
@@ -6039,15 +5963,11 @@
                             paperStripName(v.description, payee, contact),
                             paperStripName(v.role, payee, contact)
                         );
-                        var paidSaved = self._paidFields(v);
-                        /* C1: fromSavedDoc only when this row carries savedRow (stamped on Save / duplicate /
-                           rename / draft save of an edited row). Unmarked rows pair from paid POs. */
-                        var savedState = {
-                            used: false,
-                            fromSavedDoc: !!v.savedRow
-                        };
                         self._pages(v, currency).forEach(function (p) {
-                            var paid = self._paidForPage(b, v.itemId, p.amount, currency, paidSaved, usedPaymentIds, savedState);
+                            var paidRow = (v.itemId != null && String(v.itemId) !== '')
+                                ? self._poForPayment(b, v.itemId, p.amount, currency, usedPaymentIds)
+                                : v;
+                            var paid = self._paidFields(paidRow);
                             var methodWi = self._methodFillHtml(paid.paidMethod);
                             var bankVal = self._bankRefHtml(paid.paidRef);
                             var number = numbered ? prefix + String(start + pageNo) : '';
