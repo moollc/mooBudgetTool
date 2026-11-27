@@ -233,9 +233,16 @@
     }
     function paperIsProducerRole(text) {
         var role = paperWithoutParentheses(String(text || ''));
+        /* B2: lowercase, non-letter/non-digit runs to one space, trim; then gate on the first word. */
+        var normalised = String(role || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        var headWords = normalised.split(/\s+/).filter(Boolean);
+        if (headWords.length && (headWords[0] === 'asst' || headWords[0] === 'assistant')) {
+            return false;
+        }
+        /* Line Producer stays excluded under any spacing or hyphen (normalised to "line producer"). */
+        if (/\bline producer\b/.test(normalised)) return false;
         return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
             if (/\b(?:line(?:\s+|-)producer|assistant\s+to\s+the\s+producer)\b/i.test(part)) return false;
-            /* A2: Assistant-Producer / Asst. Producer are one excluded phrase before letter-hyphen splits. */
             var folded = String(part || '').replace(/(?<=\p{L})-(?=\p{L})/gu, ' ');
             var foldWords = folded.replace(/[\s\p{P}]+$/u, '').trim().split(/\s+/).filter(Boolean);
             if (foldWords.length >= 2) {
@@ -247,7 +254,6 @@
             }
             return part.split(/(?<=\p{L})-(?=\p{L})/u).some(function (title) {
                 var cleaned = title.replace(/[\s\p{P}]+$/u, '').trim();
-                /* Z6 / A2: Assistant or Asst / Asst. with last word producer is not the producing party. */
                 var words = cleaned.split(/\s+/).filter(Boolean);
                 if (words.length >= 2) {
                     var head = words[0].replace(/\.$/u, '');
@@ -5830,42 +5836,62 @@
                     }
                     return { paidMethod: paidMethod, paidRef: paidRef };
                 },
-                /* A1: a saved paid ref that only matches a PO in another currency must not print on this page. */
-                _savedPaidForeignCurrency: function (budget, itemId, paidSaved, pageCurrency) {
+                /* B1: where a saved paid ref belongs. "here" = this page; "elsewhere" = another local page;
+                   "foreign" = only a wrong-currency PO carries it; "orphan" = no PO carries it. */
+                _savedPaidPageMatch: function (budget, itemId, pageAmount, pageCurrency, paidSaved) {
                     var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
                     var id = itemId != null ? String(itemId) : '';
-                    var i, po, fields, sawForeign = false, sawLocal = false;
-                    if (!id || !paidSaved || !(paidSaved.paidMethod || paidSaved.paidRef)) return false;
+                    var i, po, fields, sawForeign = false, sawLocal = false, matchHere = false;
+                    if (!id || !paidSaved || !(paidSaved.paidMethod || paidSaved.paidRef)) return 'none';
                     for (i = 0; i < pos.length; i++) {
                         po = pos[i];
                         if (!po || String(po.itemId || '') !== id) continue;
                         fields = this._paidFields(po);
                         if ((paidSaved.paidRef || '') !== (fields.paidRef || '')) continue;
                         if (paidSaved.paidMethod && fields.paidMethod && paidSaved.paidMethod !== fields.paidMethod) continue;
-                        if (this._poCurrencyMatch(po, pageCurrency, budget)) sawLocal = true;
-                        else sawForeign = true;
+                        if (this._poCurrencyMatch(po, pageCurrency, budget)) {
+                            sawLocal = true;
+                            if (this._poAmountMatch(po, pageAmount)) matchHere = true;
+                        } else {
+                            sawForeign = true;
+                        }
                     }
-                    return sawForeign && !sawLocal;
+                    if (matchHere) return 'here';
+                    if (sawLocal) return 'elsewhere';
+                    if (sawForeign) return 'foreign';
+                    return 'orphan';
                 },
-                /* A1: apply saved paid fields to at most one page; prefer them over a matching PO when not foreign. */
+                /* B1: reopened rows keep exactly the saved payment (placed on the matching page only, never filled
+                   from a PO). Fresh vouchers still pair each page from paid POs (J6 P5). */
                 _paidForPage: function (budget, itemId, pageAmount, pageCurrency, paidSaved, usedPaymentIds, savedState) {
+                    var hasSaved = !!(paidSaved && (paidSaved.paidMethod || paidSaved.paidRef));
+                    var placed;
+                    if (savedState && savedState.fromSavedDoc) {
+                        if (!hasSaved || savedState.used) {
+                            return { paidMethod: '', paidRef: '' };
+                        }
+                        placed = this._savedPaidPageMatch(budget, itemId, pageAmount, pageCurrency, paidSaved);
+                        if (placed === 'here') {
+                            savedState.used = true;
+                            return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
+                        }
+                        if (placed === 'foreign') {
+                            savedState.used = true;
+                            return { paidMethod: '', paidRef: '' };
+                        }
+                        if (placed === 'orphan') {
+                            savedState.used = true;
+                            return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
+                        }
+                        /* elsewhere / none: leave this page blank; wait for the matching page. */
+                        return { paidMethod: '', paidRef: '' };
+                    }
                     var fromPo = (itemId != null && String(itemId) !== '')
                         ? this._poForPayment(budget, itemId, pageAmount, pageCurrency, usedPaymentIds)
                         : null;
-                    var paidPo = fromPo ? this._paidFields(fromPo) : { paidMethod: '', paidRef: '' };
-                    var hasSaved = !!(paidSaved && (paidSaved.paidMethod || paidSaved.paidRef));
-                    var foreign = hasSaved && this._savedPaidForeignCurrency(budget, itemId, paidSaved, pageCurrency);
-                    if (fromPo) {
-                        if (!savedState.used && hasSaved && !foreign) {
-                            savedState.used = true;
-                            return {
-                                paidMethod: paidSaved.paidMethod || paidPo.paidMethod,
-                                paidRef: paidSaved.paidRef || paidPo.paidRef
-                            };
-                        }
-                        return paidPo;
-                    }
-                    if (!savedState.used && hasSaved && !foreign) {
+                    if (fromPo) return this._paidFields(fromPo);
+                    /* Fresh path: a row that already carries payment (petty-cash receipt defaults) prints once. */
+                    if (!savedState.used && hasSaved) {
                         savedState.used = true;
                         return { paidMethod: paidSaved.paidMethod || '', paidRef: paidSaved.paidRef || '' };
                     }
@@ -5923,8 +5949,8 @@
                                 paperStripName(contact && contact.role, payee, contact),
                                 paperStripName(contact && contact.title, payee, contact)
                             );
-                            /* Z3: leave paid fields blank on fresh defaults so render fills per page from POs;
-                               saved editor rows keep their own paidMethod/paidRef and are never overwritten. */
+                            /* Fresh defaults leave paid fields blank so a fresh render (no editorData.vouchers)
+                               fills each page from paid POs (J6 P5). B1: a reopened editor row never fills from a PO. */
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
@@ -6016,9 +6042,12 @@
                             paperStripName(v.role, payee, contact)
                         );
                         var paidSaved = self._paidFields(v);
-                        var savedState = { used: false };
+                        /* B1: editorData.vouchers means a reopened (or editor) row: never fill paid fields from a PO. */
+                        var savedState = {
+                            used: false,
+                            fromSavedDoc: !!(options.editorData && Array.isArray(options.editorData.vouchers))
+                        };
                         self._pages(v, currency).forEach(function (p) {
-                            /* A1 / Z3+P5: per-page pairing; saved paid fields apply once and never across currencies. */
                             var paid = self._paidForPage(b, v.itemId, p.amount, currency, paidSaved, usedPaymentIds, savedState);
                             var methodWi = self._methodFillHtml(paid.paidMethod);
                             var bankVal = self._bankRefHtml(paid.paidRef);
