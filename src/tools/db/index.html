@@ -1089,6 +1089,32 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   /* K1: marker only after local write resolves and (when embedded) the monolith ack. K3: show cap notice from ack.dropped. */
   var savedDocsAckSeq = 0, savedDocsAcks = {};
+  /* P1: last shell-acknowledged saved list; a rejected write restores here so later sends omit the change. */
+  var _ackedSavedDocsSnap = null;
+  function takeAckedSavedDocsSnap() {
+    if (!budget) return;
+    _ackedSavedDocsSnap = {
+      hadDocs: Object.prototype.hasOwnProperty.call(budget, 'savedDocs'),
+      docs: Object.prototype.hasOwnProperty.call(budget, 'savedDocs')
+        ? JSON.parse(JSON.stringify(budget.savedDocs)) : undefined,
+      hadDeleted: Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted'),
+      deleted: Object.prototype.hasOwnProperty.call(budget, 'savedDocsDeleted')
+        ? JSON.parse(JSON.stringify(budget.savedDocsDeleted)) : undefined
+    };
+  }
+  function ensureAckedSavedDocsSnap() {
+    if (!_ackedSavedDocsSnap) takeAckedSavedDocsSnap();
+  }
+  function restoreAckedSavedDocsSnap() {
+    if (!budget || !_ackedSavedDocsSnap) return;
+    if (_ackedSavedDocsSnap.hadDocs) budget.savedDocs = JSON.parse(JSON.stringify(_ackedSavedDocsSnap.docs));
+    else delete budget.savedDocs;
+    if (_ackedSavedDocsSnap.hadDeleted) {
+      budget.savedDocsDeleted = JSON.parse(JSON.stringify(_ackedSavedDocsSnap.deleted));
+    } else {
+      delete budget.savedDocsDeleted;
+    }
+  }
   /* M1: capture the Save button base label once while a restore timer is pending; never recapture "Saved ✓". */
   var saveDocBtnBaseHtml = null, saveDocBtnRestoreTimer = null;
   window.addEventListener('message', function (e) {
@@ -1114,13 +1140,43 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var requestId = null;
     var localDone = false, localOk = false, ackDone = false, ackOk = false;
     var failMsg = '';
+    var finished = false;
+    ensureAckedSavedDocsSnap();
+    function finish(ok, msg) {
+      if (finished) return;
+      finished = true;
+      if (!ok) restoreAckedSavedDocsSnap();
+      else takeAckedSavedDocsSnap();
+      if (cb) { cb(!!ok, msg || ''); cb = null; }
+    }
     function maybeFinish() {
-      if (!cb) return;
+      if (finished) return;
+      if (embedded) {
+        if (!ackDone) return;
+        if (!ackOk) { finish(false, failMsg); return; }
+        /* K1 / P1: after a successful shell ack, write local package; never write on a rejected ack. */
+        if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
+          if (!localDone) {
+            localforage.setItem(projectKey, budget).then(function () {
+              localDone = true;
+              localOk = true;
+              maybeFinish();
+            }, function (err) {
+              localDone = true;
+              localOk = false;
+              failMsg = (err && err.message) ? String(err.message) : '';
+              maybeFinish();
+            });
+            return;
+          }
+          if (!localOk) { finish(false, failMsg); return; }
+        }
+        finish(true, '');
+        return;
+      }
       if (!localDone) return;
-      if (!localOk) { cb(false, failMsg); cb = null; return; }
-      if (embedded && !ackDone) return;
-      cb(!embedded || ackOk, (!embedded || ackOk) ? '' : failMsg);
-      cb = null;
+      if (!localOk) { finish(false, failMsg); return; }
+      finish(true, '');
     }
     try {
       if (window.parent && window.parent !== window) {
@@ -1154,22 +1210,25 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }, origin);
       }
     } catch (ePost) { embedded = false; }
-    if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
-      localforage.setItem(projectKey, budget).then(function () {
-        localDone = true;
-        localOk = true;
-        maybeFinish();
-      }, function (err) {
-        localDone = true;
-        localOk = false;
-        failMsg = (err && err.message) ? String(err.message) : '';
-        maybeFinish();
-      });
+    if (!embedded) {
+      if (projectKey && typeof localforage !== 'undefined' && localforage.setItem) {
+        localforage.setItem(projectKey, budget).then(function () {
+          localDone = true;
+          localOk = true;
+          maybeFinish();
+        }, function (err) {
+          localDone = true;
+          localOk = false;
+          failMsg = (err && err.message) ? String(err.message) : '';
+          maybeFinish();
+        });
+        return;
+      }
+      localDone = true;
+      localOk = true;
+      maybeFinish();
       return;
     }
-    localDone = true;
-    localOk = true;
-    if (!embedded) { if (cb) { cb(false, ''); cb = null; } return; }
     maybeFinish();
   }
   /* N6: while a migration write is in flight, later reads reuse the pending in-memory result and never set the marker. */
@@ -1205,6 +1264,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
   }
   function getSavedDocs() {
+    ensureAckedSavedDocsSnap();
     maybeMigrateSavedDocs();
     if (window.mBTSavedDocs) return window.mBTSavedDocs.list(budget);
     return [];
@@ -1308,14 +1368,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var id = btn.getAttribute('data-del-id');
         dbConfirm('Delete this saved document?', function () {
           if (window.mBTSavedDocs && budget) {
+            ensureAckedSavedDocsSnap();
             window.mBTSavedDocs.remove(budget, id);
+            buildSavedDocsList();
             persistBudgetSavedDocs(function (ok, msg) {
               if (!ok) {
+                buildSavedDocsList();
                 afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
               }
             });
+          } else {
+            buildSavedDocsList();
           }
-          buildSavedDocsList();
         });
       });
     });
@@ -1329,6 +1393,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         clone.id = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         clone.date = new Date().toISOString();
         clone.title = orig.title + ' (Copy)';
+        ensureAckedSavedDocsSnap();
         var result = window.mBTSavedDocs.add(budget, clone);
         if (result && result.dropped) {
           afNotice(result.dropped + ' older saved document' + (result.dropped === 1 ? ' was' : 's were') +
@@ -1337,6 +1402,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
           if (!ok) {
+            buildSavedDocsList();
             afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
           }
         });
@@ -1352,10 +1418,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!current) return;
         var nextTitle = prompt('Rename document:', current.title || '');
         if (nextTitle == null) return;
+        ensureAckedSavedDocsSnap();
         if (!window.mBTSavedDocs.rename(budget, id, nextTitle)) return;
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
           if (!ok) {
+            buildSavedDocsList();
             afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
           }
         });
@@ -2664,6 +2732,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       return pd;
     }
     var d = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}) : {};
+    /* P4: resolve ID-only site contacts on first open without feeding the store into crew/contactsBlock (R1). */
+    if (templateId === 'callSheet' && tmpl && typeof tmpl.getDefaultData === 'function'
+        && typeof _docContacts !== 'undefined' && Array.isArray(_docContacts) && _docContacts.length) {
+      var resolvedCs = tmpl.getDefaultData(budget || {}, { contacts: _docContacts }) || {};
+      if (Array.isArray(resolvedCs.shootingLocations)) {
+        d.shootingLocations = JSON.parse(JSON.stringify(resolvedCs.shootingLocations));
+      }
+    }
     /* New documents do not present template examples as negotiated or observed facts. */
     Object.keys(d).forEach(function (key) {
       if (typeof d[key] === 'string' && ['framesPerPage', 'columns', 'compTitle', 'snapshotALabel', 'snapshotBLabel'].indexOf(key) < 0) d[key] = '';
@@ -2901,9 +2977,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var opts = { contacts: _docContacts };
     if (editorData.dayId) opts.dayId = editorData.dayId;
     var defs = csTmpl.getDefaultData(budget || {}, opts) || {};
-    /* Day-specific fields, including hospital and contacts block, always come from the chosen day. */
+    /* Day-specific fields from the chosen day. Weather, sunrise/sunset and call times reset even when blank.
+       contactsBlock keeps previous values: unrestricted store contacts must not replace the project client (P3). */
     ['date', 'dayOf', 'schedule', 'scenes', 'shootingLocations', 'interviewees',
-      'hospitalName', 'hospitalAddress', 'hospitalPhone', 'hospitalDistance', 'contactsBlock'].forEach(function (k) {
+      'hospitalName', 'hospitalAddress', 'hospitalPhone', 'hospitalDistance',
+      'weatherHigh', 'weatherLow', 'weatherConditions', 'sunrise', 'sunset',
+      'crewCall', 'shootingCall', 'estimatedLunch', 'estimatedWrap'].forEach(function (k) {
       if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
     });
     if (defs.dayOfTbc) editorData.dayOfTbc = true;
@@ -2935,6 +3014,28 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var defOpts = {};
     if (d.dayId) defOpts.dayId = d.dayId;
     var defaults = csTmpl && csTmpl.getDefaultData ? csTmpl.getDefaultData(budget || {}, defOpts) : {};
+    /* P4: fill empty location contact fields from the store without replacing crew from unrestricted contacts. */
+    if (csTmpl && typeof csTmpl.getDefaultData === 'function'
+        && typeof _docContacts !== 'undefined' && Array.isArray(_docContacts) && _docContacts.length) {
+      var siteOpts = {};
+      if (d.dayId) siteOpts.dayId = d.dayId;
+      siteOpts.contacts = _docContacts;
+      var siteDefaults = csTmpl.getDefaultData(budget || {}, siteOpts) || {};
+      if ((!Array.isArray(d.shootingLocations) || d.shootingLocations.length === 0) && !d._keepEmptyLocations
+          && Array.isArray(siteDefaults.shootingLocations) && siteDefaults.shootingLocations.length) {
+        defaults.shootingLocations = siteDefaults.shootingLocations;
+      } else if (Array.isArray(d.shootingLocations) && Array.isArray(siteDefaults.shootingLocations)) {
+        d.shootingLocations.forEach(function (loc, i) {
+          var src = siteDefaults.shootingLocations[i];
+          if (!loc || !src) return;
+          if (!(loc.contactName || loc.contact) && (src.contactName || src.contact)) {
+            loc.contactName = src.contactName || src.contact || '';
+            loc.contact = loc.contactName;
+          }
+          if (!loc.contactPhone && src.contactPhone) loc.contactPhone = src.contactPhone;
+        });
+      }
+    }
     var overrides = (d._autofill && d._autofill.overrides) || {};
     if (d.dayId == null) d.dayId = '';
 

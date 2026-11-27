@@ -1289,10 +1289,15 @@ window.mBTRouter = (function () {
                 Promise.resolve().then(function () { return window.saveBudget(true); }).then(function () {
                     ack('success', '', dropped);
                 }, function (err) {
-                    if (hadDocs) budget.savedDocs = prevDocs;
-                    else delete budget.savedDocs;
-                    if (hadDeleted) budget.savedDocsDeleted = prevDeleted;
-                    else delete budget.savedDocsDeleted;
+                    /* P1: a failed write must not roll back a later acknowledged list still live on the budget. */
+                    var stillThisWrite = JSON.stringify(budget.savedDocs) === JSON.stringify(nextList)
+                        && JSON.stringify(budget.savedDocsDeleted) === JSON.stringify(union);
+                    if (stillThisWrite) {
+                        if (hadDocs) budget.savedDocs = prevDocs;
+                        else delete budget.savedDocs;
+                        if (hadDeleted) budget.savedDocsDeleted = prevDeleted;
+                        else delete budget.savedDocsDeleted;
+                    }
                     ack('error', (err && err.message) || 'save failed');
                 });
             })();

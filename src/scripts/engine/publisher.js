@@ -130,13 +130,12 @@
             (fl.receipts || []).forEach(function (r) { link(r && r.contactId); });
         });
         budgetContacts.forEach(function (c) { link(c && c.id); });
-        /* Shoot-day site contacts (and leg/interview people) count as linked to this budget. */
+        /* J2q R1 / P2: shoot-day people are not producer/grantee links. Still walk locations so a
+           non-array locations collection keeps throwing (deferred finding 10). */
         if (b && Object.prototype.hasOwnProperty.call(b, 'shootSchedule') && Array.isArray(b.shootSchedule)) {
             b.shootSchedule.forEach(function (day) {
                 if (!day || typeof day !== 'object') return;
-                (day.locations || []).forEach(function (loc) { if (loc) link(loc.siteContactId); });
-                (day.legs || []).forEach(function (leg) { if (leg) link(leg.contactId); });
-                (day.interviews || []).forEach(function (row) { if (row) link(row.contactId); });
+                (day.locations || []).forEach(function () { /* no link */ });
             });
         }
         opts = opts || {};
@@ -2418,9 +2417,11 @@
                         });
                     }
 
-                    /* Contacts block: client, locations, hospitals, other */
+                    /* Contacts block: client, locations, hospitals, other.
+                       P3 / J2q R1: only budget-linked contacts, never the unrestricted store. */
                     var contactsBlock = { client: [], locations: [], hospitals: [], other: [] };
-                    contactsInfo.list.forEach(function (c) {
+                    var blockContacts = paperContacts(b, opts);
+                    blockContacts.forEach(function (c) {
                         var cid = c.id != null ? String(c.id) : '';
                         var roleText = ((c.role || c.title || '') + ' ' + (c.department || '') + ' ' + (c.category || '')).toLowerCase();
                         if (c.category === 'interviewee' || /\b(interviewee|interview subject)\b/.test(roleText)) {
@@ -5730,17 +5731,29 @@
                 _poIsPaid: function (po) {
                     return !!(po && String(po.status || '').toLowerCase() === 'paid');
                 },
+                /* Match the page amount to the payment that settled it: prefer paidAmount when set. */
                 _poAmountMatch: function (po, target) {
                     if (!po || target == null || !isFinite(Number(target))) return false;
                     var want = Math.round(Number(target) * 100);
-                    var keys = ['amount', 'paidAmount'];
-                    var i, n;
-                    for (i = 0; i < keys.length; i++) {
-                        if (po[keys[i]] == null || po[keys[i]] === '') continue;
-                        n = Number(po[keys[i]]);
-                        if (isFinite(n) && Math.round(n * 100) === want) return true;
+                    var n;
+                    if (po.paidAmount != null && po.paidAmount !== '') {
+                        n = Number(po.paidAmount);
+                        return isFinite(n) && Math.round(n * 100) === want;
+                    }
+                    if (po.amount != null && po.amount !== '') {
+                        n = Number(po.amount);
+                        return isFinite(n) && Math.round(n * 100) === want;
                     }
                     return false;
+                },
+                _poCurrencyMatch: function (po, pageCurrency, budget) {
+                    var pageCode = paperCurrencyCode(pageCurrency) || String(pageCurrency || '').trim().toUpperCase();
+                    var raw = (po && po.currency != null && String(po.currency).trim() !== '')
+                        ? po.currency
+                        : (budget && budget.currency);
+                    var poCode = paperCurrencyCode(raw) || String(raw || '').trim().toUpperCase();
+                    if (!pageCode || !poCode) return false;
+                    return pageCode === poCode;
                 },
                 /* Prefer a Paid PO for the line; drafts and other statuses are not a payment made. */
                 _poForItem: function (budget, itemId) {
@@ -5753,31 +5766,53 @@
                     }
                     return null;
                 },
-                /* Payment details for one voucher page: match itemId and this page's amount, Paid only. */
-                _poForPayment: function (budget, itemId, pageAmount) {
+                /* Payment details for one voucher page: same item, currency and page amount; each PO used once. */
+                _poForPayment: function (budget, itemId, pageAmount, pageCurrency, usedIds) {
                     var pos = budget && budget.ledgers && Array.isArray(budget.ledgers.pos) ? budget.ledgers.pos : [];
                     var id = itemId != null ? String(itemId) : '';
-                    var i;
+                    var i, po, key;
                     if (!id) return null;
                     for (i = 0; i < pos.length; i++) {
-                        if (pos[i] && String(pos[i].itemId || '') === id
-                            && this._poIsPaid(pos[i])
-                            && this._poAmountMatch(pos[i], pageAmount)) {
-                            return pos[i];
-                        }
+                        po = pos[i];
+                        if (!po || String(po.itemId || '') !== id || !this._poIsPaid(po)) continue;
+                        key = po.id != null && String(po.id) !== '' ? 'id:' + po.id : 'ix:' + i;
+                        if (usedIds && usedIds[key]) continue;
+                        if (!this._poCurrencyMatch(po, pageCurrency, budget)) continue;
+                        if (!this._poAmountMatch(po, pageAmount)) continue;
+                        if (usedIds) usedIds[key] = 1;
+                        return po;
                     }
                     return null;
                 },
                 _paidFields: function (row) {
                     var n = this._paidByApi().normalise(row || null);
-                    return { paidMethod: n.paidMethod || '', paidRef: n.paidRef || '' };
+                    /* P6: voucher path keeps the stored bank reference in full; normalise still caps at 80 for entry. */
+                    var paidRef = '';
+                    if (row && typeof row.paidRef === 'string') paidRef = row.paidRef.trim();
+                    else paidRef = n.paidRef || '';
+                    var paidMethod = n.paidMethod || '';
+                    /* Unknown stored method ids still print on the voucher (never a blank method). */
+                    if (!paidMethod && row && typeof row.paidMethod === 'string' && row.paidMethod.trim() !== '') {
+                        paidMethod = row.paidMethod.trim().toLowerCase();
+                    }
+                    return { paidMethod: paidMethod, paidRef: paidRef };
                 },
                 _methodFillHtml: function (paidMethod) {
                     var label = '';
                     var api = this._paidByApi();
-                    if (paidMethod === 'transfer' || paidMethod === 'cash') {
-                        label = (api && typeof api.label === 'function') ? api.label(paidMethod) : '';
-                        if (!label) label = paidMethod === 'transfer' ? 'Bank transfer' : 'Cash';
+                    var method = typeof paidMethod === 'string' ? paidMethod.trim().toLowerCase() : '';
+                    if (method) {
+                        label = (api && typeof api.label === 'function') ? api.label(method) : '';
+                        if (!label) {
+                            if (method === 'transfer') label = 'Bank transfer';
+                            else if (method === 'cash') label = 'Cash';
+                            else if (method === 'wire') label = 'Wire';
+                            else if (method === 'wise') label = 'Wise';
+                            else if (method === 'cheque') label = 'Cheque';
+                            else if (method === 'paypal') label = 'PayPal';
+                            else if (method === 'payoneer') label = 'Payoneer';
+                            else label = method;
+                        }
                     }
                     if (label) return paperEsc(label);
                     return '<span class="cs-writein pp-wi">' + PAPER_BLANK + '</span>';
@@ -5892,6 +5927,7 @@
                     var pageNo = 0;
                     var pages = [];
                     var contacts = paperContacts(b, options);
+                    var usedPaymentIds = Object.create(null);
                     vouchers.forEach(function (v) {
                         v = v || {};
                         var currency = v.currency || d.currency || b.currency || 'JMD';
@@ -5906,7 +5942,7 @@
                         );
                         self._pages(v, currency).forEach(function (p) {
                             var paidRow = (v.itemId != null && String(v.itemId) !== '')
-                                ? self._poForPayment(b, v.itemId, p.amount)
+                                ? self._poForPayment(b, v.itemId, p.amount, currency, usedPaymentIds)
                                 : v;
                             var paid = self._paidFields(paidRow);
                             var methodWi = self._methodFillHtml(paid.paidMethod);

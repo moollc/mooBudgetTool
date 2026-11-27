@@ -360,6 +360,11 @@
     function paidLabel(id) {
         if (id === 'cash') return 'Cash';
         if (id === 'transfer') return 'Bank transfer';
+        if (id === 'wire') return 'Wire';
+        if (id === 'wise') return 'Wise';
+        if (id === 'cheque') return 'Cheque';
+        if (id === 'paypal') return 'PayPal';
+        if (id === 'payoneer') return 'Payoneer';
         if (typeof id === 'string' && PAID_OK[id] && LEGACY.indexOf(id) >= 0) {
             return id.charAt(0).toUpperCase() + id.slice(1);
         }
