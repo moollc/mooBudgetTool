@@ -1169,7 +1169,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             });
             return;
           }
-          if (!localOk) { finish(false, failMsg); return; }
+          /* R1: shell already acknowledged; keep the list and report the local failure separately. */
+          if (!localOk) {
+            finish(true, "Saved in the budget. This browser's copy could not be written: " + failMsg);
+            return;
+          }
         }
         finish(true, '');
         return;
@@ -1224,9 +1228,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         });
         return;
       }
-      localDone = true;
-      localOk = true;
-      maybeFinish();
+      /* R2: no project key and no embedding parent: nothing was persisted. */
+      finish(false, 'No project is open, so nothing was saved.');
       return;
     }
     maybeFinish();
@@ -1252,9 +1255,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       afNotice('Saved documents from other browsers are not migrated.', 'Saved documents');
       if (capNotice) afNotice(capNotice, 'Saved documents');
       savedDocsMigrationInFlight = true;
-      persistBudgetSavedDocs(function (ok) {
+      persistBudgetSavedDocs(function (ok, msg) {
         savedDocsMigrationInFlight = false;
-        if (ok) {
+        /* Marker only on a clean ack (no local-only warning), so a local failure can remigrate on reopen. */
+        if (ok && !msg) {
           try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
         }
       });
@@ -1309,10 +1313,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             saveDocBtnBaseHtml = null;
           }, 1200);
         }
+        if (msg) afNotice(String(msg), 'Saved documents');
         return;
       }
       buildSavedDocsList();
-      afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
+      if (msg === 'No project is open, so nothing was saved.') {
+        afNotice(msg, 'Saved documents');
+      } else {
+        afNotice((msg && String(msg)) ? ('The document was not saved: ' + msg) : 'The document was not saved.', 'Saved documents');
+      }
     });
   }
   function buildSavedDocsList() {
@@ -1374,10 +1383,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             window.mBTSavedDocs.remove(budget, id);
             buildSavedDocsList();
             persistBudgetSavedDocs(function (ok, msg) {
-              if (!ok) {
-                buildSavedDocsList();
-                afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+              if (ok) {
+                if (msg) afNotice(String(msg), 'Saved documents');
+                return;
               }
+              buildSavedDocsList();
+              afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
             });
           } else {
             buildSavedDocsList();
@@ -1403,10 +1414,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
-          if (!ok) {
-            buildSavedDocsList();
-            afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          if (ok) {
+            if (msg) afNotice(String(msg), 'Saved documents');
+            return;
           }
+          buildSavedDocsList();
+          afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
         });
       });
     });
@@ -1424,10 +1437,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!window.mBTSavedDocs.rename(budget, id, nextTitle)) return;
         buildSavedDocsList();
         persistBudgetSavedDocs(function (ok, msg) {
-          if (!ok) {
-            buildSavedDocsList();
-            afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
+          if (ok) {
+            if (msg) afNotice(String(msg), 'Saved documents');
+            return;
           }
+          buildSavedDocsList();
+          afNotice((msg && String(msg)) ? ('The change was not saved: ' + msg) : 'The change was not saved.', 'Saved documents');
         });
       });
     });
