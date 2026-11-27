@@ -140,9 +140,16 @@
         var legs = [];
         var interviews = [];
         var i;
-        if (Array.isArray(raw.locations)) {
-            for (i = 0; i < raw.locations.length; i++) {
-                if (isPlain(raw.locations[i])) locations.push(locationOf(raw.locations[i]));
+        var rawLocs = raw.locations;
+        if (Array.isArray(rawLocs)) {
+            for (i = 0; i < rawLocs.length; i++) {
+                if (isPlain(rawLocs[i])) locations.push(locationOf(rawLocs[i]));
+            }
+        } else if (rawLocs && typeof rawLocs === 'object') {
+            /* Z4: plain object collections become an array of values. */
+            var locVals = Object.values(rawLocs);
+            for (i = 0; i < locVals.length; i++) {
+                if (isPlain(locVals[i])) locations.push(locationOf(locVals[i]));
             }
         }
         if (Array.isArray(raw.legs)) {

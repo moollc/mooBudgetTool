@@ -2741,6 +2741,16 @@
                     });
                     var copy = mBTBudgetSafety.clone(data);
                     copy.updated_at = new Date().toISOString();
+                    /* Z4: normalise shoot-day location collections to arrays on import. */
+                    if (Array.isArray(copy.shootSchedule)) {
+                        copy.shootSchedule.forEach(function (day) {
+                            if (!day || typeof day !== 'object') return;
+                            var locs = day.locations;
+                            if (Array.isArray(locs)) return;
+                            if (locs && typeof locs === 'object') day.locations = Object.values(locs);
+                            else day.locations = [];
+                        });
+                    }
                     budgetRecords.push({ key: key, data: copy });
                 });
                 (contacts || []).forEach(function (contact) {
@@ -10132,10 +10142,18 @@
         var includeContacts = document.getElementById('exp-include-contacts') ? document.getElementById('exp-include-contacts').checked : true;
         mBTME.close('export-dialogModal');
 
+        /* Z5: finish any in-flight Docs saved-document migration before reading packages. */
+        var pendingMigration = window.__mbtPendingSavedDocsMigration;
+        var waitMigration = (pendingMigration && typeof pendingMigration.then === 'function')
+            ? pendingMigration.catch(function () {})
+            : Promise.resolve();
+
         /* Build base snapshot Ã¢â‚¬â€ use Shell storage if available, otherwise start empty */
-        var basePromise = (window.mBT && window.mBT.storage && typeof window.mBT.storage.exportAllData === 'function')
-            ? window.mBT.storage.exportAllData().then(function (json) { return JSON.parse(json); })
-            : Promise.resolve({ version: 1, exportedAt: new Date().toISOString(), stores: {}, localforage: {} });
+        var basePromise = waitMigration.then(function () {
+            return (window.mBT && window.mBT.storage && typeof window.mBT.storage.exportAllData === 'function')
+                ? window.mBT.storage.exportAllData().then(function (json) { return JSON.parse(json); })
+                : { version: 1, exportedAt: new Date().toISOString(), stores: {}, localforage: {} };
+        });
 
         basePromise.then(function (snapshot) {
             /* Enumerate and attach active localforage budgets (Budget Editor layer) */

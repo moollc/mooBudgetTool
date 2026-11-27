@@ -1135,17 +1135,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     delete savedDocsAcks[e.data.requestId];
     if (e.data.status === 'success') a.ok(); else a.fail(e.data.message);
   });
-  function persistBudgetSavedDocs(cb) {
+  function persistBudgetSavedDocs(cb, opts) {
     var embedded = false;
     var requestId = null;
     var localDone = false, localOk = false, ackDone = false, ackOk = false;
     var failMsg = '';
     var finished = false;
+    /* Z1: migration restores the last acknowledged list on any failed write, including local-only warnings. */
+    var restoreOnLocalWarning = !!(opts && opts.restoreOnLocalWarning);
     ensureAckedSavedDocsSnap();
     function finish(ok, msg) {
       if (finished) return;
       finished = true;
       if (!ok) restoreAckedSavedDocsSnap();
+      else if (msg && restoreOnLocalWarning) restoreAckedSavedDocsSnap();
       else takeAckedSavedDocsSnap();
       if (cb) { cb(!!ok, msg || ''); cb = null; }
     }
@@ -1169,7 +1172,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             });
             return;
           }
-          /* R1: shell already acknowledged; keep the list and report the local failure separately. */
+          /* R1: shell already acknowledged; report the local failure. Migration (Z1) still restores. */
           if (!localOk) {
             finish(true, "Saved in the budget. This browser's copy could not be written: " + failMsg);
             return;
@@ -1236,6 +1239,14 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   }
   /* N6: while a migration write is in flight, later reads reuse the pending in-memory result and never set the marker. */
   var savedDocsMigrationInFlight = false;
+  var __mbtPendingSavedDocsMigration = null;
+  function publishPendingSavedDocsMigration(promise) {
+    __mbtPendingSavedDocsMigration = promise;
+    try { window.__mbtPendingSavedDocsMigration = promise; } catch (eWin) {}
+    try {
+      if (window.parent && window.parent !== window) window.parent.__mbtPendingSavedDocsMigration = promise;
+    } catch (eParent) {}
+  }
   function maybeMigrateSavedDocs() {
     if (!budget || !window.mBTSavedDocs) return;
     var marker = null;
@@ -1244,6 +1255,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (savedDocsMigrationInFlight) return;
     var legacy = readLegacySavedDocs();
     if (!legacy.length) return;
+    /* Capture the pre-migration list before mutate so a failed write can restore it (Z1). */
+    ensureAckedSavedDocsSnap();
     var result = window.mBTSavedDocs.migrate(budget, legacy);
     var dropped = (result && result.dropped) ? result.dropped : 0;
     var capNotice = dropped
@@ -1253,6 +1266,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (result && result.changed) {
       /* T1: one combined notice after the save result (migration lines first, then R1 or shell error). */
       savedDocsMigrationInFlight = true;
+      var settle;
+      var pending = new Promise(function (resolve) { settle = resolve; });
+      publishPendingSavedDocsMigration(pending);
       persistBudgetSavedDocs(function (ok, msg) {
         savedDocsMigrationInFlight = false;
         var parts = ['Saved documents from other browsers are not migrated.'];
@@ -1263,7 +1279,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (ok && !msg) {
           try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet) {}
         }
-      });
+        settle();
+        if (__mbtPendingSavedDocsMigration === pending) publishPendingSavedDocsMigration(null);
+      }, { restoreOnLocalWarning: true });
     } else {
       if (capNotice) afNotice(capNotice, 'Saved documents');
       try { localStorage.setItem(savedDocsMigratedKey(), '1'); } catch (eSet2) {}
@@ -1971,6 +1989,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function loadBudget() {
     refreshBudget(function () {
       /* N8: migrate once when the budget arrives so a .moo export right after opening includes legacy documents. */
+      ensureAckedSavedDocsSnap();
       maybeMigrateSavedDocs();
       refreshAiFillButton();
       if (activeTemplateId && activeTab === 'preview') paintPreview();

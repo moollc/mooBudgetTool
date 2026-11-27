@@ -620,12 +620,18 @@
             });
         }
 
-        /* After save mints shoot-day ids, re-seal open undo snapshots so Undo does not see a false field change. */
+        /* After save mints shoot-day ids, re-seal only the schedule on open undo snapshots.
+           Z2: do not copy unrelated live fields (for example a delivery date merged by rebase). */
         function stagesResealAfterIdMint() {
             function touch(snap) {
                 if (!snap || !snap.after) return;
                 if (snap.projectKey !== (mBTStages.state._projectKey || '')) return;
-                snap.after = JSON.parse(JSON.stringify(mBTStages.state.project));
+                var live = mBTStages.state.project;
+                if (Object.prototype.hasOwnProperty.call(live, 'shootSchedule')) {
+                    snap.after.shootSchedule = JSON.parse(JSON.stringify(live.shootSchedule));
+                } else {
+                    delete snap.after.shootSchedule;
+                }
             }
             stagesUndoStack.forEach(touch);
             if (stagesUndoBurstSnap) touch(stagesUndoBurstSnap);

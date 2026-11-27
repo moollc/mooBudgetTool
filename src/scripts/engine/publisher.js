@@ -130,12 +130,11 @@
             (fl.receipts || []).forEach(function (r) { link(r && r.contactId); });
         });
         budgetContacts.forEach(function (c) { link(c && c.id); });
-        /* J2q R1 / P2: shoot-day people are not producer/grantee links. Still walk locations so a
-           non-array locations collection keeps throwing (deferred finding 10). */
+        /* J2q R1 / P2: shoot-day people are not producer/grantee links. Z4: normalise locations first. */
         if (b && Object.prototype.hasOwnProperty.call(b, 'shootSchedule') && Array.isArray(b.shootSchedule)) {
             b.shootSchedule.forEach(function (day) {
                 if (!day || typeof day !== 'object') return;
-                (day.locations || []).forEach(function () { /* no link */ });
+                paperDayLocations(day).forEach(function () { /* no link */ });
             });
         }
         opts = opts || {};
@@ -237,9 +236,23 @@
         return role.split(/[\/&,:]|\s+-\s+(?!\s*\d)/).some(function (part) {
             if (/\b(?:line(?:\s+|-)producer|assistant\s+to\s+the\s+producer)\b/i.test(part)) return false;
             return part.split(/(?<=\p{L})-(?=\p{L})/u).some(function (title) {
-                return /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(title.replace(/[\s\p{P}]+$/u, ''));
+                var cleaned = title.replace(/[\s\p{P}]+$/u, '').trim();
+                /* Z6: Assistant Producer (first word Assistant, last word producer) is not the producing party. */
+                var words = cleaned.split(/\s+/).filter(Boolean);
+                if (words.length >= 2 && /^assistant$/i.test(words[0])
+                    && /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(words[words.length - 1])) {
+                    return false;
+                }
+                return /(?<![\p{L}\p{M}\p{N}_])producer$/iu.test(cleaned);
             });
         });
+    }
+    /* Z4: location collections may arrive as a plain object; renderers always walk an array. */
+    function paperDayLocations(day) {
+        var locs = day && day.locations;
+        if (Array.isArray(locs)) return locs;
+        if (locs && typeof locs === 'object') return Object.values(locs);
+        return [];
     }
     function paperWithoutParentheses(text) {
         while (/\([^()]*\)/.test(text)) text = text.replace(/\([^()]*\)/g, ' ');
@@ -2131,7 +2144,7 @@
                     var day = picked.day;
                     var dayIndex = picked.index;
                     var locById = {};
-                    (day.locations || []).forEach(function (loc) {
+                    paperDayLocations(day).forEach(function (loc) {
                         if (loc && loc.id) locById[String(loc.id)] = loc;
                     });
                     function locName(id) {
@@ -2147,7 +2160,7 @@
                     data.date = day.date != null ? String(day.date) : '';
                     data.dayOf = api.dayTitle(day, dayIndex, days.length);
                     if (day.tbc) data.dayOfTbc = true;
-                    data.shootingLocations = (day.locations || []).map(function (loc) {
+                    data.shootingLocations = paperDayLocations(day).map(function (loc) {
                         var siteId = loc && loc.siteContactId != null && String(loc.siteContactId) !== ''
                             ? String(loc.siteContactId) : '';
                         var site = siteId && contactById ? contactById[siteId] : null;
@@ -2412,11 +2425,11 @@
 
                     keyCrew.producers = producerNames.join(', ');
 
-                    /* Shoot-day site contacts count as linked (J2q R1 / J5a N5). */
+                    /* Shoot-day site contacts count as linked (J2q R1 / J5a N5). Z4: normalise locations. */
                     if (Object.prototype.hasOwnProperty.call(b, 'shootSchedule') && Array.isArray(b.shootSchedule)) {
                         b.shootSchedule.forEach(function (day) {
                             if (!day || typeof day !== 'object') return;
-                            (day.locations || []).forEach(function (loc) {
+                            paperDayLocations(day).forEach(function (loc) {
                                 if (loc && loc.siteContactId != null && String(loc.siteContactId) !== '') {
                                     linkedContactIds[String(loc.siteContactId)] = true;
                                 }
@@ -5856,7 +5869,8 @@
                                 paperStripName(contact && contact.role, payee, contact),
                                 paperStripName(contact && contact.title, payee, contact)
                             );
-                            var paid = self._paidFields(self._poForItem(b, item.id));
+                            /* Z3: leave paid fields blank on fresh defaults so render fills per page from POs;
+                               saved editor rows keep their own paidMethod/paidRef and are never overwritten. */
                             vouchers.push({
                                 source: 'line', itemId: item.id || '', contactId: contact && contact.id != null ? String(contact.id) : '',
                                 payee: payee,
@@ -5864,8 +5878,8 @@
                                 total: paperLineTotal(item, currency),
                                 deposit: item.deposit != null ? item.deposit : item.depositAmount,
                                 currency: currency,
-                                paidMethod: paid.paidMethod,
-                                paidRef: paid.paidRef,
+                                paidMethod: '',
+                                paidRef: '',
                                 items: Array.isArray(item.voucherItems) ? item.voucherItems.map(function (r) { return { description: paperText(r.description), amount: paperAmount(r.amount, currency) }; }) : []
                             });
                         });
@@ -5948,10 +5962,16 @@
                             paperStripName(v.role, payee, contact)
                         );
                         self._pages(v, currency).forEach(function (p) {
-                            var paidRow = (v.itemId != null && String(v.itemId) !== '')
+                            /* Z3: prefer the voucher row's own paid fields; fill gaps from a matching PO. */
+                            var fromPo = (v.itemId != null && String(v.itemId) !== '')
                                 ? self._poForPayment(b, v.itemId, p.amount, currency, usedPaymentIds)
-                                : v;
-                            var paid = self._paidFields(paidRow);
+                                : null;
+                            var paidSaved = self._paidFields(v);
+                            var paidPo = fromPo ? self._paidFields(fromPo) : { paidMethod: '', paidRef: '' };
+                            var paid = {
+                                paidMethod: paidSaved.paidMethod || paidPo.paidMethod,
+                                paidRef: paidSaved.paidRef || paidPo.paidRef
+                            };
                             var methodWi = self._methodFillHtml(paid.paidMethod);
                             var bankVal = self._bankRefHtml(paid.paidRef);
                             var number = numbered ? prefix + String(start + pageNo) : '';
