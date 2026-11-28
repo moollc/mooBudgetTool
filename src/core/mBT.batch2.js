@@ -166,13 +166,16 @@
         return found;
     }
     function validDepartment(key) { return key && groups[key] ? key : null; }
-    /* What adding this item would do, without changing the budget. Shown beside the Department box. */
-    function plan(budget, item, chosen) {
+    /* What adding this item would do, without changing the budget. Shown beside the Department box.
+       preferred is the opened section name (same argument section() uses). */
+    function plan(budget, item, chosen, preferred) {
         var department = validDepartment(chosen) || classify(item);
         if (!department) return { department: null, label: '', section: '', created: false, needsChoice: true };
         var label = groups[department][0], on = deptSectionsOn(budget), name = '', created = false;
         if (on) {
-            if (deptParts[department]) {
+            if (isRenamedOpenedBase(budget, preferred) && !validDepartment(chosen)) {
+                name = preferred;
+            } else if (deptParts[department]) {
                 name = partSection(budget, deptParts[department], true) || '';
                 if (!name) { name = parts[deptParts[department]]; created = true; }
             } else {
@@ -210,8 +213,8 @@
         var sections = budget.sections || (budget.sections = {});
         var found;
         if (deptSectionsOn(budget)) {
-            /* Add-from-section on a renamed base part stays in that opened section. */
-            if (isRenamedOpenedBase(budget, preferred)) found = preferred;
+            /* Renamed base keeps Auto adds; an explicit department choice keeps its own routing. */
+            if (isRenamedOpenedBase(budget, preferred) && !validDepartment(chosen)) found = preferred;
             else found = deptSection(budget, department);
         } else {
             var names = Object.keys(sections);
@@ -269,20 +272,21 @@
         return el ? validDepartment(el.value) : null;
     }
     /* Keep the sentence under the box true as the name or the choice changes. Returns the refresh function. */
-    function bindBox(root, getBudget, getText) {
+    function bindBox(root, getBudget, getText, getPreferred) {
         var el = (root || document).getElementById('mbtDeptPick'), hint = (root || document).getElementById('mbtDeptHint');
         function refresh() {
             if (!hint) return;
             var text = String(getText() || '').replace(/^\s+|\s+$/g, ''), chosen = pick(root);
-            hint.textContent = (text || chosen) ? planText(getBudget(), { description: text }, chosen) : (deptSectionsOn(getBudget()) ? 'Each item goes in its own department\'s section. Pick a department to override.' : 'Pick a department to set it on the new line.');
+            var preferred = typeof getPreferred === 'function' ? getPreferred() : undefined;
+            hint.textContent = (text || chosen) ? planText(getBudget(), { description: text }, chosen, preferred) : (deptSectionsOn(getBudget()) ? 'Each item goes in its own department\'s section. Pick a department to override.' : 'Pick a department to set it on the new line.');
         }
         if (el) el.addEventListener('change', refresh);
         refresh();
         return refresh;
     }
     /* One plain sentence under a Department box: where this line will go. */
-    function planText(budget, item, chosen) {
-        var p = plan(budget, item, chosen);
+    function planText(budget, item, chosen, preferred) {
+        var p = plan(budget, item, chosen, preferred);
         if (p.needsChoice) return 'Department not recognised. Choose one above before adding.';
         if (!deptSectionsOn(budget)) return 'Department: ' + p.label + '. The section is chosen as before, not by department.';
         return 'Department: ' + p.label + '. Goes in the "' + p.section + '" section' + (p.created ? ' (new)' : '') + '.';

@@ -1746,6 +1746,18 @@
                 var contacts = this._stagesContacts();
                 var i, c, cName, phone, phoneEl;
                 var hit = null;
+                var prevId = loc.siteContactId != null ? String(loc.siteContactId) : '';
+                var prevPhone = String(loc.siteContactPhone || '').trim();
+                var prevMatchPhone = '';
+                if (prevId) {
+                    for (i = 0; i < contacts.length; i++) {
+                        c = contacts[i] || {};
+                        if (c && String(c.id) === prevId) {
+                            prevMatchPhone = c.phone != null ? String(c.phone).trim() : '';
+                            break;
+                        }
+                    }
+                }
                 if (needle) {
                     for (i = 0; i < contacts.length; i++) {
                         c = contacts[i] || {};
@@ -1753,20 +1765,22 @@
                         if (cName && cName.toLowerCase() === needle) { hit = c; break; }
                     }
                 }
+                function writePhone(next) {
+                    loc.siteContactPhone = next;
+                    if (locEl && locEl.querySelector) {
+                        phoneEl = locEl.querySelector('.sd-loc-site-phone');
+                        if (phoneEl) phoneEl.value = next;
+                    }
+                }
                 if (hit) {
                     loc.siteContactId = hit.id != null ? String(hit.id) : '';
                     loc.siteContactName = hit.name != null ? String(hit.name) : '';
                     phone = hit.phone != null ? String(hit.phone).trim() : '';
-                    if (phone && !String(loc.siteContactPhone || '').trim()) {
-                        loc.siteContactPhone = phone;
-                        if (locEl && locEl.querySelector) {
-                            phoneEl = locEl.querySelector('.sd-loc-site-phone');
-                            if (phoneEl) phoneEl.value = phone;
-                        }
-                    }
+                    if (!prevPhone || prevPhone === prevMatchPhone) writePhone(phone);
                 } else {
                     loc.siteContactId = '';
                     loc.siteContactName = typed == null ? '' : String(typed);
+                    if (!prevPhone || prevPhone === prevMatchPhone) writePhone('');
                 }
             },
 
@@ -2822,6 +2836,14 @@
                 this._refreshDept = mBTBatch2.bindBox(dom, function() { return deptState.project; }, function() {
                     var form = dom.getElementById('custom-form');
                     return form && !form.classList.contains('hidden') ? dom.getElementById('custom-desc').value : '';
+                }, function() {
+                    var sk = deptState._modalStage;
+                    var sections = (deptState.project && deptState.project.sections) || {};
+                    var names = Object.keys(sections);
+                    if (!sk) return names[0];
+                    if (sk === 'post') return names.filter(function(s) { return /post|edit/i.test(s); })[0] || names[0];
+                    if (sk === 'dev') return names.filter(function(s) { return /dev|creative|travel/i.test(s); })[0] || names[0];
+                    return names.filter(function(s) { return /prod/i.test(s); })[0] || names[0];
                 });
                 dom.getElementById('custom-desc').oninput = this._refreshDept;
                 dom.getElementById('mbtDeptPick').addEventListener('change', function() { mBTStages._buildModalList(dom.getElementById('modal-search').value); });

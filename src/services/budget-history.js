@@ -13,6 +13,10 @@
         return id;
     }
     function key(b, project) { return 'mbt_history:' + (project || b._historyBudgetId || b.projectName) + ':' + actor(); }
+    function journalKey(budget) {
+        if (!budget) return key({ projectName: '' }, null);
+        return key(budget, budget.collab_project_id || null);
+    }
     function serialize(k, task) {
         var result = (chains[k] || Promise.resolve()).catch(function () {}).then(task);
         chains[k] = result;
@@ -452,5 +456,5 @@
     }
     window.addEventListener('online', function () { sync().catch(function (err) { console.warn('[History]', err.message); }); });
     setInterval(function () { if (active && active.project && navigator.onLine) sync().catch(function (err) { console.warn('[History]', err.message); }); }, 10000);
-    window.mBTHistory = { open: open, record: record, sync: sync, decide: decide, mount: mount, differences: differences, isApplying: function () { return applying; } };
+    window.mBTHistory = { open: open, record: record, sync: sync, decide: decide, mount: mount, differences: differences, journalKey: journalKey, isApplying: function () { return applying; } };
 })();

@@ -251,10 +251,12 @@
 
     function dayTitle(day, index, shootDayCount, productionDays) {
         if (!day || !Number.isInteger(index) || index < 0 || index >= shootDayCount) return '';
-        var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : 0;
-        var total = Number.isFinite(planned) && planned > 0 ? planned
-            : (Number.isInteger(shootDayCount) && shootDayCount >= 2 ? shootDayCount : 0);
-        return total ? 'Day ' + (index + 1) + ' of ' + total : '';
+        var n = index + 1;
+        var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : NaN;
+        var total = 0;
+        if (Number.isInteger(planned) && planned >= n) total = planned;
+        else if (Number.isInteger(shootDayCount) && shootDayCount >= 2 && shootDayCount >= n) total = shootDayCount;
+        return total ? 'Day ' + n + ' of ' + total : '';
     }
 
     function sortedLegs(day) {

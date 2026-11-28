@@ -3099,14 +3099,15 @@
         }
     };
 
-    /* History journal entry count (no separate edit counter). Offline local actor key. */
+    /* History journal entry count (no separate edit counter). Reuses History journalKey. */
     window.mBTHistoryEditCount = function (projectName) {
         var name = String(projectName || '');
         if (!name || typeof localforage === 'undefined') return Promise.resolve(0);
-        var actor = '';
-        try { actor = localStorage.getItem('mbt_history_local_actor') || ''; } catch (eA) { actor = ''; }
-        if (!actor) return Promise.resolve(0);
-        var key = 'mbt_history:' + name + ':' + actor;
+        if (!window.mBTHistory || typeof mBTHistory.journalKey !== 'function') return Promise.resolve(0);
+        var b = (typeof budget !== 'undefined' && budget && budget.projectName === name)
+            ? budget
+            : { projectName: name };
+        var key = mBTHistory.journalKey(b);
         return localforage.getItem(key).then(function (journal) {
             return (journal && Array.isArray(journal.entries)) ? journal.entries.length : 0;
         }).catch(function () { return 0; });
@@ -6473,7 +6474,7 @@
             '</div>';
 
         mBTME.open('itemSelector', mBTBatch2.deptSectionsOn(budget) ? 'Add Item' : 'Add to ' + sectionName, content, 'max-w-md');
-        window._mbtDeptRefresh = mBTBatch2.bindBox(document, function () { return budget; }, function () { return ''; });
+        window._mbtDeptRefresh = mBTBatch2.bindBox(document, function () { return budget; }, function () { return ''; }, function () { return sectionName; });
         /* The rows show the department the line will get, so they follow the box. */
         (function () {
             var pickEl = document.getElementById('mbtDeptPick');
@@ -11235,7 +11236,7 @@
         var refreshDeptHint = mBTBatch2.bindBox(document, function () { return budget; }, function () {
             var custom = document.getElementById('stageCustomForm');
             return custom && !custom.classList.contains('hidden') ? (document.getElementById('stageCustomDesc') || {}).value : '';
-        });
+        }, function () { return targetSectionName; });
         var customDescInput = document.getElementById('stageCustomDesc');
         if (customDescInput) customDescInput.addEventListener('input', refreshDeptHint);
         var deptPickEl = document.getElementById('mbtDeptPick');

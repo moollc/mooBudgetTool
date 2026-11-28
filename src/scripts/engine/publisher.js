@@ -2131,10 +2131,12 @@
                         },
                         dayTitle: function (day, index, shootDayCount, productionDays) {
                             if (!day || !Number.isInteger(index) || index < 0 || index >= shootDayCount) return '';
-                            var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : 0;
-                            var total = Number.isFinite(planned) && planned > 0 ? planned
-                                : (Number.isInteger(shootDayCount) && shootDayCount >= 2 ? shootDayCount : 0);
-                            return total ? 'Day ' + (index + 1) + ' of ' + total : '';
+                            var n = index + 1;
+                            var planned = typeof productionDays === 'number' || typeof productionDays === 'string' ? Number(productionDays) : NaN;
+                            var total = 0;
+                            if (Number.isInteger(planned) && planned >= n) total = planned;
+                            else if (Number.isInteger(shootDayCount) && shootDayCount >= 2 && shootDayCount >= n) total = shootDayCount;
+                            return total ? 'Day ' + n + ' of ' + total : '';
                         },
                         sortedLegs: function (day) {
                             if (!day || typeof day !== 'object' || !Array.isArray(day.legs)) return [];
@@ -2983,9 +2985,28 @@
                     });
                     var hospList = [];
                     var hospitalsByName = Object.create(null);
+                    function hospitalMergeKey(name) {
+                        /* Drop a parenthesised abbreviation such as "(KPH)" before the shared normaliser. */
+                        var cleaned = String(name || '').replace(/\([^)]*\)/g, ' ');
+                        var norm = null;
+                        if (typeof window !== 'undefined') {
+                            if (window.mBTHospitalLookup && typeof window.mBTHospitalLookup.normalizeHospitalName === 'function') {
+                                norm = window.mBTHospitalLookup.normalizeHospitalName;
+                            } else if (window.mBTHospitalFallback && typeof window.mBTHospitalFallback.normalizeHospitalName === 'function') {
+                                norm = window.mBTHospitalFallback.normalizeHospitalName;
+                            }
+                        }
+                        if (norm) return norm(cleaned);
+                        /* Same rules as hospital-lookup when neither script is loaded in this frame. */
+                        var s = String(cleaned || '');
+                        try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (eAcc) {}
+                        s = s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+                        s = s.replace(/\b(hospital|regional|public|general|community)\b/g, ' ');
+                        return s.replace(/\s+/g, ' ').trim();
+                    }
                     function addHospital(row) {
                         if (!row) return;
-                        var nameKey = String(row.name || '').trim().toLowerCase();
+                        var nameKey = hospitalMergeKey(row.name);
                         var match = nameKey && hospitalsByName[nameKey];
                         if (match) {
                             ['role', 'phone', 'email', 'address', 'distance'].forEach(function (key) {
@@ -3034,10 +3055,15 @@
                         });
                     }
 
+                    function contactRowHasValue(c) {
+                        if (!c) return false;
+                        return [c.name, c.role, c.phone, c.email, c.address, c.distance]
+                            .some(function (v) { return String(v || '').trim() !== ''; });
+                    }
                     function renderContactCatRows(categoryLabel, items) {
                         var rows = Array.isArray(items) ? items.slice() : [];
                         if (hideEmpty) {
-                            rows = rows.filter(function (c) { return c && String(c.name || '').trim() !== ''; });
+                            rows = rows.filter(contactRowHasValue);
                         }
                         if (rows.length === 0) {
                             if (hideEmpty) return '';
@@ -3061,13 +3087,25 @@
                     var hospitalConfirmNote = hospList.length
                         ? '<p style="font-size:8pt;margin:4px 0 0;color:#334155;">Confirm hospital phone numbers and the route before the shoot. Distances are straight line.</p>'
                         : '';
+                    var regionHintCs = (options && (options.region || (options.budget && options.budget.region))) ||
+                        (rawD && rawD.region) || (b && b.region) ||
+                        (typeof window !== 'undefined' && window.mBTHospitalLookup && window.mBTHospitalLookup.projectRegion
+                            ? window.mBTHospitalLookup.projectRegion(b, window.mBTOG)
+                            : '') ||
+                        (typeof window !== 'undefined' && window.mBTOG && mBTOG.settings && mBTOG.settings.location) || '';
+                    var jamaicaLine = '';
+                    if (typeof window !== 'undefined' && window.mBTHospitalLookup
+                        && typeof window.mBTHospitalLookup.jamaicaEmergencyLine === 'function'
+                        && window.mBTHospitalLookup.jamaicaEmergencyLine(regionHintCs) === 'Ambulance and Fire 110, Police 119') {
+                        jamaicaLine = '<p style="font-size:8pt;margin:4px 0 0;">Emergency: Ambulance and Fire 110, Police 119</p>';
+                    }
                     var contactsHtml = '<div class="callsheet-block" data-section="contacts"><h3>Contacts (Client, Locations, Hospitals, Other)</h3>' +
                         '<table><thead><tr class="th-row"><th>Category</th><th>Name</th><th>Role / Site</th><th>Phone / Contact / Address</th></tr></thead><tbody>' +
                         renderContactCatRows('Client', clientList) +
                         renderContactCatRows('Locations', locContactList) +
                         renderContactCatRows('Hospitals', hospList) +
                         renderContactCatRows('Other', otherContactList) +
-                        '</tbody></table>' + hospitalConfirmNote + '</div>';
+                        '</tbody></table>' + hospitalConfirmNote + jamaicaLine + '</div>';
 
                     /* ---- Weather & Locations ---- */
                     var wx = '<div class="cs-meta-grid">' +
@@ -3103,7 +3141,11 @@
                     /* ---- Crew Table (from all budget sections via linked contacts) ---- */
                     var crewList = Array.isArray(d.crew) ? d.crew.slice() : [];
                     if (hideEmpty) {
-                        crewList = crewList.filter(function (m) { return m && String(m.name || '').trim() !== ''; });
+                        crewList = crewList.filter(function (m) {
+                            if (!m) return false;
+                            return [m.name, m.role, m.phone, m.email, m.call]
+                                .some(function (v) { return String(v || '').trim() !== ''; });
+                        });
                     }
                     var crewBody = crewList.length > 0 ? crewList.map(function (m) {
                         var phoneText = [m.phone, m.email].filter(Boolean).join(', ');
