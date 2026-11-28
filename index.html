@@ -38,7 +38,7 @@
 
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/cow-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="./assets/cow-512.png">
-    <title>mooBudgetTool v24.19</title>
+    <title>mooBudgetTool v24.20</title>
     <script>
         /* Pre-paint theme on <html> so tokens resolve before body paint */
         (function () {
@@ -196,6 +196,7 @@
     <script src="./src/scripts/engine/opfs.js"></script>
     <script src="./src/scripts/engine/hospital-fallback.js"></script>
     <script src="./src/scripts/engine/hospital-lookup.js"></script>
+    <script src="./src/scripts/engine/backup-consent.js"></script>
     <script src="./src/scripts/engine/publisher.js"></script>
     <script src="./src/core/logic/DocumentProjection.js"></script>
     <script src="./src/core/logic/ShootSchedule.js"></script>
@@ -931,7 +932,7 @@
     /* ================= v22.85 TIER 1: Environment Configuration ================= */
 
     /* --- 1. Global System Identity --- */
-    var APP_VERSION = "24.19";
+    var APP_VERSION = "24.20";
     var storageKeyPrefix = 'prodBudget_v5_';
     var trashKey = storageKeyPrefix + 'trash';
     var globalItemsKey = storageKeyPrefix + 'globalItems';
@@ -3088,6 +3089,62 @@
         }
     };
 
+    /* History journal entry count (no separate edit counter). Offline local actor key. */
+    window.mBTHistoryEditCount = function (projectName) {
+        var name = String(projectName || '');
+        if (!name || typeof localforage === 'undefined') return Promise.resolve(0);
+        var actor = '';
+        try { actor = localStorage.getItem('mbt_history_local_actor') || ''; } catch (eA) { actor = ''; }
+        if (!actor) return Promise.resolve(0);
+        var key = 'mbt_history:' + name + ':' + actor;
+        return localforage.getItem(key).then(function (journal) {
+            return (journal && Array.isArray(journal.entries)) ? journal.entries.length : 0;
+        }).catch(function () { return 0; });
+    };
+
+    window.mBTMaybeShowBackupReminder = function () {
+        if (!window.mBTBackupConsent || typeof budget === 'undefined' || !budget || !budget.projectName) return;
+        var api = mBTBackupConsent;
+        var project = budget.projectName;
+        var loggedIn = !!(window.mBTCollab && typeof mBTCollab.getSession === 'function' && mBTCollab.getSession());
+        window.mBTHistoryEditCount(project).then(function (editCount) {
+            var show = api.shouldShowBackupBanner({
+                now: Date.now(),
+                project: project,
+                editCount: editCount,
+                loggedIn: loggedIn,
+                localStorage: localStorage,
+                sessionStorage: sessionStorage
+            });
+            if (!show) return;
+            api.showBackupBanner({
+                document: document,
+                sessionStorage: sessionStorage,
+                onDownload: function () {
+                    api.onDownloadBackup({
+                        localStorage: localStorage,
+                        project: project,
+                        now: Date.now(),
+                        editCount: editCount,
+                        runExport: function () { if (typeof window._runExport === 'function') window._runExport(); }
+                    });
+                },
+                onLater: function () {
+                    api.onLaterBackup({ localStorage: localStorage, project: project, now: Date.now() });
+                }
+            });
+        }).catch(function () { /* ignore */ });
+    };
+
+    (function mbtRequestStoragePersistOnce() {
+        if (!window.mBTBackupConsent || typeof mBTBackupConsent.requestStoragePersist !== 'function') return;
+        var navStorage = (typeof navigator !== 'undefined' && navigator.storage) ? navigator.storage : null;
+        mBTBackupConsent.requestStoragePersist({
+            storage: navStorage,
+            localStorage: localStorage
+        }).catch(function () { /* ignore */ });
+    })();
+
     window.saveBudget = function (silent) {
         if (!silent && typeof mBT !== 'undefined' && mBT.audio && typeof mBT.audio.play === 'function') mBT.audio.play('success');
         var result = mBT.data.save.apply(mBT.data, arguments);
@@ -3102,6 +3159,7 @@
         if (result && typeof result.then === 'function') {
             result.then(function () {
                 if (window.mBTSaveStatus) mBTSaveStatus.set(true);
+                if (typeof window.mBTMaybeShowBackupReminder === 'function') window.mBTMaybeShowBackupReminder();
             }).catch(function (err) {
                 if (window.mBTSaveStatus) mBTSaveStatus.set(false, (err && err.message) || 'storage error');
             });
@@ -10290,6 +10348,24 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            try {
+                if (window.mBTBackupConsent && typeof mBTBackupConsent.noteExport === 'function' && typeof budget !== 'undefined' && budget && budget.projectName) {
+                    var _exportEdits = 0;
+                    var _note = function (n) {
+                        mBTBackupConsent.noteExport({
+                            localStorage: localStorage,
+                            project: budget.projectName,
+                            now: Date.now(),
+                            editCount: n
+                        });
+                    };
+                    if (typeof window.mBTHistoryEditCount === 'function') {
+                        window.mBTHistoryEditCount(budget.projectName).then(function (n) { _note(n || 0); }).catch(function () { _note(0); });
+                    } else {
+                        _note(0);
+                    }
+                }
+            } catch (_expNote) { /* ignore */ }
             mBTME.alert('Export Complete', 'Budget package downloaded successfully.');
         }).catch(function (e) {
             mBTME.alert('Export Failed', e.message);
@@ -13640,6 +13716,9 @@
         });
 
         window.openTool = function (url) {
+            if (typeof window.mBTMaybeShowBackupReminder === 'function') {
+                try { window.mBTMaybeShowBackupReminder(); } catch (_br) { /* ignore */ }
+            }
             /* Lifecycle sync: push local changes before handing off to a tool.
                Sub-Phase 51.2 Task 8: Skip REST push when realtime is live -- it
                propagates changes in real-time, so an immediate REST push is redundant. */

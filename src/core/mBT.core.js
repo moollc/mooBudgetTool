@@ -273,6 +273,32 @@
             localStorage.setItem('moo_og_share_contacts', JSON.stringify(!!enabled));
         },
 
+        /* --- Offline backup reminder preference (default on) --- */
+        toggleBackupReminders: function (enabled) {
+            if (window.mBTBackupConsent && typeof mBTBackupConsent.setRemindersEnabled === 'function') {
+                mBTBackupConsent.setRemindersEnabled(localStorage, !!enabled);
+            } else {
+                localStorage.setItem('mbt_show_backup_reminders', enabled ? 'true' : 'false');
+            }
+            if (!enabled && window.mBTBackupConsent && typeof mBTBackupConsent.hideBackupBanner === 'function') {
+                mBTBackupConsent.hideBackupBanner(document);
+            }
+        },
+
+        /* --- Open Gate public facility contribution (default off) --- */
+        toggleFacilityContribute: function (enabled) {
+            if (window.mBTBackupConsent && typeof mBTBackupConsent.setContributeFacilityInfo === 'function') {
+                mBTBackupConsent.setContributeFacilityInfo({
+                    localStorage: localStorage,
+                    sessionStorage: sessionStorage,
+                    enabled: !!enabled,
+                    now: new Date()
+                });
+            } else {
+                localStorage.setItem('moo_og_share_contacts', enabled ? 'true' : 'false');
+            }
+        },
+
         /* --- Profile save: reads form fields then delegates to mBTSync --- */
         saveProfile: function () {
             if (!window.mBTSync) { return; }

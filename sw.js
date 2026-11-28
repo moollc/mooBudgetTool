@@ -1,7 +1,7 @@
 /* ========= v1.1 SW: Offline Endurance Cache — full asset precache v2.4 ========= */
  /* LEGAL: UserAgreement.md and PrivacyPolicy.md are explicitly precached for offline access */
 
-var CACHE_NAME = 'mbt-monolith-cache-v24.19';
+var CACHE_NAME = 'mbt-monolith-cache-v24.20';
 
 var PRECACHE_ASSETS = [
     /* --- Shell entry --- */
@@ -44,6 +44,7 @@ var PRECACHE_ASSETS = [
     './src/scripts/engine/opfs.js',
     './src/scripts/engine/hospital-fallback.js',
     './src/scripts/engine/hospital-lookup.js',
+    './src/scripts/engine/backup-consent.js',
     './src/scripts/engine/publisher.js',
     './src/core/logic/DocumentProjection.js',
     './src/core/logic/ShootSchedule.js',

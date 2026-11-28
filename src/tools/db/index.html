@@ -28,6 +28,7 @@
   <script src="../../core/finance.engine.js"></script>
   <script src="../../scripts/engine/hospital-fallback.js"></script>
   <script src="../../scripts/engine/hospital-lookup.js"></script>
+  <script src="../../scripts/engine/backup-consent.js"></script>
   <script src="../../scripts/engine/publisher.js"></script>
   <script src="../../core/logic/DocumentProjection.js"></script>
   <script src="../../core/logic/ShootSchedule.js"></script>
@@ -5701,7 +5702,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }).catch(function () {});
   }
 
+  function maybeOfferFacilityConsent() {
+    try {
+      var host = (window.parent && window.parent !== window) ? window.parent : window;
+      var api = host.mBTBackupConsent || window.mBTBackupConsent;
+      if (!api || typeof api.offerFacilityConsent !== 'function') return;
+      api.offerFacilityConsent({
+        localStorage: host.localStorage || localStorage,
+        sessionStorage: host.sessionStorage || sessionStorage,
+        modal: host.mBTME || window.mBTME,
+        document: host.document || document
+      });
+    } catch (eConsent) { /* never block lookup */ }
+  }
+
   function lookupHospitalsForLocations(geoList, signal, statusEl) {
+    maybeOfferFacilityConsent();
     var api = hospitalLookupApi();
     if (!api) return Promise.resolve({ hospitalsByAddress: {}, firstRanked: [], error: 'Hospital lookup unavailable' });
     var online = typeof navigator === 'undefined' || navigator.onLine !== false;

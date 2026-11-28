@@ -980,6 +980,7 @@
             /* Off unless switched on: a new budget starts locked (batch 3). */
             var autoFetchRates = localStorage.getItem(storageKeyPrefix + 'auto_fetch_rates') === 'true';
             var autoHideNav = localStorage.getItem('mBT_autoHideNav') === 'true';
+            var showBackupReminders = localStorage.getItem('mbt_show_backup_reminders') !== 'false';
             var decimalPlaces = (budget.settings && budget.settings.decimalPlaces != null) ? budget.settings.decimalPlaces : 0;
 
             var _ring = isDark ? 'ring-slate-600' : 'ring-slate-200';
@@ -1131,6 +1132,16 @@
                                     '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="autoFetchRatesToggle" ' + (autoFetchRates ? 'checked' : '') + ' class="sr-only peer">' +
                                         '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                                '<div class="settings-row flex items-center justify-between gap-4 px-2">' +
+                                    '<div class="min-w-0">' +
+                                        '<div class="text-[11px] leading-4 font-black settings-text-primary">Show backup reminders</div>' +
+                                        '<div class="text-[9px] leading-4 font-bold settings-text-muted">When you are not signed in, remind you to download a .moo backup after enough edits or when the last backup is old.</div>' +
+                                    '</div>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="backupRemindersToggle" ' + (showBackupReminders ? 'checked' : '') + ' onchange="mBT.features.settings.toggleBackupReminders(this.checked);" class="sr-only peer">' +
+                                        '<div class="w-11 h-6 ' + _sw + ' peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>' +
                                     '</label>' +
                                 '</div>' +
                             '</div>' +
@@ -1294,6 +1305,9 @@
             var profileRole = localStorage.getItem('mbt_profile_role') || '';
             var syncOnReconnect = localStorage.getItem('mbt_supabase_sync_on_reconnect') === 'true';
             var ogShareContacts = JSON.parse(localStorage.getItem('moo_og_share_contacts') || 'false');
+            var contributeFacility = (window.mBTBackupConsent && typeof mBTBackupConsent.contributeFacilityEnabled === 'function')
+                ? !!mBTBackupConsent.contributeFacilityEnabled(localStorage)
+                : !!ogShareContacts;
 
             /* Data-driven home markets from OpenGate RATE_REGIONS (not demo hardcode) */
             var _regionMap = (window.mBTOG && mBTOG.RATE_REGIONS) ? mBTOG.RATE_REGIONS : {};
@@ -1423,6 +1437,13 @@
                                     '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Publish shared contacts</span>' +
                                     '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
                                         '<input type="checkbox" id="ogShareContactsToggle" ' + (ogShareContacts ? 'checked' : '') + ' onchange="mBT.features.settings.toggleContactSharing(this.checked);" class="sr-only peer">' +
+                                        '<div class="' + toggleTrack + ' peer-checked:bg-violet-600"></div>' +
+                                    '</label>' +
+                                '</div>' +
+                                '<div class="settings-row settings-row--single flex items-center justify-between gap-4 px-2">' +
+                                    '<span class="text-[9px] leading-4 font-bold ' + _mutedStrong + ' uppercase tracking-widest">Contribute public facility info to Open Gate</span>' +
+                                    '<label class="relative inline-flex items-center cursor-pointer shrink-0">' +
+                                        '<input type="checkbox" id="ogFacilityContributeToggle" ' + (contributeFacility ? 'checked' : '') + ' onchange="mBT.features.settings.toggleFacilityContribute(this.checked);" class="sr-only peer">' +
                                         '<div class="' + toggleTrack + ' peer-checked:bg-violet-600"></div>' +
                                     '</label>' +
                                 '</div>' +
