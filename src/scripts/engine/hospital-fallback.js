@@ -316,8 +316,11 @@
   function normalizeHospitalName(name) {
     var s = String(name || '');
     try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+    /* Drop parenthesised abbreviations such as "(KPH)" before punctuation strip. */
+    s = s.replace(/\([^)]*\)/g, ' ');
     s = s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-    s = s.replace(/\b(hospital|regional|public|general|community)\b/g, ' ');
+    /* Only the word hospital is stripped. Keep regional, public, general, community. */
+    s = s.replace(/\bhospital\b/g, ' ');
     return s.replace(/\s+/g, ' ').trim();
   }
   function phoneFromFallback(name) {

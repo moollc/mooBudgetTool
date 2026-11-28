@@ -34,8 +34,9 @@
     }
     var s = String(name || '');
     try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+    s = s.replace(/\([^)]*\)/g, ' ');
     s = s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-    s = s.replace(/\b(hospital|regional|public|general|community)\b/g, ' ');
+    s = s.replace(/\bhospital\b/g, ' ');
     return s.replace(/\s+/g, ' ').trim();
   }
 
@@ -132,20 +133,11 @@
     }
     var p = fetchImpl(url, Object.assign({}, opts || {}, signal ? { signal: signal } : {}));
     if (!ms) return p.finally(releaseFetchTimeout);
-    /* Docs harnesses often stub setTimeout to run immediately. Detect that and skip the race. */
-    var delayHonoured = true;
-    try {
-      var probeAt = Date.now();
-      var probe = setTimeout(function () {}, 50);
-      if (Date.now() - probeAt < 5) delayHonoured = false;
-      clearTimeout(probe);
-    } catch (eProbe) { delayHonoured = true; }
+    /* Body read shares the same AbortController. Real setTimeout abort works with fake and real timers. */
     var body = p.then(function (res) {
       if (!res || !res.ok) throw new Error('Overpass HTTP ' + (res && res.status));
-      /* Body read shares the same AbortController and timeout. */
       return res.json();
     });
-    if (!delayHonoured) return body.finally(releaseFetchTimeout);
     return Promise.race([
       body,
       new Promise(function (_, reject) {
@@ -267,15 +259,39 @@
     };
   }
 
+  function isJamaicaHint(text) {
+    var r = String(text || '').trim().toLowerCase();
+    if (!r) return false;
+    if (r === 'jamaica' || r === 'jm' || r === 'jam') return true;
+    return /\bjamaica\b/.test(r);
+  }
+
   function jamaicaEmergencyLine(region) {
-    var r = String(region || '').trim().toLowerCase();
-    if (r === 'jamaica') return 'Ambulance and Fire 110, Police 119';
+    if (isJamaicaHint(region)) return 'Ambulance and Fire 110, Police 119';
     return 'Dial 911';
   }
 
+  /* Live budget country, region or project location only. Empty means no Jamaica line. */
   function projectRegion(budget, og) {
-    if (budget && budget.region) return String(budget.region);
-    if (og && og.settings && og.settings.location) return String(og.settings.location);
+    if (!budget) return '';
+    if (budget.country != null && String(budget.country).trim()) return String(budget.country);
+    if (budget.region != null && String(budget.region).trim()) return String(budget.region);
+    if (budget.projectLocation != null && String(budget.projectLocation).trim()) return String(budget.projectLocation);
+    return '';
+  }
+
+  function callSheetJamaicaHint(budget, rawD, options) {
+    var opts = options || {};
+    var b = budget || {};
+    var hints = [
+      opts.country, opts.region,
+      opts.budget && opts.budget.country, opts.budget && opts.budget.region, opts.budget && opts.budget.projectLocation,
+      b.country, b.region, b.projectLocation
+    ];
+    var i;
+    for (i = 0; i < hints.length; i++) {
+      if (String(hints[i] || '').trim()) return String(hints[i]);
+    }
     return '';
   }
 
@@ -297,8 +313,10 @@
     resolveHospitalPhone: resolveHospitalPhone,
     canAutoFillValue: canAutoFillValue,
     facilityRecordForSharing: facilityRecordForSharing,
+    isJamaicaHint: isJamaicaHint,
     jamaicaEmergencyLine: jamaicaEmergencyLine,
-    projectRegion: projectRegion
+    projectRegion: projectRegion,
+    callSheetJamaicaHint: callSheetJamaicaHint
   };
   root.mBTHospitalLookup = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -153,37 +153,60 @@
                 return !/^dept_/.test(sections[name].id || '') && wanted.indexOf(norm(name)) !== -1;
             })[0] || null;
     }
-    function deptSection(budget, department) {
-        if (deptParts[department]) return partSection(budget, deptParts[department]);
+    function deptSection(budget, department, dry) {
+        if (deptParts[department]) return partSection(budget, deptParts[department], dry);
         var sections = budget.sections || (budget.sections = {});
         var found = findDeptSection(budget, department);
         if (!found) {
             found = department === 'atl' ? 'Above The Line' : groups[department][0];
             if (sections[found]) found += ' (Budget Part)';
+            if (dry) return found;
             /* No defaultPhase: a new line keeps the schedule it was added with. */
             sections[found] = { id: sectionIdFor(department), isOpen: true, items: [] };
         }
         return found;
     }
     function validDepartment(key) { return key && groups[key] ? key : null; }
-    /* What adding this item would do, without changing the budget. Shown beside the Department box.
-       preferred is the opened section name (same argument section() uses). */
-    function plan(budget, item, chosen, preferred) {
+    /* Single routing path for hint and add. dryRun: true never mutates the budget. */
+    function routeSection(budget, item, preferred, chosen, dryRun) {
         var department = validDepartment(chosen) || classify(item);
-        if (!department) return { department: null, label: '', section: '', created: false, needsChoice: true };
-        var label = groups[department][0], on = deptSectionsOn(budget), name = '', created = false;
-        if (on) {
-            if (isRenamedOpenedBase(budget, preferred) && !validDepartment(chosen)) {
-                name = preferred;
-            } else if (deptParts[department]) {
-                name = partSection(budget, deptParts[department], true) || '';
-                if (!name) { name = parts[deptParts[department]]; created = true; }
-            } else {
-                name = findDeptSection(budget, department) || '';
-                if (!name) { name = department === 'atl' ? 'Above The Line' : label; created = true; }
+        if (!department) {
+            return { department: null, label: '', section: '', created: false, needsChoice: true };
+        }
+        var label = groups[department][0];
+        var on = deptSectionsOn(budget);
+        var name = '';
+        var created = false;
+        if (!on) {
+            return { department: department, label: label, section: '', created: false, needsChoice: false };
+        }
+        if (isRenamedOpenedBase(budget, preferred) && !validDepartment(chosen)) {
+            name = preferred;
+        } else if (deptParts[department]) {
+            var before = partSection(budget, deptParts[department], true);
+            name = partSection(budget, deptParts[department], dryRun) || '';
+            if (!before && name) created = true;
+            if (!name) {
+                name = parts[deptParts[department]];
+                if ((budget.sections || {})[name]) name += ' (Budget Part)';
+                created = true;
+            }
+        } else {
+            var existing = findDeptSection(budget, department);
+            name = deptSection(budget, department, dryRun) || '';
+            if (!existing && name) created = true;
+            if (!name) {
+                name = department === 'atl' ? 'Above The Line' : label;
+                if ((budget.sections || {})[name]) name += ' (Budget Part)';
+                created = true;
             }
         }
         return { department: department, label: label, section: name, created: created, needsChoice: false };
+    }
+    /* What adding this item would do, without changing the budget. Shown beside the Department box.
+       preferred is the opened section name (same argument section() uses). */
+    function plan(budget, item, chosen, preferred) {
+        return routeSection(budget, item, preferred, chosen, true);
     }
     /* Default display title for a budget-part section id (prod/dev/post...). */
     function defaultPartTitle(id) {
@@ -202,8 +225,8 @@
         return !!def && preferred !== def;
     }
     function section(budget, item, preferred, chosen) {
-        var department = validDepartment(chosen) || classify(item);
-        if (!department) {
+        var routed = routeSection(budget, item, preferred, chosen, true);
+        if (routed.needsChoice || !routed.department) {
             item.needsClassification = true;
             console.warn('[mBT classification] Needs classification:', item.description || item.role || '(unnamed item)');
             throw new Error('Could not classify this item. Choose its department, or use a recognizable role or equipment name. Nothing was added.');
@@ -213,19 +236,17 @@
         var sections = budget.sections || (budget.sections = {});
         var found;
         if (deptSectionsOn(budget)) {
-            /* Renamed base keeps Auto adds; an explicit department choice keeps its own routing. */
-            if (isRenamedOpenedBase(budget, preferred) && !validDepartment(chosen)) found = preferred;
-            else found = deptSection(budget, department);
+            found = routeSection(budget, item, preferred, chosen, false).section;
         } else {
             var names = Object.keys(sections);
             found = names.filter(function (name) {
                 return name === preferred && !/^dept_/.test(sections[name].id || '');
             })[0];
             if (!found) {
-                found = partSection(budget, parts[preferred] ? preferred : partFor(item, department));
+                found = partSection(budget, parts[preferred] ? preferred : partFor(item, routed.department));
             }
         }
-        item.department = department;
+        item.department = routed.department;
         var known = catalogMatch(item.description || item.role, catalogs());
         if (known) { item.itemType = known.itemType; item.catalogDescription = known.description; }
         return found;
@@ -405,5 +426,5 @@
             panel.appendChild(text); panel.appendChild(send); panel.appendChild(cancel); document.body.appendChild(panel);
         });
     }
-    window.mBTBatch2 = { classify: classify, section: section, plan: plan, planText: planText, pick: pick, boxHtml: boxHtml, bindBox: bindBox, pickerOptions: pickerOptions, moveToDepartment: moveToDepartment, deptSectionsOn: deptSectionsOn, migrateDepartments: migrateDepartments, groups: groups, ledger: ledger, workbook: workbook, following: following, eligible: eligible, protectedPrice: protectedPrice, manual: manual, adoptCatalog: adoptCatalog, shareFile: shareFile, uuid: uuid, ensureLedgerIds: ensureLedgerIds, catalogMatch: catalogMatch };
+    window.mBTBatch2 = { classify: classify, section: section, plan: plan, planText: planText, routeSection: routeSection, pick: pick, boxHtml: boxHtml, bindBox: bindBox, pickerOptions: pickerOptions, moveToDepartment: moveToDepartment, deptSectionsOn: deptSectionsOn, migrateDepartments: migrateDepartments, groups: groups, ledger: ledger, workbook: workbook, following: following, eligible: eligible, protectedPrice: protectedPrice, manual: manual, adoptCatalog: adoptCatalog, shareFile: shareFile, uuid: uuid, ensureLedgerIds: ensureLedgerIds, catalogMatch: catalogMatch };
 })();

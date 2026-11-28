@@ -1879,32 +1879,21 @@ window.mBTRouter = (function () {
         return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: 2 });
     }
 
+    /* Z8: Relabel only when the budget has no POs (any status), no petty cash floats or receipts, and no actual amounts. */
     function relabelPaymentCurrency(budget, to) {
         if (!budget) return '';
-        var base = String(budget.currency || 'JMD').toUpperCase();
         var ledgers = budget.ledgers || {};
-        var foreign = '';
-        function checkCurrency(currency) {
-            var code = String(currency || base).toUpperCase();
-            if (code === to) return false;
-            foreign = code;
-            return true;
-        }
-        (ledgers.pos || []).some(function (po) { return po && po.status === 'Paid' && checkCurrency(po.currency); });
-        if (foreign) return foreign;
-        (ledgers.pettyCash || []).some(function (float) {
-            return float && (checkCurrency(float.currency) || (float.receipts || []).some(function (receipt) {
-                return receipt && checkCurrency(receipt.currency || float.currency);
-            }));
-        });
-        if (foreign || base === to) return foreign;
+        if ((ledgers.pos || []).length) return 'records';
+        if ((ledgers.pettyCash || []).some(function (float) {
+            return float && (float.floatAmount != null || float.currency || (float.receipts && float.receipts.length));
+        })) return 'records';
         var sections = budget.sections || {};
         var hasActual = Object.keys(sections).some(function (key) {
             return ((sections[key] && sections[key].items) || []).some(function (item) {
                 return item && (parseFloat(item.actual) || (parseFloat(item.actualQuantity) * parseFloat(item.actualRate)));
             });
         });
-        return hasActual ? base : '';
+        return hasActual ? 'records' : '';
     }
 
     function buildCurrencySwitchDialog(fromCode, toCode, exampleLine) {
@@ -1927,7 +1916,7 @@ window.mBTRouter = (function () {
         return '<div class="p-6 space-y-4" id="currencySwitchDialog">' +
             '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800">Switch currency to ' + esc(to) + '</h3>' +
             '<p class="text-xs text-slate-600 font-bold leading-relaxed">' + esc(description) + '</p>' +
-            (paymentCurrency ? '<p class="text-xs text-slate-600 font-bold">' + esc('Payments are recorded in ' + paymentCurrency + '. Relabel would misstate them. Use Convert or Cancel.') + '</p>' : '') +
+            (paymentCurrency ? '<p class="text-xs text-slate-600 font-bold">' + esc('This budget has payment records. Relabel would misstate them. Use Convert or Cancel.') + '</p>' : '') +
             '<div class="space-y-2">' +
             '<button type="button" data-currency-mode="convert"' + (converted == null ? ' disabled' : '') + ' class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all disabled:opacity-40">Convert rates</button>' +
             '<button type="button" data-currency-mode="relabel"' + (paymentCurrency ? ' disabled' : '') + ' class="w-full py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all disabled:opacity-40">Relabel only</button>' +

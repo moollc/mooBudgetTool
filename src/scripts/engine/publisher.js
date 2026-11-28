@@ -2986,7 +2986,6 @@
                     var hospList = [];
                     var hospitalsByName = Object.create(null);
                     function hospitalMergeKey(name) {
-                        /* Drop a parenthesised abbreviation such as "(KPH)" before the shared normaliser. */
                         var cleaned = String(name || '').replace(/\([^)]*\)/g, ' ');
                         var norm = null;
                         if (typeof window !== 'undefined') {
@@ -2997,17 +2996,32 @@
                             }
                         }
                         if (norm) return norm(cleaned);
-                        /* Same rules as hospital-lookup when neither script is loaded in this frame. */
                         var s = String(cleaned || '');
                         try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (eAcc) {}
                         s = s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-                        s = s.replace(/\b(hospital|regional|public|general|community)\b/g, ' ');
+                        s = s.replace(/\bhospital\b/g, ' ');
                         return s.replace(/\s+/g, ' ').trim();
+                    }
+                    function hospitalAddressKey(address) {
+                        return String(address || '').replace(/\s+/g, ' ').trim().toLowerCase();
                     }
                     function addHospital(row) {
                         if (!row) return;
                         var nameKey = hospitalMergeKey(row.name);
-                        var match = nameKey && hospitalsByName[nameKey];
+                        var addrKey = hospitalAddressKey(row.address);
+                        var match = null;
+                        if (nameKey) {
+                            var candidates = hospitalsByName[nameKey] || [];
+                            for (var ci = 0; ci < candidates.length; ci++) {
+                                var existing = candidates[ci];
+                                var existingAddr = hospitalAddressKey(existing.address);
+                                /* Merge only when names match and addresses are equal or one is blank. */
+                                if (!existingAddr || !addrKey || existingAddr === addrKey) {
+                                    match = existing;
+                                    break;
+                                }
+                            }
+                        }
                         if (match) {
                             ['role', 'phone', 'email', 'address', 'distance'].forEach(function (key) {
                                 if (!String(match[key] || '').trim() && String(row[key] || '').trim()) match[key] = row[key];
@@ -3017,7 +3031,10 @@
                         }
                         var copy = Object.assign({}, row);
                         hospList.push(copy);
-                        if (nameKey) hospitalsByName[nameKey] = copy;
+                        if (nameKey) {
+                            if (!hospitalsByName[nameKey]) hospitalsByName[nameKey] = [];
+                            hospitalsByName[nameKey].push(copy);
+                        }
                     }
                     var hospitalTbc = Boolean(fieldTbcMap.hospitalName || fieldTbcMap.hospitalAddress || fieldTbcMap.hospitalPhone || fieldTbcMap.hospitalDistance);
                     var nearestHospital = hospitalTbc || [d.hospitalName, d.hospitalAddress, d.hospitalPhone, d.hospitalDistance].some(function (value) {
@@ -3057,6 +3074,8 @@
 
                     function contactRowHasValue(c) {
                         if (!c) return false;
+                        if (isRowTbc(c)) return true;
+                        if (c.tbc === true || c.tbc === 'true') return true;
                         return [c.name, c.role, c.phone, c.email, c.address, c.distance]
                             .some(function (v) { return String(v || '').trim() !== ''; });
                     }
@@ -3087,12 +3106,15 @@
                     var hospitalConfirmNote = hospList.length
                         ? '<p style="font-size:8pt;margin:4px 0 0;color:#334155;">Confirm hospital phone numbers and the route before the shoot. Distances are straight line.</p>'
                         : '';
-                    var regionHintCs = (options && (options.region || (options.budget && options.budget.region))) ||
-                        (rawD && rawD.region) || (b && b.region) ||
-                        (typeof window !== 'undefined' && window.mBTHospitalLookup && window.mBTHospitalLookup.projectRegion
-                            ? window.mBTHospitalLookup.projectRegion(b, window.mBTOG)
-                            : '') ||
-                        (typeof window !== 'undefined' && window.mBTOG && mBTOG.settings && mBTOG.settings.location) || '';
+                    var regionHintCs = '';
+                    if (typeof window !== 'undefined' && window.mBTHospitalLookup
+                        && typeof window.mBTHospitalLookup.callSheetJamaicaHint === 'function') {
+                        regionHintCs = window.mBTHospitalLookup.callSheetJamaicaHint(b, rawD, options);
+                    } else {
+                        regionHintCs = (options && (options.country || options.region
+                            || (options.budget && (options.budget.country || options.budget.region || options.budget.projectLocation))))
+                            || (b && (b.country || b.region || b.projectLocation)) || '';
+                    }
                     var jamaicaLine = '';
                     if (typeof window !== 'undefined' && window.mBTHospitalLookup
                         && typeof window.mBTHospitalLookup.jamaicaEmergencyLine === 'function'
@@ -3143,6 +3165,8 @@
                     if (hideEmpty) {
                         crewList = crewList.filter(function (m) {
                             if (!m) return false;
+                            if (isRowTbc(m)) return true;
+                            if (m.tbc === true || m.tbc === 'true') return true;
                             return [m.name, m.role, m.phone, m.email, m.call]
                                 .some(function (v) { return String(v || '').trim() !== ''; });
                         });
@@ -6492,8 +6516,9 @@
                     if (['equipment', 'equip', 'gear', 'rental', 'rentals', 'kit'].indexOf(kind) > -1) return true;
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
-                    if (/\b(fee|deposit)\b/.test(desc)) return false;
+                    /* Kit rental rule (J2t) lists before the fee/deposit exclusion. */
                     if (/\bkit rental\b/.test(desc)) return true;
+                    if (/\b(fee|deposit)\b/.test(desc)) return false;
                     // Catalog adoption can stamp a crew tag from a partial description match.
                     var catalogWordBreak = /[^\p{L}\p{Nd}]+/gu;
                     var catalog = typeof item.catalogDescription === 'string' ? item.catalogDescription.toLowerCase().replace(catalogWordBreak, ' ').trim() : '';

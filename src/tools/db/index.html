@@ -445,6 +445,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var hospitalLookupToken = 0;
   var hospitalLookupDocToken = 0;
   var lastNominatimAt = 0;
+  var hospitalLookupDocId = '';
+  var nominatimQueue = Promise.resolve();
   var activeTemplateId = null;
   var activeTab = 'preview';   /* 'edit' | 'preview' */
   var editorData = null;       /* current editable template data */
@@ -1434,6 +1436,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var tmplMeta = pub.templates.getAll().find(function (t) { return t.id === d.templateId; });
         if (!tmplMeta) return;
         activeTemplateId = d.templateId;
+        /* Opening a Saved document invalidates in-flight hospital lookups (Z2). */
+        if (typeof invalidateHospitalLookups === 'function') {
+          invalidateHospitalLookups(d.id || d.templateId || 'saved');
+        } else {
+          if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
+          if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
+          if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
+            try { hospitalLookupController.abort(); } catch (eAbortSaved) {}
+            hospitalLookupController = null;
+          }
+        }
         dbPushUndoImmediate();
         editorData = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
         if (activeTemplateId === 'fundingPackage') {
@@ -2093,10 +2106,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     _afEpoch++;
     _afProjection = null;
     _afBusy = false;
-    if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
-    if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
-      try { hospitalLookupController.abort(); } catch (eAbortTmpl) {}
-      hospitalLookupController = null;
+    if (typeof invalidateHospitalLookups === 'function') {
+      invalidateHospitalLookups(tmplMeta && tmplMeta.id);
+    } else {
+      if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
+      if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
+      if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
+        try { hospitalLookupController.abort(); } catch (eAbortTmpl) {}
+        hospitalLookupController = null;
+      }
     }
     var fillButton = dom.getElementById('btn-ai-fill'); if (fillButton) fillButton.disabled = false;
     activeTemplateId = tmplMeta.id;
@@ -3107,10 +3125,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Refresh call sheet editor fields from the selected shoot day (empty dayId = first day). */
   function applyCallSheetDaySelection(dayId) {
     if (!editorData || typeof editorData !== 'object') return;
-    if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
-    if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
-      try { hospitalLookupController.abort(); } catch (eAbortDay) {}
-      hospitalLookupController = null;
+    if (typeof invalidateHospitalLookups === 'function') {
+      invalidateHospitalLookups('day:' + String(dayId != null ? dayId : ''));
+    } else {
+      if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
+      if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
+      if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
+        try { hospitalLookupController.abort(); } catch (eAbortDay) {}
+        hospitalLookupController = null;
+      }
     }
     editorData.dayId = dayId != null ? String(dayId) : '';
     var csTmpl = pub && pub.templates && pub.templates.callSheet;
@@ -3318,6 +3341,21 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* hideEmpty is a document option: default false (write-in blanks print as before). */
     if (d.hideEmpty == null) d.hideEmpty = false;
     else d.hideEmpty = !!d.hideEmpty;
+
+    /* Z10: old documents with hospital fields but no source load as typed. */
+    function migrateHospitalSource(target, nameKey) {
+      if (!target) return;
+      var has = [target[nameKey], target.hospitalPhone, target.hospitalAddress, target.hospitalDistance]
+        .some(function (v) { return String(v || '').trim() !== ''; });
+      if (!has) {
+        target.hospitalSource = '';
+        target.hospitalRetrievedAt = '';
+        return;
+      }
+      if (!String(target.hospitalSource || '').trim()) target.hospitalSource = 'typed';
+    }
+    migrateHospitalSource(d, 'hospitalName');
+    (d.shootingLocations || []).forEach(function (loc) { migrateHospitalSource(loc, 'hospital'); });
   }
 
   /* ======== Build Editor (dispatcher) ======== */
@@ -3479,10 +3517,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        }
     }
 
-    /* Phase 70: auto-fetch weather on open if location is set but forecasts not yet loaded */
+    /* Phase 70: auto-fetch weather on open if location is set but forecasts not yet loaded.
+       Hospital lookup is skipped here: it runs only on address commit or the weather button (Z3). */
     if (editorData && editorData.shootingLocations && editorData.shootingLocations.length &&
         editorData.shootingLocations[0].address && !editorData.locationForecasts) {
-        try { setTimeout(fetchWeatherAndHospitals, 400); } catch(e) { console.warn('[mBTDB] Auto-weather fetch failed:', e); }
+        try {
+          setTimeout(function () {
+            if (typeof fetchWeatherOnlyOnOpen === 'function') fetchWeatherOnlyOnOpen();
+          }, 400);
+        } catch(e) { console.warn('[mBTDB] Auto-weather fetch failed:', e); }
     }
 
     /* Phase 71: crewDealMemo status change — inject/remove ghost item in budget */
@@ -5161,26 +5204,27 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var el = e.target;
       if (!el) return;
       if (el.getAttribute('data-key') === 'hospitalName') {
-        editorData.hospitalSource = 'typed';
         clearAutoHospitalPhoneOnNameEdit();
+        markHospitalTyped(editorData);
       }
       if (el.getAttribute('data-key') === 'hospitalPhone') {
-        editorData.hospitalSource = 'typed';
-        editorData.hospitalPhoneSource = 'typed';
+        if (String(el.value || '').trim()) editorData.hospitalPhoneSource = 'typed';
+        markHospitalTyped(editorData);
       }
       if (el.getAttribute('data-key') === 'hospitalAddress' || el.getAttribute('data-key') === 'hospitalDistance') {
-        editorData.hospitalSource = 'typed';
+        markHospitalTyped(editorData);
       }
     });
 
     function commitHospitalNameOrAddress(el) {
       if (!el) return;
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
+        invalidateHospitalLookups(currentHospitalDocIdentity());
         scheduleHospitalLookupFromAddresses();
       }
       if (el.getAttribute('data-key') === 'hospitalName') {
-        editorData.hospitalSource = 'typed';
         clearAutoHospitalPhoneOnNameEdit();
+        markHospitalTyped(editorData);
         fillHospitalPhoneFromName(el.value, true).then(function () {
           saveEditorData();
         });
@@ -5596,34 +5640,41 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (!seenQ[k]) { seenQ[k] = true; unique.push(q); }
     });
 
-    function waitNominatimGap() {
-      var now = Date.now();
-      var wait = Math.max(0, 1000 - (now - lastNominatimAt));
-      if (!wait) {
-        lastNominatimAt = now;
-        return Promise.resolve();
-      }
-      return new Promise(function (resolve, reject) {
-        var timer = setTimeout(function () {
+    function enqueueNominatim(startRequest) {
+      var run = nominatimQueue.then(function () {
+        var now = Date.now();
+        var wait = Math.max(0, 1000 - (now - lastNominatimAt));
+        function start() {
           lastNominatimAt = Date.now();
-          resolve();
-        }, wait);
-        if (signal) {
-          signal.addEventListener('abort', function () {
-            clearTimeout(timer);
-            var err = new Error('Aborted');
-            err.name = 'AbortError';
-            reject(err);
-          });
+          return startRequest();
         }
+        if (!wait) return start();
+        return new Promise(function (resolve, reject) {
+          var timer = setTimeout(function () {
+            resolve(start());
+          }, wait);
+          if (signal) {
+            signal.addEventListener('abort', function () {
+              clearTimeout(timer);
+              var err = new Error('Aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }
+        });
       });
+      nominatimQueue = run.catch(function () { /* keep queue moving */ });
+      return run;
     }
 
     function tryNext(idx) {
       if (idx >= unique.length) return Promise.resolve(null);
       var q = unique[idx];
-      return waitNominatimGap().then(function () {
-        return fetch(
+      return enqueueNominatim(function () {
+        var root = (typeof window !== 'undefined') ? window : (typeof self !== 'undefined' ? self : null);
+        var fetchFn = root && root.fetch ? root.fetch.bind(root) : null;
+        if (!fetchFn) return Promise.reject(new Error('No fetch'));
+        return fetchFn(
           'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q),
           { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal }
         );
@@ -5659,11 +5710,100 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var hospitalLookupController = null;
   var hospitalLookupToken = 0;
   var hospitalLookupDocToken = 0;
+  var hospitalLookupDocId = hospitalLookupDocId || '';
   var lastNominatimAt = 0;
+  var nominatimQueue = nominatimQueue || Promise.resolve();
+  var weatherFetchController = typeof weatherFetchController !== 'undefined' ? weatherFetchController : null;
   var AUTO_HOSPITAL_SOURCES = { live: 1, opengate: 1, fallback: 1 };
 
   function hospitalLookupApi() {
     return (typeof window !== 'undefined' && window.mBTHospitalLookup) ? window.mBTHospitalLookup : null;
+  }
+
+  function currentHospitalDocIdentity() {
+    return String(hospitalLookupDocId || activeTemplateId || 'sheet');
+  }
+
+  function invalidateHospitalLookups(docId) {
+    hospitalLookupToken += 1;
+    hospitalLookupDocToken += 1;
+    if (docId != null) hospitalLookupDocId = String(docId);
+    if (hospitalLookupController) {
+      try { hospitalLookupController.abort(); } catch (eInv) {}
+      hospitalLookupController = null;
+    }
+  }
+
+  function makeHospitalLookupToken(locationId) {
+    hospitalLookupToken += 1;
+    return {
+      counter: hospitalLookupToken,
+      docToken: hospitalLookupDocToken,
+      docId: currentHospitalDocIdentity(),
+      locationId: String(locationId || '')
+    };
+  }
+
+  function hospitalLookupTokenValid(token) {
+    if (!token) return false;
+    return token.counter === hospitalLookupToken
+      && token.docToken === hospitalLookupDocToken
+      && token.docId === currentHospitalDocIdentity();
+  }
+
+  function hospitalUnitEmpty(target) {
+    if (!target) return true;
+    var isTop = (target === editorData) || Object.prototype.hasOwnProperty.call(target, 'hospitalName');
+    var name = isTop ? target.hospitalName : target.hospital;
+    return !String(name || '').trim()
+      && !String(target.hospitalPhone || '').trim()
+      && !String(target.hospitalAddress || '').trim()
+      && !String(target.hospitalDistance || '').trim();
+  }
+
+  function hospitalUnitHasValues(target) {
+    return !hospitalUnitEmpty(target);
+  }
+
+  function markHospitalTyped(target) {
+    if (!target) return;
+    if (hospitalUnitEmpty(target)) {
+      target.hospitalSource = '';
+      target.hospitalRetrievedAt = '';
+      target.hospitalPhoneSource = '';
+      return;
+    }
+    target.hospitalSource = 'typed';
+  }
+
+  function clearHospitalUnit(target) {
+    if (!target) return;
+    var isTop = (target === editorData) || Object.prototype.hasOwnProperty.call(target, 'hospitalName');
+    if (isTop) target.hospitalName = '';
+    else target.hospital = '';
+    target.hospitalPhone = '';
+    target.hospitalAddress = '';
+    target.hospitalDistance = '';
+    target.hospitalSource = '';
+    target.hospitalRetrievedAt = '';
+    target.hospitalPhoneSource = '';
+  }
+
+  function writeHospitalUnit(target, hospital, source) {
+    if (!target || !hospital) return;
+    var isTop = (target === editorData) || Object.prototype.hasOwnProperty.call(target, 'hospitalName');
+    var nameKey = isTop ? 'hospitalName' : 'hospital';
+    target[nameKey] = hospital.name || '';
+    target.hospitalAddress = hospital.address || '';
+    target.hospitalPhone = hospital.phone || '';
+    target.hospitalDistance = hospital.distance || '';
+    target.hospitalSource = source || hospital.source || 'live';
+    target.hospitalRetrievedAt = hospital.retrievedAt || new Date().toISOString();
+    if (hospital.phone) {
+      target.hospitalPhoneSource = hospital.phoneSource || source || 'live';
+    } else {
+      target.hospitalPhoneSource = '';
+    }
   }
 
   function sharedContactsGetter() {
@@ -5687,84 +5827,46 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function clearAutoHospitalFields(target) {
     if (!target) return;
     var src = String(target.hospitalSource || '');
-    if (!AUTO_HOSPITAL_SOURCES[src]) return;
-    var isTop = (target === editorData);
-    if (isTop) {
-      target.hospitalName = '';
-      target.hospitalPhone = '';
-      target.hospitalAddress = '';
-      target.hospitalDistance = '';
-    } else {
-      target.hospital = '';
-      target.hospitalPhone = '';
-      target.hospitalAddress = '';
-      target.hospitalDistance = '';
-    }
-    target.hospitalSource = '';
-    target.hospitalRetrievedAt = '';
-    target.hospitalPhoneSource = '';
+    if (!AUTO_HOSPITAL_SOURCES[src] && !hospitalUnitEmpty(target)) return;
+    if (AUTO_HOSPITAL_SOURCES[src] || hospitalUnitEmpty(target)) clearHospitalUnit(target);
   }
 
   function clearAutoHospitalPhoneOnNameEdit() {
+    var src = String(editorData.hospitalSource || '');
+    /* Z1(c): editing the name of an automatic hospital clears auto-filled address, phone and distance. */
+    if (AUTO_HOSPITAL_SOURCES[src]) {
+      editorData.hospitalAddress = '';
+      editorData.hospitalPhone = '';
+      editorData.hospitalDistance = '';
+      editorData.hospitalPhoneSource = '';
+      editorData.hospitalRetrievedAt = '';
+      editorData.hospitalSource = 'typed';
+      return;
+    }
     var phoneSrc = String(editorData.hospitalPhoneSource || '');
     if (AUTO_HOSPITAL_SOURCES[phoneSrc] || phoneSrc === 'opengate' || phoneSrc === 'fallback') {
       editorData.hospitalPhone = '';
       editorData.hospitalPhoneSource = '';
     }
+    markHospitalTyped(editorData);
   }
 
   function applyHospitalFields(target, hospital, asTyped) {
-    var api = hospitalLookupApi();
     if (!target || !hospital) return;
     var source = asTyped ? 'typed' : (hospital.source || 'live');
-    var retrievedAt = hospital.retrievedAt || new Date().toISOString();
-    var isTop = (target === editorData);
-    var nameKey = isTop ? 'hospitalName' : 'hospital';
-    var curName = String(target[nameKey] || '').trim();
-    var curPhone = String(target.hospitalPhone || '').trim();
     var curSource = String(target.hospitalSource || '');
-    var norm = function (n) {
-      return api && typeof api.normalizeHospitalName === 'function' ? api.normalizeHospitalName(n) : String(n || '').toLowerCase();
-    };
-    var emptyUnit = !curName && !curPhone;
-    var nameMatches = curName && norm(curName) === norm(hospital.name);
 
     if (asTyped) {
-      target[nameKey] = hospital.name || target[nameKey] || '';
-      if (hospital.address != null) target.hospitalAddress = hospital.address;
-      if (hospital.phone != null) {
-        target.hospitalPhone = hospital.phone;
-        target.hospitalPhoneSource = 'typed';
-      }
-      if (hospital.distance != null) target.hospitalDistance = hospital.distance;
-      target.hospitalSource = 'typed';
-      target.hospitalRetrievedAt = retrievedAt;
+      writeHospitalUnit(target, hospital, 'typed');
+      target.hospitalPhoneSource = 'typed';
       return;
     }
 
-    if (emptyUnit) {
-      target[nameKey] = hospital.name || '';
-      target.hospitalAddress = hospital.address || '';
-      target.hospitalPhone = hospital.phone || '';
-      target.hospitalDistance = hospital.distance || '';
-      target.hospitalSource = source;
-      target.hospitalRetrievedAt = retrievedAt;
-      if (hospital.phone) {
-        target.hospitalPhoneSource = hospital.phoneSource || source || 'live';
-      }
-      return;
-    }
+    /* Z1: automatic fill only when empty or already automatic. Typed hospitals never change. */
+    if (curSource === 'typed') return;
+    if (!hospitalUnitEmpty(target) && !AUTO_HOSPITAL_SOURCES[curSource]) return;
 
-    if (!nameMatches) return;
-
-    if (!String(target.hospitalAddress || '').trim() && hospital.address) target.hospitalAddress = hospital.address;
-    if (!curPhone && hospital.phone) {
-      target.hospitalPhone = hospital.phone;
-      target.hospitalPhoneSource = hospital.phoneSource || source || 'live';
-    }
-    if (!String(target.hospitalDistance || '').trim() && hospital.distance) target.hospitalDistance = hospital.distance;
-    if (!curSource) target.hospitalSource = source;
-    if (!target.hospitalRetrievedAt) target.hospitalRetrievedAt = retrievedAt;
+    writeHospitalUnit(target, hospital, source);
   }
 
   function renderHospitalPicker(hospitals, statusEl) {
@@ -5818,27 +5920,35 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function fillHospitalPhoneFromName(name, allowOverwriteEmptyOnly) {
     var api = hospitalLookupApi();
     if (!api || !name) return Promise.resolve();
-    var phoneSrc = String(editorData.hospitalPhoneSource || '');
     var phoneNow = String(editorData.hospitalPhone || '').trim();
-    var canReplace = !phoneNow || phoneSrc === 'opengate' || phoneSrc === 'fallback' || phoneSrc === 'live';
-    if (!canReplace) return Promise.resolve();
-    if (allowOverwriteEmptyOnly !== false && phoneNow && phoneSrc === 'typed') return Promise.resolve();
+    var addrNow = String(editorData.hospitalAddress || '').trim();
+    var distNow = String(editorData.hospitalDistance || '').trim();
+    var src = String(editorData.hospitalSource || '');
+    /* Z1(e) / Z0: exact-name commit fills only when phone is empty and the unit is name-only
+       (or still automatic). Typed hospitals with other fields never receive a lookup phone. */
+    if (phoneNow) return Promise.resolve();
+    if (src === 'typed' && (addrNow || distNow)) return Promise.resolve();
+    if (src === 'typed' && !addrNow && !distNow) {
+      /* name-only typed: exact match exception writes name + phone + blank address/distance as one auto unit */
+    } else if (src && !AUTO_HOSPITAL_SOURCES[src] && src !== 'typed') {
+      return Promise.resolve();
+    }
     return api.resolveHospitalPhone({
       livePhone: '',
       hospitalName: name,
       getSharedContacts: sharedContactsGetter()
     }).then(function (got) {
       if (String(editorData.hospitalName || '').trim() !== String(name || '').trim()) return;
-      phoneSrc = String(editorData.hospitalPhoneSource || '');
-      phoneNow = String(editorData.hospitalPhone || '').trim();
-      canReplace = !phoneNow || phoneSrc === 'opengate' || phoneSrc === 'fallback' || phoneSrc === 'live';
-      if (!canReplace) return;
+      if (String(editorData.hospitalPhone || '').trim()) return;
       if (got && got.phone) {
-        editorData.hospitalPhone = got.phone;
-        editorData.hospitalPhoneSource = got.source || 'fallback';
-      } else if (phoneSrc === 'opengate' || phoneSrc === 'fallback' || phoneSrc === 'live') {
-        editorData.hospitalPhone = '';
-        editorData.hospitalPhoneSource = '';
+        writeHospitalUnit(editorData, {
+          name: String(name || '').trim(),
+          address: '',
+          phone: got.phone,
+          distance: '',
+          phoneSource: got.source || 'fallback',
+          retrievedAt: got.retrievedAt || new Date().toISOString()
+        }, got.source || 'fallback');
       }
       saveEditorData();
     }).catch(function () {});
@@ -5864,8 +5974,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (!api) return Promise.resolve({ hospitalsByAddress: {}, firstRanked: [], error: 'Hospital lookup unavailable' });
     var online = typeof navigator === 'undefined' || navigator.onLine !== false;
     if (!online) return Promise.resolve({ hospitalsByAddress: {}, firstRanked: [], error: 'offline' });
-    var token = requestToken != null ? requestToken : hospitalLookupToken;
-    var docToken = hospitalLookupDocToken;
+    var token = requestToken && typeof requestToken === 'object'
+      ? requestToken
+      : { counter: requestToken != null ? requestToken : hospitalLookupToken, docToken: hospitalLookupDocToken, docId: currentHospitalDocIdentity() };
 
     var tasks = (geoList || []).map(function (g) {
       return api.fetchOverpassHospitals(g.lat, g.lon, fetch, signal).then(function (ranked) {
@@ -5878,7 +5989,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     });
 
     return Promise.all(tasks).then(function (results) {
-      if (token !== hospitalLookupToken || docToken !== hospitalLookupDocToken) {
+      if (!hospitalLookupTokenValid(token)) {
         return { hospitalsByAddress: {}, firstRanked: [], error: '', stale: true };
       }
       var hospitalsByAddress = {};
@@ -5907,7 +6018,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           retrievedAt: retrievedAt,
           getSharedContacts: sharedContactsGetter()
         }).then(function (phoneGot) {
-          if (token !== hospitalLookupToken || docToken !== hospitalLookupDocToken) return null;
+          if (!hospitalLookupTokenValid(token)) return null;
           nearest.phone = (phoneGot && phoneGot.phone) || '';
           nearest.phoneSource = (phoneGot && phoneGot.source) || '';
           nearest.source = 'live';
@@ -5929,7 +6040,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         });
       });
       return Promise.all(phoneJobs).then(function () {
-        if (token !== hospitalLookupToken || docToken !== hospitalLookupDocToken) {
+        if (!hospitalLookupTokenValid(token)) {
           return { hospitalsByAddress: {}, firstRanked: [], error: '', stale: true };
         }
         var errMsg = '';
@@ -5945,12 +6056,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       hospitalLookupTimer = null;
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
       var collected = collectWeatherAddresses();
-      if (!collected.locations.length) return;
+      if (!collected.locations.length) {
+        (editorData.shootingLocations || []).forEach(clearAutoHospitalFields);
+        clearAutoHospitalFields(editorData);
+        saveEditorData();
+        return;
+      }
       if (hospitalLookupController) hospitalLookupController.abort();
       hospitalLookupController = new AbortController();
-      hospitalLookupToken += 1;
-      var token = hospitalLookupToken;
-      var docToken = hospitalLookupDocToken;
+      var token = makeHospitalLookupToken('addresses');
       var signal = hospitalLookupController.signal;
       var statusEl = dom.getElementById('weather-status');
       Promise.all(collected.locations.map(function (address) {
@@ -5959,18 +6073,26 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           return null;
         });
       })).then(function (geos) {
-        if (token !== hospitalLookupToken || docToken !== hospitalLookupDocToken) return;
+        if (!hospitalLookupTokenValid(token)) return;
         var valid = geos.filter(Boolean);
+        var validAddrs = {};
+        valid.forEach(function (g) { validAddrs[String(g.address || '').trim()] = true; });
+        (editorData.shootingLocations || []).forEach(function (loc, locIdx) {
+          var addr = String(loc.address || '').trim();
+          if (addr && !validAddrs[addr]) {
+            clearAutoHospitalFields(loc);
+            if (locIdx === 0) clearAutoHospitalFields(editorData);
+          }
+        });
         if (!valid.length) {
           if (statusEl) statusEl.textContent = 'Could not look up a hospital: address not found. Type one in.';
-          (editorData.shootingLocations || []).forEach(clearAutoHospitalFields);
           clearAutoHospitalFields(editorData);
           saveEditorData();
           return;
         }
         return lookupHospitalsForLocations(valid, signal, statusEl, token).then(function (res) {
           if (!res || res.stale) return;
-          if (token !== hospitalLookupToken || docToken !== hospitalLookupDocToken) return;
+          if (!hospitalLookupTokenValid(token)) return;
           if (res.error && statusEl) {
             statusEl.textContent = 'Could not look up a hospital: ' + res.error + '. Type one in.';
           }
@@ -6010,8 +6132,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       try { hospitalLookupController.abort(); } catch (eAbortWx) {}
     }
     hospitalLookupController = weatherFetchController;
-    hospitalLookupToken += 1;
-    var lookupToken = hospitalLookupToken;
+    var lookupToken = makeHospitalLookupToken('weather-button');
     var signal = weatherFetchController.signal;
 
     Promise.all(locations.map(function (address) {
@@ -6074,8 +6195,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       Promise.all([Promise.all(weatherFetches), hospitalPromise]).then(function (pair) {
         var weatherResults = (pair[0] || []).filter(Boolean);
         var hospitalRes = pair[1] || { firstRanked: [], error: '' };
+        if (!hospitalLookupTokenValid(lookupToken)) {
+          hospitalRes = { firstRanked: [], error: '', stale: true };
+        }
 
-        if (weatherResults.length === 0 && hospitalRes.error) {
+        if (weatherResults.length === 0 && hospitalRes.error && !hospitalRes.stale) {
           statusEl.textContent = 'Weather fetch failed. Could not look up a hospital: ' + hospitalRes.error + '. Type one in.';
           return;
         }
@@ -6106,7 +6230,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           }
         }
 
-        renderHospitalPicker(hospitalRes.firstRanked || [], statusEl);
+        if (!hospitalRes.stale) renderHospitalPicker(hospitalRes.firstRanked || [], statusEl);
 
         saveEditorData();
         buildEditor('callSheet');
@@ -6116,8 +6240,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var parts = [];
         if (weatherResults.length > 0) parts.push('Weather loaded for ' + editorData.locationForecasts.length + ' location(s)' + doneNote);
         else parts.push('Weather fetch failed');
-        if (hospitalRes.error) parts.push('Could not look up a hospital: ' + hospitalRes.error + '. Type one in.');
-        else if ((hospitalRes.firstRanked || []).length) parts.push('nearest hospital filled (pick another above if needed)');
+        if (!hospitalRes.stale) {
+          if (hospitalRes.error) parts.push('Could not look up a hospital: ' + hospitalRes.error + '. Type one in.');
+          else if ((hospitalRes.firstRanked || []).length) parts.push('nearest hospital filled (pick another above if needed)');
+        }
         statusEl.textContent = parts.join('. ') + '.';
         setTimeout(function () {
           if (statusEl.textContent.indexOf('Type one in') >= 0) return;
@@ -6134,6 +6260,63 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       statusEl.textContent = 'Geocoding failed. Check connection.';
       console.error('[mBTDB geocode]', err);
     });
+  }
+
+  /* Weather-only open path: no hospital lookup (Z3). */
+  function fetchWeatherOnlyOnOpen() {
+    var collected = collectWeatherAddresses();
+    var locations = collected.locations;
+    if (!locations.length) return;
+    var statusEl = dom.getElementById('weather-status');
+    if (weatherFetchController) { try { weatherFetchController.abort(); } catch (eWx) {} }
+    var signal = null;
+    if (typeof AbortController !== 'undefined') {
+      weatherFetchController = new AbortController();
+      signal = weatherFetchController.signal;
+    } else {
+      weatherFetchController = null;
+    }
+    Promise.all(locations.map(function (address) {
+      return geocodeAddressCascade(address, signal).catch(function () { return null; });
+    })).then(function (geoResults) {
+      var validGeo = (geoResults || []).filter(Boolean);
+      if (!validGeo.length) return;
+      return Promise.all(validGeo.map(function (g) {
+        var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + g.lat + '&longitude=' + g.lon +
+          '&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto&forecast_days=3';
+        return fetch(url, { signal: signal })
+          .then(function (r) { return r.json(); })
+          .then(function (w) { return { geo: g, weather: w }; })
+          .catch(function () { return null; });
+      })).then(function (weatherResults) {
+        weatherResults = (weatherResults || []).filter(Boolean);
+        if (!weatherResults.length) return;
+        editorData.locationForecasts = weatherResults.map(function (wr) {
+          var d = wr.weather.daily || {};
+          var days = (d.time || []).map(function (date, i) {
+            return {
+              date: date,
+              high: d.temperature_2m_max[i] !== undefined ? Math.round(d.temperature_2m_max[i]) + '\u00b0C' : '',
+              low: d.temperature_2m_min[i] !== undefined ? Math.round(d.temperature_2m_min[i]) + '\u00b0C' : '',
+              conditions: WMO_DESC[d.weathercode[i]] || ('Code ' + d.weathercode[i]),
+              sunrise: (d.sunrise && d.sunrise[i]) ? (d.sunrise[i].indexOf('T') > -1 ? d.sunrise[i].split('T')[1].slice(0, 5) : d.sunrise[i]) : '',
+              sunset: (d.sunset && d.sunset[i]) ? (d.sunset[i].indexOf('T') > -1 ? d.sunset[i].split('T')[1].slice(0, 5) : d.sunset[i]) : ''
+            };
+          });
+          return { address: wr.geo.address, days: days };
+        });
+        if (editorData.locationForecasts[0] && editorData.locationForecasts[0].days[0]) {
+          var first = editorData.locationForecasts[0].days[0];
+          editorData.weatherHigh = first.high;
+          editorData.weatherLow = first.low;
+          editorData.weatherConditions = first.conditions;
+          if (first.sunrise) editorData.sunrise = first.sunrise;
+          if (first.sunset) editorData.sunset = first.sunset;
+        }
+        saveEditorData();
+        if (statusEl) statusEl.textContent = 'Weather loaded for ' + editorData.locationForecasts.length + ' location(s).';
+      });
+    }).catch(function () {});
   }
 
   /* ======== Init ======== */
