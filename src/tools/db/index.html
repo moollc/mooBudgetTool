@@ -925,6 +925,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
     var backEpoch = _afEpoch;
+    /* T2/U2: commit a dirty hospital name before flush so Back never loses a rename. */
+    if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
     if (activeTemplateId === 'fundingPackage') {
       clearTimeout(saveTimer);
       var backKey = storageKey('fundingPackage');
@@ -5837,12 +5839,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     setEditorKeyVal('hospitalName', rawName == null ? '' : rawName);
     clearAutoHospitalPhoneOnNameEdit();
     markHospitalTyped(editorData);
+    /* T2: write the committed unit synchronously so Back/close cannot lose it while the
+       shared contacts phone lookup is still pending. W4 may fill an empty phone later. */
+    saveEditorData();
     if (via === 'change') {
       fillHospitalPhoneFromName(rawName, true).then(function () {
         saveEditorData();
       });
-    } else {
-      saveEditorData();
     }
   }
 
@@ -5903,9 +5906,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   function markHospitalTyped(target) {
     if (!target) return;
+    /* T1: any typed mark clears the retrieval date in the same step. */
+    target.hospitalRetrievedAt = '';
     if (hospitalUnitEmpty(target)) {
       target.hospitalSource = '';
-      target.hospitalRetrievedAt = '';
       target.hospitalPhoneSource = '';
       return;
     }

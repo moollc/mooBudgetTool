@@ -323,6 +323,20 @@
     for (i = 0; i < hints.length; i++) {
       if (String(hints[i].text || '').trim()) return hints[i];
     }
+    /* T3: when project fields are blank, consider every selected shoot day location address
+       with kind shootDayLocation (V4 location text rule). Prefer a Jamaica match among them. */
+    var locs = (rawD && Array.isArray(rawD.shootingLocations)) ? rawD.shootingLocations : [];
+    var shootHints = [];
+    for (i = 0; i < locs.length; i++) {
+      var addr = locs[i] && locs[i].address;
+      if (String(addr || '').trim()) {
+        shootHints.push({ kind: 'shootDayLocation', text: addr });
+      }
+    }
+    for (i = 0; i < shootHints.length; i++) {
+      if (isJamaicaHint(shootHints[i])) return shootHints[i];
+    }
+    if (shootHints.length) return shootHints[0];
     return { kind: 'location', text: '' };
   }
 
