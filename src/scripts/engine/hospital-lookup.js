@@ -259,24 +259,22 @@
     };
   }
 
-  function lastCommaPartIsJamaica(text) {
-    var parts = String(text || '').split(',').map(function (p) {
-      return String(p || '').trim().toLowerCase();
-    }).filter(Boolean);
-    if (!parts.length) return false;
-    var last = parts[parts.length - 1];
-    if (last === 'jamaica' || last === 'jamaica w.i.' || last === 'jamaica wi' || last === 'jamaica w.i') return true;
-    if (/^jamaica(\s+w\.?i\.?)?$/.test(last)) return true;
-    if (last === 'west indies' && parts.length >= 2 && /^jamaica\b/.test(parts[parts.length - 2])) return true;
-    return false;
+  /* V4: after trim, strip trailing periods and a trailing suffix of the listed kinds, then require the text ends with the word Jamaica. */
+  function locationTextEndsWithJamaica(text) {
+    var s = String(text || '').trim();
+    if (!s) return false;
+    s = s.replace(/\.+\s*$/, '').trim();
+    s = s.replace(/(?:,\s*|\s+)(?:w\.?\s*i\.?|west\s+indies|jm)\s*$/i, '').trim();
+    s = s.replace(/\.+\s*$/, '').trim();
+    return /\bjamaica$/i.test(s);
   }
 
   function isJamaicaHint(text) {
     var r = String(text || '').trim().toLowerCase();
     if (!r) return false;
-    /* Country and region: exact Z7 tokens only. Location text: last comma-separated part (W7). */
+    /* Country and region: exact Z7 tokens only. Location text: V4 ends-with Jamaica after suffix strip. */
     if (r === 'jamaica' || r === 'jm' || r === 'jam') return true;
-    return lastCommaPartIsJamaica(r);
+    return locationTextEndsWithJamaica(text);
   }
 
   function jamaicaEmergencyLine(region) {

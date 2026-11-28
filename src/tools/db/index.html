@@ -3152,6 +3152,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       'crewCall', 'shootingCall', 'estimatedLunch', 'estimatedWrap'].forEach(function (k) {
       if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
     });
+    /* V2: a day switch ends any open name/address edit session. */
+    hospitalNameDirty = false;
+    hospitalNameAtFocus = null;
+    locationAddressDirty = Object.create(null);
+    locationAddressAtFocus = Object.create(null);
     applyCallSheetDayTitle(editorData, defs.dayOf || '');
     var overrides = editorData._autofill && editorData._autofill.overrides;
     if (!overrides || !overrides.dayOfTbc) {
@@ -3161,6 +3166,19 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     delete editorData._keepEmptySchedule;
     delete editorData._keepEmptyLocations;
     delete editorData._keepEmptyInterviewees;
+  }
+
+  /* V3: picker option text only (printed Day n of N / dayTitle for the header is unchanged). */
+  function callSheetDayPickerOptionText(day, index, shootDayCount, productionDays, api) {
+    var derived = api && typeof api.dayTitle === 'function'
+      ? api.dayTitle(day, index, shootDayCount, productionDays)
+      : '';
+    var text = derived ? String(derived) : ('Day ' + (index + 1));
+    var label = day && day.label != null ? String(day.label).trim() : '';
+    if (label) text += ': ' + label;
+    var date = day && day.date != null ? String(day.date).trim() : '';
+    if (date) text += ' (' + date + ')';
+    return text;
   }
 
   function callSheetDayPickerHtml(d, projectDefault) {
@@ -3173,8 +3191,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       '<option value=""' + (selected === '' ? ' selected' : '') + '>' + (projectDefault ? 'Project dates and location' : '') + '</option>';
     days.forEach(function (day, i) {
       var id = day && day.id != null ? String(day.id) : '';
-      var title = api.dayTitle(day, i, days.length, budget.productionDays);
-      if (projectDefault) title = (title || 'Shoot day ' + (i + 1)) + (day.date ? ' (' + day.date + ')' : '');
+      var title;
+      if (projectDefault) {
+        title = api.dayTitle(day, i, days.length, budget.productionDays);
+        title = (title || 'Shoot day ' + (i + 1)) + (day.date ? ' (' + day.date + ')' : '');
+      } else {
+        title = callSheetDayPickerOptionText(day, i, days.length, budget.productionDays, api);
+      }
       html += '<option value="' + esc(id) + '"' + (selected && selected === id ? ' selected' : '') + '>' + esc(title) + '</option>';
     });
     html += '</select></div></div>';
@@ -5200,13 +5223,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
     /* Simple and array field inputs (data-key, data-arr). Hospital lookup and phone fill run on commit, not each keystroke. */
     panel.addEventListener('input', function (e) {
-      applyControlChange(e.target);
       var el = e.target;
       if (!el) return;
+      /* V2: name/address input only records dirty and the value at focus; never clears hospital fields. */
+      if (el.getAttribute('data-key') === 'hospitalName' && !hospitalNameDirty) {
+        hospitalNameAtFocus = String(editorData.hospitalName || '');
+      }
+      if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
+        var focusIdx = String(el.getAttribute('data-i') || '0');
+        if (!locationAddressDirty[focusIdx]) {
+          var focusRow = (editorData.shootingLocations || [])[Number(focusIdx)] || (editorData.shootingLocations || [])[focusIdx];
+          locationAddressAtFocus[focusIdx] = String((focusRow && focusRow.address) || '');
+        }
+      }
+      applyControlChange(el);
       if (el.getAttribute('data-key') === 'hospitalName') {
         hospitalNameDirty = true;
-        clearAutoHospitalPhoneOnNameEdit();
-        markHospitalTyped(editorData);
       }
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
         locationAddressDirty[String(el.getAttribute('data-i') || '0')] = true;
@@ -5224,25 +5256,33 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (!el) return;
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
         var locIdx = String(el.getAttribute('data-i') || '0');
-        /* W1: Tab or blur with an unchanged address must not re-run the lookup. */
+        /* V2: commit only when the final value differs from the value at focus (trim, case sensitive). */
         if (!locationAddressDirty[locIdx]) return;
         locationAddressDirty[locIdx] = false;
+        var addrFinal = String(el.value || '').trim();
+        var addrFocus = String(locationAddressAtFocus[locIdx] == null ? '' : locationAddressAtFocus[locIdx]).trim();
+        delete locationAddressAtFocus[locIdx];
+        if (addrFinal === addrFocus) return;
         invalidateHospitalLookups(currentHospitalDocIdentity());
         scheduleHospitalLookupFromAddresses();
       }
       if (el.getAttribute('data-key') === 'hospitalName') {
-        /* W1: Z1c clearing runs only on input. Name phone fill runs on change (browsers fire
-           change on blur when the value changed since focus). A blur alone, or Tab through
-           with no edit, never clears, refills or flips the source. */
-        if (via === 'blur') {
-          hospitalNameDirty = false;
-          return;
-        }
+        /* V2: Z1c clear and mark typed run on change/blur only when the final value differs from focus. */
         if (!hospitalNameDirty) return;
+        var nameFinal = String(el.value || '').trim();
+        var nameFocus = String(hospitalNameAtFocus == null ? '' : hospitalNameAtFocus).trim();
         hospitalNameDirty = false;
-        fillHospitalPhoneFromName(el.value, true).then(function () {
+        hospitalNameAtFocus = null;
+        if (nameFinal === nameFocus) return;
+        clearAutoHospitalPhoneOnNameEdit();
+        markHospitalTyped(editorData);
+        if (via === 'change') {
+          fillHospitalPhoneFromName(el.value, true).then(function () {
+            saveEditorData();
+          });
+        } else {
           saveEditorData();
-        });
+        }
       }
     }
 
@@ -5777,7 +5817,9 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var nominatimQueue = nominatimQueue || Promise.resolve();
   var weatherFetchController = typeof weatherFetchController !== 'undefined' ? weatherFetchController : null;
   var hospitalNameDirty = false;
+  var hospitalNameAtFocus = null;
   var locationAddressDirty = locationAddressDirty || Object.create(null);
+  var locationAddressAtFocus = locationAddressAtFocus || Object.create(null);
   var AUTO_HOSPITAL_SOURCES = { live: 1, opengate: 1, fallback: 1 };
 
   function hospitalLookupApi() {
