@@ -2794,12 +2794,21 @@
                 });
             } catch (err) { return Promise.reject(err); }
             if (!budgetRecords.length && !(contacts && contacts.length)) return Promise.reject(new Error('Package has no valid budgets or contacts. Nothing was written.'));
+            function observeRestoreWrite(write) {
+                return Promise.resolve().then(write).then(function (value) {
+                    if (window.mBTSaveStatus) mBTSaveStatus.set(true);
+                    return value;
+                }, function (err) {
+                    if (window.mBTSaveStatus) mBTSaveStatus.set(false, (err && err.message) || 'storage error');
+                    throw err;
+                });
+            }
             budgetRecords.forEach(function (record) {
                 tasks.push(Promise.resolve().then(function () {
                     /* Reject before writing when either existing budget copy is unreadable. */
                     return self.storage.load(record.key);
                 }).then(function () {
-                    return self.storage.save(record.key, record.data);
+                    return observeRestoreWrite(function () { return self.storage.save(record.key, record.data); });
                 }).then(function (backends) {
                     result.budgets.push({ key: record.key, name: record.data.projectName, restored: true, backends: backends });
                 }, function (err) {
@@ -2810,7 +2819,8 @@
             (contacts || []).forEach(function (contact, index) {
                 tasks.push(Promise.resolve().then(function () {
                     if (!window.mBTStorage || typeof mBTStorage.saveContact !== 'function') throw new Error('Contacts storage is unavailable.');
-                    return mBTStorage.saveContact(mBTBudgetSafety.clone(contact));
+                    var copy = mBTBudgetSafety.clone(contact);
+                    return observeRestoreWrite(function () { return mBTStorage.saveContact(copy); });
                 }).then(function (saved) {
                     result.contacts.push({ index: index, id: saved.id, name: contact.name, restored: true });
                 }, function (err) {
@@ -7467,7 +7477,7 @@
 
             var finalize = function () {
                 modal.remove();
-                if (typeof mBTLE !== 'undefined') mBTLE.reconcile();
+                if (modalId !== 'currency-switchModal' && typeof mBTLE !== 'undefined') mBTLE.reconcile();
                 /* Focus Restoration */
                 if (self.focusStack && self.focusStack.length > 0) {
                     var el = self.focusStack.pop();

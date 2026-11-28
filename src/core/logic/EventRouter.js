@@ -1875,36 +1875,63 @@ window.mBTRouter = (function () {
         return null;
     }
 
-    function _moneyExampleFigure(n) {
-        var x = Math.round(Number(n) || 0);
-        return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    function _moneyExampleFigure(n, decimals) {
+        return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: 2 });
+    }
+
+    function relabelPaymentCurrency(budget, to) {
+        if (!budget) return '';
+        var base = String(budget.currency || 'JMD').toUpperCase();
+        var ledgers = budget.ledgers || {};
+        var foreign = '';
+        function checkCurrency(currency) {
+            var code = String(currency || base).toUpperCase();
+            if (code === to) return false;
+            foreign = code;
+            return true;
+        }
+        (ledgers.pos || []).some(function (po) { return po && po.status === 'Paid' && checkCurrency(po.currency); });
+        if (foreign) return foreign;
+        (ledgers.pettyCash || []).some(function (float) {
+            return float && (checkCurrency(float.currency) || (float.receipts || []).some(function (receipt) {
+                return receipt && checkCurrency(receipt.currency || float.currency);
+            }));
+        });
+        if (foreign || base === to) return foreign;
+        var sections = budget.sections || {};
+        var hasActual = Object.keys(sections).some(function (key) {
+            return ((sections[key] && sections[key].items) || []).some(function (item) {
+                return item && (parseFloat(item.actual) || (parseFloat(item.actualQuantity) * parseFloat(item.actualRate)));
+            });
+        });
+        return hasActual ? base : '';
     }
 
     function buildCurrencySwitchDialog(fromCode, toCode, exampleLine) {
         var from = fromCode || 'JMD';
         var to = toCode || 'USD';
-        var amt = exampleLine && exampleLine.rate != null ? Number(exampleLine.rate) : 1000;
-        var converted = amt;
+        var amt = exampleLine && exampleLine.rate != null ? Number(exampleLine.rate) || 0 : 1000;
         var budget = _ctx && _ctx.getBudget ? _ctx.getBudget() : (typeof window !== 'undefined' ? window.budget : null);
-        if (budget && window.mBT && mBT.le && typeof mBT.le.convertCurrencyOrNull === 'function' && from !== to) {
-            var c = mBT.le.convertCurrencyOrNull(amt, from, to, budget, true);
-            if (c != null && isFinite(c)) converted = c;
-        } else if (from !== to && budget && budget.exchangeRateState && budget.exchangeRateState.rates) {
-            var table = budget.exchangeRateState.rates;
-            if (table[from] > 0 && table[to] > 0) converted = amt * (table[to] / table[from]);
+        var converted = from === to ? amt : null;
+        if (from !== to && window.mBT && mBT.le && typeof mBT.le.convertCurrencyOrNull === 'function') {
+            converted = mBT.le.convertCurrencyOrNull(amt, from, to, budget);
         }
-        var convertEx = _moneyExampleFigure(amt) + ' ' + from + ' becomes ' + _moneyExampleFigure(converted) + ' ' + to;
-        var relabelEx = _moneyExampleFigure(amt) + ' stays ' + _moneyExampleFigure(amt) + ' and is labelled ' + to;
+        var paymentCurrency = relabelPaymentCurrency(budget, to);
+        var figure = _moneyExampleFigure(amt, 0);
+        var description = converted == null
+            ? 'No exchange rate for ' + to + ' is on file, so Convert cannot be used. Relabel only changes the label.'
+            : 'Convert rates displays amounts in ' + to + ' at the current exchange rate (' + figure + ' ' + from + ' becomes ' + _moneyExampleFigure(converted, 2) + ' ' + to + '). Relabel only keeps every stored number (' + figure + ' stays ' + figure + ' and is labelled ' + to + ').';
         var esc = (window.mBT && mBT.ui && mBT.ui.render && mBT.ui.render.esc)
             ? mBT.ui.render.esc
             : function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
         return '<div class="p-6 space-y-4" id="currencySwitchDialog">' +
             '<h3 class="text-sm font-black uppercase tracking-widest text-slate-800">Switch currency to ' + esc(to) + '</h3>' +
-            '<p class="text-xs text-slate-600 font-bold leading-relaxed">Convert rates turns amounts into ' + esc(to) + ' at the current exchange rate (example: ' + esc(convertEx) + '). Relabel only keeps every stored number and labels it ' + esc(to) + ' (example: ' + esc(relabelEx) + ').</p>' +
+            '<p class="text-xs text-slate-600 font-bold leading-relaxed">' + esc(description) + '</p>' +
+            (paymentCurrency ? '<p class="text-xs text-slate-600 font-bold">' + esc('Payments are recorded in ' + paymentCurrency + '. Relabel would misstate them. Use Convert or Cancel.') + '</p>' : '') +
             '<div class="space-y-2">' +
-            '<button type="button" data-currency-mode="convert" class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all">Convert rates</button>' +
-            '<button type="button" data-currency-mode="relabel" class="w-full py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">Relabel only</button>' +
-            '<button type="button" data-currency-mode="cancel" class="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
+            '<button type="button" data-currency-mode="convert"' + (converted == null ? ' disabled' : '') + ' class="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all disabled:opacity-40">Convert rates</button>' +
+            '<button type="button" data-currency-mode="relabel"' + (paymentCurrency ? ' disabled' : '') + ' class="w-full py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all disabled:opacity-40">Relabel only</button>' +
+            '<button type="button" autofocus data-currency-mode="cancel" class="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>' +
             '</div></div>';
     }
 
@@ -1930,15 +1957,15 @@ window.mBTRouter = (function () {
         if (!_ctx) return;
         var code = String(wantedCode || '').toUpperCase();
         var budget = _ctx.getBudget ? _ctx.getBudget() : window.budget;
-        if (!budget) return;
-        budget.currency = code;
+        if (!budget || relabelPaymentCurrency(budget, code)) return;
+        /* A label write must bypass the budget proxy's audit, reconcile and autosave trap. */
+        Object.defineProperty(budget, 'currency', { value: code, writable: true, enumerable: true, configurable: true });
         localStorage.setItem(_ctx.storageKeyPrefix + 'currency', code);
         if (typeof window.resolveDisplayCurrency === 'function') {
             window.resolveDisplayCurrency(budget, code);
         }
         window.displayNoRate = '';
         _ctx.setDisplayCurrency(code);
-        if (typeof mBTLE !== 'undefined' && mBTLE.reconcile) mBTLE.reconcile();
         if (window.render) render();
         if (_ctx.renderCurrencyBtn) _ctx.renderCurrencyBtn();
         if (typeof window.saveBudget === 'function') window.saveBudget(true);
@@ -1965,26 +1992,18 @@ window.mBTRouter = (function () {
         var budget = _ctx && _ctx.getBudget ? _ctx.getBudget() : window.budget;
         var from = (budget && budget.currency) || (_ctx && _ctx.getDisplayCurrency ? _ctx.getDisplayCurrency() : 'JMD') || 'JMD';
         var html = buildCurrencySwitchDialog(from, code, _firstBudgetLine(budget));
-        window._mbtCurrencySwitchPending = code;
-        window._mbtCurrencySwitchAct = function (action) {
-            var pending = window._mbtCurrencySwitchPending;
-            window._mbtCurrencySwitchPending = null;
-            if (window.mBTME) mBTME.close('currency-switchModal');
-            if (action === 'cancel' || !pending) return;
-            applyCurrencyMode(pending, action);
-        };
         if (window.mBTME && mBTME.open) {
-            mBTME.open('currency-switch', 'Switch currency', html, 'max-w-sm', { hideHeader: true, noPadding: true });
+            var modal = mBTME.open('currency-switch', 'Switch currency', html, 'max-w-sm', { hideHeader: true, noPadding: true });
             setTimeout(function () {
+                if (modal && document.getElementById('currency-switchModal') !== modal) return;
                 var root = document.getElementById('currencySwitchDialog');
                 if (!root) return;
-                var cancelBtn = root.querySelector('[data-currency-mode="cancel"]');
-                if (cancelBtn && typeof cancelBtn.focus === 'function') cancelBtn.focus();
                 root.addEventListener('click', function (ev) {
                     var hit = ev.target.closest('[data-currency-mode]');
-                    if (!hit) return;
-                    var act = hit.getAttribute('data-currency-mode');
-                    if (window._mbtCurrencySwitchAct) window._mbtCurrencySwitchAct(act);
+                    if (!hit || hit.disabled || (mBTME.stack && mBTME.stack.indexOf('currency-switchModal') < 0)) return;
+                    var action = hit.getAttribute('data-currency-mode');
+                    mBTME.close('currency-switchModal');
+                    applyCurrencyMode(code, action);
                 });
             }, 0);
         } else {

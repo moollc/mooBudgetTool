@@ -2705,7 +2705,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       : (Array.isArray(_docContacts) && _docContacts.length ? _docContacts : ((budget && Array.isArray(budget.contacts) && budget.contacts.length)
         ? budget.contacts
         : ((typeof window !== 'undefined' && window.mBTOG && Array.isArray(window.mBTOG.contacts)) ? window.mBTOG.contacts : [])));
-    var partyData = { producerName: d.producerName, clientName: d.clientName, client: d.client, _autofill: d._autofill };
+    var partyData = { producerName: d.producerName, clientName: d.clientName, client: d.client, dayId: d.dayId, _autofill: d._autofill };
     var defaults = tmpl.getDefaultData(budget || {}, { contacts: contacts, editorData: partyData }) || {};
     var blankDefaults = tmpl.getDefaultData({}, {}) || {};
     // Convert the brand only; preserve all other characters in custom release text.
@@ -2849,9 +2849,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   function applyBudgetDefaults(templateId, callback) {
     return afRefresh(false).then(function () { if (activeTemplateId === templateId && callback) callback(); });
   }
-  function afNewDocument(templateId) {
+  function afNewDocument(templateId, dayId) {
     if (templateId === 'purchaseOrder') return { productionTitle: '', poNumber: '', date: '', vendorName: '', vendorAddress: '', vendorPhone: '', vendorEmail: '', vendorTaxId: '', budgetCategory: '', paymentTerms: '', requestedBy: '', approvedBy: '', taxRate: '', notes: '', items: [] };
     var tmpl = pub.templates[templateId];
+    if (templateId === 'sitePermission') return tmpl.getDefaultData(budget || {}, { contacts: _docContacts, dayId: dayId });
     if (PAPERWORK_TEMPLATES.indexOf(templateId) > -1) {
       var pd = tmpl && tmpl.getDefaultData ? tmpl.getDefaultData(budget || {}, { contacts: _docContacts }) : {};
       if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(pd);
@@ -2889,7 +2890,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       liveSources = JSON.parse(JSON.stringify(master));
       fundingDeletes = [];
     }
-    editorData = afNewDocument(activeTemplateId);
+    editorData = afNewDocument(activeTemplateId, activeTemplateId === 'sitePermission' && editorData ? editorData.dayId : '');
     if (liveSources) {
       editorData.sources = JSON.parse(JSON.stringify(liveSources));
       fundingBase = JSON.parse(JSON.stringify(liveSources));
@@ -3124,17 +3125,18 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     delete editorData._keepEmptyInterviewees;
   }
 
-  function callSheetDayPickerHtml(d) {
+  function callSheetDayPickerHtml(d, projectDefault) {
     var days = callSheetShootDays(budget);
     if (!days.length) return '';
     var api = pub.templates.callSheet._shootScheduleApi();
     var selected = (d && d.dayId != null) ? String(d.dayId) : '';
     var html = '<div class="ed-row"><div class="ed-field"><label>Shoot day</label>' +
-      '<select id="cs-day-picker" data-key="dayId">' +
-      '<option value=""' + (selected === '' ? ' selected' : '') + '></option>';
+      '<select id="' + (projectDefault ? 'site-permission-day-picker' : 'cs-day-picker') + '" data-key="dayId">' +
+      '<option value=""' + (selected === '' ? ' selected' : '') + '>' + (projectDefault ? 'Project dates and location' : '') + '</option>';
     days.forEach(function (day, i) {
       var id = day && day.id != null ? String(day.id) : '';
       var title = api.dayTitle(day, i, days.length, budget.productionDays);
+      if (projectDefault) title = (title || 'Shoot day ' + (i + 1)) + (day.date ? ' (' + day.date + ')' : '');
       html += '<option value="' + esc(id) + '"' + (selected && selected === id ? ' selected' : '') + '>' + esc(title) + '</option>';
     });
     html += '</select></div></div>';
@@ -4035,6 +4037,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     roleSelect += '</select></div>';
     return '<div class="ed-section"><div class="ed-section-hdr">Site Permission</div>' +
+      callSheetDayPickerHtml(d, true) +
       '<div class="ed-row ed-2">' + fld('productionTitle', 'Production Title') + fld('productionCompany', 'Production Company') + '</div>' +
       '<div class="ed-row">' + fld('producerName', 'Producer Name (for signature)', null, true) + '</div>' +
       '<div class="ed-row">' + fld('granteeLine', 'Production / Grantee Line', null, true) + '</div>' +
@@ -5084,6 +5087,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           buildEditor('callSheet');
           return;
         }
+        if (key === 'dayId' && activeTemplateId === 'sitePermission') {
+          var defaults = pub.templates.sitePermission.getDefaultData(budget || {}, { contacts: _docContacts, dayId: val });
+          ['placeName', 'address', 'parish', 'filmingDates', 'ownerName'].forEach(function (field) {
+            editorData[field] = defaults[field];
+          });
+          saveEditorData();
+          buildEditor(activeTemplateId);
+          return;
+        }
         saveEditorData();
         return;
       }
@@ -5106,6 +5118,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
             if (arr === 'schedule' && field === 'activity') list[idx].description = val;
             if (arr === 'schedule' && field === 'people') list[idx].cast = val;
             if (arr === 'vouchers' && field === 'paidMethod') {
+              list[idx].paidByUser = true;
               if (val !== 'transfer') list[idx].paidRef = '';
               saveEditorData();
               var scrollYMethod = panel.scrollTop;
@@ -5115,6 +5128,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
               return;
             }
             if (arr === 'vouchers' && field === 'paidRef') {
+              list[idx].paidByUser = true;
               list[idx].paidRef = String(val == null ? '' : val).trim().slice(0, 60);
             }
           }

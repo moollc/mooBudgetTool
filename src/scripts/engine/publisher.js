@@ -4000,63 +4000,29 @@
                 description: 'Short one-page site permission: place, parish, dates, owner or authorised person, access times, and signature.',
                 formats: ['pdf', 'html', 'print'],
                 hasEditor: true,
-                _filmingDates: function (b) {
-                    var filmingDates = '';
-                    var startDate = b.startDate || (b.production && b.production.startDate) || '';
-                    if (!startDate) return filmingDates;
-                    filmingDates = paperDate(startDate);
-                    var prodDays = 0;
-                    if (b.targetLock && b.targetLock.stages && b.targetLock.stages.prod) {
-                        prodDays = parseInt(b.targetLock.stages.prod.days, 10) || 0;
-                    }
-                    if (!prodDays) prodDays = parseInt(b.productionDays, 10) || 0;
-                    if (prodDays > 1) {
-                        var parts = String(startDate).split('-');
-                        if (parts.length === 3) {
-                            var endDt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-                            if (!isNaN(endDt.getTime())) {
-                                endDt.setDate(endDt.getDate() + prodDays - 1);
-                                var endDate = endDt.getFullYear() + '-' +
-                                    String(endDt.getMonth() + 1).replace(/^(\d)$/, '0$1') + '-' +
-                                    String(endDt.getDate()).replace(/^(\d)$/, '0$1');
-                                filmingDates = paperDate(startDate) + ' to ' + paperDate(endDate);
-                            }
-                        }
-                    }
-                    return filmingDates;
-                },
-                _firstShootLocation: function (b) {
-                    var days = Array.isArray(b.shootSchedule) ? b.shootSchedule : [];
-                    var i, locs, loc;
-                    for (i = 0; i < days.length; i++) {
-                        locs = paperDayLocations(days[i]);
-                        if (locs.length) {
-                            loc = locs[0] || {};
-                            return {
-                                placeName: paperText(loc.name),
-                                address: paperText(loc.address),
-                                parish: paperText(loc.parish),
-                                ownerName: paperText(loc.siteContactName)
-                            };
-                        }
-                    }
-                    return { placeName: '', address: '', parish: '', ownerName: '' };
-                },
                 getDefaultData: function (budget, options) {
                     var b = budget || {};
-                    var party = paperworkParty(b, options, true);
-                    var shootLoc = this._firstShootLocation(b);
-                    var address = paperFirst(shootLoc.address, b.projectLocation, b.location, b.basecamp);
+                    var templates = window.mBTPublisher.templates;
+                    var agreement = templates.locationAgreement.getDefaultData(b, options);
+                    var schedule = Array.isArray(b.shootSchedule) ? b.shootSchedule : [];
+                    var days = templates.callSheet._shootScheduleApi().normalise(schedule);
+                    var picked = templates.callSheet._pickShootDay(days, options);
+                    var day = picked && picked.selected ? picked.day : null;
+                    var loc = paperDayLocations(day)[0] || {};
+                    var title = paperText(b.workingTitle) || paperText(b.projectName);
+                    var granteeLine = (agreement.producerName || PAPER_BLANK) + ' trading as ' + (agreement.productionCompany || 'moo') +
+                        ', producer for ' + (title || PAPER_BLANK);
                     return {
-                        productionTitle: b.workingTitle || b.projectName || '',
-                        productionCompany: paperBrand(b.projectCompany || b.company || ''),
-                        producerName: party.producer,
-                        granteeLine: paperReleaseGrantee(b, options),
-                        placeName: shootLoc.placeName,
-                        address: address,
-                        parish: shootLoc.parish,
-                        filmingDates: this._filmingDates(b),
-                        ownerName: shootLoc.ownerName,
+                        productionTitle: title,
+                        productionCompany: agreement.productionCompany,
+                        producerName: agreement.producerName,
+                        granteeLine: granteeLine,
+                        dayId: day ? String(day.id || '') : '',
+                        placeName: paperText(loc.name),
+                        address: paperText(day ? loc.address : agreement.propertyAddress),
+                        parish: paperText(loc.parish),
+                        filmingDates: day ? paperDate(day.date) : agreement.filmingDates,
+                        ownerName: paperText(loc.siteContactName),
                         role: '',
                         phone: '',
                         accessFrom: '',
@@ -4070,8 +4036,9 @@
                     var self = this;
                     var b = budgetData || {};
                     options = options || {};
-                    var d = paperMerge(self.getDefaultData(b, options), options.editorData);
-                    var granteeLine = paperReleaseGrantee(b, options, d.granteeLine);
+                    var defaults = self.getDefaultData(b, options);
+                    var d = paperMerge(defaults, options.editorData);
+                    var granteeLine = paperBrand(paperFirst(d.granteeLine, defaults.granteeLine));
                     var insurance = paperText(d.insuranceAmount);
                     var body = '<div class="pp-page" data-doc="sitePermission">' +
                         paperHeader('Site Permission', [d.productionTitle || b.projectName]) +
@@ -4083,7 +4050,7 @@
                         paperField('FILMING DATE OR DATES', paperWriteIn(paperDate(d.filmingDates) || d.filmingDates)) +
                         paperField('OWNER OR AUTHORISED PERSON', paperWriteIn(d.ownerName, false, true)) +
                         paperField('ROLE', paperWriteIn(d.role, false, true)) +
-                        paperField('PHONE', paperWriteIn('')) +
+                        paperField('PHONE', paperWriteIn(d.phone, false, true)) +
                         paperField('ACCESS FROM', paperWriteIn(d.accessFrom)) +
                         paperField('ACCESS TO', paperWriteIn(d.accessTo)) +
                         (insurance ? paperField('INSURANCE', esc(insurance)) : '') +
@@ -6182,10 +6149,10 @@
                             var paidRow = (v.itemId != null && String(v.itemId) !== '')
                                 ? self._poForPayment(b, v.itemId, p.amount, currency, usedPaymentIds)
                                 : v;
-                            /* Full page with a voucher method set: print the voucher fields.
+                            /* Full page with a user-selected voucher method: print the voucher fields.
                                Deposit/Balance split pages keep amount-matched Paid PO pairing. */
-                            var voucherPaid = self._paidFields(v);
-                            var paid = (!p.split && voucherPaid.paidMethod)
+                            var voucherPaid = !p.split && v.paidByUser === true ? self._paidFields(v) : null;
+                            var paid = (voucherPaid && voucherPaid.paidMethod)
                                 ? voucherPaid
                                 : self._paidFields(paidRow);
                             var methodWi = self._methodFillHtml(paid.paidMethod);
@@ -6483,6 +6450,7 @@
                     if (['equipment', 'equip', 'gear', 'rental', 'rentals', 'kit'].indexOf(kind) > -1) return true;
                     var secId = String((sec && sec.id) || '').toLowerCase();
                     var desc = String(item.description || '').toLowerCase();
+                    if (/\b(fee|deposit)\b/.test(desc)) return false;
                     if (/\bkit rental\b/.test(desc)) return true;
                     // Catalog adoption can stamp a crew tag from a partial description match.
                     var catalogWordBreak = /[^\p{L}\p{Nd}]+/gu;
@@ -6494,7 +6462,7 @@
                     /* Package/kit/rig still count when catalog adoption stamped crew (E2b). */
                     var packageNoun = /(?<![\p{L}\p{M}\p{N}_])(?:kit|package|rig)$/u.test(label) &&
                         !/\b(with|incl|own)\b|[+/]/.test(label);
-                    if (((kind === 'crew' && catalogMatch) || /\b(fee|deposit)\b/.test(desc)) && !packageNoun) return false;
+                    if (kind === 'crew' && catalogMatch && !packageNoun) return false;
                     var crewRole = /\b(recordist|operator|director|assistant|assist|driver|producer|editor|coordinator|manager|technician|designer|artist|writer|utility|pilot)\b/.test(desc);
                     // AC also appears in gear voltage descriptions.
                     var acLabel = kind ? desc.replace(/^[\s\p{Cf}]+|[\s\p{P}\p{Cf}]+$/gu, '') : '';
@@ -6927,7 +6895,7 @@
                         waited += 100;
                         if (typeof window.html2pdf !== 'undefined') {
                             clearInterval(timer);
-                            resolve(exportNow());
+                            resolve(Promise.resolve().then(exportNow));
                         } else if (waited >= 3000) {
                             clearInterval(timer);
                             try { notify('Error', 'PDF export engine (html2pdf) not loaded.'); } catch (err) { /* harness may lack alert */ }
