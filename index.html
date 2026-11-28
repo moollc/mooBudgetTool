@@ -7468,12 +7468,22 @@
         close: function (modalId, instant) {
             instant = instant || false;
             var self = this;
+            var modal = document.getElementById(modalId);
+            if (modalId === 'tool-windowModal' && mBTActiveTool === 'db' && modal) {
+                var frame = modal.querySelector('iframe');
+                var docs = frame && frame.contentWindow;
+                if (docs && typeof docs.mBTRequestDocsClose === 'function' && docs.mBTRequestDocsClose(function () {
+                    if (document.getElementById(modalId) === modal) {
+                        mBTActiveTool = null;
+                        self.close(modalId, instant);
+                    }
+                })) return;
+            }
             var wasIn = (this.stack || []).indexOf(modalId) >= 0;
             /* Phase 87B: Pop from stack */
             this.stack = (this.stack || []).filter(function (id) { return id !== modalId; });
             if (wasIn) this._syncLayerHistory();
             if (this.stack.length === 0) document.body.style.overflow = '';
-            var modal = document.getElementById(modalId);
             if (!modal) return;
 
             var finalize = function () {

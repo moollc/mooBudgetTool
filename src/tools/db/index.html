@@ -836,12 +836,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     clearTimeout(dbUndoDebounceTimer);
     dbUndoDebounceTimer = null;
-    dbRedoStack.push(dbCaptureSnapshot());
-    var prev = dbUndoStack.pop();
-    editorData = prev.data;
-    saveEditorData();
-    buildEditor(activeTemplateId);
-    dbUpdateUndoUI();
+    return replaceActiveDocument('undo', {
+      apply: function () {
+        dbRedoStack.push(dbCaptureSnapshot());
+        return dbUndoStack.pop().data;
+      },
+      rebuild: function () {
+        saveEditorData();
+        buildEditor(activeTemplateId);
+        dbUpdateUndoUI();
+      }
+    });
   }
 
   function dbRedo() {
@@ -853,17 +858,23 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     clearTimeout(dbUndoDebounceTimer);
     dbUndoDebounceTimer = null;
-    dbUndoStack.push(dbCaptureSnapshot());
-    var next = dbRedoStack.pop();
-    if (activeTemplateId === 'fundingPackage') {
-      (editorData.sources || []).forEach(function (source) {
-        if (source.id && !(next.data.sources || []).some(function (row) { return row.id === source.id; }) && fundingDeletes.indexOf(source.id) < 0) fundingDeletes.push(source.id);
-      });
-    }
-    editorData = next.data;
-    saveEditorData();
-    buildEditor(activeTemplateId);
-    dbUpdateUndoUI();
+    return replaceActiveDocument('redo', {
+      apply: function () {
+        dbUndoStack.push(dbCaptureSnapshot());
+        var next = dbRedoStack.pop();
+        if (activeTemplateId === 'fundingPackage') {
+          (editorData.sources || []).forEach(function (source) {
+            if (source.id && !(next.data.sources || []).some(function (row) { return row.id === source.id; }) && fundingDeletes.indexOf(source.id) < 0) fundingDeletes.push(source.id);
+          });
+        }
+        return next.data;
+      },
+      rebuild: function () {
+        saveEditorData();
+        buildEditor(activeTemplateId);
+        dbUpdateUndoUI();
+      }
+    });
   }
 
   window.dbUndo = dbUndo;
@@ -924,42 +935,50 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Back Button ======== */
   dom.getElementById('btn-back').addEventListener('click', function () {
-    var backEpoch = _afEpoch;
-    if (activeTemplateId === 'fundingPackage') {
-      /* T2/U2: commit a dirty hospital name before flush so Back never loses a rename. */
-      if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
-      clearTimeout(saveTimer);
-      var backKey = storageKey('fundingPackage');
-      var data = JSON.parse(JSON.stringify(editorData));
-      delete data.sources;
-      fundingQueue.then(function () {
-        if (fundingSaveError) throw fundingSaveError;
-        return flushDocumentSaves();
-      }).then(function () {
-        return localforage.setItem(backKey, data);
-      }).then(function () {
-        if (backEpoch !== _afEpoch) return;
-        hasUnsaved = false;
-        _dbClearNotices();
-        window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
-      }).catch(fundingError);
-      return;
-    }
-    /* R1: flush committed hospital edit to storage before close-tool. */
-    (typeof flushCommittedHospitalEdit === 'function'
-      ? flushCommittedHospitalEdit()
-      : (typeof commitDirtyHospitalFields === 'function' && commitDirtyHospitalFields(), flushDocumentSaves())
-    ).then(function () {
-    if (backEpoch !== _afEpoch) return;
-    _dbClearNotices();
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
-    } else {
-      /* Fallback for standalone direct-launch */
-      window.location.href = '/index.html';
-    }
-    }).catch(function (err) { afNotice('Document changes could not be saved. Back kept this tool open. Retry the save before leaving: ' + (err.message || err)); });
+    return closeActiveDocs();
   });
+  var docsReadyToClose = false;
+  window.mBTRequestDocsClose = function (onClosed) {
+    if (docsReadyToClose) return false;
+    closeActiveDocs(onClosed);
+    return true;
+  };
+  function closeActiveDocs(onClosed) {
+    if (docsReadyToClose && !editorData) return;
+    var funding = activeTemplateId === 'fundingPackage';
+    return replaceActiveDocument('Back', {
+      docId: '',
+      prepare: funding ? function () {
+        var backKey = storageKey('fundingPackage');
+        var data = JSON.parse(JSON.stringify(editorData));
+        delete data.sources;
+        return fundingQueue.then(function () {
+          if (fundingSaveError) throw fundingSaveError;
+          return localforage.setItem(backKey, data);
+        });
+      } : null,
+      apply: function () {
+        activeTemplateId = null;
+        return null;
+      },
+      rebuild: function () {
+        docsReadyToClose = true;
+        if (funding) hasUnsaved = false;
+        _dbClearNotices();
+        if (onClosed) {
+          onClosed();
+        } else if (funding || (window.parent && window.parent !== window)) {
+          window.parent.postMessage({ type: 'mbt:tool-action', action: 'close-tool' }, window.location.origin);
+        } else {
+          /* Fallback for standalone direct-launch */
+          window.location.href = '/index.html';
+        }
+      },
+      onError: funding ? fundingError : function (err) {
+        afNotice('Document changes could not be saved. Back kept this tool open. Retry the save before leaving: ' + (err.message || err));
+      }
+    });
+  }
 
   /* ======== Rate UI ======== */
   function updateRateUI() {
@@ -1441,49 +1460,36 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!d) return;
         var tmplMeta = pub.templates.getAll().find(function (t) { return t.id === d.templateId; });
         if (!tmplMeta) return;
-        /* R1: flush committed hospital edit to storage before the Saved open replaces the sheet. */
         function proceedSavedOpen() {
-          activeTemplateId = d.templateId;
-          /* Opening a Saved document invalidates in-flight hospital lookups (Z2). */
-          if (typeof invalidateHospitalLookups === 'function') {
-            invalidateHospitalLookups(d.id || d.templateId || 'saved');
-          } else {
-            if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
-            if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
-            if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
-              try { hospitalLookupController.abort(); } catch (eAbortSaved) {}
-              hospitalLookupController = null;
+          return replaceActiveDocument('opening the Saved sheet', {
+            docId: d.id || d.templateId || 'saved',
+            apply: function () {
+              activeTemplateId = d.templateId;
+              dbPushUndoImmediate();
+              var data = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
+              if (activeTemplateId === 'fundingPackage') {
+                if (data.sources && !data.legacyFundingSources) data.legacyFundingSources = JSON.parse(JSON.stringify(data.sources));
+                data.sources = JSON.parse(JSON.stringify((budget && budget.fundingSources) || []));
+                fundingBase = JSON.parse(JSON.stringify(data.sources));
+                fundingDeletes = [];
+              }
+              return data;
+            },
+            rebuild: function () {
+              dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
+              var matchCard = dom.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
+              if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
+              var topTitle = dom.getElementById('topbar-title');
+              if (topTitle) topTitle.textContent = d.title || tmplMeta.name;
+              buildEditor(activeTemplateId);
+              var tabBar = dom.getElementById('tab-bar');
+              if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
+              setActiveTab('edit');
+              switchPickerView('templates');
             }
-          }
-          dbPushUndoImmediate();
-          editorData = d.editorData ? JSON.parse(JSON.stringify(d.editorData)) : {};
-          if (activeTemplateId === 'fundingPackage') {
-            if (editorData.sources && !editorData.legacyFundingSources) editorData.legacyFundingSources = JSON.parse(JSON.stringify(editorData.sources));
-            editorData.sources = JSON.parse(JSON.stringify((budget && budget.fundingSources) || []));
-            fundingBase = JSON.parse(JSON.stringify(editorData.sources));
-            fundingDeletes = [];
-          }
-          dom.querySelectorAll('.tmpl-card').forEach(function (c) { c.classList.remove('active'); c.setAttribute('aria-selected', 'false'); });
-          var matchCard = dom.querySelector('.tmpl-card[data-id="' + d.templateId + '"]');
-          if (matchCard) { matchCard.classList.add('active'); matchCard.setAttribute('aria-selected', 'true'); }
-          /* Title replaced directly onto topbar above */
-          /* 45.2 — Dynamic topbar title shows saved doc title */
-          var topTitle = dom.getElementById('topbar-title');
-          if (topTitle) topTitle.textContent = d.title || tmplMeta.name;
-          buildEditor(activeTemplateId);
-          var tabBar = dom.getElementById('tab-bar');
-          if (tabBar) tabBar.style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
-          setActiveTab('edit');
-          switchPickerView('templates');
-        }
-        if (typeof flushCommittedHospitalEdit === 'function') {
-          flushCommittedHospitalEdit().then(proceedSavedOpen).catch(function (err) {
-            afNotice('Document changes could not be saved before opening the Saved sheet: ' + (err.message || err));
           });
-        } else {
-          if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
-          proceedSavedOpen();
         }
+        return proceedSavedOpen();
       });
     });
     savedList.querySelectorAll('.saved-item-del').forEach(function (btn) {
@@ -2120,94 +2126,69 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
 
   /* ======== Select Template ======== */
   function selectTemplate(tmplMeta) {
-    /* R1: flush committed hospital edit to storage before the template switch replaces the sheet. */
-    function proceedSelectTemplate() {
-    _afEpoch++;
-    _afProjection = null;
-    _afBusy = false;
-    if (typeof invalidateHospitalLookups === 'function') {
-      invalidateHospitalLookups(tmplMeta && tmplMeta.id);
-    } else {
-      if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
-      if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
-      if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
-        try { hospitalLookupController.abort(); } catch (eAbortTmpl) {}
-        hospitalLookupController = null;
-      }
-    }
-    var fillButton = dom.getElementById('btn-ai-fill'); if (fillButton) fillButton.disabled = false;
-    activeTemplateId = tmplMeta.id;
-    /* Clear unsaved state on template switch */
-    hasUnsaved = false;
-    var dot = dom.getElementById('unsaved-dot');
-    var ind = dom.getElementById('save-indicator');
-    if (dot) dot.style.display = 'none';
-    if (ind) ind.style.display = 'none';
-    var titleEl = dom.getElementById('preview-toolbar-title');
-    if (titleEl) titleEl.textContent = tmplMeta.name;
-
-    /* 45.2 — Dynamic topbar title */
-    var topTitle = dom.getElementById('topbar-title');
-    if (topTitle) topTitle.textContent = tmplMeta.name;
-
-    /* 45.1 — Sync mobile select */
-    var mSel = dom.getElementById('picker-mobile-select');
-    if (mSel) mSel.value = tmplMeta.id;
-
-    /* 45.3 — Close overflow panel on template switch */
-    var ob = dom.getElementById('overflow-btns');
-    if (ob) ob.classList.remove('open');
-
-    /* Track recently used + toggle Save/CSV/XLSX buttons */
-    addRecentTemplate(tmplMeta.id);
-    var btnSave     = dom.getElementById('btn-save-doc');
-    var btnCsv      = dom.getElementById('btn-csv');
-    var btnXlsx     = dom.getElementById('btn-xlsx');
-    var btnSnapshot = dom.getElementById('btn-snapshot');
-    var btnPackage  = dom.getElementById('btn-package');
-    if (btnSave)     btnSave.style.display     = tmplMeta.hasEditor ? 'inline-flex' : 'none';
-    if (btnCsv)      btnCsv.style.display      = (CSV_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
-    if (btnXlsx)     btnXlsx.style.display     = (XLSX_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
-    if (btnSnapshot) btnSnapshot.style.display = budget ? 'inline-flex' : 'none';
-    if (btnPackage)  btnPackage.style.display  = budget ? 'inline-flex' : 'none';
-    dom.getElementById('btn-storyboard-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
-    dom.getElementById('btn-storyboard-share-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
-    dom.getElementById('storyboard-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
-    dom.getElementById('share-format-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
-    if (tmplMeta.id !== 'storyboard') dom.getElementById('share-format').value = 'pdf';
-    refreshStoryboardChoices();
-
-    /* Phase 149.2: AI Fill button — visible whenever the template is in the autofill registry */
-    refreshAiFillButton();
-
-    var tabBar = dom.getElementById('tab-bar');
-    var editor = dom.getElementById('editor-panel');
-
     if (tmplMeta.hasEditor) {
-      tabBar.style.display = 'inline-flex';
-      loadEditorData(tmplMeta.id, function () {
+      return loadEditorData(tmplMeta.id, function () {
         buildEditor(tmplMeta.id);
         if (typeof syncHideEmptyUi === 'function') syncHideEmptyUi(tmplMeta.id);
         setActiveTab('edit');
         updatePreflight();
-      });
-    } else {
-      tabBar.style.display = 'none';
-      editorData = null;
-      editor.style.display = 'none';
-      dom.getElementById('preview-frame-wrap').style.display = 'flex';
-      activeTab = 'preview';
-      if (typeof syncHideEmptyUi === 'function') syncHideEmptyUi(tmplMeta.id);
-      updatePreflight();
-      renderPreview();
+      }, proceedSelectTemplate);
     }
-    }
-    if (typeof flushCommittedHospitalEdit === 'function') {
-      flushCommittedHospitalEdit().then(proceedSelectTemplate).catch(function (err) {
-        afNotice('Document changes could not be saved before switching templates: ' + (err.message || err));
-      });
-    } else {
-      proceedSelectTemplate();
+    return replaceActiveDocument('switching templates', {
+      docId: tmplMeta.id,
+      apply: function () {
+        proceedSelectTemplate();
+        return null;
+      },
+      rebuild: function () {
+        dom.getElementById('editor-panel').style.display = 'none';
+        dom.getElementById('preview-frame-wrap').style.display = 'flex';
+        activeTab = 'preview';
+        if (typeof syncHideEmptyUi === 'function') syncHideEmptyUi(tmplMeta.id);
+        updatePreflight();
+        renderPreview();
+      }
+    });
+
+    function proceedSelectTemplate() {
+      _afProjection = null;
+      _afBusy = false;
+      var fillButton = dom.getElementById('btn-ai-fill'); if (fillButton) fillButton.disabled = false;
+      activeTemplateId = tmplMeta.id;
+      hasUnsaved = false;
+      var dot = dom.getElementById('unsaved-dot');
+      var ind = dom.getElementById('save-indicator');
+      if (dot) dot.style.display = 'none';
+      if (ind) ind.style.display = 'none';
+      var titleEl = dom.getElementById('preview-toolbar-title');
+      if (titleEl) titleEl.textContent = tmplMeta.name;
+      var topTitle = dom.getElementById('topbar-title');
+      if (topTitle) topTitle.textContent = tmplMeta.name;
+      var mSel = dom.getElementById('picker-mobile-select');
+      if (mSel) mSel.value = tmplMeta.id;
+      var ob = dom.getElementById('overflow-btns');
+      if (ob) ob.classList.remove('open');
+
+      addRecentTemplate(tmplMeta.id);
+      var btnSave     = dom.getElementById('btn-save-doc');
+      var btnCsv      = dom.getElementById('btn-csv');
+      var btnXlsx     = dom.getElementById('btn-xlsx');
+      var btnSnapshot = dom.getElementById('btn-snapshot');
+      var btnPackage  = dom.getElementById('btn-package');
+      if (btnSave)     btnSave.style.display     = tmplMeta.hasEditor ? 'inline-flex' : 'none';
+      if (btnCsv)      btnCsv.style.display      = (CSV_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
+      if (btnXlsx)     btnXlsx.style.display     = (XLSX_TEMPLATES.indexOf(tmplMeta.id) > -1) ? 'inline-flex' : 'none';
+      if (btnSnapshot) btnSnapshot.style.display = budget ? 'inline-flex' : 'none';
+      if (btnPackage)  btnPackage.style.display  = budget ? 'inline-flex' : 'none';
+      dom.getElementById('btn-storyboard-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+      dom.getElementById('btn-storyboard-share-jpeg').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+      dom.getElementById('storyboard-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+      dom.getElementById('share-format-choice').style.display = tmplMeta.id === 'storyboard' ? 'inline-flex' : 'none';
+      if (tmplMeta.id !== 'storyboard') dom.getElementById('share-format').value = 'pdf';
+      refreshStoryboardChoices();
+      refreshAiFillButton();
+
+      dom.getElementById('tab-bar').style.display = tmplMeta.hasEditor ? 'inline-flex' : 'none';
     }
   }
 
@@ -2936,66 +2917,106 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return d;
   }
 
-  /* Document reset reloads the live funding list. It never sends master deletes. */
-  function resetActiveDocument() {
-    /* R1: flush committed hospital edit to storage before defaults replace the sheet. */
-    function proceedResetActiveDocument() {
-      dbPushUndoImmediate();
-      var liveSources = null;
-      if (activeTemplateId === 'fundingPackage') {
-        var master = (budget && Array.isArray(budget.fundingSources)) ? budget.fundingSources : (fundingBase || []);
-        liveSources = JSON.parse(JSON.stringify(master));
-        fundingDeletes = [];
-      }
-      editorData = afNewDocument(activeTemplateId, activeTemplateId === 'sitePermission' && editorData ? editorData.dayId : '');
-      if (liveSources) {
-        editorData.sources = JSON.parse(JSON.stringify(liveSources));
-        fundingBase = JSON.parse(JSON.stringify(liveSources));
-      }
-      saveEditorData();
-      applyBudgetDefaults(activeTemplateId, function () { buildEditor(activeTemplateId); });
-    }
-    if (typeof flushCommittedHospitalEdit === 'function') {
-      flushCommittedHospitalEdit().then(proceedResetActiveDocument).catch(function (err) {
-        afNotice('Document changes could not be saved before reset: ' + (err.message || err));
+  var pendingActiveDocumentReplacement = null;
+
+  function replaceActiveDocument(reason, nextState) {
+    pendingActiveDocumentReplacement = nextState;
+    function current() { return pendingActiveDocumentReplacement === nextState; }
+    function replaceWhenSaved() {
+      var flushed = flushCommittedHospitalEdit();
+      var saveNumber = editorSaveNumber;
+      return flushed.then(function () {
+        if (current() && nextState.prepare) return nextState.prepare(current);
+      }).then(function (prepared) {
+        if (!current()) return;
+        /* An edit made during the storage wait still belongs to the outgoing document. */
+        if (hospitalNameDirty || editorSaveNumber !== saveNumber) return replaceWhenSaved();
+        hospitalLookupDocToken += 1;
+        if (nextState.docId != null) hospitalLookupDocId = String(nextState.docId);
+        invalidateHospitalLookups();
+        hospitalNameAtFocus = null;
+        hospitalNamePending = null;
+        locationAddressDirty = Object.create(null);
+        locationAddressAtFocus = Object.create(null);
+        _afEpoch++;
+        editorData = nextState.apply(prepared);
+        return nextState.rebuild(current);
       });
-    } else {
-      proceedResetActiveDocument();
     }
+    return replaceWhenSaved().catch(function (err) {
+      if (!current()) return;
+      if (nextState.onError) nextState.onError(err);
+      else afNotice('Document change failed (' + reason + '): ' + (err.message || err));
+    });
   }
 
-  function loadEditorData(templateId, cb) {
-    var key = storageKey(templateId), epoch = _afEpoch;
-    function current() { return epoch === _afEpoch && templateId === activeTemplateId && key === storageKey(templateId); }
-    var contactsRead = Promise.resolve().then(function () { return mBTStorage.getAllContacts(); }).catch(function (err) {
-      if (current()) afNotice('Contacts could not be loaded: ' + (err.message || err));
-      return [];
-    });
-    Promise.all([localforage.getItem(key), contactsRead]).then(function (results) {
-      if (!current()) return;
-      var saved = results[0];
-      _docContacts = Array.isArray(results[1]) ? results[1] : [];
-      var pending = pendingDocumentSaves[key];
-      editorData = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
-      if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, editorData);
-      if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(editorData);
-      var ready = Promise.resolve();
-      if (templateId === 'fundingPackage') {
-        if (saved && saved.sources && !editorData.legacyFundingSources) editorData.legacyFundingSources = JSON.parse(JSON.stringify(saved.sources));
-        ready = requestFunding().then(function (sources) {
-          if (!current()) return;
-          editorData.sources = sources;
-          fundingBase = JSON.parse(JSON.stringify(sources));
+  /* Document reset reloads the live funding list. It never sends master deletes. */
+  function resetActiveDocument() {
+    var templateId = activeTemplateId;
+    return replaceActiveDocument('reset', {
+      apply: function () {
+        dbPushUndoImmediate();
+        var data = afNewDocument(templateId, templateId === 'sitePermission' && editorData ? editorData.dayId : '');
+        if (templateId === 'fundingPackage') {
+          var master = (budget && Array.isArray(budget.fundingSources)) ? budget.fundingSources : (fundingBase || []);
+          data.sources = JSON.parse(JSON.stringify(master));
+          fundingBase = JSON.parse(JSON.stringify(data.sources));
           fundingDeletes = [];
-          fundingQueue = Promise.resolve(); fundingSaveError = null;
-          if (budget) budget.fundingSources = sources;
+        }
+        return data;
+      },
+      rebuild: function (current) {
+        saveEditorData();
+        return applyBudgetDefaults(templateId, function () { if (current()) buildEditor(templateId); });
+      }
+    });
+  }
+
+  function loadEditorData(templateId, cb, activateTemplate) {
+    var key = storageKey(templateId);
+    return replaceActiveDocument('loading the draft', {
+      docId: templateId,
+      prepare: function (current) {
+        var contactsRead = Promise.resolve().then(function () { return mBTStorage.getAllContacts(); }).catch(function (err) {
+          if (current()) afNotice('Contacts could not be loaded: ' + (err.message || err));
+          return [];
+        });
+        return Promise.all([localforage.getItem(key), contactsRead]);
+      },
+      apply: function (results) {
+        if (activateTemplate) activateTemplate();
+        var saved = results[0];
+        _docContacts = Array.isArray(results[1]) ? results[1] : [];
+        var pending = pendingDocumentSaves[key];
+        var data = pending ? JSON.parse(JSON.stringify(pending.data)) : saved || afNewDocument(templateId);
+        if (RELEASE_TEMPLATES.indexOf(templateId) > -1) normalizeReleaseEditorData(templateId, data);
+        if (templateId === 'interviewQuestions') normalizeInterviewQuestionsEditorData(data);
+        if (templateId === 'fundingPackage' && saved && saved.sources && !data.legacyFundingSources) {
+          data.legacyFundingSources = JSON.parse(JSON.stringify(saved.sources));
+        }
+        return data;
+      },
+      rebuild: function (current) {
+        var ready = Promise.resolve();
+        if (templateId === 'fundingPackage') {
+          ready = requestFunding().then(function (sources) {
+            if (!current()) return;
+            editorData.sources = sources;
+            fundingBase = JSON.parse(JSON.stringify(sources));
+            fundingDeletes = [];
+            fundingQueue = Promise.resolve(); fundingSaveError = null;
+            if (budget) budget.fundingSources = sources;
+          });
+        }
+        return ready.then(function () {
+          if (current()) return applyBudgetDefaults(templateId, function () { if (current() && cb) cb(); });
+        }).catch(function (err) {
+          if (!current()) return;
+          if (cb) cb();
+          fundingError(err);
         });
       }
-      ready.then(function () { if (current()) applyBudgetDefaults(templateId, function () { if (current()) cb(); }); }).catch(function (err) {
-        if (!current()) return;
-        cb(); fundingError(err);
-      });
-    }).catch(function (err) { if (current()) afNotice('Saved document could not be loaded: ' + (err.message || err)); });
+    });
   }
 
   function markUnsaved() {
@@ -3032,12 +3053,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     }
     var previous = pendingDocumentSaves[documentStorageKey];
     if (previous) clearTimeout(previous.timer);
-    var pending = { data: data, saving: saving, timer: null };
+    var pending = { data: data, saving: saving, timer: null, write: null };
     pendingDocumentSaves[documentStorageKey] = pending;
     pending.timer = saveTimer = setTimeout(function () {
       var key = documentStorageKey;
-      saving.then(function () { return localforage.setItem(key, data); }).then(function () {
-        if (pendingDocumentSaves[key] === pending) delete pendingDocumentSaves[key];
+      writePendingDocument(key, pending).then(function () {
         if (saveNumber !== editorSaveNumber || templateId !== activeTemplateId) return;
         hasUnsaved = false;
         if (activeTemplateId === 'crewDealMemo' && editorData.status === 'Sent') {
@@ -3055,13 +3075,22 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       }).catch(fundingError);
     }, 400);
   }
+  function writePendingDocument(key, pending) {
+    if (!pending.write) {
+      pending.write = pending.saving.then(function () { return localforage.setItem(key, pending.data); }).then(function () {
+        if (pendingDocumentSaves[key] === pending) delete pendingDocumentSaves[key];
+      }).catch(function (err) {
+        pending.write = null;
+        throw err;
+      });
+    }
+    return pending.write;
+  }
   function flushDocumentSaves() {
     return Promise.all(Object.keys(pendingDocumentSaves).map(function (key) {
       var pending = pendingDocumentSaves[key];
       clearTimeout(pending.timer);
-      return pending.saving.then(function () { return localforage.setItem(key, pending.data); }).then(function () {
-        if (pendingDocumentSaves[key] === pending) delete pendingDocumentSaves[key];
-      });
+      return writePendingDocument(key, pending);
     }));
   }
 
@@ -3162,18 +3191,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Refresh call sheet editor fields from the selected shoot day (empty dayId = first day). */
   function applyCallSheetDaySelection(dayId) {
     if (!editorData || typeof editorData !== 'object') return;
-    /* U2: commit a dirty hospital name before the day switch replaces the unit. */
-    if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
-    if (typeof invalidateHospitalLookups === 'function') {
-      invalidateHospitalLookups('day:' + String(dayId != null ? dayId : ''));
-    } else {
-      if (typeof hospitalLookupDocToken === 'number') hospitalLookupDocToken += 1;
-      if (typeof hospitalLookupToken === 'number') hospitalLookupToken += 1;
-      if (typeof hospitalLookupController !== 'undefined' && hospitalLookupController) {
-        try { hospitalLookupController.abort(); } catch (eAbortDay) {}
-        hospitalLookupController = null;
-      }
-    }
     editorData.dayId = dayId != null ? String(dayId) : '';
     var csTmpl = pub && pub.templates && pub.templates.callSheet;
     if (!csTmpl || typeof csTmpl.getDefaultData !== 'function') return;
@@ -3191,12 +3208,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       'crewCall', 'shootingCall', 'estimatedLunch', 'estimatedWrap'].forEach(function (k) {
       if (defs[k] !== undefined) editorData[k] = JSON.parse(JSON.stringify(defs[k]));
     });
-    /* V2: a day switch ends any open name/address edit session. */
-    hospitalNameDirty = false;
-    hospitalNameAtFocus = null;
-    hospitalNamePending = null;
-    locationAddressDirty = Object.create(null);
-    locationAddressAtFocus = Object.create(null);
     applyCallSheetDayTitle(editorData, defs.dayOf || '');
     var overrides = editorData._autofill && editorData._autofill.overrides;
     if (!overrides || !overrides.dayOfTbc) {
@@ -3584,9 +3595,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        Hospital lookup is skipped here: it runs only on address commit or the weather button (Z3). */
     if (editorData && editorData.shootingLocations && editorData.shootingLocations.length &&
         editorData.shootingLocations[0].address && !editorData.locationForecasts) {
+        var weatherOpenDocToken = hospitalLookupDocToken;
         try {
           setTimeout(function () {
-            if (typeof fetchWeatherOnlyOnOpen === 'function') fetchWeatherOnlyOnOpen();
+            if (weatherOpenDocToken === hospitalLookupDocToken) fetchWeatherOnlyOnOpen();
           }, 400);
         } catch(e) { console.warn('[mBTDB] Auto-weather fetch failed:', e); }
     }
@@ -5190,6 +5202,29 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var val = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
 
       if (key) {
+        if (key === 'dayId' && (activeTemplateId === 'callSheet' || activeTemplateId === 'sitePermission')) {
+          var templateId = activeTemplateId;
+          return replaceActiveDocument('switching shoot days', {
+            docId: 'day:' + String(val == null ? '' : val),
+            apply: function () {
+              afTyped(key);
+              if (templateId === 'callSheet') {
+                applyCallSheetDaySelection(val);
+              } else {
+                setEditorKeyVal(key, val);
+                var defaults = pub.templates.sitePermission.getDefaultData(budget || {}, { contacts: _docContacts, dayId: val });
+                ['placeName', 'address', 'parish', 'filmingDates', 'ownerName'].forEach(function (field) {
+                  editorData[field] = defaults[field];
+                });
+              }
+              return editorData;
+            },
+            rebuild: function () {
+              saveEditorData();
+              buildEditor(templateId);
+            }
+          });
+        }
         afTyped(key.split('.')[0]);
         setEditorKeyVal(key, val);
         if (RELEASE_TEMPLATES.indexOf(activeTemplateId) > -1 && ['producerName', 'clientName', 'client'].indexOf(key) > -1) {
@@ -5201,21 +5236,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
         if (key === 'durationLine' && Array.isArray(editorData.howWeFilm) && editorData.howWeFilm.length >= 7) {
           editorData.howWeFilm[6] = val;
-        }
-        if (key === 'dayId' && activeTemplateId === 'callSheet') {
-          applyCallSheetDaySelection(val);
-          saveEditorData();
-          buildEditor('callSheet');
-          return;
-        }
-        if (key === 'dayId' && activeTemplateId === 'sitePermission') {
-          var defaults = pub.templates.sitePermission.getDefaultData(budget || {}, { contacts: _docContacts, dayId: val });
-          ['placeName', 'address', 'parish', 'filmingDates', 'ownerName'].forEach(function (field) {
-            editorData[field] = defaults[field];
-          });
-          saveEditorData();
-          buildEditor(activeTemplateId);
-          return;
         }
         saveEditorData();
         return;
@@ -5314,7 +5334,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           if (Number(locIdx) === 0) clearAutoHospitalFields(editorData);
           saveEditorData();
         }
-        invalidateHospitalLookups(currentHospitalDocIdentity());
+        invalidateHospitalLookups();
         scheduleHospitalLookupFromAddresses();
       }
       if (el.getAttribute('data-key') === 'hospitalName') {
@@ -5330,7 +5350,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       if (!el) return;
       commitHospitalNameOrAddress(el, 'change');
       if (el.tagName !== 'SELECT' && el.type !== 'checkbox') return;
-      applyControlChange(el);
+      return applyControlChange(el);
     });
 
     panel.addEventListener('blur', function (e) {
@@ -5849,8 +5869,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var hospitalLookupTimer = null;
   var hospitalLookupController = null;
   var hospitalLookupToken = 0;
-  var hospitalLookupDocToken = 0;
-  var hospitalLookupDocId = hospitalLookupDocId || '';
+  var hospitalNameLookupToken = 0;
   var lastNominatimAt = 0;
   var nominatimQueue = nominatimQueue || Promise.resolve();
   var weatherFetchController = typeof weatherFetchController !== 'undefined' ? weatherFetchController : null;
@@ -5879,9 +5898,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       /* S1: capture document identity; a Saved open or template switch must not save here. */
       var nameCommitDocToken = hospitalLookupDocToken;
       var nameCommitDocId = currentHospitalDocIdentity();
+      var nameCommitLookupToken = hospitalNameLookupToken;
       fillHospitalPhoneFromName(rawName, true).then(function () {
         if (nameCommitDocToken !== hospitalLookupDocToken
-          || nameCommitDocId !== currentHospitalDocIdentity()) return;
+          || nameCommitDocId !== currentHospitalDocIdentity()
+          || nameCommitLookupToken !== hospitalNameLookupToken) return;
         saveEditorData();
       });
     }
@@ -5906,10 +5927,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     return String(hospitalLookupDocId || activeTemplateId || 'sheet');
   }
 
-  function invalidateHospitalLookups(docId) {
+  function invalidateHospitalLookups() {
     hospitalLookupToken += 1;
-    hospitalLookupDocToken += 1;
-    if (docId != null) hospitalLookupDocId = String(docId);
+    hospitalNameLookupToken += 1;
+    clearTimeout(hospitalLookupTimer);
+    hospitalLookupTimer = null;
     if (hospitalLookupController) {
       try { hospitalLookupController.abort(); } catch (eInv) {}
       hospitalLookupController = null;
@@ -6126,13 +6148,15 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        pending must not receive this write or save. */
     var phoneLookupDocToken = hospitalLookupDocToken;
     var phoneLookupDocId = currentHospitalDocIdentity();
+    var nameLookupToken = hospitalNameLookupToken;
     return api.resolveHospitalPhone({
       livePhone: '',
       hospitalName: name,
       getSharedContacts: sharedContactsGetter()
     }).then(function (got) {
       if (phoneLookupDocToken !== hospitalLookupDocToken
-        || phoneLookupDocId !== currentHospitalDocIdentity()) return;
+        || phoneLookupDocId !== currentHospitalDocIdentity()
+        || nameLookupToken !== hospitalNameLookupToken) return;
       /* W4: re-test at WRITE time that the hospital is still name only (address, phone, distance empty)
          and the name unchanged; otherwise write nothing so typed address and distance stay. */
       if (String(editorData.hospitalName || '').trim() !== String(name || '').trim()) return;
