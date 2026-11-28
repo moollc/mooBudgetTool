@@ -1435,6 +1435,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         if (!d) return;
         var tmplMeta = pub.templates.getAll().find(function (t) { return t.id === d.templateId; });
         if (!tmplMeta) return;
+        /* U2: commit a dirty hospital name before leaving the open sheet. */
+        if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
         activeTemplateId = d.templateId;
         /* Opening a Saved document invalidates in-flight hospital lookups (Z2). */
         if (typeof invalidateHospitalLookups === 'function') {
@@ -3125,6 +3127,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   /* Refresh call sheet editor fields from the selected shoot day (empty dayId = first day). */
   function applyCallSheetDaySelection(dayId) {
     if (!editorData || typeof editorData !== 'object') return;
+    /* U2: commit a dirty hospital name before the day switch replaces the unit. */
+    if (typeof commitDirtyHospitalFields === 'function') commitDirtyHospitalFields();
     if (typeof invalidateHospitalLookups === 'function') {
       invalidateHospitalLookups('day:' + String(dayId != null ? dayId : ''));
     } else {
@@ -3155,6 +3159,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     /* V2: a day switch ends any open name/address edit session. */
     hospitalNameDirty = false;
     hospitalNameAtFocus = null;
+    hospitalNamePending = null;
     locationAddressDirty = Object.create(null);
     locationAddressAtFocus = Object.create(null);
     applyCallSheetDayTitle(editorData, defs.dayOf || '');
@@ -3188,7 +3193,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     var selected = (d && d.dayId != null) ? String(d.dayId) : '';
     var html = '<div class="ed-row"><div class="ed-field"><label>Shoot day</label>' +
       '<select id="' + (projectDefault ? 'site-permission-day-picker' : 'cs-day-picker') + '" data-key="dayId">' +
-      '<option value=""' + (selected === '' ? ' selected' : '') + '>' + (projectDefault ? 'Project dates and location' : '') + '</option>';
+      '<option value=""' + (selected === '' ? ' selected' : '') + '>' + (projectDefault ? 'Project dates and location' : 'Choose a day') + '</option>';
     days.forEach(function (day, i) {
       var id = day && day.id != null ? String(day.id) : '';
       var title;
@@ -5225,9 +5230,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     panel.addEventListener('input', function (e) {
       var el = e.target;
       if (!el) return;
-      /* V2: name/address input only records dirty and the value at focus; never clears hospital fields. */
-      if (el.getAttribute('data-key') === 'hospitalName' && !hospitalNameDirty) {
-        hospitalNameAtFocus = String(editorData.hospitalName || '');
+      /* V2/U2: name input only records dirty, focus value and pending text; stored unit stays until commit. */
+      if (el.getAttribute('data-key') === 'hospitalName') {
+        if (!hospitalNameDirty) hospitalNameAtFocus = String(editorData.hospitalName || '');
+        hospitalNameDirty = true;
+        hospitalNamePending = el.value;
+        return;
       }
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
         var focusIdx = String(el.getAttribute('data-i') || '0');
@@ -5236,19 +5244,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           locationAddressAtFocus[focusIdx] = String((focusRow && focusRow.address) || '');
         }
       }
-      applyControlChange(el);
-      if (el.getAttribute('data-key') === 'hospitalName') {
-        hospitalNameDirty = true;
+      /* U1: mark typed before the autosave snapshot for hospital companion fields. */
+      if (el.getAttribute('data-key') === 'hospitalPhone'
+          || el.getAttribute('data-key') === 'hospitalAddress'
+          || el.getAttribute('data-key') === 'hospitalDistance') {
+        var hospKey = el.getAttribute('data-key');
+        setEditorKeyVal(hospKey, el.value);
+        if (hospKey === 'hospitalPhone' && String(el.value || '').trim()) editorData.hospitalPhoneSource = 'typed';
+        markHospitalTyped(editorData);
+        saveEditorData();
+        return;
       }
+      applyControlChange(el);
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
         locationAddressDirty[String(el.getAttribute('data-i') || '0')] = true;
-      }
-      if (el.getAttribute('data-key') === 'hospitalPhone') {
-        if (String(el.value || '').trim()) editorData.hospitalPhoneSource = 'typed';
-        markHospitalTyped(editorData);
-      }
-      if (el.getAttribute('data-key') === 'hospitalAddress' || el.getAttribute('data-key') === 'hospitalDistance') {
-        markHospitalTyped(editorData);
       }
     });
 
@@ -5263,26 +5272,20 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var addrFocus = String(locationAddressAtFocus[locIdx] == null ? '' : locationAddressAtFocus[locIdx]).trim();
         delete locationAddressAtFocus[locIdx];
         if (addrFinal === addrFocus) return;
+        /* U3: erasing a location address clears that location's automatic hospital immediately. */
+        if (!addrFinal) {
+          var eraseRow = (editorData.shootingLocations || [])[Number(locIdx)];
+          if (eraseRow) clearAutoHospitalFields(eraseRow);
+          if (Number(locIdx) === 0) clearAutoHospitalFields(editorData);
+          saveEditorData();
+        }
         invalidateHospitalLookups(currentHospitalDocIdentity());
         scheduleHospitalLookupFromAddresses();
       }
       if (el.getAttribute('data-key') === 'hospitalName') {
         /* V2: Z1c clear and mark typed run on change/blur only when the final value differs from focus. */
         if (!hospitalNameDirty) return;
-        var nameFinal = String(el.value || '').trim();
-        var nameFocus = String(hospitalNameAtFocus == null ? '' : hospitalNameAtFocus).trim();
-        hospitalNameDirty = false;
-        hospitalNameAtFocus = null;
-        if (nameFinal === nameFocus) return;
-        clearAutoHospitalPhoneOnNameEdit();
-        markHospitalTyped(editorData);
-        if (via === 'change') {
-          fillHospitalPhoneFromName(el.value, true).then(function () {
-            saveEditorData();
-          });
-        } else {
-          saveEditorData();
-        }
+        commitHospitalNameValue(el.value, via);
       }
     }
 
@@ -5818,9 +5821,35 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var weatherFetchController = typeof weatherFetchController !== 'undefined' ? weatherFetchController : null;
   var hospitalNameDirty = false;
   var hospitalNameAtFocus = null;
+  var hospitalNamePending = null;
   var locationAddressDirty = locationAddressDirty || Object.create(null);
   var locationAddressAtFocus = locationAddressAtFocus || Object.create(null);
   var AUTO_HOSPITAL_SOURCES = { live: 1, opengate: 1, fallback: 1 };
+
+  /* U2: apply a dirty hospital name at commit (change, blur, close or document switch). */
+  function commitHospitalNameValue(rawName, via) {
+    var nameFinal = String(rawName == null ? '' : rawName).trim();
+    var nameFocus = String(hospitalNameAtFocus == null ? '' : hospitalNameAtFocus).trim();
+    hospitalNameDirty = false;
+    hospitalNamePending = null;
+    hospitalNameAtFocus = null;
+    if (nameFinal === nameFocus) return;
+    setEditorKeyVal('hospitalName', rawName == null ? '' : rawName);
+    clearAutoHospitalPhoneOnNameEdit();
+    markHospitalTyped(editorData);
+    if (via === 'change') {
+      fillHospitalPhoneFromName(rawName, true).then(function () {
+        saveEditorData();
+      });
+    } else {
+      saveEditorData();
+    }
+  }
+
+  function commitDirtyHospitalFields() {
+    if (!hospitalNameDirty) return;
+    commitHospitalNameValue(hospitalNamePending, 'blur');
+  }
 
   function hospitalLookupApi() {
     return (typeof window !== 'undefined' && window.mBTHospitalLookup) ? window.mBTHospitalLookup : null;
@@ -5911,7 +5940,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else {
       target.hospitalPhoneSource = '';
     }
-    if (isTop) hospitalNameDirty = false;
+    if (isTop) {
+      hospitalNameDirty = false;
+      hospitalNamePending = null;
+      hospitalNameAtFocus = null;
+    }
   }
 
   function sharedContactsGetter() {
@@ -6199,9 +6232,10 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var valid = geos.filter(Boolean);
         var validAddrs = {};
         valid.forEach(function (g) { validAddrs[String(g.address || '').trim()] = true; });
+        /* U3: empty addresses and geocode misses clear that location's automatic hospital. */
         (editorData.shootingLocations || []).forEach(function (loc, locIdx) {
           var addr = String(loc.address || '').trim();
-          if (addr && !validAddrs[addr]) {
+          if (!addr || !validAddrs[addr]) {
             clearAutoHospitalFields(loc);
             if (locIdx === 0) clearAutoHospitalFields(editorData);
           }

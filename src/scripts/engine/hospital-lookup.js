@@ -269,12 +269,27 @@
     return /\bjamaica$/i.test(s);
   }
 
-  function isJamaicaHint(text) {
-    var r = String(text || '').trim().toLowerCase();
+  /* U4: pass field type with the hint ({ kind, text }). Bare strings keep location semantics for older callers. */
+  function normalizeJamaicaHint(hint) {
+    if (hint && typeof hint === 'object') {
+      return {
+        kind: String(hint.kind || 'location'),
+        text: hint.text != null ? hint.text : (hint.value != null ? hint.value : '')
+      };
+    }
+    return { kind: 'location', text: hint };
+  }
+
+  function isJamaicaHint(hint) {
+    var h = normalizeJamaicaHint(hint);
+    var r = String(h.text || '').trim().toLowerCase();
     if (!r) return false;
     /* Country and region: exact Z7 tokens only. Location text: V4 ends-with Jamaica after suffix strip. */
+    if (h.kind === 'country' || h.kind === 'region') {
+      return r === 'jamaica' || r === 'jm' || r === 'jam';
+    }
     if (r === 'jamaica' || r === 'jm' || r === 'jam') return true;
-    return locationTextEndsWithJamaica(text);
+    return locationTextEndsWithJamaica(h.text);
   }
 
   function jamaicaEmergencyLine(region) {
@@ -295,15 +310,20 @@
     var opts = options || {};
     var b = budget || {};
     var hints = [
-      opts.country, opts.region,
-      opts.budget && opts.budget.country, opts.budget && opts.budget.region, opts.budget && opts.budget.projectLocation,
-      b.country, b.region, b.projectLocation
+      { kind: 'country', text: opts.country },
+      { kind: 'region', text: opts.region },
+      { kind: 'country', text: opts.budget && opts.budget.country },
+      { kind: 'region', text: opts.budget && opts.budget.region },
+      { kind: 'location', text: opts.budget && opts.budget.projectLocation },
+      { kind: 'country', text: b.country },
+      { kind: 'region', text: b.region },
+      { kind: 'location', text: b.projectLocation }
     ];
     var i;
     for (i = 0; i < hints.length; i++) {
-      if (String(hints[i] || '').trim()) return String(hints[i]);
+      if (String(hints[i].text || '').trim()) return hints[i];
     }
-    return '';
+    return { kind: 'location', text: '' };
   }
 
   var api = {
@@ -324,6 +344,7 @@
     resolveHospitalPhone: resolveHospitalPhone,
     canAutoFillValue: canAutoFillValue,
     facilityRecordForSharing: facilityRecordForSharing,
+    normalizeJamaicaHint: normalizeJamaicaHint,
     isJamaicaHint: isJamaicaHint,
     jamaicaEmergencyLine: jamaicaEmergencyLine,
     projectRegion: projectRegion,
