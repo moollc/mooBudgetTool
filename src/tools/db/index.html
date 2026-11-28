@@ -5843,7 +5843,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
        shared contacts phone lookup is still pending. W4 may fill an empty phone later. */
     saveEditorData();
     if (via === 'change') {
+      /* S1: capture document identity; a Saved open or template switch must not save here. */
+      var nameCommitDocToken = hospitalLookupDocToken;
+      var nameCommitDocId = currentHospitalDocIdentity();
       fillHospitalPhoneFromName(rawName, true).then(function () {
+        if (nameCommitDocToken !== hospitalLookupDocToken
+          || nameCommitDocId !== currentHospitalDocIdentity()) return;
         saveEditorData();
       });
     }
@@ -6078,11 +6083,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else if (src && !AUTO_HOSPITAL_SOURCES[src] && src !== 'typed') {
       return Promise.resolve();
     }
+    /* S1: same document token mechanism as Z2; a Saved sheet opened while contacts are
+       pending must not receive this write or save. */
+    var phoneLookupDocToken = hospitalLookupDocToken;
+    var phoneLookupDocId = currentHospitalDocIdentity();
     return api.resolveHospitalPhone({
       livePhone: '',
       hospitalName: name,
       getSharedContacts: sharedContactsGetter()
     }).then(function (got) {
+      if (phoneLookupDocToken !== hospitalLookupDocToken
+        || phoneLookupDocId !== currentHospitalDocIdentity()) return;
       /* W4: re-test at WRITE time that the hospital is still name only (address, phone, distance empty)
          and the name unchanged; otherwise write nothing so typed address and distance stay. */
       if (String(editorData.hospitalName || '').trim() !== String(name || '').trim()) return;

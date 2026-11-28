@@ -3109,7 +3109,9 @@
                     var regionHintCs = '';
                     if (typeof window !== 'undefined' && window.mBTHospitalLookup
                         && typeof window.mBTHospitalLookup.callSheetJamaicaHint === 'function') {
-                        regionHintCs = window.mBTHospitalLookup.callSheetJamaicaHint(b, rawD, options);
+                        /* S2: use merged sheet data (d) so selected shoot day locations from the
+                           schedule reach the hint even when the Saved payload omitted location rows. */
+                        regionHintCs = window.mBTHospitalLookup.callSheetJamaicaHint(b, d, options);
                     } else {
                         regionHintCs = (options && (options.country || options.region
                             || (options.budget && (options.budget.country || options.budget.region || options.budget.projectLocation))))

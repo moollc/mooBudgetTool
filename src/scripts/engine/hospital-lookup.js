@@ -309,6 +309,8 @@
   function callSheetJamaicaHint(budget, rawD, options) {
     var opts = options || {};
     var b = budget || {};
+    /* S2: evaluate every source independently. Prefer any Jamaica match; a non Jamaica
+       project label (Stage B) or US country never hides a Jamaica shoot day address. */
     var hints = [
       { kind: 'country', text: opts.country },
       { kind: 'region', text: opts.region },
@@ -320,23 +322,19 @@
       { kind: 'location', text: b.projectLocation }
     ];
     var i;
-    for (i = 0; i < hints.length; i++) {
-      if (String(hints[i].text || '').trim()) return hints[i];
-    }
-    /* T3: when project fields are blank, consider every selected shoot day location address
-       with kind shootDayLocation (V4 location text rule). Prefer a Jamaica match among them. */
     var locs = (rawD && Array.isArray(rawD.shootingLocations)) ? rawD.shootingLocations : [];
-    var shootHints = [];
     for (i = 0; i < locs.length; i++) {
       var addr = locs[i] && locs[i].address;
       if (String(addr || '').trim()) {
-        shootHints.push({ kind: 'shootDayLocation', text: addr });
+        hints.push({ kind: 'shootDayLocation', text: addr });
       }
     }
-    for (i = 0; i < shootHints.length; i++) {
-      if (isJamaicaHint(shootHints[i])) return shootHints[i];
+    for (i = 0; i < hints.length; i++) {
+      if (String(hints[i].text || '').trim() && isJamaicaHint(hints[i])) return hints[i];
     }
-    if (shootHints.length) return shootHints[0];
+    for (i = 0; i < hints.length; i++) {
+      if (String(hints[i].text || '').trim()) return hints[i];
+    }
     return { kind: 'location', text: '' };
   }
 
