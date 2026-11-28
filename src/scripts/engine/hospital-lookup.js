@@ -259,11 +259,24 @@
     };
   }
 
+  function lastCommaPartIsJamaica(text) {
+    var parts = String(text || '').split(',').map(function (p) {
+      return String(p || '').trim().toLowerCase();
+    }).filter(Boolean);
+    if (!parts.length) return false;
+    var last = parts[parts.length - 1];
+    if (last === 'jamaica' || last === 'jamaica w.i.' || last === 'jamaica wi' || last === 'jamaica w.i') return true;
+    if (/^jamaica(\s+w\.?i\.?)?$/.test(last)) return true;
+    if (last === 'west indies' && parts.length >= 2 && /^jamaica\b/.test(parts[parts.length - 2])) return true;
+    return false;
+  }
+
   function isJamaicaHint(text) {
     var r = String(text || '').trim().toLowerCase();
     if (!r) return false;
+    /* Country and region: exact Z7 tokens only. Location text: last comma-separated part (W7). */
     if (r === 'jamaica' || r === 'jm' || r === 'jam') return true;
-    return /\bjamaica\b/.test(r);
+    return lastCommaPartIsJamaica(r);
   }
 
   function jamaicaEmergencyLine(region) {

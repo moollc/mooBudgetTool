@@ -5204,8 +5204,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       var el = e.target;
       if (!el) return;
       if (el.getAttribute('data-key') === 'hospitalName') {
+        hospitalNameDirty = true;
         clearAutoHospitalPhoneOnNameEdit();
         markHospitalTyped(editorData);
+      }
+      if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
+        locationAddressDirty[String(el.getAttribute('data-i') || '0')] = true;
       }
       if (el.getAttribute('data-key') === 'hospitalPhone') {
         if (String(el.value || '').trim()) editorData.hospitalPhoneSource = 'typed';
@@ -5216,15 +5220,26 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       }
     });
 
-    function commitHospitalNameOrAddress(el) {
+    function commitHospitalNameOrAddress(el, via) {
       if (!el) return;
       if (el.getAttribute('data-arr') === 'shootingLocations' && el.getAttribute('data-f') === 'address') {
+        var locIdx = String(el.getAttribute('data-i') || '0');
+        /* W1: Tab or blur with an unchanged address must not re-run the lookup. */
+        if (!locationAddressDirty[locIdx]) return;
+        locationAddressDirty[locIdx] = false;
         invalidateHospitalLookups(currentHospitalDocIdentity());
         scheduleHospitalLookupFromAddresses();
       }
       if (el.getAttribute('data-key') === 'hospitalName') {
-        clearAutoHospitalPhoneOnNameEdit();
-        markHospitalTyped(editorData);
+        /* W1: Z1c clearing runs only on input. Name phone fill runs on change (browsers fire
+           change on blur when the value changed since focus). A blur alone, or Tab through
+           with no edit, never clears, refills or flips the source. */
+        if (via === 'blur') {
+          hospitalNameDirty = false;
+          return;
+        }
+        if (!hospitalNameDirty) return;
+        hospitalNameDirty = false;
         fillHospitalPhoneFromName(el.value, true).then(function () {
           saveEditorData();
         });
@@ -5235,13 +5250,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     panel.addEventListener('change', function (e) {
       var el = e.target;
       if (!el) return;
-      commitHospitalNameOrAddress(el);
+      commitHospitalNameOrAddress(el, 'change');
       if (el.tagName !== 'SELECT' && el.type !== 'checkbox') return;
       applyControlChange(el);
     });
 
     panel.addEventListener('blur', function (e) {
-      commitHospitalNameOrAddress(e.target);
+      commitHospitalNameOrAddress(e.target, 'blur');
     }, true);
 
     /* Add and delete row buttons */
@@ -5663,8 +5678,54 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           }
         });
       });
+      /* W2: release the serial queue on timeout, failure or abort so later geocodes start. */
       nominatimQueue = run.catch(function () { /* keep queue moving */ });
       return run;
+    }
+
+    /* W2: Nominatim fetch and body read share a local AbortController aborted by a real setTimeout at 12s. */
+    function nominatimFetchWithTimeout(fetchFn, url, opts, ms) {
+      var localCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var outer = opts && opts.signal;
+      var onOuterAbort = null;
+      if (localCtrl && outer) {
+        if (outer.aborted) localCtrl.abort();
+        else {
+          onOuterAbort = function () { try { localCtrl.abort(); } catch (eNom) {} };
+          outer.addEventListener('abort', onOuterAbort);
+        }
+      }
+      var nomSignal = outer;
+      if (localCtrl) nomSignal = localCtrl.signal;
+      var timer = null;
+      function releaseNominatimTimeout() {
+        if (timer) clearTimeout(timer);
+        if (outer && onOuterAbort) {
+          try { outer.removeEventListener('abort', onOuterAbort); } catch (eRel) {}
+        }
+      }
+      var p = fetchFn(url, Object.assign({}, opts || {}, nomSignal ? { signal: nomSignal } : {}));
+      var body = p.then(function (res) {
+        if (!res || !res.ok) {
+          var httpErr = new Error('Nominatim HTTP ' + (res && res.status));
+          httpErr.isHttp = true;
+          throw httpErr;
+        }
+        return res.json();
+      });
+      return Promise.race([
+        body,
+        new Promise(function (_, reject) {
+          timer = setTimeout(function () {
+            if (localCtrl) {
+              try { localCtrl.abort(); } catch (eAb) {}
+            }
+            var err = new Error('timeout');
+            err.name = 'TimeoutError';
+            reject(err);
+          }, ms);
+        })
+      ]).finally(releaseNominatimTimeout);
     }
 
     function tryNext(idx) {
@@ -5674,17 +5735,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         var root = (typeof window !== 'undefined') ? window : (typeof self !== 'undefined' ? self : null);
         var fetchFn = root && root.fetch ? root.fetch.bind(root) : null;
         if (!fetchFn) return Promise.reject(new Error('No fetch'));
-        return fetchFn(
+        return nominatimFetchWithTimeout(
+          fetchFn,
           'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q),
-          { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal }
+          { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' }, signal: signal },
+          12000
         );
-      }).then(function (r) {
-        if (!r.ok) {
-          var httpErr = new Error('Nominatim HTTP ' + r.status);
-          httpErr.isHttp = true;
-          throw httpErr;
-        }
-        return r.json();
       }).then(function (geo) {
         if (geo && geo.length > 0) {
           return {
@@ -5696,7 +5752,13 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
         }
         return tryNext(idx + 1);
       }).catch(function (err) {
-        if (err.name === 'AbortError') throw err;
+        /* Outer cancellation still aborts the whole cascade. A local 12s timeout (AbortError or
+           TimeoutError from nominatimFetchWithTimeout) fails this address and releases the queue. */
+        if (err.name === 'AbortError' && signal && signal.aborted) throw err;
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          console.warn('[mBTDB geocode] timed out: ' + q);
+          return null;
+        }
         if (err.isHttp) throw err; /* surface HTTP failure to outer status */
         console.warn('[mBTDB geocode] query failed: ' + q, err);
         return tryNext(idx + 1);
@@ -5714,6 +5776,8 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
   var lastNominatimAt = 0;
   var nominatimQueue = nominatimQueue || Promise.resolve();
   var weatherFetchController = typeof weatherFetchController !== 'undefined' ? weatherFetchController : null;
+  var hospitalNameDirty = false;
+  var locationAddressDirty = locationAddressDirty || Object.create(null);
   var AUTO_HOSPITAL_SOURCES = { live: 1, opengate: 1, fallback: 1 };
 
   function hospitalLookupApi() {
@@ -5731,6 +5795,11 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (hospitalLookupController) {
       try { hospitalLookupController.abort(); } catch (eInv) {}
       hospitalLookupController = null;
+    }
+    /* W5: drop in-flight weather-on-open for a document that is no longer active. */
+    if (weatherFetchController) {
+      try { weatherFetchController.abort(); } catch (eWxInv) {}
+      weatherFetchController = null;
     }
   }
 
@@ -5759,10 +5828,6 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       && !String(target.hospitalPhone || '').trim()
       && !String(target.hospitalAddress || '').trim()
       && !String(target.hospitalDistance || '').trim();
-  }
-
-  function hospitalUnitHasValues(target) {
-    return !hospitalUnitEmpty(target);
   }
 
   function markHospitalTyped(target) {
@@ -5804,6 +5869,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else {
       target.hospitalPhoneSource = '';
     }
+    if (isTop) hospitalNameDirty = false;
   }
 
   function sharedContactsGetter() {
@@ -5938,8 +6004,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
       hospitalName: name,
       getSharedContacts: sharedContactsGetter()
     }).then(function (got) {
+      /* W4: re-test at WRITE time that the hospital is still name only (address, phone, distance empty)
+         and the name unchanged; otherwise write nothing so typed address and distance stay. */
       if (String(editorData.hospitalName || '').trim() !== String(name || '').trim()) return;
       if (String(editorData.hospitalPhone || '').trim()) return;
+      if (String(editorData.hospitalAddress || '').trim()) return;
+      if (String(editorData.hospitalDistance || '').trim()) return;
       if (got && got.phone) {
         writeHospitalUnit(editorData, {
           name: String(name || '').trim(),
@@ -6054,7 +6124,17 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     if (hospitalLookupTimer) clearTimeout(hospitalLookupTimer);
     hospitalLookupTimer = setTimeout(function () {
       hospitalLookupTimer = null;
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        /* W6: an automatic hospital of the old address cannot be right; a typed hospital stays. */
+        (editorData.shootingLocations || []).forEach(clearAutoHospitalFields);
+        clearAutoHospitalFields(editorData);
+        var offlineStatus = dom.getElementById('weather-status');
+        if (offlineStatus) {
+          offlineStatus.textContent = 'Offline: type a hospital, or look one up when you are online.';
+        }
+        saveEditorData();
+        return;
+      }
       var collected = collectWeatherAddresses();
       if (!collected.locations.length) {
         (editorData.shootingLocations || []).forEach(clearAutoHospitalFields);
@@ -6276,9 +6356,12 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
     } else {
       weatherFetchController = null;
     }
+    /* W5: same document token as lookups; invalidateHospitalLookups aborts this controller. */
+    var openToken = makeHospitalLookupToken('weather-open');
     Promise.all(locations.map(function (address) {
       return geocodeAddressCascade(address, signal).catch(function () { return null; });
     })).then(function (geoResults) {
+      if (!hospitalLookupTokenValid(openToken)) return;
       var validGeo = (geoResults || []).filter(Boolean);
       if (!validGeo.length) return;
       return Promise.all(validGeo.map(function (g) {
@@ -6289,6 +6372,7 @@ if (dom === document && window.shadowRoot) dom = window.shadowRoot;
           .then(function (w) { return { geo: g, weather: w }; })
           .catch(function () { return null; });
       })).then(function (weatherResults) {
+        if (!hospitalLookupTokenValid(openToken)) return;
         weatherResults = (weatherResults || []).filter(Boolean);
         if (!weatherResults.length) return;
         editorData.locationForecasts = weatherResults.map(function (wr) {

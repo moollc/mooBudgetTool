@@ -11320,8 +11320,11 @@
 
     window.addStageItemToBudget = function (desc, rate, unit, stageKey, targetSectionName, isManual, sourceCurrency) {
         var classification = { description: desc };
-        /* Preferred is the opened section name (same value the Department hint uses), not the stage key. */
-        try { targetSectionName = mBTBatch2.section(budget, classification, targetSectionName, mBTBatch2.pick()); }
+        /* W3: with department sections off, prefer the stage key so the line lands by section id
+           (prod/dev/post) as at 3eb3cb1. With department sections on, keep the opened section name. */
+        var preferredSection = targetSectionName;
+        if (!(budget.settings && budget.settings.deptSections)) preferredSection = stageKey;
+        try { targetSectionName = mBTBatch2.section(budget, classification, preferredSection, mBTBatch2.pick()); }
         catch (err) { return mBTME.alert('Classification', err.message); }
         rate = mBT.le.convertCurrencyOrNull(Number(rate) || 0, sourceCurrency || budget.currency || 'JMD', budget.currency || 'JMD', budget);
         if (rate === null) return missingPriceRate(sourceCurrency);
